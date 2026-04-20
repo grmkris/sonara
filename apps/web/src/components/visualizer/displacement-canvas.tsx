@@ -11,24 +11,38 @@ import {
 } from "@/lib/render/map-audio-to-visuals";
 import { createVuEnvelope, type VuEnvelope } from "@/lib/render/vu";
 import {
+  BASE,
+  PRESETS,
+  lerpPreset,
+  makeDriftForPreset,
+  type PresetConfig,
+  type PresetDrift,
+  type PresetName,
+} from "@/lib/render/presets";
+import {
+  createFbo,
   createProgram,
   createQuadBuffer,
   createShader,
   createTexture,
+  deleteFbo,
   resizeCanvasToDisplay,
+  resizeFbo,
   uploadImageToTexture,
+  type Fbo,
 } from "@/lib/render/webgl-util";
 import {
+  BLIT_FRAGMENT_SHADER,
   FRAGMENT_SHADER,
   VERTEX_SHADER,
 } from "./displacement-shaders";
 
 const BLEED_MS = 4500;
 const FADE_MS = 1500;
+const PRESET_CROSSFADE_MS = 2000;
 
 // Module-level ref to the active WebGL canvas so sibling overlays (e.g. the
-// slit-scan trail) can sample from it without prop-drilling. Mirrors the
-// pattern used by `getCurrentAudioEngine`.
+// slit-scan trail) can sample from it without prop-drilling.
 let currentCanvas: HTMLCanvasElement | null = null;
 export function getCurrentDisplacementCanvas(): HTMLCanvasElement | null {
   return currentCanvas;
@@ -72,15 +86,11 @@ interface TextureSlot {
   loaded: boolean;
 }
 
-// One ink-blot layer — four drop positions + per-drop stagger delays.
 interface DropLayer {
-  ab: [number, number, number, number]; // (a.x, a.y, b.x, b.y)
-  cd: [number, number, number, number]; // (c.x, c.y, d.x, d.y)
+  ab: [number, number, number, number];
+  cd: [number, number, number, number];
   delays: [number, number, number, number];
 }
-
-// Three stacked layers: fg (bold, fast), mg (delayed, medium), bg (slow).
-// Regenerated every time a new image lands so no two transitions look alike.
 interface DropLayers {
   l1: DropLayer;
   l2: DropLayer;
@@ -89,32 +99,37 @@ interface DropLayers {
 
 function randomDropLayers(): DropLayers {
   const rand = () => Math.random();
-  // Foreground: anchor near centre so the primary bleed always emerges
-  // from the heart of the image.
   const aX = 0.5 + (rand() - 0.5) * 0.25;
   const aY = 0.5 + (rand() - 0.5) * 0.25;
-  const l1: DropLayer = {
-    ab: [aX, aY, rand(), rand()],
-    cd: [rand(), rand(), rand(), rand()],
-    delays: [0, rand() * 0.25 + 0.05, rand() * 0.35 + 0.10, rand() * 0.40 + 0.15],
+  return {
+    l1: {
+      ab: [aX, aY, rand(), rand()],
+      cd: [rand(), rand(), rand(), rand()],
+      delays: [0, rand() * 0.25 + 0.05, rand() * 0.35 + 0.1, rand() * 0.4 + 0.15],
+    },
+    l2: {
+      ab: [rand(), rand(), rand(), rand()],
+      cd: [rand(), rand(), rand(), rand()],
+      delays: [
+        rand() * 0.15,
+        rand() * 0.3 + 0.1,
+        rand() * 0.35 + 0.15,
+        rand() * 0.4 + 0.2,
+      ],
+    },
+    l3: {
+      ab: [rand(), rand(), rand(), rand()],
+      cd: [rand(), rand(), rand(), rand()],
+      delays: [
+        rand() * 0.2 + 0.05,
+        rand() * 0.3 + 0.15,
+        rand() * 0.35 + 0.2,
+        rand() * 0.4 + 0.25,
+      ],
+    },
   };
-  // Midground: fully random origins, slightly later starts.
-  const l2: DropLayer = {
-    ab: [rand(), rand(), rand(), rand()],
-    cd: [rand(), rand(), rand(), rand()],
-    delays: [rand() * 0.15, rand() * 0.30 + 0.10, rand() * 0.35 + 0.15, rand() * 0.40 + 0.20],
-  };
-  // Background: scattered fine pinpricks, slowest.
-  const l3: DropLayer = {
-    ab: [rand(), rand(), rand(), rand()],
-    cd: [rand(), rand(), rand(), rand()],
-    delays: [rand() * 0.20 + 0.05, rand() * 0.30 + 0.15, rand() * 0.35 + 0.20, rand() * 0.40 + 0.25],
-  };
-  return { l1, l2, l3 };
 }
 
-// Per-onset dab positions. Each onset type has its own preferred band so the
-// drums are spatially recognisable.
 interface DabPositions {
   kick: [number, number];
   snare: [number, number];
@@ -122,34 +137,57 @@ interface DabPositions {
   vocal: [number, number];
 }
 
-function initialDabs(): DabPositions {
-  return {
-    kick: [0.5, 0.72],
-    snare: [0.5, 0.5],
-    hat: [0.5, 0.22],
-    vocal: [0.5, 0.48],
-  };
-}
-
 function rollDab(
   kind: "kick" | "snare" | "hat" | "vocal",
   centroid: number,
 ): [number, number] {
-  const r = () => Math.random();
+  const r = Math.random;
   switch (kind) {
     case "kick":
-      // Lower third, bass-biased: slight lateral scatter.
       return [0.2 + r() * 0.6, 0.6 + r() * 0.25];
     case "snare":
-      // Middle band.
       return [0.2 + r() * 0.6, 0.4 + r() * 0.2];
     case "hat":
-      // Upper band, wider lateral scatter.
       return [0.15 + r() * 0.7, 0.1 + r() * 0.25];
     case "vocal":
-      // Centroid-biased horizontally so vocals land where the spectrum lives.
       return [0.25 + centroid * 0.5 + (r() - 0.5) * 0.15, 0.3 + r() * 0.4];
   }
+}
+
+// Apply slow LFO drift to a base preset config. Modifies a few fields so the
+// preset doesn't sit still even on long tenures.
+function applyDrift(
+  base: PresetConfig,
+  drift: PresetDrift,
+  tSec: number,
+): PresetConfig {
+  const d = { ...base };
+  if (drift.bloomMult) {
+    d.bloomMult = Math.max(
+      0,
+      d.bloomMult + drift.bloomMult.lfo.sample(tSec) * drift.bloomMult.amplitude,
+    );
+  }
+  if (drift.polarWarp) {
+    d.polarWarp = d.polarWarp + drift.polarWarp.lfo.sample(tSec) * drift.polarWarp.amplitude;
+  }
+  if (drift.feedbackAmount) {
+    d.feedbackAmount = Math.max(
+      0,
+      Math.min(
+        0.85,
+        d.feedbackAmount +
+          drift.feedbackAmount.lfo.sample(tSec) * drift.feedbackAmount.amplitude,
+      ),
+    );
+  }
+  if (drift.noiseMult) {
+    d.noiseMult = Math.max(
+      0,
+      d.noiseMult + drift.noiseMult.lfo.sample(tSec) * drift.noiseMult.amplitude,
+    );
+  }
+  return d;
 }
 
 export function DisplacementCanvas() {
@@ -166,22 +204,29 @@ export function DisplacementCanvas() {
     });
     if (!gl) return;
 
+    // Main shader program (displacement + effects deck).
     let program: WebGLProgram;
+    let blitProgram: WebGLProgram;
     try {
       const vs = createShader(gl, gl.VERTEX_SHADER, VERTEX_SHADER);
-      const fs = createShader(gl, gl.FRAGMENT_SHADER, FRAGMENT_SHADER);
-      program = createProgram(gl, vs, fs);
+      const fsMain = createShader(gl, gl.FRAGMENT_SHADER, FRAGMENT_SHADER);
+      const fsBlit = createShader(gl, gl.FRAGMENT_SHADER, BLIT_FRAGMENT_SHADER);
+      program = createProgram(gl, vs, fsMain);
+      blitProgram = createProgram(gl, vs, fsBlit);
       gl.deleteShader(vs);
-      gl.deleteShader(fs);
+      gl.deleteShader(fsMain);
+      gl.deleteShader(fsBlit);
     } catch (err) {
       console.error("[DisplacementCanvas] shader build failed:", err);
       return;
     }
+
     gl.useProgram(program);
 
     const uni = {
       uCurr: gl.getUniformLocation(program, "uCurr"),
       uPrev: gl.getUniformLocation(program, "uPrev"),
+      uFeedback: gl.getUniformLocation(program, "uFeedback"),
       uHasPrev: gl.getUniformLocation(program, "uHasPrev"),
       uBleedT: gl.getUniformLocation(program, "uBleedT"),
       uTime: gl.getUniformLocation(program, "uTime"),
@@ -201,7 +246,6 @@ export function DisplacementCanvas() {
       uPrevTexSize: gl.getUniformLocation(program, "uPrevTexSize"),
       uViewSize: gl.getUniformLocation(program, "uViewSize"),
       uImpulseAges: gl.getUniformLocation(program, "uImpulseAges"),
-      // Newly wired — see displacement-shaders.ts comments.
       uWarp: gl.getUniformLocation(program, "uWarp"),
       uMotionEnergy: gl.getUniformLocation(program, "uMotionEnergy"),
       uVignette: gl.getUniformLocation(program, "uVignette"),
@@ -216,9 +260,28 @@ export function DisplacementCanvas() {
       uDropsL3A: gl.getUniformLocation(program, "uDropsL3A"),
       uDropsL3B: gl.getUniformLocation(program, "uDropsL3B"),
       uDropDelaysL3: gl.getUniformLocation(program, "uDropDelaysL3"),
+      // Effects-deck uniforms
+      uKaleidoSegments: gl.getUniformLocation(program, "uKaleidoSegments"),
+      uPolarWarp: gl.getUniformLocation(program, "uPolarWarp"),
+      uPosterizeAlways: gl.getUniformLocation(program, "uPosterizeAlways"),
+      uDuotoneMix: gl.getUniformLocation(program, "uDuotoneMix"),
+      uDuotoneLo: gl.getUniformLocation(program, "uDuotoneLo"),
+      uDuotoneHi: gl.getUniformLocation(program, "uDuotoneHi"),
+      uEdge: gl.getUniformLocation(program, "uEdge"),
+      uInvert: gl.getUniformLocation(program, "uInvert"),
+      uFeedbackAmount: gl.getUniformLocation(program, "uFeedbackAmount"),
+      uBloomMult: gl.getUniformLocation(program, "uBloomMult"),
+      uNoiseMult: gl.getUniformLocation(program, "uNoiseMult"),
     };
     gl.uniform1i(uni.uCurr, 0);
     gl.uniform1i(uni.uPrev, 1);
+    gl.uniform1i(uni.uFeedback, 2);
+
+    // Blit program uniform (samples the just-drawn offscreen FBO).
+    const blitUSrc = gl.getUniformLocation(blitProgram, "uSrc");
+    gl.useProgram(blitProgram);
+    gl.uniform1i(blitUSrc, 0);
+    gl.useProgram(program);
 
     const { vao } = createQuadBuffer(gl);
 
@@ -236,6 +299,11 @@ export function DisplacementCanvas() {
     const getCurr = (): TextureSlot => (currIsA ? slotA : slotB);
     const getPrev = (): TextureSlot => (currIsA ? slotB : slotA);
     const getInactive = (): TextureSlot => (currIsA ? slotB : slotA);
+
+    // Ping-pong FBOs for feedback trails. Sized to canvas each frame.
+    let fboA: Fbo = createFbo(gl, canvas.clientWidth, canvas.clientHeight);
+    let fboB: Fbo = createFbo(gl, canvas.clientWidth, canvas.clientHeight);
+    let fboWriteIsA = true;
 
     let drops: DropLayers = randomDropLayers();
 
@@ -279,7 +347,6 @@ export function DisplacementCanvas() {
       img.src = url;
     });
 
-    // Kick off an immediate load if a frame is already in the store at mount.
     {
       const seed = useVisualizerStore.getState().currentFrame;
       if (seed) {
@@ -313,11 +380,56 @@ export function DisplacementCanvas() {
       }
     }
 
+    // ===== Preset state =====
+    // Cross-fade between `from` and `to` over PRESET_CROSSFADE_MS. When the
+    // store signals a change (presetTick bumps), we snapshot the current
+    // effective config as `from`, set `to` to the new preset, start the fade.
+    let fromCfg: PresetConfig = { ...BASE };
+    let toCfg: PresetConfig = { ...BASE };
+    let fadeStartAt = 0;
+    let fadeInFlight = false;
+    let currentPresetName: PresetName = useVisualizerStore.getState().preset;
+    let currentDrift: PresetDrift = makeDriftForPreset(currentPresetName);
+
+    const applyPreset = (newName: PresetName, atMs: number) => {
+      if (newName === currentPresetName && !fadeInFlight) return;
+      // Snapshot whatever is currently being rendered as the fade-source.
+      fromCfg = effectiveCfgSnapshot();
+      toCfg = PRESETS[newName] ?? { ...BASE };
+      fadeStartAt = atMs;
+      fadeInFlight = true;
+      currentPresetName = newName;
+      currentDrift = makeDriftForPreset(newName);
+    };
+
+    // Tracks the snapshot used by applyPreset — captured from the last frame's
+    // rendered uniforms.
+    let lastEffective: PresetConfig = { ...BASE };
+    const effectiveCfgSnapshot = (): PresetConfig => ({ ...lastEffective });
+
+    // Watch the store for preset selection. The store increments `presetTick`
+    // whenever `setPreset` is called, so changes propagate even when the name
+    // happens to equal the previous one.
+    const unsubPreset = useVisualizerStore.subscribe((state, prev) => {
+      if (state.presetTick !== prev.presetTick) {
+        applyPreset(state.preset, performance.now());
+      }
+    });
+
+    // Initialise fromCfg/toCfg to the starting preset.
+    toCfg = PRESETS[currentPresetName] ?? { ...BASE };
+    fromCfg = { ...toCfg };
+
     let envelopes = buildEnvelopes(1);
     let lastIntensity = -1;
     const impulses = { kick: 0, snare: 0, hat: 0, vocal: 0 };
     const ages = { kick: 99, snare: 99, hat: 99, vocal: 99 };
-    const dabs: DabPositions = initialDabs();
+    const dabs: DabPositions = {
+      kick: [0.5, 0.72],
+      snare: [0.5, 0.5],
+      hat: [0.5, 0.22],
+      vocal: [0.5, 0.48],
+    };
     let lastOnset = false;
     let lastTick = performance.now();
     const driftStart = performance.now();
@@ -418,11 +530,37 @@ export function DisplacementCanvas() {
 
       resizeCanvasToDisplay(canvas, gl);
 
+      // Keep FBOs sized to the drawing buffer.
+      fboA = resizeFbo(gl, fboA, canvas.width, canvas.height);
+      fboB = resizeFbo(gl, fboB, canvas.width, canvas.height);
+
+      // ===== Preset effective config for this frame =====
+      let fadeT = 1;
+      if (fadeInFlight) {
+        fadeT = Math.min(1, (now - fadeStartAt) / PRESET_CROSSFADE_MS);
+        if (fadeT >= 1) fadeInFlight = false;
+      }
+      const blended = lerpPreset(fromCfg, toCfg, fadeT);
+      const effective = applyDrift(
+        blended,
+        currentDrift,
+        (now - mountedAt) / 1000,
+      );
+      lastEffective = effective;
+
+      // ===== Render main pass to offscreen FBO =====
+      const writeFbo = fboWriteIsA ? fboA : fboB;
+      const readFbo = fboWriteIsA ? fboB : fboA;
+      gl.bindFramebuffer(gl.FRAMEBUFFER, writeFbo.fbo);
+      gl.viewport(0, 0, writeFbo.width, writeFbo.height);
+
       gl.useProgram(program);
       gl.activeTexture(gl.TEXTURE0);
       gl.bindTexture(gl.TEXTURE_2D, currSlot.tex);
       gl.activeTexture(gl.TEXTURE1);
       gl.bindTexture(gl.TEXTURE_2D, prevSlot.tex);
+      gl.activeTexture(gl.TEXTURE2);
+      gl.bindTexture(gl.TEXTURE_2D, readFbo.tex);
 
       gl.uniform1f(uni.uTime, (now - mountedAt) / 1000);
       gl.uniform1f(uni.uBass, envelopes.bass.value);
@@ -450,13 +588,9 @@ export function DisplacementCanvas() {
         ages.hat,
         ages.vocal,
       );
-
-      // Reclaimed signals: warp, motionEnergy, vignette.
       gl.uniform1f(uni.uWarp, targets.warp ?? 0);
       gl.uniform1f(uni.uMotionEnergy, targets.motionEnergy ?? 0);
       gl.uniform1f(uni.uVignette, targets.vignette ?? 0);
-
-      // Onset ink-dab positions packed as two vec4s.
       gl.uniform4f(
         uni.uDabPosKS,
         dabs.kick[0],
@@ -472,52 +606,62 @@ export function DisplacementCanvas() {
         dabs.vocal[1],
       );
 
-      // Three ink-bleed layers — fg / mg / bg.
       const { l1, l2, l3 } = drops;
       gl.uniform4f(uni.uDropsL1A, l1.ab[0], l1.ab[1], l1.ab[2], l1.ab[3]);
       gl.uniform4f(uni.uDropsL1B, l1.cd[0], l1.cd[1], l1.cd[2], l1.cd[3]);
-      gl.uniform4f(
-        uni.uDropDelaysL1,
-        l1.delays[0],
-        l1.delays[1],
-        l1.delays[2],
-        l1.delays[3],
-      );
+      gl.uniform4f(uni.uDropDelaysL1, l1.delays[0], l1.delays[1], l1.delays[2], l1.delays[3]);
       gl.uniform4f(uni.uDropsL2A, l2.ab[0], l2.ab[1], l2.ab[2], l2.ab[3]);
       gl.uniform4f(uni.uDropsL2B, l2.cd[0], l2.cd[1], l2.cd[2], l2.cd[3]);
-      gl.uniform4f(
-        uni.uDropDelaysL2,
-        l2.delays[0],
-        l2.delays[1],
-        l2.delays[2],
-        l2.delays[3],
-      );
+      gl.uniform4f(uni.uDropDelaysL2, l2.delays[0], l2.delays[1], l2.delays[2], l2.delays[3]);
       gl.uniform4f(uni.uDropsL3A, l3.ab[0], l3.ab[1], l3.ab[2], l3.ab[3]);
       gl.uniform4f(uni.uDropsL3B, l3.cd[0], l3.cd[1], l3.cd[2], l3.cd[3]);
-      gl.uniform4f(
-        uni.uDropDelaysL3,
-        l3.delays[0],
-        l3.delays[1],
-        l3.delays[2],
-        l3.delays[3],
-      );
+      gl.uniform4f(uni.uDropDelaysL3, l3.delays[0], l3.delays[1], l3.delays[2], l3.delays[3]);
+
+      // Effects-deck uniforms from the blended+drifted preset.
+      gl.uniform1f(uni.uKaleidoSegments, effective.kaleidoSegments);
+      gl.uniform1f(uni.uPolarWarp, effective.polarWarp);
+      gl.uniform1f(uni.uPosterizeAlways, effective.posterizeAlways);
+      gl.uniform1f(uni.uDuotoneMix, effective.duotoneMix);
+      gl.uniform3f(uni.uDuotoneLo, effective.duotoneLo[0], effective.duotoneLo[1], effective.duotoneLo[2]);
+      gl.uniform3f(uni.uDuotoneHi, effective.duotoneHi[0], effective.duotoneHi[1], effective.duotoneHi[2]);
+      gl.uniform1f(uni.uEdge, effective.edge);
+      gl.uniform1f(uni.uInvert, effective.invert);
+      gl.uniform1f(uni.uFeedbackAmount, effective.feedbackAmount);
+      gl.uniform1f(uni.uBloomMult, effective.bloomMult);
+      gl.uniform1f(uni.uNoiseMult, effective.noiseMult);
 
       gl.bindVertexArray(vao);
       gl.drawArrays(gl.TRIANGLES, 0, 6);
+
+      // ===== Blit offscreen FBO to default framebuffer =====
+      gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+      gl.viewport(0, 0, canvas.width, canvas.height);
+      gl.useProgram(blitProgram);
+      gl.activeTexture(gl.TEXTURE0);
+      gl.bindTexture(gl.TEXTURE_2D, writeFbo.tex);
+      gl.bindVertexArray(vao);
+      gl.drawArrays(gl.TRIANGLES, 0, 6);
+
+      // Swap ping-pong FBOs so next frame samples this one as feedback.
+      fboWriteIsA = !fboWriteIsA;
     };
     raf = requestAnimationFrame(tick);
 
     return () => {
       cancelAnimationFrame(raf);
       unsubFrame();
+      unsubPreset();
       if (pendingImg) {
         pendingImg.onload = null;
         pendingImg.onerror = null;
       }
       if (currentCanvas === canvas) currentCanvas = null;
       gl.deleteProgram(program);
+      gl.deleteProgram(blitProgram);
       gl.deleteTexture(slotA.tex);
       gl.deleteTexture(slotB.tex);
+      deleteFbo(gl, fboA);
+      deleteFbo(gl, fboB);
       gl.deleteVertexArray(vao);
     };
   }, []);

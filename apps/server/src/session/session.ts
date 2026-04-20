@@ -94,6 +94,7 @@ export class Session {
   // LLM-synthesized atmospheric drift. Refreshed in the background; when
   // fresh, it takes priority over raw voice phrases and the static pool.
   private currentLlmDrift: string | null = null;
+  private lastSuggestedPreset: string | null = null;
   private llmRefreshTimer?: ReturnType<typeof setTimeout>;
   private llmInFlight?: AbortController;
   private lastLlmRefreshAt = 0;
@@ -196,7 +197,7 @@ export class Session {
       .map((e) => e.text);
 
     try {
-      const drift = await synthesizeDrift(
+      const result = await synthesizeDrift(
         {
           scene: {
             subject: this.scene.subject,
@@ -208,13 +209,21 @@ export class Session {
           valence: this.lastValence,
           arousal: this.lastArousal,
           previousDrift: this.currentLlmDrift,
+          previousPreset: this.lastSuggestedPreset,
         },
         { signal: controller.signal, logger: this.logger },
       );
       if (controller.signal.aborted) return;
-      if (drift) {
-        this.currentLlmDrift = drift;
-        this.logger.info({ drift }, "llm drift refreshed");
+      if (result.drift) {
+        this.currentLlmDrift = result.drift;
+        this.logger.info(
+          { drift: result.drift, preset: result.preset },
+          "llm drift refreshed",
+        );
+      }
+      if (result.preset && result.preset !== this.lastSuggestedPreset) {
+        this.lastSuggestedPreset = result.preset;
+        this.send({ type: "preset.suggest", name: result.preset });
       }
     } catch (err) {
       if (!controller.signal.aborted) {
@@ -256,6 +265,7 @@ export class Session {
     this.heroImageUrl = null;
     this.voiceBuffer = [];
     this.currentLlmDrift = null;
+    this.lastSuggestedPreset = null;
     this.lastLlmRefreshAt = 0;
     this.llmInFlight?.abort();
     if (this.llmRefreshTimer) {

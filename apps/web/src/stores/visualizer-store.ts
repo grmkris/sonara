@@ -6,6 +6,11 @@ import {
   defaultAudio,
   defaultScene,
 } from "@music-visualizer/shared";
+import { PRESET_NAMES, type PresetName } from "@/lib/render/presets";
+
+export type PresetMode = "manual" | "cycle" | "section" | "llm";
+const PRESET_KEY = "dream.preset";
+const PRESET_MODE_KEY = "dream.presetMode";
 
 export type JobStatus = "idle" | "running" | "cancelled" | "error";
 export type TriggerReason =
@@ -35,6 +40,23 @@ export function hydrateUiVisible(): void {
   useVisualizerStore.setState({ uiVisible: raw !== "0" });
 }
 
+// Pulls the last-used preset + mode from localStorage. Matches the
+// hydrateUiVisible pattern — server always renders with `wet_ink` / `manual`,
+// client applies the stored preference post-mount.
+export function hydratePresetPrefs(): void {
+  if (typeof window === "undefined") return;
+  const p = window.localStorage.getItem(PRESET_KEY);
+  const m = window.localStorage.getItem(PRESET_MODE_KEY);
+  const update: Partial<VisualizerState> = {};
+  if (p && (PRESET_NAMES as string[]).includes(p)) {
+    update.preset = p as PresetName;
+  }
+  if (m === "manual" || m === "cycle" || m === "section" || m === "llm") {
+    update.presetMode = m;
+  }
+  if (Object.keys(update).length > 0) useVisualizerStore.setState(update);
+}
+
 export interface VisualizerState {
   scene: DreamSceneState;
   audio: AudioFeatures;
@@ -51,6 +73,16 @@ export interface VisualizerState {
   latestVersion: number;
   triggerLog: TriggerEntry[];
 
+  // Effects-deck preset state. Controls which named look the shader is
+  // cross-fading toward; driven manually, by a timer, by section triggers
+  // (from job.status reason="section"), or by LLM suggestions.
+  preset: PresetName;
+  presetMode: PresetMode;
+  presetCycleMs: number;
+  // Monotonic counter — bumped whenever a new preset is SELECTED (from any
+  // source). DisplacementCanvas subscribes to this to start a cross-fade.
+  presetTick: number;
+
   patchSceneLocal: (patch: DreamSceneStatePatch) => void;
   setScene: (state: DreamSceneState) => void;
   setAudio: (f: AudioFeatures) => void;
@@ -63,6 +95,10 @@ export interface VisualizerState {
   pulseCommit: () => void;
   pulseSweep: () => void;
   pushTrigger: (reason: TriggerReason, version: number) => void;
+
+  setPreset: (name: PresetName) => void;
+  setPresetMode: (m: PresetMode) => void;
+  setPresetCycleMs: (ms: number) => void;
 }
 
 export const useVisualizerStore = create<VisualizerState>()((set, get) => ({
@@ -80,6 +116,11 @@ export const useVisualizerStore = create<VisualizerState>()((set, get) => ({
   sweepPulse: 0,
   latestVersion: 0,
   triggerLog: [],
+
+  preset: "wet_ink",
+  presetMode: "manual",
+  presetCycleMs: 90_000,
+  presetTick: 0,
 
   patchSceneLocal: (patch) =>
     set((s) => ({ scene: { ...s.scene, ...patch } })),
@@ -130,6 +171,22 @@ export const useVisualizerStore = create<VisualizerState>()((set, get) => ({
       };
       return { triggerLog: [entry, ...s.triggerLog].slice(0, TRIGGER_LOG_MAX) };
     }),
+
+  setPreset: (name) =>
+    set((s) => {
+      if (s.preset === name) return {};
+      if (typeof window !== "undefined") {
+        window.localStorage.setItem(PRESET_KEY, name);
+      }
+      return { preset: name, presetTick: s.presetTick + 1 };
+    }),
+  setPresetMode: (m) => {
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem(PRESET_MODE_KEY, m);
+    }
+    set({ presetMode: m });
+  },
+  setPresetCycleMs: (ms) => set({ presetCycleMs: Math.max(5_000, ms) }),
 }));
 
 /**

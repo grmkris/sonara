@@ -5,6 +5,11 @@ import { toast } from "sonner";
 import type { ClientEvent } from "@music-visualizer/shared";
 import { WsClient } from "@/lib/ws/ws-client";
 import { useVisualizerStore } from "@/stores/visualizer-store";
+import { PRESET_NAMES, type PresetName } from "@/lib/render/presets";
+
+function isKnownPreset(name: string): name is PresetName {
+  return (PRESET_NAMES as readonly string[]).includes(name);
+}
 
 const WS_URL =
   process.env.NEXT_PUBLIC_WS_URL ?? "ws://localhost:3001/ws";
@@ -44,6 +49,14 @@ export function useWsSession(): (event: ClientEvent) => void {
                 description: event.message ?? "unknown error",
                 duration: 4000,
               });
+            }
+            break;
+          case "preset.suggest":
+            // Server (LLM) suggests a visual preset. Only apply if user has
+            // opted into the `llm` mode — otherwise the suggestion is noted
+            // but ignored, respecting manual / cycle / section selections.
+            if (s.presetMode === "llm" && isKnownPreset(event.name)) {
+              s.setPreset(event.name);
             }
             break;
         }

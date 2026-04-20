@@ -24,6 +24,9 @@ export const ClientEvent = z.discriminatedUnion("type", [
 
 export type ClientEvent = z.infer<typeof ClientEvent>;
 
+// Preset name suggestions are free-form strings here — the client validates
+// against its own PRESET_NAMES list before applying. Keeps the schema decoupled
+// from the visual preset catalog.
 export const ServerEvent = z.discriminatedUnion("type", [
   z.object({ type: z.literal("scene.state"), state: DreamSceneState }),
   z.object({
@@ -43,6 +46,10 @@ export const ServerEvent = z.discriminatedUnion("type", [
     reason: z
       .enum(["pause", "semantic", "section", "periodic", "commit", "voice"])
       .optional(),
+  }),
+  z.object({
+    type: z.literal("preset.suggest"),
+    name: z.string().min(1).max(64),
   }),
 ]);
 

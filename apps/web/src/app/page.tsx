@@ -22,6 +22,7 @@ import {
 } from "@/hooks/use-audio-features";
 import { useHotkey } from "@/hooks/use-hotkey";
 import {
+  hydratePresetPrefs,
   hydrateUiVisible,
   useVisualizerStore,
 } from "@/stores/visualizer-store";
@@ -45,6 +46,7 @@ export default function Page() {
   // Apply localStorage preference after mount so SSR and first client paint match.
   useEffect(() => {
     hydrateUiVisible();
+    hydratePresetPrefs();
   }, []);
 
   useHotkey(

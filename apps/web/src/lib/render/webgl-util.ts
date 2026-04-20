@@ -130,6 +130,76 @@ export function resizeCanvasToDisplay(
   return false;
 }
 
+// Framebuffer object with a colour-attached texture, for ping-pong feedback.
+// Size-resizable so the FBO tracks canvas resizes.
+export interface Fbo {
+  fbo: WebGLFramebuffer;
+  tex: WebGLTexture;
+  width: number;
+  height: number;
+}
+
+export function createFbo(
+  gl: WebGL2RenderingContext,
+  width: number,
+  height: number,
+): Fbo {
+  const tex = gl.createTexture();
+  if (!tex) throw new Error("createTexture failed");
+  gl.bindTexture(gl.TEXTURE_2D, tex);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+  gl.texImage2D(
+    gl.TEXTURE_2D,
+    0,
+    gl.RGBA,
+    Math.max(1, width),
+    Math.max(1, height),
+    0,
+    gl.RGBA,
+    gl.UNSIGNED_BYTE,
+    null,
+  );
+
+  const fbo = gl.createFramebuffer();
+  if (!fbo) throw new Error("createFramebuffer failed");
+  gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
+  gl.framebufferTexture2D(
+    gl.FRAMEBUFFER,
+    gl.COLOR_ATTACHMENT0,
+    gl.TEXTURE_2D,
+    tex,
+    0,
+  );
+  const status = gl.checkFramebufferStatus(gl.FRAMEBUFFER);
+  gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+  if (status !== gl.FRAMEBUFFER_COMPLETE) {
+    throw new Error(`FBO incomplete: 0x${status.toString(16)}`);
+  }
+  return { fbo, tex, width, height };
+}
+
+export function resizeFbo(
+  gl: WebGL2RenderingContext,
+  slot: Fbo,
+  width: number,
+  height: number,
+): Fbo {
+  const w = Math.max(1, width);
+  const h = Math.max(1, height);
+  if (slot.width === w && slot.height === h) return slot;
+  gl.bindTexture(gl.TEXTURE_2D, slot.tex);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, w, h, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+  return { ...slot, width: w, height: h };
+}
+
+export function deleteFbo(gl: WebGL2RenderingContext, slot: Fbo): void {
+  gl.deleteTexture(slot.tex);
+  gl.deleteFramebuffer(slot.fbo);
+}
+
 export function isWebgl2Available(): boolean {
   if (typeof document === "undefined") return false;
   try {

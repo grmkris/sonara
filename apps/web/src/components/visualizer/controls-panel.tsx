@@ -10,6 +10,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { IntensityDial } from "@/components/visualizer/intensity-dial";
+import { PresetPicker } from "@/components/visualizer/preset-picker";
 import { useVisualizerStore } from "@/stores/visualizer-store";
 import { cn } from "@/lib/utils";
 
@@ -52,6 +53,10 @@ export function ControlsPanel({ send }: ControlsPanelProps) {
 
   return (
     <div className="flex flex-col gap-6">
+      <PresetPicker />
+
+      <Separator className="bg-[color:var(--hairline)]/30" />
+
       <IntensityDial send={send} />
 
       <Separator className="bg-[color:var(--hairline)]/30" />
