@@ -1,0 +1,40 @@
+# Fly.io config for the music-visualizer server (Bun + Hono + WebSocket).
+#
+# Deploy:
+#   fly launch --no-deploy        # first time — creates the app, reads this file
+#   fly secrets set FAL_KEY=...   # required; image gen + LLM drift both use it
+#   fly deploy                    # build + push + release
+#
+# The web app (apps/web) is deployed separately to Vercel. See DEPLOY.md.
+
+app = "music-visualizer-server"
+primary_region = "iad"  # change to your nearest Fly region if desired
+
+[build]
+  dockerfile = "Dockerfile"
+
+[http_service]
+  internal_port = 3001
+  force_https = true
+  # auto_stop saves cost when idle; min_machines_running = 0 means first
+  # visitor after a cold window waits ~3–5s. Bump to 1 for always-on (costs more).
+  auto_stop_machines = "stop"
+  auto_start_machines = true
+  min_machines_running = 0
+  processes = ["app"]
+
+  [[http_service.checks]]
+    interval = "30s"
+    timeout = "5s"
+    grace_period = "10s"
+    method = "GET"
+    path = "/health"
+
+[env]
+  LOG_LEVEL = "info"
+  # PORT is automatically injected by Fly as $PORT; server reads process.env.PORT.
+
+[[vm]]
+  cpu_kind = "shared"
+  cpus = 1
+  memory_mb = 512
