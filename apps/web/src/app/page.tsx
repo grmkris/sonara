@@ -10,6 +10,8 @@ import { SlitScanTrail } from "@/components/visualizer/slit-scan-trail";
 import { ControlsPanel } from "@/components/visualizer/controls-panel";
 import { SceneHud } from "@/components/visualizer/scene-hud";
 import { HideToggle } from "@/components/visualizer/hide-toggle";
+import { UserControls } from "@/components/user-controls";
+import { DemoRecorder } from "@/components/visualizer/demo-recorder";
 import { TriggerLog } from "@/components/visualizer/trigger-log";
 import { ScanSweep } from "@/components/visualizer/scan-sweep";
 import { Stamp } from "@/components/visualizer/stamp";
@@ -85,6 +87,7 @@ export default function Page() {
         <Logotype />
         <div className="flex items-center gap-6 pt-2">
           <Timestamp />
+          <UserControls />
           <HideToggle />
         </div>
       </div>
@@ -156,6 +159,7 @@ export default function Page() {
       </div>
 
       <Stamp />
+      <DemoRecorder />
     </main>
   );
 }

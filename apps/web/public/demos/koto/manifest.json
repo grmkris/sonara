@@ -1,12 +1,12 @@
 {
   "slug": "koto",
   "title": "In the place far away",
-  "artist": "Pixabay — koto composer credit TBD on download",
+  "artist": "harumachimusic",
   "source": "https://pixabay.com/music/ambient-in-the-place-far-away-japanese-koto-inspirational-calm-music-151182/",
   "license": "Pixabay Content License",
   "audio": "audio.mp3",
   "prompt": "sumi-e ink landscape at dusk, distant koto strings, cedar mountains, washi paper",
   "preset": "wet_ink",
-  "durationSec": 0,
+  "durationSec": 172.67,
   "frames": []
 }

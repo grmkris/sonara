@@ -30,6 +30,12 @@ type TriggerReason =
 const VOICE_PHRASE_TTL_MS = 30_000;
 const VOICE_BUFFER_MAX = 8;
 
+// How long a voice-derived atmosphere clause stays "fresh" before we let
+// drift fall through to the rotating static pool. Without this, one voice
+// phrase sticks forever and every subsequent trigger reuses the identical
+// drift clause — images stop subtly morphing between generations.
+const ATMOSPHERE_TTL_MS = 15_000;
+
 // Reset-via-voice shows the user a 10s confirm toast before actually firing.
 const RESET_CONFIRM_TTL_MS = 10_000;
 
@@ -84,6 +90,7 @@ export class Session {
 
   private voiceBuffer: { text: string; at: number }[] = [];
   private currentAtmosphere: string | null = null;
+  private currentAtmosphereAt = 0;
   private voiceInFlight?: AbortController;
   private voiceDebounceTimer?: ReturnType<typeof setTimeout>;
 
@@ -240,7 +247,10 @@ export class Session {
     );
 
     // Always update atmosphere (flavors subsequent triggers).
-    if (intent.atmosphere) this.currentAtmosphere = intent.atmosphere;
+    if (intent.atmosphere) {
+      this.currentAtmosphere = intent.atmosphere;
+      this.currentAtmosphereAt = Date.now();
+    }
 
     // Visual-preset suggestion is advisory. The client gates on its own
     // presetMode === "llm" before actually applying it.
@@ -296,6 +306,7 @@ export class Session {
     this.heroImageUrl = null;
     this.voiceBuffer = [];
     this.currentAtmosphere = null;
+    this.currentAtmosphereAt = 0;
     this.send({ type: "scene.state", state: this.scene });
     this.send({ type: "job.status", status: "idle" });
   }
@@ -339,8 +350,11 @@ export class Session {
     // Drift layering: current atmosphere (from voice-intent) →
     // most-recent voice phrase raw → static pool.
     const latestVoice = this.getLatestVoice();
+    const atmosphereFresh =
+      this.currentAtmosphere !== null &&
+      Date.now() - this.currentAtmosphereAt < ATMOSPHERE_TTL_MS;
     const drift = sampleDriftLayered({
-      llmDrift: this.currentAtmosphere,
+      llmDrift: atmosphereFresh ? this.currentAtmosphere : null,
       latestVoice,
     });
     const prompt = drift ? `${basePrompt}, ${drift}` : basePrompt;
@@ -363,7 +377,7 @@ export class Session {
         version,
         prompt,
         drift,
-        driftSource: this.currentAtmosphere
+        driftSource: atmosphereFresh
           ? "llm"
           : latestVoice
             ? "voice"

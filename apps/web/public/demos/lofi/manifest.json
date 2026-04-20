@@ -1,12 +1,12 @@
 {
   "slug": "lofi",
   "title": "Lofi Hip Hop Beat",
-  "artist": "The_Mountain",
+  "artist": "tunetank",
   "source": "https://pixabay.com/music/beats-lofi-hip-hop-beat-387061/",
   "license": "Pixabay Content License",
   "audio": "audio.mp3",
   "prompt": "rain-blurred tokyo alley at 3am, neon puddles, slow dolly",
   "preset": "dust",
-  "durationSec": 0,
+  "durationSec": 171.29,
   "frames": []
 }

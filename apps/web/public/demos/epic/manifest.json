@@ -1,12 +1,12 @@
 {
   "slug": "epic",
   "title": "Epic Cinematic Drama",
-  "artist": "Pixabay — composer credit TBD on download",
+  "artist": "grand_project",
   "source": "https://pixabay.com/music/build-up-scenes-epic-cinematic-drama-131725/",
   "license": "Pixabay Content License",
   "audio": "audio.mp3",
   "prompt": "thunderhead over volcanic ridge, ember light breaking cloud, kinetic ash",
   "preset": "storm",
-  "durationSec": 0,
+  "durationSec": 178.57,
   "frames": []
 }
