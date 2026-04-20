@@ -1,10 +1,21 @@
 import type { DreamSceneState } from "@music-visualizer/shared";
 
-// Pattern mirrors ai-stilist/packages/wardrobe/src/inspiration/generate-inspiration.ts:36-86 —
-// typed state → conditional comma-joined sections. No negative prompts (FLUX.2 guidance).
+// Subject-anchor invariant
+// ------------------------
+// `subject` is the identity anchor of the scene. It is ALWAYS emitted as the
+// first segment of the prompt, byte-identical, never modulated by audio, never
+// reordered, never mixed into style/mood clauses. FLUX.2 klein's character
+// consistency depends on the subject phrase staying in a stable position with a
+// stable spelling across keyframes. If future code needs to append
+// audio-reactive modifiers, they must go AFTER every other segment — never
+// touch the subject slot.
+//
+// Pattern mirrors ai-stilist/packages/wardrobe/src/inspiration/generate-inspiration.ts:36-86.
 export function buildPrompt(s: DreamSceneState): string {
-  const parts: (string | false)[] = [
-    s.subject,
+  const subject = s.subject.trim();
+  if (subject.length === 0) return "";
+
+  const tail: (string | false)[] = [
     s.action,
     s.style,
     s.environment,
@@ -21,7 +32,8 @@ export function buildPrompt(s: DreamSceneState): string {
     s.preservePalette && "preserve color family",
   ];
 
-  return parts
-    .filter((p): p is string => typeof p === "string" && p.length > 0)
-    .join(", ");
+  const tailParts = tail.filter(
+    (p): p is string => typeof p === "string" && p.length > 0,
+  );
+  return [subject, ...tailParts].join(", ");
 }

@@ -6,20 +6,30 @@ if (FAL_KEY) {
   fal.config({ credentials: FAL_KEY });
 }
 
-// FLUX.2 [klein] — sub-second image gen from Black Forest Labs, served by fal.
-// Two endpoints:
-//   - text-to-image:  fal-ai/flux-2/klein/4b
-//   - edit / img2img: fal-ai/flux-2/klein/4b/edit  (takes image_urls array, up to 4)
-// Env overrides keep us forward-compatible if BFL bumps model paths.
-const TEXT_MODEL = process.env.FAL_TEXT_MODEL ?? "fal-ai/flux-2/klein/4b";
-const EDIT_MODEL = process.env.FAL_EDIT_MODEL ?? "fal-ai/flux-2/klein/4b/edit";
-// Fallback (text-only) for when the primary text model 404s.
+// FLUX.2 tier routing.
+//
+// Flow tier — runs on every periodic / semantic / section keyframe.
+//   Default: klein 9B (measurably better preserve-most-of-input than 4B).
+//   Edit variant for img2img continuity.
+// Commit tier — runs only when the user explicitly commits (Enter / 印 button).
+//   Default: flux-2-pro/edit (state-of-the-art multi-reference editor).
+//   The commit frame becomes the hero that all subsequent flow frames edit on top of.
+// Fallback — text-only last resort when both above 404/error.
+const FLOW_TEXT_MODEL =
+  process.env.FAL_TEXT_MODEL ?? "fal-ai/flux-2/klein/9b";
+const FLOW_EDIT_MODEL =
+  process.env.FAL_EDIT_MODEL ?? "fal-ai/flux-2/klein/9b/edit";
+const COMMIT_TEXT_MODEL =
+  process.env.FAL_COMMIT_TEXT_MODEL ?? "fal-ai/flux-2-pro";
+const COMMIT_EDIT_MODEL =
+  process.env.FAL_COMMIT_EDIT_MODEL ?? "fal-ai/flux-2-pro/edit";
 const FALLBACK_TEXT_MODEL = "fal-ai/flux/schnell";
 
 export interface StreamPreviewInput {
   prompt: string;
   referenceImages?: string[];
   seed?: number;
+  forCommit?: boolean;
   signal: AbortSignal;
   logger: Logger;
   onPreview: (url: string) => void;
@@ -50,11 +60,12 @@ interface SubscribeArgs {
   logger: Logger;
   onPreview: (url: string) => void;
   onFinal: (url: string) => void;
+  tier: "flow" | "commit" | "fallback";
 }
 
 async function subscribeOnce(args: SubscribeArgs): Promise<boolean> {
   args.logger.info(
-    { model: args.model, hasRef: Boolean(args.input.image_urls) },
+    { model: args.model, tier: args.tier, hasRef: Boolean(args.input.image_urls) },
     "fal subscribe start",
   );
 
@@ -72,7 +83,7 @@ async function subscribeOnce(args: SubscribeArgs): Promise<boolean> {
   if (!url) return false;
   args.onPreview(url);
   args.onFinal(url);
-  args.logger.info({ model: args.model, url }, "fal subscribe complete");
+  args.logger.info({ model: args.model, tier: args.tier, url }, "fal subscribe complete");
   return true;
 }
 
@@ -82,12 +93,9 @@ export async function streamPreview(input: StreamPreviewInput): Promise<void> {
     return;
   }
 
-  const refs = (input.referenceImages ?? []).filter(Boolean).slice(-4);
+  const refs = (input.referenceImages ?? []).filter(Boolean);
   const hasRef = refs.length > 0;
 
-  // Seed pinning is the single most important lever for identity stability
-  // across frames. With edit-endpoint + same seed + growing reference list,
-  // the subject ("the cat") persists instead of re-rolling each generation.
   const commonInput: Record<string, unknown> = {
     prompt: input.prompt,
     num_images: 1,
@@ -98,10 +106,15 @@ export async function streamPreview(input: StreamPreviewInput): Promise<void> {
   };
   if (typeof input.seed === "number") commonInput.seed = input.seed;
 
-  const primaryModel = hasRef ? EDIT_MODEL : TEXT_MODEL;
+  const [primaryEditModel, primaryTextModel]: [string, string] = input.forCommit
+    ? [COMMIT_EDIT_MODEL, COMMIT_TEXT_MODEL]
+    : [FLOW_EDIT_MODEL, FLOW_TEXT_MODEL];
+
+  const primaryModel = hasRef ? primaryEditModel : primaryTextModel;
   const primaryInput = hasRef
     ? { ...commonInput, image_urls: refs }
     : commonInput;
+  const tier: "flow" | "commit" = input.forCommit ? "commit" : "flow";
 
   try {
     const ok = await subscribeOnce({
@@ -111,20 +124,20 @@ export async function streamPreview(input: StreamPreviewInput): Promise<void> {
       logger: input.logger,
       onPreview: input.onPreview,
       onFinal: input.onFinal,
+      tier,
     });
     if (ok || input.signal.aborted) return;
-    input.logger.warn({ model: primaryModel }, "primary returned no image; trying text fallback");
+    input.logger.warn({ model: primaryModel, tier }, "primary returned no image; trying text fallback");
   } catch (err) {
     if (input.signal.aborted) return;
-    input.logger.warn({ err, model: primaryModel }, "primary fal model errored; trying text fallback");
+    input.logger.warn({ err, model: primaryModel, tier }, "primary fal model errored; trying text fallback");
   }
 
-  // Text-only fallback — used when the primary endpoint is unavailable.
-  // Warn the caller that identity won't be preserved on this path.
+  // Text-only fallback sheds identity (no image_urls). Logged loudly.
   if (hasRef) {
     input.logger.warn(
       { model: FALLBACK_TEXT_MODEL },
-      "fallback is text-only; dropping reference images (identity will drift)",
+      "fallback is text-only; dropping reference image (identity will drift)",
     );
   }
   try {
@@ -135,6 +148,7 @@ export async function streamPreview(input: StreamPreviewInput): Promise<void> {
       logger: input.logger,
       onPreview: input.onPreview,
       onFinal: input.onFinal,
+      tier: "fallback",
     });
   } catch (err2) {
     if (!input.signal.aborted) input.onError(err2);

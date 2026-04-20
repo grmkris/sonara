@@ -18,8 +18,8 @@ export interface SessionOpts {
 
 type TriggerReason = "pause" | "semantic" | "periodic" | "section" | "commit";
 
-const PAUSE_MS = 600;
-const PERIODIC_MS = 4000;
+// Baseline thresholds. PERIODIC_MS and PAUSE_MS are intensity-derived
+// (see cadenceFromIntensity below).
 const SEMANTIC_THRESHOLD = 0.3;
 const SECTION_DELTA_THRESHOLD = 0.5;
 const SECTION_SUSTAIN_MS = 500;
@@ -28,6 +28,19 @@ const SECTION_SUSTAIN_MS = 500;
 const SEED_MAX = 2_147_483_647;
 function rollSeed(): number {
   return Math.floor(Math.random() * SEED_MAX);
+}
+
+function lerp(a: number, b: number, t: number): number {
+  return a + (b - a) * t;
+}
+
+// Intensity 0..1 → periodic + pause timing. Matches plan doc D1.
+function cadenceFromIntensity(i: number): { periodicMs: number; pauseMs: number } {
+  const I = Math.max(0, Math.min(1, i));
+  return {
+    periodicMs: Math.round(lerp(20_000, 4_000, I)),
+    pauseMs: Math.round(lerp(2_000, 600, I)),
+  };
 }
 
 export class Session {
@@ -42,12 +55,13 @@ export class Session {
   private readonly send: (e: ServerEvent) => void;
   private readonly logger: Logger;
 
-  // Per-session seed pinned at construction and rerolled on reset(). With the
-  // FLUX.2 klein edit endpoint, the same seed across calls keeps the subject's
-  // identity stable across frames (no "new cat every generation").
   private seed: number = rollSeed();
 
-  // Section detection state.
+  // Single-hero identity anchor. Updated ONLY on commit-tier completion.
+  // Flow-tier frames condition on this but never mutate it — prevents the
+  // frame-to-frame drift compounding that a rolling ring buffer causes.
+  private heroImageUrl: string | null = null;
+
   private lastSectionEnergy = 0;
   private sectionDeltaStartedAt: number | null = null;
   private lastAudioAt = 0;
@@ -76,14 +90,12 @@ export class Session {
       this.trigger("semantic");
       return;
     }
-    // Restart pause timer — user is still editing.
     this.schedulePause();
   }
 
   applyAudio(features: AudioFeatures): void {
     this.lastAudioAt = Date.now();
 
-    // Section-change detection on server-received 5 Hz feature stream.
     const delta = Math.abs(features.sectionEnergy - this.lastSectionEnergy);
     if (delta > SECTION_DELTA_THRESHOLD) {
       const now = Date.now();
@@ -97,7 +109,6 @@ export class Session {
       }
     } else {
       this.sectionDeltaStartedAt = null;
-      // Slow tracking so small drift doesn't starve the detector.
       this.lastSectionEnergy =
         this.lastSectionEnergy * 0.9 + features.sectionEnergy * 0.1;
     }
@@ -114,6 +125,7 @@ export class Session {
     this.activeVersion = 0;
     this.lastKeyframeAt = 0;
     this.seed = rollSeed();
+    this.heroImageUrl = null;
     this.send({ type: "scene.state", state: this.scene });
     this.send({ type: "job.status", status: "idle" });
   }
@@ -126,19 +138,19 @@ export class Session {
 
   private schedulePause(): void {
     if (this.pauseTimer) clearTimeout(this.pauseTimer);
+    const { pauseMs } = cadenceFromIntensity(this.scene.intensity);
     this.pauseTimer = setTimeout(() => {
       this.pauseTimer = undefined;
       const diff = semanticDiff(this.lastGeneratedScene, this.scene);
       if (diff > 0.05) this.trigger("pause");
-    }, PAUSE_MS);
+    }, pauseMs);
   }
 
   private startPeriodic(): void {
     this.periodicTimer = setInterval(() => {
       const now = Date.now();
-      if (now - this.lastKeyframeAt < PERIODIC_MS) return;
-      // Only refresh periodically if the user has spoken at all (non-empty subject)
-      // or fed audio recently. Avoid burning fal calls on an idle blank session.
+      const { periodicMs } = cadenceFromIntensity(this.scene.intensity);
+      if (now - this.lastKeyframeAt < periodicMs) return;
       const hasAudio = now - this.lastAudioAt < 5000;
       const hasScene = this.scene.subject.trim().length > 0;
       if (!hasAudio && !hasScene) return;
@@ -159,13 +171,23 @@ export class Session {
 
     this.activeVersion += 1;
     const version = this.activeVersion;
-    this.scene = { ...this.scene, version };
+    // Surface hero URL in scene.references for wire compatibility; the real
+    // source of truth is this.heroImageUrl on the server.
+    const nextReferences = this.heroImageUrl ? [this.heroImageUrl] : [];
+    this.scene = { ...this.scene, version, references: nextReferences };
     const snapshot: DreamSceneState = this.scene;
-    const referenceImages = snapshot.references.slice(-4);
+    const forCommit = reason === "commit";
 
     this.send({ type: "scene.state", state: this.scene });
     this.logger.info(
-      { reason, version, prompt, seed: this.seed, refs: referenceImages.length },
+      {
+        reason,
+        version,
+        prompt,
+        seed: this.seed,
+        hasHero: this.heroImageUrl !== null,
+        tier: forCommit ? "commit" : "flow",
+      },
       "trigger fire",
     );
     this.send({ type: "job.status", status: "running", reason });
@@ -173,8 +195,9 @@ export class Session {
 
     streamPreview({
       prompt,
-      referenceImages,
+      referenceImages: nextReferences,
       seed: this.seed,
+      forCommit,
       signal: controller.signal,
       logger: this.logger,
       onPreview: (url) => {
@@ -184,9 +207,15 @@ export class Session {
       onFinal: (url) => {
         if (version !== this.activeVersion) return;
         this.lastGeneratedScene = snapshot;
-        // Keep up to the last 4 frames as references for continuity.
-        const nextRefs = [...this.scene.references, url].slice(-4);
-        this.scene = { ...this.scene, references: nextRefs };
+        // Only commit-tier frames promote to hero. Flow-tier frames are
+        // transient and never become anchors; this is what stops identity
+        // drift from compounding.
+        if (forCommit) {
+          this.heroImageUrl = url;
+          this.scene = { ...this.scene, references: [url] };
+          this.send({ type: "scene.state", state: this.scene });
+          this.logger.info({ url }, "hero image updated (commit-tier)");
+        }
         this.send({ type: "frame.final", imageUrl: url, version });
         this.send({ type: "job.status", status: "idle" });
       },

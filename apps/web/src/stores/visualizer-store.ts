@@ -25,11 +25,13 @@ export interface TriggerEntry {
 const TRIGGER_LOG_MAX = 16;
 const UI_VISIBLE_KEY = "dream.uiVisible";
 
-function readInitialUiVisible(): boolean {
-  if (typeof window === "undefined") return true;
+// Always `true` on first render (server + client) so SSR hydrates cleanly. The
+// stored preference is applied post-mount via `hydrateUiVisible()`.
+export function hydrateUiVisible(): void {
+  if (typeof window === "undefined") return;
   const raw = window.localStorage.getItem(UI_VISIBLE_KEY);
-  if (raw === null) return true;
-  return raw !== "0";
+  if (raw === null) return;
+  useVisualizerStore.setState({ uiVisible: raw !== "0" });
 }
 
 export interface VisualizerState {
@@ -72,7 +74,7 @@ export const useVisualizerStore = create<VisualizerState>()((set, get) => ({
   statusMessage: null,
   connected: false,
 
-  uiVisible: readInitialUiVisible(),
+  uiVisible: true,
   commitPulse: 0,
   sweepPulse: 0,
   latestVersion: 0,

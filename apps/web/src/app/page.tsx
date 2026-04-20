@@ -11,6 +11,7 @@ import { HideToggle } from "@/components/visualizer/hide-toggle";
 import { Hanko } from "@/components/visualizer/hanko";
 import { ScanSweep } from "@/components/visualizer/scan-sweep";
 import { TriggerLog } from "@/components/visualizer/trigger-log";
+import { IntensityDial } from "@/components/visualizer/intensity-dial";
 import { Button } from "@/components/ui/button";
 import { useWsSession } from "@/hooks/use-ws-session";
 import {
@@ -18,7 +19,10 @@ import {
   type AudioSource,
 } from "@/hooks/use-audio-features";
 import { useHotkey } from "@/hooks/use-hotkey";
-import { useVisualizerStore } from "@/stores/visualizer-store";
+import {
+  hydrateUiVisible,
+  useVisualizerStore,
+} from "@/stores/visualizer-store";
 import { cn } from "@/lib/utils";
 
 export default function Page() {
@@ -37,6 +41,11 @@ export default function Page() {
 
   const uiVisible = useVisualizerStore((s) => s.uiVisible);
   const setUiVisible = useVisualizerStore((s) => s.setUiVisible);
+
+  // Apply localStorage preference after mount so SSR and first client paint match.
+  useEffect(() => {
+    hydrateUiVisible();
+  }, []);
 
   // Clear mic-denied banner after a short window.
   useEffect(() => {
@@ -118,8 +127,11 @@ export default function Page() {
               audio
             </span>
           </div>
-          <div className="mt-2">
-            <AudioMeter />
+          <div className="mt-2 flex items-center gap-8">
+            <div className="flex-1">
+              <AudioMeter />
+            </div>
+            <IntensityDial send={send} />
           </div>
           <div className="mt-3 flex items-center justify-between gap-6">
             <MusicSource

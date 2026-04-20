@@ -5,43 +5,72 @@ import {
   markImageLoaded,
   useVisualizerStore,
 } from "@/stores/visualizer-store";
-import { damp } from "@/lib/render/damp";
-import { targetsFromAudio } from "@/lib/render/map-audio-to-visuals";
+import {
+  intensityCoefficients,
+  targetsFromAudio,
+} from "@/lib/render/map-audio-to-visuals";
+import { createVuEnvelope, type VuEnvelope } from "@/lib/render/vu";
 import { CanvasGrain } from "@/components/visualizer/canvas-grain";
 import { OnsetRing } from "@/components/visualizer/onset-ring";
+import { InkDrops } from "@/components/visualizer/ink-drops";
 
-// Duration (ms) of the ink-bleed reveal when a new frame arrives on top of a
-// previous one. First-frame loads use the shorter fade instead.
 const BLEED_MS = 1400;
 const FADE_MS = 640;
-
-// Damping factors per feature. Higher = more audio-reactive, lower = smoother.
-// Tuned so kick drums register without the image thrashing.
-const DAMP_ZOOM = 0.15;
-const DAMP_BLOOM = 0.12;
-const DAMP_WARP = 0.05;
-const DAMP_BLUR = 0.08;
-const DAMP_PALETTE = 0.02;
-const DAMP_IMPULSE_DECAY = 0.35;
 
 function prefersReducedMotion(): boolean {
   if (typeof window === "undefined") return false;
   return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 }
 
+interface EnvelopeBundle {
+  rms: VuEnvelope;
+  bass: VuEnvelope;
+  mids: VuEnvelope;
+  treble: VuEnvelope;
+  palette: VuEnvelope;
+}
+
+function buildEnvelopes(intensity: number): EnvelopeBundle {
+  const c = intensityCoefficients(intensity);
+  const base = {
+    attackMs: c.vuAttackMs,
+    releaseMs: c.vuReleaseMs,
+    peakAttackMs: 10,
+    peakReleaseMs: 1500,
+    overshoot: c.peakOvershoot,
+  } as const;
+  return {
+    rms: createVuEnvelope(base),
+    bass: createVuEnvelope(base),
+    mids: createVuEnvelope(base),
+    treble: createVuEnvelope(base),
+    // Palette moves slower — keep it smooth even at high intensity.
+    palette: createVuEnvelope({
+      attackMs: Math.max(800, c.vuAttackMs * 3),
+      releaseMs: Math.max(2000, c.vuReleaseMs * 2),
+      peakAttackMs: 200,
+      peakReleaseMs: 3000,
+      overshoot: 0,
+    }),
+  };
+}
+
 export function DreamCanvas() {
   const prevImgRef = useRef<HTMLImageElement | null>(null);
   const currImgRef = useRef<HTMLImageElement | null>(null);
   const driftStartRef = useRef<number>(performance.now());
-  const renderStateRef = useRef({
-    zoom: 1,
-    bloom: 0.15,
-    warp: 0,
-    blur: 0.15,
-    paletteShift: 0,
-    impulse: 0,
-  });
+  const lastTickRef = useRef<number>(performance.now());
+  const lastIntensityRef = useRef<number>(-1);
+  const envelopesRef = useRef<EnvelopeBundle | null>(null);
   const lastOnsetRef = useRef(false);
+
+  // Per-onset-type short-lived impulse envelopes (0..1, decays toward 0).
+  const impulseRef = useRef({
+    kick: 0,
+    snare: 0,
+    hat: 0,
+    vocal: 0,
+  });
 
   useEffect(() => {
     const store = useVisualizerStore;
@@ -54,32 +83,92 @@ export function DreamCanvas() {
       const prevImg = prevImgRef.current;
       const currImg = currImgRef.current;
 
-      const targets = targetsFromAudio(state.audio);
-      const r = renderStateRef.current;
-      r.zoom = damp(r.zoom, targets.zoom ?? 1, DAMP_ZOOM);
-      r.bloom = damp(r.bloom, targets.bloom ?? 0.15, DAMP_BLOOM);
-      r.warp = damp(r.warp, targets.warp ?? 0, DAMP_WARP);
-      r.blur = damp(r.blur, targets.blur ?? 0.15, DAMP_BLUR);
-      r.paletteShift = damp(r.paletteShift, targets.paletteShift ?? 0, DAMP_PALETTE);
-
-      // Rising-edge onset detection → impulse = 1, decays toward 0 each frame.
-      if (state.audio.onset && !lastOnsetRef.current) r.impulse = 1;
-      else r.impulse = damp(r.impulse, 0, DAMP_IMPULSE_DECAY);
-      lastOnsetRef.current = state.audio.onset;
-
-      const motion = targets.motionEnergy ?? 0;
-      // Pulse amplitude is gated by motionEnergy: a beat in a quiet section
-      // nudges the canvas; a beat in a loud one shoves it.
-      const beat = r.impulse * (0.05 + motion * 0.35);
-
       const now = performance.now();
+      const dtMs = Math.max(1, now - lastTickRef.current);
+      lastTickRef.current = now;
+
+      const intensity = state.scene.intensity;
+      // Rebuild envelopes when intensity changes meaningfully (avoids rebuild
+      // on every 0.01-step slider drag).
+      if (
+        envelopesRef.current === null ||
+        Math.abs(intensity - lastIntensityRef.current) > 0.03
+      ) {
+        envelopesRef.current = buildEnvelopes(intensity);
+        lastIntensityRef.current = intensity;
+      }
+      const env = envelopesRef.current;
+
+      const targets = targetsFromAudio(state.audio, intensity);
+      const coef = intensityCoefficients(intensity);
+
+      // Feed VU envelopes with the per-band audio levels (not the target
+      // values) so each envelope can expose its own value + peak.
+      env.rms.update(state.audio.rms, dtMs);
+      env.bass.update(state.audio.bass, dtMs);
+      env.mids.update(state.audio.mids, dtMs);
+      env.treble.update(state.audio.treble, dtMs);
+      env.palette.update(state.audio.centroid, dtMs);
+
+      // Onset-type impulse routing. Rising edge only.
+      const imp = impulseRef.current;
+      const risingOnset = state.audio.onset && !lastOnsetRef.current;
+      lastOnsetRef.current = state.audio.onset;
+      if (risingOnset) {
+        switch (state.audio.onsetType) {
+          case "kick":
+            imp.kick = 1;
+            break;
+          case "snare":
+            imp.snare = 1;
+            break;
+          case "hat":
+            imp.hat = 1;
+            break;
+          case "vocal":
+            imp.vocal = 1;
+            break;
+          default:
+            break;
+        }
+      }
+      // Impulses decay ~300 ms half-life; taut at high intensity, slack at low.
+      const halfLife = 300 - 150 * intensity;
+      const decay = Math.exp(-dtMs / Math.max(40, halfLife));
+      imp.kick *= decay;
+      imp.snare *= decay;
+      imp.hat *= decay;
+      imp.vocal *= decay;
+
+      // Compose the final look from VU values + impulse channels.
+      const kickBoost = imp.kick * coef.zoomImpulseGain;
+      const vocalBoost = imp.vocal * coef.onsetImpulseGain * 0.35;
+      const hatBoost = imp.hat * coef.grainSwellGain * 0.6;
+      const snareFlash = imp.snare; // 0..1 drives contrast/saturation briefly
+
+      const zoomVu = targets.zoom + env.bass.peak * 0.04 * intensity;
+      const zoomLevel = zoomVu + kickBoost * 0.035;
+
+      const bloomLevel =
+        0.15 + env.rms.value * 0.9 + vocalBoost + env.rms.peak * 0.25 * intensity;
+
+      const warpLevel = env.bass.value * 0.6 + env.mids.value * 0.25;
+      const blurLevel = Math.max(0, 0.25 - env.treble.value * 0.18);
+
+      const huePumpNorm = coef.huePumpRange / 18;
+      const paletteShift = (env.palette.value * 2 - 1) * huePumpNorm; // -huePumpNorm..+huePumpNorm
+
+      // Time-based drifts preserved from prior design.
       const driftT = (now - driftStartRef.current) / 1000;
       const slowPan = Math.sin(driftT * 0.05) * 12;
       const slowYaw = Math.cos(driftT * 0.07) * 1.2;
       const breath = 1 + Math.sin(driftT * 0.2) * 0.008;
 
-      // Reveal timing. When both frames are present we paint a radial ink-bleed;
-      // otherwise we fall back to a simple opacity fade.
+      // Kick-onset jitter: small translate offset scaled by intensity.
+      const jitter = kickBoost * 6;
+      const jitterX = jitter * (Math.random() - 0.5);
+      const jitterY = jitter * (Math.random() - 0.5);
+
       const hasPrev = state.previousFrame !== null;
       const t =
         state.crossfadeStartedAt === null
@@ -90,11 +179,18 @@ export function DreamCanvas() {
               1,
               (now - state.crossfadeStartedAt) / (hasPrev ? BLEED_MS : FADE_MS),
             );
-
       const useBleed = hasPrev && !reducedMotion;
 
-      const filter = `blur(${(r.blur * 2).toFixed(2)}rem) brightness(${(1 + r.bloom * 0.9 + beat).toFixed(3)}) contrast(${(1 + r.warp * 0.25).toFixed(3)}) saturate(${(1 + r.bloom * 0.4).toFixed(3)}) hue-rotate(${(r.paletteShift * 360).toFixed(2)}deg)`;
-      const transform = `scale(${(r.zoom * breath).toFixed(4)}) translate3d(${slowPan.toFixed(2)}px, ${(-slowPan * 0.4).toFixed(2)}px, 0) rotate(${slowYaw.toFixed(3)}deg)`;
+      // CSS filter composition. Snare fires a brief contrast/saturation flip
+      // (posterize-adjacent, CSS-only).
+      const contrastBoost = 1 + warpLevel * 0.25 + snareFlash * 0.8;
+      const saturateBoost =
+        1 + env.rms.value * 0.4 - snareFlash * 0.7; // snare desaturates toward wood-block
+      const brightnessBoost = 1 + bloomLevel * 0.9;
+
+      const filter = `blur(${(blurLevel * 2).toFixed(2)}rem) brightness(${brightnessBoost.toFixed(3)}) contrast(${contrastBoost.toFixed(3)}) saturate(${Math.max(0.15, saturateBoost).toFixed(3)}) hue-rotate(${(paletteShift * 360).toFixed(2)}deg)`;
+
+      const transform = `scale(${(zoomLevel * breath).toFixed(4)}) translate3d(${(slowPan + jitterX).toFixed(2)}px, ${(-slowPan * 0.4 + jitterY).toFixed(2)}px, 0) rotate(${slowYaw.toFixed(3)}deg)`;
 
       if (currImg) {
         currImg.style.filter = filter;
@@ -111,12 +207,18 @@ export function DreamCanvas() {
         }
       }
       if (prevImg) {
-        // Previous stays fully visible behind the bleed and is retired once the
-        // reveal completes. With no bleed, it fades out opposite the current.
         if (useBleed) prevImg.style.opacity = t >= 1 ? "0" : "1";
         else prevImg.style.opacity = String(1 - t);
         prevImg.style.filter = filter;
         prevImg.style.transform = transform;
+      }
+
+      // Expose a snapshot to the grain+ink-drop overlays via dataset so they
+      // don't need a second rAF loop.
+      const host = prevImg?.parentElement ?? currImg?.parentElement;
+      if (host) {
+        host.style.setProperty("--grain-amp", String((targets.grainSwell + hatBoost).toFixed(3)));
+        host.style.setProperty("--vignette-amp", String(targets.vignette.toFixed(3)));
       }
     };
     rafId = requestAnimationFrame(tick);
@@ -136,6 +238,7 @@ export function DreamCanvas() {
         onLoad={markImageLoaded}
       />
       <CanvasGrain />
+      <InkDrops />
       <OnsetRing />
       <div aria-hidden className="vignette-mask absolute inset-0" />
     </div>
