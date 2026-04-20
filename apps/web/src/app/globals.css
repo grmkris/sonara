@@ -1,0 +1,187 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: var(--font-kaku), system-ui, sans-serif;
+  --font-serif: var(--font-mincho), "Hiragino Mincho ProN", "Yu Mincho", serif;
+  --font-mono: var(--font-plex), ui-monospace, Menlo, monospace;
+
+  --color-paper: #ede7d9;
+  --color-ink: #1a1612;
+  --color-stone: #8c8578;
+  --color-hairline: #c9c0ae;
+  --color-indigo: #1c2d52;
+  --color-hanko: #a4343a;
+}
+
+:root {
+  --paper: #ede7d9;
+  --ink: #1a1612;
+  --stone: #8c8578;
+  --hairline: #c9c0ae;
+  --indigo: #1c2d52;
+  --hanko: #a4343a;
+}
+
+html,
+body {
+  background: var(--ink);
+  color: var(--paper);
+  margin: 0;
+  padding: 0;
+  min-height: 100vh;
+  font-family: var(--font-sans);
+  overflow: hidden;
+  letter-spacing: 0.01em;
+  font-feature-settings: "palt" on;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+button {
+  font-family: inherit;
+  color: inherit;
+  background: transparent;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  letter-spacing: inherit;
+}
+
+input,
+textarea {
+  font-family: inherit;
+  background: transparent;
+  color: inherit;
+  border: 0;
+  outline: none;
+  padding: 0;
+}
+
+input::placeholder {
+  color: color-mix(in srgb, var(--stone) 75%, transparent);
+  font-family: var(--font-mono);
+  font-size: 0.8em;
+  letter-spacing: 0.04em;
+}
+
+::selection {
+  background: color-mix(in srgb, var(--indigo) 40%, transparent);
+  color: var(--paper);
+}
+
+.font-mincho { font-family: var(--font-serif); }
+.font-kaku   { font-family: var(--font-sans); }
+.font-plex   { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+
+.hairline        { background-color: var(--hairline); }
+.hairline-faint  { background-color: color-mix(in srgb, var(--hairline) 35%, transparent); }
+
+/* Thin paper-tinted scrim behind clusters of UI text, so bone text stays
+   legible against any hallucinated frame without becoming a card. */
+.paper-scrim {
+  background: radial-gradient(
+    ellipse at center,
+    color-mix(in srgb, var(--ink) 78%, transparent) 0%,
+    color-mix(in srgb, var(--ink) 30%, transparent) 70%,
+    transparent 100%
+  );
+}
+
+/* Edge vignette for the image so edge-anchored UI stays readable. */
+.vignette-mask {
+  background:
+    linear-gradient(to right, color-mix(in srgb, var(--ink) 72%, transparent), transparent 22%, transparent 78%, color-mix(in srgb, var(--ink) 70%, transparent)),
+    linear-gradient(to bottom, color-mix(in srgb, var(--ink) 55%, transparent), transparent 18%, transparent 78%, color-mix(in srgb, var(--ink) 75%, transparent));
+  pointer-events: none;
+}
+
+/* Breathing pulse for the empty-state 夢 ideogram. */
+@keyframes breath {
+  0%,   100% { opacity: 0.09; transform: scale(1.0);  }
+  50%        { opacity: 0.16; transform: scale(1.015); }
+}
+.breath { animation: breath 4.5s ease-in-out infinite; }
+
+/* Ink sweep: 1 px brush stroke drawn horizontally across the top of the viewport. */
+@keyframes ink-sweep {
+  0%   { transform: translate3d(-100%, 0, 0); opacity: 0;    }
+  8%   {                                      opacity: 0.75; }
+  90%  {                                      opacity: 0.55; }
+  100% { transform: translate3d(100%, 0, 0);  opacity: 0;    }
+}
+.ink-sweep {
+  position: absolute;
+  left: 0;
+  top: 18px;
+  height: 1px;
+  width: 40vw;
+  background: linear-gradient(90deg, transparent, var(--paper) 50%, transparent);
+  animation: ink-sweep 720ms cubic-bezier(0.25, 0.9, 0.25, 1) forwards;
+  pointer-events: none;
+}
+
+/* Hanko stamp — sealing wax press animation. */
+@keyframes hanko-press {
+  0%   { transform: scale(0.1) rotate(-4deg); opacity: 0;    }
+  20%  { transform: scale(1.15) rotate(-6deg); opacity: 0.95; }
+  35%  { transform: scale(0.98) rotate(-3deg); opacity: 0.98; }
+  80%  { transform: scale(1.0)  rotate(-3deg); opacity: 0.90; }
+  100% { transform: scale(1.05) rotate(-2deg); opacity: 0;    }
+}
+.hanko-press { animation: hanko-press 1100ms cubic-bezier(0.2, 0.9, 0.2, 1) forwards; }
+
+/* Red tick that lingers by the version counter after commit. */
+@keyframes hanko-tick {
+  0%,  40% { opacity: 1; }
+  100%     { opacity: 0; }
+}
+.hanko-tick { animation: hanko-tick 2000ms linear forwards; }
+
+/* Utility: fade UI when hidden. */
+.ui-fade-in  { transition: opacity 240ms ease; opacity: 1; }
+.ui-fade-out { transition: opacity 240ms ease; opacity: 0; pointer-events: none; }
+
+/* Tabular numerals for anything telemetric. */
+.nums { font-variant-numeric: tabular-nums; font-feature-settings: "tnum" on; }
+
+/* Onset ring — expanding paper-stroke circle pinned to the canvas centre. */
+@keyframes onset-ring {
+  0%   { r: 6;  opacity: 0.6; stroke-width: 0.6; }
+  60%  {        opacity: 0.3;                      }
+  100% { r: 48; opacity: 0;   stroke-width: 0.1; }
+}
+
+/* Trigger-log line fade-in. */
+@keyframes log-fade {
+  0%   { opacity: 0; transform: translateY(4px); }
+  100% { opacity: 1; transform: translateY(0);   }
+}
+
+/* Sumi-e field commit stroke — 1px ink line paints beneath a committed input. */
+@keyframes field-sweep {
+  0%   { transform: scaleX(0);   opacity: 0;    transform-origin: left; }
+  20%  {                          opacity: 0.9;                         }
+  100% { transform: scaleX(1);   opacity: 0;    transform-origin: left; }
+}
+.field-sweep {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -4px;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--paper) 30%, var(--paper) 70%, transparent);
+  animation: field-sweep 720ms cubic-bezier(0.25, 0.9, 0.25, 1) forwards;
+  pointer-events: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .breath,
+  .ink-sweep,
+  .hanko-press,
+  .field-sweep { animation: none !important; }
+  .hanko-tick   { animation-duration: 1ms !important; }
+}

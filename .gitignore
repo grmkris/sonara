@@ -1,0 +1,23 @@
+node_modules
+.next
+dist
+out
+.turbo
+coverage
+
+.env
+.env.local
+.env.*.local
+!.env.example
+
+.DS_Store
+*.log
+.vscode
+.idea
+
+# claude-code / agent harness local state
+.claude/
+.agents/
+.mcp.json
+skills-lock.json
+
