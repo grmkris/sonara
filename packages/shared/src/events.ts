@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { DreamSceneState } from "./scene";
 import { AudioFeatures } from "./audio";
+import { VISUAL_PRESET_NAMES } from "./visual-presets";
 
 // Clients may only patch user-authored fields. version/references are
 // server-authoritative and are omitted from the patch payload.
@@ -24,9 +25,6 @@ export const ClientEvent = z.discriminatedUnion("type", [
 
 export type ClientEvent = z.infer<typeof ClientEvent>;
 
-// Preset name suggestions are free-form strings here — the client validates
-// against its own PRESET_NAMES list before applying. Keeps the schema decoupled
-// from the visual preset catalog.
 export const ServerEvent = z.discriminatedUnion("type", [
   z.object({ type: z.literal("scene.state"), state: DreamSceneState }),
   z.object({
@@ -47,16 +45,18 @@ export const ServerEvent = z.discriminatedUnion("type", [
       .enum(["pause", "semantic", "section", "periodic", "commit", "voice"])
       .optional(),
   }),
-  z.object({
-    type: z.literal("preset.suggest"),
-    name: z.string().min(1).max(64),
-  }),
   // Voice-originated reset goes through a client confirm toast before the
   // destructive session.reset actually runs — mishears are a real risk.
   z.object({
     type: z.literal("confirm.reset"),
     ttlMs: z.number().int().positive(),
     reason: z.string(),
+  }),
+  // Advisory visual-preset suggestion from the server-side LLM. The client
+  // only applies it when presetMode === "llm".
+  z.object({
+    type: z.literal("preset.suggest"),
+    name: z.enum(VISUAL_PRESET_NAMES),
   }),
 ]);
 

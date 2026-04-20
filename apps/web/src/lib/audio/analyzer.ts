@@ -35,8 +35,6 @@ export class AudioEngine {
   private flatnessFromMeyda = 0;
   private rolloffFromMeyda = 0;
   private fluxFromMeyda = 0;
-  private chromaFromMeyda: number[] | null = null;
-  private mfccFromMeyda: number[] | null = null;
 
   private prevSpectrum: Float32Array | null = null;
   private freqBuffer: Uint8Array<ArrayBuffer> | null = null;
@@ -209,15 +207,11 @@ export class AudioEngine {
           "spectralFlatness",
           "spectralRolloff",
           "spectralFlux",
-          "chroma",
-          "mfcc",
         ],
         callback: (features: {
           spectralFlatness?: number;
           spectralRolloff?: number;
           spectralFlux?: number;
-          chroma?: number[];
-          mfcc?: number[];
         }) => {
           if (typeof features.spectralFlatness === "number") {
             this.flatnessFromMeyda = features.spectralFlatness;
@@ -230,21 +224,15 @@ export class AudioEngine {
           if (typeof features.spectralFlux === "number") {
             this.fluxFromMeyda = features.spectralFlux;
           }
-          if (Array.isArray(features.chroma) && features.chroma.length === 12) {
-            this.chromaFromMeyda = features.chroma;
-          }
-          if (Array.isArray(features.mfcc) && features.mfcc.length === 13) {
-            this.mfccFromMeyda = features.mfcc;
-          }
         },
       });
       this.meydaAnalyzer.start();
     } catch (err) {
-      // Meyda supplies flatness/rolloff/chroma/mfcc. RMS + centroid are now
-      // computed locally so this failure degrades gracefully — log so we
-      // notice instead of silently losing features.
+      // Meyda supplies flatness/rolloff/flux. RMS + centroid are now computed
+      // locally so this failure degrades gracefully — log so we notice instead
+      // of silently losing features.
       console.warn(
-        "[AudioEngine] Meyda init failed — spectral flatness/rolloff/chroma/mfcc will stay at 0",
+        "[AudioEngine] Meyda init failed — spectral flatness/rolloff/flux will stay at 0",
         err,
       );
       this.meydaAnalyzer = null;
@@ -376,8 +364,6 @@ export class AudioEngine {
       arousal: Math.max(0, Math.min(1, this.arousalSmoothed)),
     };
     if (onsetType) payload.onsetType = onsetType;
-    if (this.chromaFromMeyda) payload.chroma = this.chromaFromMeyda;
-    if (this.mfccFromMeyda) payload.mfcc = this.mfccFromMeyda;
 
     this.callback(payload);
   };

@@ -1,8 +1,10 @@
 "use client";
 
+import { useMemo } from "react";
 import type { ClientEvent, DreamSceneState } from "@music-visualizer/shared";
 import { Slider } from "@/components/ui/slider";
 import { useVisualizerStore } from "@/stores/visualizer-store";
+import { debounce } from "@/lib/debounce";
 
 interface IntensityDialProps {
   send: (e: ClientEvent) => void;
@@ -14,12 +16,18 @@ interface IntensityDialProps {
 export function IntensityDial({ send }: IntensityDialProps) {
   const intensity = useVisualizerStore((s) => s.scene.intensity);
 
-  const onChange = (v: number) => {
-    send({
-      type: "scene.patch",
-      patch: { intensity: v } as Partial<DreamSceneState>,
-    });
-  };
+  // Radix Slider fires onValueChange per pointer-move. Debounce WS emits to
+  // ~16/s and flush on pointer-up so the final value always lands.
+  const emit = useMemo(
+    () =>
+      debounce((v: number) => {
+        send({
+          type: "scene.patch",
+          patch: { intensity: v } as Partial<DreamSceneState>,
+        });
+      }, 60),
+    [send],
+  );
 
   return (
     <div className="flex min-w-[200px] items-center gap-3">
@@ -34,8 +42,11 @@ export function IntensityDial({ send }: IntensityDialProps) {
         step={0.01}
         onValueChange={(v) => {
           const next = v[0];
-          if (typeof next === "number") onChange(next);
+          if (typeof next === "number") emit(next);
         }}
+        onPointerUp={() => emit.flush()}
+        onPointerLeave={() => emit.flush()}
+        onBlur={() => emit.flush()}
       />
       <span className="font-mono nums w-10 text-right text-[10px] text-[color:var(--stone)]">
         {intensity.toFixed(2)}

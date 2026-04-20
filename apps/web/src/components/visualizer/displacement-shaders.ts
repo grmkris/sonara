@@ -17,12 +17,18 @@ void main() {
 
 // Blit pass — used for the ping-pong FBO feedback loop to copy the last-drawn
 // offscreen target onto the default framebuffer.
+//
+// Y-flip on sample: the quad's UV convention is "v=0 at clip-space top"
+// (matching HTML Image textures uploaded without UNPACK_FLIP_Y_WEBGL). But
+// FBO textures are written with gl_FragCoord.y=0 at bottom, so FBO texel v=0
+// holds clip-space-bottom content from the previous pass. We flip V here so
+// the blit displays the FBO right-side up.
 export const BLIT_FRAGMENT_SHADER = `#version 300 es
 precision highp float;
 in vec2 vUv;
 out vec4 fragColor;
 uniform sampler2D uSrc;
-void main() { fragColor = texture(uSrc, vUv); }
+void main() { fragColor = texture(uSrc, vec2(vUv.x, 1.0 - vUv.y)); }
 `;
 
 // Main fragment shader. Pipeline order (UV → texture → colour):
@@ -59,7 +65,6 @@ uniform float uRms;
 uniform float uRmsPeak;
 uniform float uKick;
 uniform float uSnare;
-uniform float uHat;
 uniform float uVocal;
 uniform float uIntensity;
 uniform float uHuePumpNorm;
@@ -101,6 +106,22 @@ uniform float uFeedbackAmount;
 uniform float uBloomMult;
 // Displacement multiplier (preset-level gain on top of audio-driven noise).
 uniform float uNoiseMult;
+// Paper/ink primitives — 0 = off, 1 = full.
+uniform float uWashi;
+uniform float uDeckle;
+uniform float uBokashi;
+uniform float uNijimi;
+uniform float uDrybrush;
+// Light primitives — 0 = off, 1 = full.
+uniform float uHalation;
+uniform float uFocal;
+uniform float uGodray;
+uniform float uGrain;
+// Color/geometry primitives — 0 = off, 1 = full.
+uniform float uCurl;
+uniform float uDither;
+uniform float uSeal;
+uniform float uEnso;
 
 float hash21(vec2 p) {
   p = fract(p * vec2(234.34, 435.345));
@@ -303,6 +324,18 @@ void main() {
   uv = kaleidoscope(uv, uKaleidoSegments);
   uv = polarWarp(uv, uPolarWarp);
 
+  // --- Curl: curl-noise UV warp ---
+  // Numerical curl of a 2D fbm potential (dpsi/dy, -dpsi/dx). Reads as
+  // swirling, volume-preserving eddies — less "tornado" than polarWarp.
+  if (uCurl > 0.001) {
+    vec2 cp = uv * 3.0 + uTime * 0.1;
+    float eps = 0.01;
+    float gx = fbm2(cp + vec2(eps, 0.0)) - fbm2(cp - vec2(eps, 0.0));
+    float gy = fbm2(cp + vec2(0.0, eps)) - fbm2(cp - vec2(0.0, eps));
+    vec2 curlV = vec2(gy, -gx) / (2.0 * eps);
+    uv += curlV * 0.015 * clamp(uCurl, 0.0, 1.0);
+  }
+
   vec2 disp = computeDisplacement(uv);
   vec3 curr = sampleWithSplit(uCurr, uCurrTexSize, uv, disp);
 
@@ -310,7 +343,10 @@ void main() {
   // GLSL can't conditionally sample, so always fetch the previous-frame
   // texture and gate the blend by strength. At amount=0 we fall through to
   // plain curr untouched.
-  vec3 fbPrev = texture(uFeedback, uv).rgb;
+  // Y-flip: uFeedback is an FBO (gl_FragCoord.y=0 at bottom), our quad UV has
+  // v=0 at clip-space top. Flip so the feedback overlay tracks the current
+  // image rather than an inverted ghost.
+  vec3 fbPrev = texture(uFeedback, vec2(uv.x, 1.0 - uv.y)).rgb;
   vec3 colorWithFb = mix(curr, max(curr, fbPrev * 0.92), clamp(uFeedbackAmount, 0.0, 0.85));
   // Use colorWithFb for subsequent transitions; scale "curr" alias.
   vec3 color;
@@ -321,6 +357,24 @@ void main() {
     color = mix(prev, colorWithFb, cov);
   } else {
     color = colorWithFb;
+  }
+
+  // --- Nijimi: ink bleed at dark boundaries ---
+  // Wet-ink diffusion: sample neighbours on the current texture and mix
+  // them into dark regions only. Sharp ink edges soften and crawl outward.
+  if (uNijimi > 0.001) {
+    vec2 px = 1.0 / max(vec2(1.0), uCurrTexSize);
+    vec2 uvTex = coverUv(uv, uCurrTexSize, uViewSize);
+    float amp = 2.5 * uNijimi;
+    vec3 soft = (
+      texture(uCurr, uvTex + px * vec2(amp, 0.0)).rgb +
+      texture(uCurr, uvTex - px * vec2(amp, 0.0)).rgb +
+      texture(uCurr, uvTex + px * vec2(0.0, amp)).rgb +
+      texture(uCurr, uvTex - px * vec2(0.0, amp)).rgb
+    ) * 0.25;
+    float lumN = dot(color, vec3(0.299, 0.587, 0.114));
+    float inkMask = 1.0 - smoothstep(0.15, 0.55, lumN);
+    color = mix(color, soft, inkMask * uNijimi * 0.7);
   }
 
   // --- Per-onset ink dabs ---
@@ -340,6 +394,15 @@ void main() {
   }
   if (uPosterizeAlways > 1.5) {
     color = floor(color * uPosterizeAlways + 0.5) / uPosterizeAlways;
+  }
+
+  // --- Bokashi: wet gradient wash ---
+  // Slow, low-frequency fbm tinted by the duotone endpoints. Reads as a
+  // watered-down ink pool laid on top; not audio-reactive.
+  if (uBokashi > 0.001) {
+    float washN = fbm2(vUv * 1.8 + uTime * 0.02);
+    vec3 washColor = mix(uDuotoneLo, uDuotoneHi, washN);
+    color = mix(color, (color + washColor) * 0.5, clamp(uBokashi, 0.0, 1.0) * 0.55);
   }
 
   // --- Bloom + tonemap (preset multiplier on top of audio) ---
@@ -378,6 +441,148 @@ void main() {
   float invertAmt = clamp(uInvert * uKick, 0.0, 1.0);
   if (invertAmt > 0.001) {
     color = mix(color, vec3(1.0) - color, invertAmt);
+  }
+
+  // --- Washi: paper-fiber texture ---
+  // Two anisotropic noise layers give the cross-grain look of mulberry paper.
+  // Darkens in fibres (mostly), lifts in specks — a faint multiplicative mod.
+  if (uWashi > 0.001) {
+    float fib = noise21(vUv * vec2(420.0, 95.0));
+    fib += noise21(vUv * vec2(32.0, 115.0)) * 0.5;
+    float fibMod = (fib / 1.5 - 0.55) * 0.22 * uWashi;
+    color *= 1.0 + fibMod;
+  }
+
+  // --- Drybrush: rough-brush dropout ---
+  // Horizontal streaks that brighten toward paper-white. Best on mid-range
+  // luminance — solid blacks and whites stay intact.
+  if (uDrybrush > 0.001) {
+    float streak = noise21(vUv * vec2(8.0, 120.0));
+    streak = smoothstep(0.58, 0.88, streak);
+    float lumD = dot(color, vec3(0.299, 0.587, 0.114));
+    float midMask = 1.0 - abs(lumD - 0.5) * 2.0;
+    color = mix(color, vec3(0.96, 0.93, 0.86), streak * uDrybrush * 0.55 * max(0.0, midMask));
+  }
+
+  // --- Deckle: torn-paper edge ---
+  // Noisy fade at the canvas rim toward a paper colour, so the image reads
+  // as a torn sheet rather than a hard rectangle.
+  if (uDeckle > 0.001) {
+    vec2 dc = abs(vUv - 0.5) * 2.0;
+    float near = max(dc.x, dc.y);
+    float edgeN = noise21(vUv * 34.0) * 0.14;
+    float tear = smoothstep(0.92 - edgeN, 0.99, near);
+    color = mix(color, vec3(0.90, 0.87, 0.80), tear * uDeckle);
+  }
+
+  // --- Halation: highlight bloom spread ---
+  // Sample a cheap 6-tap blur of the source and add it gated on luminance,
+  // so hot spots leak into their neighbours (film-halation glow).
+  if (uHalation > 0.001) {
+    vec2 pxH = 1.0 / max(vec2(1.0), uCurrTexSize);
+    vec2 uvH = coverUv(uv, uCurrTexSize, uViewSize);
+    float rH = 6.0;
+    vec3 spread = (
+      texture(uCurr, uvH + pxH * vec2( rH, 0.0)).rgb +
+      texture(uCurr, uvH + pxH * vec2(-rH, 0.0)).rgb +
+      texture(uCurr, uvH + pxH * vec2(0.0,  rH)).rgb +
+      texture(uCurr, uvH + pxH * vec2(0.0, -rH)).rgb +
+      texture(uCurr, uvH + pxH * vec2( rH, rH) * 0.7).rgb +
+      texture(uCurr, uvH + pxH * vec2(-rH,-rH) * 0.7).rgb
+    ) / 6.0;
+    float lumH = dot(color, vec3(0.299, 0.587, 0.114));
+    float hiMask = smoothstep(0.55, 0.95, lumH);
+    color += spread * hiMask * uHalation * 0.5;
+  }
+
+  // --- Focal: radial depth-of-field ---
+  // Pixels outside the focus ring are replaced by a blurred copy of the
+  // source texture, proportional to how far from centre they are.
+  if (uFocal > 0.001) {
+    float fd = distance(vUv, vec2(0.5));
+    float oof = smoothstep(0.25, 0.6, fd) * clamp(uFocal, 0.0, 1.0);
+    if (oof > 0.001) {
+      vec2 pxF = 1.0 / max(vec2(1.0), uCurrTexSize);
+      vec2 uvF = coverUv(uv, uCurrTexSize, uViewSize);
+      float rF = 4.0 * oof + 1.0;
+      vec3 blur = (
+        texture(uCurr, uvF + pxF * vec2( rF, 0.0)).rgb +
+        texture(uCurr, uvF + pxF * vec2(-rF, 0.0)).rgb +
+        texture(uCurr, uvF + pxF * vec2(0.0,  rF)).rgb +
+        texture(uCurr, uvF + pxF * vec2(0.0, -rF)).rgb
+      ) * 0.25;
+      color = mix(color, blur, oof);
+    }
+  }
+
+  // --- Godray: directional light shafts ---
+  // Noisy additive streaks along a fixed light direction, slowly animated.
+  if (uGodray > 0.001) {
+    vec2 lightDir = normalize(vec2(0.3, -0.8));
+    float along = dot(vUv - vec2(0.5), lightDir);
+    float across = dot(vUv - vec2(0.5), vec2(lightDir.y, -lightDir.x));
+    float rayN = noise21(vec2(across * 18.0, along * 3.0) + uTime * 0.05);
+    float ray = smoothstep(0.55, 0.92, rayN) * (0.5 + 0.5 * sin(across * 22.0 + uTime * 0.8));
+    color += vec3(0.95, 0.90, 0.82) * max(0.0, ray) * uGodray * 0.28;
+  }
+
+  // --- Dither: ordered Bayer 4x4 ---
+  // Threshold matrix dither toward a reduced palette. Reads like a newsprint
+  // or risograph texture rather than a crisp posterize.
+  if (uDither > 0.001) {
+    const float bayerM[16] = float[16](
+       0.0,  8.0,  2.0, 10.0,
+      12.0,  4.0, 14.0,  6.0,
+       3.0, 11.0,  1.0,  9.0,
+      15.0,  7.0, 13.0,  5.0
+    );
+    ivec2 bp = ivec2(mod(gl_FragCoord.xy, 4.0));
+    int bi = bp.x + bp.y * 4;
+    float threshold = bayerM[bi] / 16.0 - 0.5;
+    vec3 biased = color + vec3(threshold) * 0.1 * uDither;
+    float levels = mix(8.0, 3.0, clamp(uDither, 0.0, 1.0));
+    vec3 quantized = floor(biased * levels + 0.5) / levels;
+    color = mix(color, quantized, clamp(uDither, 0.0, 1.0));
+  }
+
+  // --- Enso: single-stroke circle ---
+  // A hand-drawn ink ring centred on the canvas with a broken arc and
+  // brush-width jitter. Static composition — reads as a sumi-e accent.
+  if (uEnso > 0.001) {
+    vec2 ec = vUv - vec2(0.5);
+    float er = length(ec);
+    float ea = atan(ec.y, ec.x);
+    float wMod = 1.0 + noise21(vec2(ea * 6.0 + 1.7, er * 4.0)) * 0.6;
+    float gap = smoothstep(0.5, 0.15, abs(ea + 0.6));
+    float ring = smoothstep(0.01 * wMod, 0.0, abs(er - 0.3));
+    ring *= mix(1.0, 0.0, gap * 0.75);
+    color = mix(color, vec3(0.06, 0.05, 0.04), ring * uEnso * 0.9);
+  }
+
+  // --- Seal: kanji-style stamp ---
+  // Red square stamp with a cutout character glyph and a noisy mask so it
+  // looks inked rather than printed.
+  if (uSeal > 0.001) {
+    vec2 sp = vUv - vec2(0.87, 0.12);
+    vec2 as = abs(sp);
+    float sq = step(max(as.x, as.y), 0.045);
+    float sqOuter = step(max(as.x, as.y), 0.05);
+    float border = sqOuter - sq;
+    float glyphV = step(as.x, 0.008) * step(as.y, 0.028);
+    float glyphH = step(as.y, 0.008) * step(as.x, 0.028);
+    float glyph = clamp(glyphV + glyphH, 0.0, 1.0);
+    float sealMask = border + sq * (1.0 - glyph);
+    float stampNoise = noise21(vUv * 110.0);
+    sealMask *= smoothstep(0.25, 0.65, stampNoise);
+    color = mix(color, vec3(0.78, 0.14, 0.10), sealMask * clamp(uSeal, 0.0, 1.0));
+  }
+
+  // --- Grain: film grain ---
+  // Per-fragment temporal noise on final colour. Neutral-gray mean so it
+  // doesn't drift brightness.
+  if (uGrain > 0.001) {
+    float g = hash21(gl_FragCoord.xy + vec2(fract(uTime * 7.0), fract(uTime * 13.0)));
+    color += (g - 0.5) * uGrain * 0.12;
   }
 
   // --- Dynamic vignette ---

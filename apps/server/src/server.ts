@@ -1,9 +1,10 @@
 import { Hono } from "hono";
-import { ClientEvent, type ServerEvent } from "@music-visualizer/shared";
+import { ClientEvent, ServerEvent } from "@music-visualizer/shared";
 import { logger } from "./lib/logger";
 import { SessionManager } from "./session/session-manager";
 
 const port = Number(process.env.PORT ?? 3001);
+const isDev = process.env.NODE_ENV !== "production";
 
 const app = new Hono();
 
@@ -37,6 +38,16 @@ const server = Bun.serve<WsData, never>({
     open(ws) {
       const { sessionId } = ws.data;
       const session = manager.create(sessionId, (event: ServerEvent) => {
+        if (isDev) {
+          const check = ServerEvent.safeParse(event);
+          if (!check.success) {
+            logger.error(
+              { issues: check.error.issues, type: (event as { type?: unknown }).type, sessionId },
+              "outbound ServerEvent failed validation — dropped",
+            );
+            return;
+          }
+        }
         try {
           ws.send(JSON.stringify(event));
         } catch (err) {

@@ -13,7 +13,7 @@ const MODES: { id: PresetMode; label: string; title: string }[] = [
   { id: "manual", label: "manual",  title: "Stay on the selected preset until changed." },
   { id: "cycle",  label: "cycle",   title: "Rotate through presets on a timer." },
   { id: "section",label: "section", title: "Switch preset whenever the server detects a music section change." },
-  { id: "llm",    label: "llm",     title: "Let the drift LLM pick a preset based on scene + voice + mood." },
+  { id: "llm",    label: "llm",     title: "Let the LLM pick the preset from your voice + the music." },
 ];
 
 // Pretty labels for the preset names (replace underscores).
@@ -28,6 +28,24 @@ export function PresetPicker() {
   const setPreset = useVisualizerStore((s) => s.setPreset);
   const setMode = useVisualizerStore((s) => s.setPresetMode);
   const setCycleMs = useVisualizerStore((s) => s.setPresetCycleMs);
+  const savedPresets = useVisualizerStore((s) => s.savedPresets);
+  const customPreset = useVisualizerStore((s) => s.customPreset);
+  const snapshotCurrentPreset = useVisualizerStore(
+    (s) => s.snapshotCurrentPreset,
+  );
+  const selectSavedPreset = useVisualizerStore((s) => s.selectSavedPreset);
+  const deleteSavedPreset = useVisualizerStore((s) => s.deleteSavedPreset);
+  const savedNames = Object.keys(savedPresets);
+  // A saved preset "appears active" when customPreset is set AND it matches
+  // one of the saved entries by value-reference. We compare the JSON since
+  // the stored snapshot is a deep copy.
+  const activeSavedName =
+    customPreset === null
+      ? null
+      : savedNames.find(
+          (n) =>
+            JSON.stringify(savedPresets[n]) === JSON.stringify(customPreset),
+        ) ?? null;
 
   // ===== Cycle mode: swap presets on a timer =====
   useEffect(() => {
@@ -83,7 +101,7 @@ export function PresetPicker() {
       {/* Preset chips. Wrap to multiple rows. */}
       <div className="flex flex-wrap gap-1.5">
         {PRESET_NAMES.map((name) => {
-          const active = name === preset;
+          const active = name === preset && customPreset === null;
           return (
             <button
               key={name}
@@ -102,6 +120,44 @@ export function PresetPicker() {
             </button>
           );
         })}
+        {savedNames.map((name) => {
+          const active = name === activeSavedName;
+          return (
+            <button
+              key={`saved:${name}`}
+              type="button"
+              onClick={() => selectSavedPreset(name)}
+              onContextMenu={(ev) => {
+                ev.preventDefault();
+                if (window.confirm(`Delete saved preset "${name}"?`)) {
+                  deleteSavedPreset(name);
+                }
+              }}
+              title={`saved snapshot (right-click to delete): ${name}`}
+              className={cn(
+                "group font-serif text-[11px] italic tracking-normal transition-colors",
+                "border-b px-1 pb-0.5",
+                "before:mr-1 before:text-[color:var(--paper)]/60 before:content-['\u2022']",
+                active
+                  ? "border-[color:var(--paper)] text-[color:var(--paper)]"
+                  : "border-transparent text-[color:var(--stone)] hover:text-[color:var(--paper)]/90 hover:border-[color:var(--hairline)]/40",
+              )}
+            >
+              {name}
+            </button>
+          );
+        })}
+        <button
+          type="button"
+          onClick={() => {
+            const name = window.prompt("name this mid-state")?.trim();
+            if (name) snapshotCurrentPreset(name);
+          }}
+          title="Capture the current effective preset (including any in-progress crossfade and drift) as a saved snapshot."
+          className="font-mono text-[9px] uppercase tracking-[0.22em] text-[color:var(--stone)] hover:text-[color:var(--paper)] border-b border-dashed border-[color:var(--hairline)]/40 px-1 pb-0.5"
+        >
+          + save
+        </button>
       </div>
 
       {/* Mode selector */}
@@ -120,9 +176,10 @@ export function PresetPicker() {
                 title={m.title}
                 className={cn(
                   "font-mono text-[9px] uppercase tracking-[0.22em] transition-colors",
+                  "border-b px-1 pb-0.5",
                   active
-                    ? "text-[color:var(--paper)]"
-                    : "text-[color:var(--stone)] hover:text-[color:var(--paper)]/80",
+                    ? "border-[color:var(--paper)] text-[color:var(--paper)]"
+                    : "border-transparent text-[color:var(--stone)] hover:text-[color:var(--paper)]/80 hover:border-[color:var(--hairline)]/40",
                 )}
               >
                 {m.label}

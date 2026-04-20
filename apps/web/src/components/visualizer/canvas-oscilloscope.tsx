@@ -56,7 +56,7 @@ export function CanvasOscilloscope() {
       // consistency). Gates the overall alpha so silent sections stay quiet.
       let sumSq = 0;
       for (let i = 0; i < bins; i++) {
-        const d = buf[i]! - 128;
+        const d = (buf[i] ?? 128) - 128;
         sumSq += d * d;
       }
       const rms = Math.sqrt(sumSq / bins) / 128;
@@ -75,7 +75,7 @@ export function CanvasOscilloscope() {
       // Amplitude envelope kept gentle — the point is presence, not DAW graph.
       const ampY = (h / 2) * 0.42;
       for (let i = 0; i < bins; i++) {
-        const v = (buf[i]! - 128) / 128;
+        const v = ((buf[i] ?? 128) - 128) / 128;
         const y = midY + v * ampY;
         const x = i * slice;
         if (i === 0) ctx.moveTo(x, y);

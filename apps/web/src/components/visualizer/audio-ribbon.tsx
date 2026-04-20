@@ -108,7 +108,7 @@ export function AudioRibbon({ height = 40 }: AudioRibbonProps) {
 
       let sum = 0;
       for (let i = 0; i < waveBins; i++) {
-        const d = waveBuf[i]! - 128;
+        const d = (waveBuf[i] ?? 128) - 128;
         sum += d * d;
       }
       const rms = Math.sqrt(sum / waveBins) / 128;
@@ -123,7 +123,7 @@ export function AudioRibbon({ height = 40 }: AudioRibbonProps) {
       ctx.beginPath();
       const slice = w / waveBins;
       for (let i = 0; i < waveBins; i++) {
-        const v = (waveBuf[i]! - 128) / 128; // -1..1
+        const v = ((waveBuf[i] ?? 128) - 128) / 128; // -1..1
         const y = h / 2 + v * (h / 2) * 0.78;
         const x = i * slice;
         if (i === 0) ctx.moveTo(x, y);

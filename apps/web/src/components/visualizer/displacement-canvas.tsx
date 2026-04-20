@@ -13,6 +13,7 @@ import { createVuEnvelope, type VuEnvelope } from "@/lib/render/vu";
 import {
   BASE,
   PRESETS,
+  PRESET_NAMES,
   lerpPreset,
   makeDriftForPreset,
   type PresetConfig,
@@ -53,30 +54,29 @@ interface EnvelopeBundle {
   bass: VuEnvelope;
   mids: VuEnvelope;
   treble: VuEnvelope;
-  palette: VuEnvelope;
 }
 
-function buildEnvelopes(intensity: number): EnvelopeBundle {
+// Carry prior value/peak so intensity-driven rebuilds don't snap to 0.
+function buildEnvelopes(
+  intensity: number,
+  prev?: EnvelopeBundle,
+): EnvelopeBundle {
   const c = intensityCoefficients(intensity);
-  const base = {
-    attackMs: c.vuAttackMs,
-    releaseMs: c.vuReleaseMs,
-    peakAttackMs: 10,
-    peakReleaseMs: 1500,
-    overshoot: c.peakOvershoot,
-  } as const;
+  const make = (p?: VuEnvelope) =>
+    createVuEnvelope({
+      attackMs: c.vuAttackMs,
+      releaseMs: c.vuReleaseMs,
+      peakAttackMs: 10,
+      peakReleaseMs: 1500,
+      overshoot: c.peakOvershoot,
+      initialValue: p?.value,
+      initialPeak: p?.peak,
+    });
   return {
-    rms: createVuEnvelope(base),
-    bass: createVuEnvelope(base),
-    mids: createVuEnvelope(base),
-    treble: createVuEnvelope(base),
-    palette: createVuEnvelope({
-      attackMs: Math.max(800, c.vuAttackMs * 3),
-      releaseMs: Math.max(2000, c.vuReleaseMs * 2),
-      peakAttackMs: 200,
-      peakReleaseMs: 3000,
-      overshoot: 0,
-    }),
+    rms: make(prev?.rms),
+    bass: make(prev?.bass),
+    mids: make(prev?.mids),
+    treble: make(prev?.treble),
   };
 }
 
@@ -237,7 +237,6 @@ export function DisplacementCanvas() {
       uRmsPeak: gl.getUniformLocation(program, "uRmsPeak"),
       uKick: gl.getUniformLocation(program, "uKick"),
       uSnare: gl.getUniformLocation(program, "uSnare"),
-      uHat: gl.getUniformLocation(program, "uHat"),
       uVocal: gl.getUniformLocation(program, "uVocal"),
       uIntensity: gl.getUniformLocation(program, "uIntensity"),
       uHuePumpNorm: gl.getUniformLocation(program, "uHuePumpNorm"),
@@ -272,6 +271,19 @@ export function DisplacementCanvas() {
       uFeedbackAmount: gl.getUniformLocation(program, "uFeedbackAmount"),
       uBloomMult: gl.getUniformLocation(program, "uBloomMult"),
       uNoiseMult: gl.getUniformLocation(program, "uNoiseMult"),
+      uWashi: gl.getUniformLocation(program, "uWashi"),
+      uDeckle: gl.getUniformLocation(program, "uDeckle"),
+      uBokashi: gl.getUniformLocation(program, "uBokashi"),
+      uNijimi: gl.getUniformLocation(program, "uNijimi"),
+      uDrybrush: gl.getUniformLocation(program, "uDrybrush"),
+      uHalation: gl.getUniformLocation(program, "uHalation"),
+      uFocal: gl.getUniformLocation(program, "uFocal"),
+      uGodray: gl.getUniformLocation(program, "uGodray"),
+      uGrain: gl.getUniformLocation(program, "uGrain"),
+      uCurl: gl.getUniformLocation(program, "uCurl"),
+      uDither: gl.getUniformLocation(program, "uDither"),
+      uSeal: gl.getUniformLocation(program, "uSeal"),
+      uEnso: gl.getUniformLocation(program, "uEnso"),
     };
     gl.uniform1i(uni.uCurr, 0);
     gl.uniform1i(uni.uPrev, 1);
@@ -392,10 +404,13 @@ export function DisplacementCanvas() {
     let currentDrift: PresetDrift = makeDriftForPreset(currentPresetName);
 
     const applyPreset = (newName: PresetName, atMs: number) => {
-      if (newName === currentPresetName && !fadeInFlight) return;
       // Snapshot whatever is currently being rendered as the fade-source.
       fromCfg = effectiveCfgSnapshot();
-      toCfg = PRESETS[newName] ?? { ...BASE };
+      // customPreset (saved snapshot) takes precedence over the named lookup
+      // when present. This lets the user select a saved mid-state without
+      // altering the built-in preset registry.
+      const custom = useVisualizerStore.getState().customPreset;
+      toCfg = custom ?? PRESETS[newName] ?? { ...BASE };
       fadeStartAt = atMs;
       fadeInFlight = true;
       currentPresetName = newName;
@@ -416,9 +431,23 @@ export function DisplacementCanvas() {
       }
     });
 
-    // Initialise fromCfg/toCfg to the starting preset.
-    toCfg = PRESETS[currentPresetName] ?? { ...BASE };
+    // Initialise fromCfg/toCfg to the starting preset (custom takes priority
+    // if a saved snapshot was already the active target post-hydration).
+    const initCustom = useVisualizerStore.getState().customPreset;
+    toCfg = initCustom ?? PRESETS[currentPresetName] ?? { ...BASE };
     fromCfg = { ...toCfg };
+
+    // ===== Glitch peek scheduler =====
+    // Every 30-60s, flash to a random other preset for ~1s (0.4s in, 0.2s
+    // hold, 0.4s out) then return. Reads as a brief "skip" in the visuals.
+    const PEEK_DURATION_MS = 1000;
+    const peekIntervalMin = 30_000;
+    const peekIntervalJitter = 30_000;
+    let nextPeekAt =
+      performance.now() + peekIntervalMin + Math.random() * peekIntervalJitter;
+    let peekActive = false;
+    let peekStartAt = 0;
+    let peekCfg: PresetConfig | null = null;
 
     let envelopes = buildEnvelopes(1);
     let lastIntensity = -1;
@@ -444,11 +473,8 @@ export function DisplacementCanvas() {
       lastTick = now;
 
       const intensity = state.scene.intensity;
-      if (
-        envelopes === null ||
-        Math.abs(intensity - lastIntensity) > 0.03
-      ) {
-        envelopes = buildEnvelopes(intensity);
+      if (Math.abs(intensity - lastIntensity) > 0.03) {
+        envelopes = buildEnvelopes(intensity, envelopes);
         lastIntensity = intensity;
       }
       const coef = intensityCoefficients(intensity);
@@ -458,7 +484,6 @@ export function DisplacementCanvas() {
       envelopes.bass.update(state.audio.bass, dtMs);
       envelopes.mids.update(state.audio.mids, dtMs);
       envelopes.treble.update(state.audio.treble, dtMs);
-      envelopes.palette.update(state.audio.centroid, dtMs);
 
       const rising = state.audio.onset && !lastOnset;
       lastOnset = state.audio.onset;
@@ -540,13 +565,48 @@ export function DisplacementCanvas() {
         fadeT = Math.min(1, (now - fadeStartAt) / PRESET_CROSSFADE_MS);
         if (fadeT >= 1) fadeInFlight = false;
       }
-      const blended = lerpPreset(fromCfg, toCfg, fadeT);
-      const effective = applyDrift(
+      // easeOutBack — linear t is jarring; overshoot makes the switch feel
+      // like a flip-card settling, not a dissolve.
+      const s = 1.70158;
+      const u = fadeT - 1;
+      const easedT = u * u * ((s + 1) * u + s) + 1;
+      const blended = lerpPreset(fromCfg, toCfg, easedT);
+      let effective = applyDrift(
         blended,
         currentDrift,
         (now - mountedAt) / 1000,
       );
+
+      // Glitch-peek overlay: triangle envelope (0→1→1→0 over 0.4/0.2/0.4s)
+      // blended on top of the drifted base. Fires at random intervals so
+      // long listening sessions never feel static.
+      if (!peekActive && now >= nextPeekAt) {
+        const pool = PRESET_NAMES.filter((n) => n !== currentPresetName);
+        const pick = pool[Math.floor(Math.random() * pool.length)];
+        if (pick) {
+          peekCfg = PRESETS[pick] ?? null;
+          peekActive = peekCfg !== null;
+          peekStartAt = now;
+        } else {
+          nextPeekAt = now + peekIntervalMin;
+        }
+      }
+      if (peekActive && peekCfg) {
+        const p = (now - peekStartAt) / PEEK_DURATION_MS;
+        if (p >= 1) {
+          peekActive = false;
+          peekCfg = null;
+          nextPeekAt =
+            now + peekIntervalMin + Math.random() * peekIntervalJitter;
+        } else {
+          const peekT =
+            p < 0.4 ? p / 0.4 : p < 0.6 ? 1 : 1 - (p - 0.6) / 0.4;
+          effective = lerpPreset(effective, peekCfg, peekT);
+        }
+      }
+
       lastEffective = effective;
+      useVisualizerStore.getState().setLastEffective(effective);
 
       // ===== Render main pass to offscreen FBO =====
       const writeFbo = fboWriteIsA ? fboA : fboB;
@@ -570,7 +630,6 @@ export function DisplacementCanvas() {
       gl.uniform1f(uni.uRmsPeak, envelopes.rms.peak);
       gl.uniform1f(uni.uKick, impulses.kick);
       gl.uniform1f(uni.uSnare, impulses.snare);
-      gl.uniform1f(uni.uHat, impulses.hat);
       gl.uniform1f(uni.uVocal, impulses.vocal);
       gl.uniform1f(uni.uIntensity, intensity);
       const huePumpNorm = coef.huePumpRange / 18;
@@ -629,6 +688,19 @@ export function DisplacementCanvas() {
       gl.uniform1f(uni.uFeedbackAmount, effective.feedbackAmount);
       gl.uniform1f(uni.uBloomMult, effective.bloomMult);
       gl.uniform1f(uni.uNoiseMult, effective.noiseMult);
+      gl.uniform1f(uni.uWashi, effective.washi);
+      gl.uniform1f(uni.uDeckle, effective.deckle);
+      gl.uniform1f(uni.uBokashi, effective.bokashi);
+      gl.uniform1f(uni.uNijimi, effective.nijimi);
+      gl.uniform1f(uni.uDrybrush, effective.drybrush);
+      gl.uniform1f(uni.uHalation, effective.halation);
+      gl.uniform1f(uni.uFocal, effective.focal);
+      gl.uniform1f(uni.uGodray, effective.godray);
+      gl.uniform1f(uni.uGrain, effective.grain);
+      gl.uniform1f(uni.uCurl, effective.curl);
+      gl.uniform1f(uni.uDither, effective.dither);
+      gl.uniform1f(uni.uSeal, effective.seal);
+      gl.uniform1f(uni.uEnso, effective.enso);
 
       gl.bindVertexArray(vao);
       gl.drawArrays(gl.TRIANGLES, 0, 6);

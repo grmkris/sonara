@@ -21,6 +21,8 @@ export interface VuOptions {
   peakAttackMs?: number; // PPM attack (default 10 ms)
   peakReleaseMs?: number; // PPM release (default 1500 ms)
   overshoot?: number; // 0..0.05, mechanical needle overshoot on rising edge
+  initialValue?: number; // seed "needle" state (carry-over across rebuilds)
+  initialPeak?: number; // seed peak-hold state (carry-over across rebuilds)
 }
 
 export interface VuEnvelope {
@@ -34,8 +36,8 @@ export function createVuEnvelope(opts: VuOptions): VuEnvelope {
   const peakReleaseMs = opts.peakReleaseMs ?? 1500;
   const overshoot = opts.overshoot ?? 0;
 
-  let value = 0;
-  let peak = 0;
+  let value = opts.initialValue ?? 0;
+  let peak = Math.max(opts.initialPeak ?? 0, value);
   let overshootPulse = 0; // short-lived additive bump on rising edges
   let rising = false;
 
@@ -58,10 +60,12 @@ export function createVuEnvelope(opts: VuOptions): VuEnvelope {
       if (!wasRising && rising && overshoot > 0) {
         overshootPulse = overshoot;
       }
-      // Overshoot decays quickly — half-life ~60 ms.
+      // Apply the pulse to this frame's output BEFORE decaying, so the birth
+      // tick carries the full overshoot amplitude (was halved on same tick).
+      value = nextValue + overshootPulse;
+      // Decay for next frame — half-life ~60 ms.
       overshootPulse *= Math.exp(-dtMs / 60);
 
-      value = nextValue + overshootPulse;
       peak = peak + alphaPeak * (raw - peak);
       // Peak should never fall below value (peak "holds above" the needle).
       if (peak < value) peak = value;

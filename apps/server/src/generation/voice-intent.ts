@@ -1,5 +1,10 @@
 import { fal } from "@fal-ai/client";
-import { SCENE_TEMPLATE_KEYS } from "@music-visualizer/shared";
+import {
+  SCENE_TEMPLATE_KEYS,
+  VISUAL_PRESET_DESCRIPTIONS,
+  VISUAL_PRESET_NAMES,
+  type VisualPresetName,
+} from "@music-visualizer/shared";
 import type { Logger } from "../lib/logger";
 import { sampleDrift } from "./prompt-drift";
 
@@ -20,6 +25,9 @@ const MAX_OUTPUT_TOKENS = 240;
 
 function buildSystemPrompt(): string {
   const presetList = SCENE_TEMPLATE_KEYS.join(", ");
+  const lookList = VISUAL_PRESET_NAMES
+    .map((n) => `${n} (${VISUAL_PRESET_DESCRIPTIONS[n]})`)
+    .join("; ");
   return `You parse spoken phrases from a user operating a sumi-e dream visualizer. Given the user's voice, the current scene, recent voice history, and the music mood, emit a SINGLE JSON object. No prose, no markdown fences, no commentary. The object MUST have exactly these keys (any value may be null):
 
 {
@@ -27,6 +35,7 @@ function buildSystemPrompt(): string {
   "commit": boolean,
   "reset": boolean,
   "preset": string | null,
+  "lookPreset": string | null,
   "atmosphere": string | null
 }
 
@@ -42,24 +51,28 @@ RULES:
     "intensity 0.7" / "seventy percent" → 0.7
 - commit verbs (return commit: true): commit / save this / keep it / keep this / lock it / hold this.
 - reset verbs (return reset: true): reset / start over / clear / forget this / new scene.
-- preset verbs (return preset: "<key>"): "preset <key>" / "try the <key> one" / "load <key>". Valid keys: ${presetList}.
+- preset verbs (return preset: "<key>"): "preset <key>" / "try the <key> one" / "load <key>". Valid scene keys: ${presetList}.
+- lookPreset: pick a VISUAL LOOK that best matches the music mood + user's phrase (arousal/valence, words like "dreamy", "aggressive", "cold"). Return the key only — no prefix. Emit null if nothing clearly fits. Valid look keys: ${lookList}.
 - atmosphere: ALWAYS emit 1–3 short comma-joined sumi-e clauses (ink, paper, drift, fog, shadow, light, silence, stillness, wet, fibre). Even if the phrase was a pure command, emit atmosphere informed by the scene + mood.
 
 GOOD:
-User: "a heron over grey water"
-→ {"patch":{"subject":"a heron","environment":"grey still water"},"commit":false,"reset":false,"preset":null,"atmosphere":"slow water, feathered silence, cold light"}
+User: "a heron over grey water" (arousal 0.3, valence 0.4)
+→ {"patch":{"subject":"a heron","environment":"grey still water"},"commit":false,"reset":false,"preset":null,"lookPreset":"frost","atmosphere":"slow water, feathered silence, cold light"}
 
-User: "pull it back" (current intensity 0.7)
-→ {"patch":{"intensity":0.4},"commit":false,"reset":false,"preset":null,"atmosphere":"breath, quieting"}
+User: "pull it back" (current intensity 0.7, arousal 0.2)
+→ {"patch":{"intensity":0.4},"commit":false,"reset":false,"preset":null,"lookPreset":"dust","atmosphere":"breath, quieting"}
 
 User: "commit this"
-→ {"patch":{},"commit":true,"reset":false,"preset":null,"atmosphere":"held, still"}
+→ {"patch":{},"commit":true,"reset":false,"preset":null,"lookPreset":null,"atmosphere":"held, still"}
 
 User: "try the cathedral one"
-→ {"patch":{},"commit":false,"reset":false,"preset":"cathedral","atmosphere":"sacred dust, cold stone"}
+→ {"patch":{},"commit":false,"reset":false,"preset":"cathedral","lookPreset":null,"atmosphere":"sacred dust, cold stone"}
+
+User: "make it louder" (arousal 0.85)
+→ {"patch":{},"commit":false,"reset":false,"preset":null,"lookPreset":"storm","atmosphere":"rushing wind, torn paper"}
 
 User: "hmm"
-→ {"patch":{},"commit":false,"reset":false,"preset":null,"atmosphere":"quiet, held"}
+→ {"patch":{},"commit":false,"reset":false,"preset":null,"lookPreset":null,"atmosphere":"quiet, held"}
 
 Output ONLY the JSON object.`;
 }
@@ -95,6 +108,7 @@ export interface VoiceIntent {
   commit: boolean;
   reset: boolean;
   preset: string | null;
+  lookPreset: VisualPresetName | null;
   atmosphere: string | null;
 }
 
@@ -178,13 +192,21 @@ function coerceIntent(raw: unknown): VoiceIntent | null {
     if (k.length > 0 && k !== "null") preset = k;
   }
 
+  let lookPreset: VisualPresetName | null = null;
+  if (typeof o.lookPreset === "string") {
+    const k = o.lookPreset.trim().toLowerCase();
+    if ((VISUAL_PRESET_NAMES as readonly string[]).includes(k)) {
+      lookPreset = k as VisualPresetName;
+    }
+  }
+
   let atmosphere: string | null = null;
   if (typeof o.atmosphere === "string") {
     const a = o.atmosphere.trim().replace(/^["']|["']$/g, "").replace(/\.+$/, "").trim();
     if (a.length > 0) atmosphere = a;
   }
 
-  return { patch, commit, reset, preset, atmosphere };
+  return { patch, commit, reset, preset, lookPreset, atmosphere };
 }
 
 let _warnedNoKey = false;
@@ -198,6 +220,7 @@ function fallbackIntent(): VoiceIntent {
     commit: false,
     reset: false,
     preset: null,
+    lookPreset: null,
     atmosphere: sampleDrift(),
   };
 }

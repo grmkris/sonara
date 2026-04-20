@@ -78,26 +78,35 @@ interface EnvelopeBundle {
   palette: VuEnvelope;
 }
 
-function buildEnvelopes(intensity: number): EnvelopeBundle {
+// Carry prior value/peak so intensity-driven rebuilds don't snap to 0.
+function buildEnvelopes(
+  intensity: number,
+  prev?: EnvelopeBundle,
+): EnvelopeBundle {
   const c = intensityCoefficients(intensity);
-  const base = {
-    attackMs: c.vuAttackMs,
-    releaseMs: c.vuReleaseMs,
-    peakAttackMs: 10,
-    peakReleaseMs: 1500,
-    overshoot: c.peakOvershoot,
-  } as const;
+  const make = (p?: VuEnvelope) =>
+    createVuEnvelope({
+      attackMs: c.vuAttackMs,
+      releaseMs: c.vuReleaseMs,
+      peakAttackMs: 10,
+      peakReleaseMs: 1500,
+      overshoot: c.peakOvershoot,
+      initialValue: p?.value,
+      initialPeak: p?.peak,
+    });
   return {
-    rms: createVuEnvelope(base),
-    bass: createVuEnvelope(base),
-    mids: createVuEnvelope(base),
-    treble: createVuEnvelope(base),
+    rms: make(prev?.rms),
+    bass: make(prev?.bass),
+    mids: make(prev?.mids),
+    treble: make(prev?.treble),
     palette: createVuEnvelope({
       attackMs: Math.max(800, c.vuAttackMs * 3),
       releaseMs: Math.max(2000, c.vuReleaseMs * 2),
       peakAttackMs: 200,
       peakReleaseMs: 3000,
       overshoot: 0,
+      initialValue: prev?.palette.value,
+      initialPeak: prev?.palette.peak,
     }),
   };
 }
@@ -137,7 +146,10 @@ function CssFrames() {
         envelopesRef.current === null ||
         Math.abs(intensity - lastIntensityRef.current) > 0.03
       ) {
-        envelopesRef.current = buildEnvelopes(intensity);
+        envelopesRef.current = buildEnvelopes(
+          intensity,
+          envelopesRef.current ?? undefined,
+        );
         lastIntensityRef.current = intensity;
       }
       const env = envelopesRef.current;
@@ -182,7 +194,6 @@ function CssFrames() {
 
       const kickBoost = imp.kick * coef.zoomImpulseGain;
       const vocalBoost = imp.vocal * coef.onsetImpulseGain * 0.35;
-      const hatBoost = imp.hat * coef.grainSwellGain * 0.6;
       const snareFlash = imp.snare;
 
       const zoomVu = (targets.zoom ?? 1) + env.bass.peak * 0.04 * intensity;
@@ -252,17 +263,6 @@ function CssFrames() {
         prevImg.style.transform = transform;
       }
 
-      const host = prevImg?.parentElement ?? currImg?.parentElement;
-      if (host) {
-        host.style.setProperty(
-          "--grain-amp",
-          ((targets.grainSwell ?? 0) + hatBoost).toFixed(3),
-        );
-        host.style.setProperty(
-          "--vignette-amp",
-          (targets.vignette ?? 0).toFixed(3),
-        );
-      }
     };
     rafId = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(rafId);

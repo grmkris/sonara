@@ -14,18 +14,12 @@ export const AudioFeatures = z.object({
   flux: z.number(),
   onset: z.boolean(),
   onsetType: OnsetType.optional(),
-  bpm: z.number().optional(),
-  bpmConfidence: z.number().optional(),
   sectionEnergy: z.number(),
   // 2D mood vector, 0..1, smoothed over ~4s. valence: bright↔dark,
   // arousal: calm↔energetic. Cheap derivation from existing features — fed
   // to the server LLM-drift synthesizer to steer prompt atmosphere.
   valence: z.number(),
   arousal: z.number(),
-  // Emitted when the feature set is available; omitted to keep payloads small
-  // on the 5 Hz upstream path. Local consumers still see them in-process.
-  chroma: z.array(z.number()).length(12).optional(),
-  mfcc: z.array(z.number()).length(13).optional(),
 });
 
 export type AudioFeatures = z.infer<typeof AudioFeatures>;

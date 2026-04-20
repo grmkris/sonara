@@ -51,14 +51,6 @@ export function useWsSession(): (event: ClientEvent) => void {
               });
             }
             break;
-          case "preset.suggest":
-            // Server (LLM) suggests a visual preset. Only apply if user has
-            // opted into the `llm` mode — otherwise the suggestion is noted
-            // but ignored, respecting manual / cycle / section selections.
-            if (s.presetMode === "llm" && isKnownPreset(event.name)) {
-              s.setPreset(event.name);
-            }
-            break;
           case "confirm.reset":
             // Voice said "start over" / "reset". Show a toast with a
             // Confirm action; user click fires session.reset. Mishears are
@@ -72,6 +64,14 @@ export function useWsSession(): (event: ClientEvent) => void {
                   clientRef.current?.send({ type: "session.reset" }),
               },
             });
+            break;
+          case "preset.suggest":
+            // Server (LLM) suggests a visual preset. Only apply when the user
+            // has opted into LLM mode — otherwise respect manual / cycle /
+            // section selections.
+            if (s.presetMode === "llm" && isKnownPreset(event.name)) {
+              s.setPreset(event.name);
+            }
             break;
         }
       },

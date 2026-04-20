@@ -104,11 +104,6 @@ export function PromptInput({ send }: PromptInputProps) {
     return () => clearInterval(id);
   }, []);
 
-  const sceneRef = useRef(scene);
-  useEffect(() => {
-    sceneRef.current = scene;
-  }, [scene]);
-
   const commit = (key: FieldKey) => {
     const value = draft[key];
     if (value === undefined) return;

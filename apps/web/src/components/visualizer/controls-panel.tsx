@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import type { ClientEvent, DreamSceneState } from "@music-visualizer/shared";
 import { Slider } from "@/components/ui/slider";
 import { Separator } from "@/components/ui/separator";
@@ -13,6 +13,7 @@ import { IntensityDial } from "@/components/visualizer/intensity-dial";
 import { PresetPicker } from "@/components/visualizer/preset-picker";
 import { SceneTemplatePicker } from "@/components/visualizer/scene-template-picker";
 import { useVisualizerStore } from "@/stores/visualizer-store";
+import { debounce } from "@/lib/debounce";
 
 interface ControlsPanelProps {
   send: (e: ClientEvent) => void;
@@ -74,6 +75,9 @@ function SliderRow({
   onChange: (v: number) => void;
 }) {
   const [dragging, setDragging] = useState(false);
+  // Radix fires per pointer-move. Debounce WS emits to ~16/s; flush on
+  // pointer-up / leave / blur so the final value always lands.
+  const emit = useMemo(() => debounce(onChange, 60), [onChange]);
 
   const node = (
     <Slider
@@ -83,12 +87,21 @@ function SliderRow({
       step={0.01}
       onValueChange={(v) => {
         const next = v[0];
-        if (typeof next === "number") onChange(next);
+        if (typeof next === "number") emit(next);
       }}
       onPointerDown={() => setDragging(true)}
-      onPointerUp={() => setDragging(false)}
-      onPointerLeave={() => setDragging(false)}
-      onBlur={() => setDragging(false)}
+      onPointerUp={() => {
+        setDragging(false);
+        emit.flush();
+      }}
+      onPointerLeave={() => {
+        setDragging(false);
+        emit.flush();
+      }}
+      onBlur={() => {
+        setDragging(false);
+        emit.flush();
+      }}
     />
   );
 

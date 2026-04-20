@@ -96,7 +96,8 @@ export function InkDrops() {
       ctx.clearRect(0, 0, w, h);
       const drops = dropsRef.current;
       for (let i = drops.length - 1; i >= 0; i--) {
-        const d = drops[i]!;
+        const d = drops[i];
+        if (!d) continue;
         const age = now - d.born;
         if (age > LIFE_MS) {
           drops.splice(i, 1);

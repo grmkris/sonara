@@ -73,7 +73,6 @@ input::placeholder {
 }
 
 .hairline        { background-color: var(--hairline); }
-.hairline-faint  { background-color: color-mix(in srgb, var(--hairline) 35%, transparent); }
 
 /* Thin paper-tinted scrim behind clusters of UI text, so text stays legible
    against any hallucinated frame without becoming a card. */

@@ -242,6 +242,12 @@ export class Session {
     // Always update atmosphere (flavors subsequent triggers).
     if (intent.atmosphere) this.currentAtmosphere = intent.atmosphere;
 
+    // Visual-preset suggestion is advisory. The client gates on its own
+    // presetMode === "llm" before actually applying it.
+    if (intent.lookPreset) {
+      this.send({ type: "preset.suggest", name: intent.lookPreset });
+    }
+
     // Reset wins but only after user confirms on the client.
     if (intent.reset) {
       this.send({
