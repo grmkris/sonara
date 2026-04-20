@@ -119,6 +119,29 @@ float noise21(vec2 p) {
   return mix(mix(a, b, u.x), mix(c, d, u.x), u.y);
 }
 
+// 3-octave fbm on top of value-noise21. Amplitude halves, frequency doubles.
+float fbm2(vec2 p) {
+  float v = 0.0;
+  float a = 0.5;
+  for (int i = 0; i < 3; i++) {
+    v += a * noise21(p);
+    p *= 2.0;
+    a *= 0.5;
+  }
+  return v;
+}
+
+// iq recursive domain warp: f(p + k*fbm(p + k*fbm(p))). Cloudy turbulence
+// rather than plate ripples; audio-modulated warp amount drives the swirl.
+float warpedFbm(vec2 p, float k) {
+  vec2 q = vec2(fbm2(p), fbm2(p + vec2(5.2, 1.3)));
+  vec2 r = vec2(
+    fbm2(p + k * q + vec2(1.7, 9.2)),
+    fbm2(p + k * q + vec2(8.3, 2.8))
+  );
+  return fbm2(p + k * r);
+}
+
 vec2 coverUv(vec2 uv, vec2 texSize, vec2 viewSize) {
   float texAspect = texSize.x / max(1.0, texSize.y);
   float viewAspect = viewSize.x / max(1.0, viewSize.y);
@@ -166,7 +189,15 @@ vec2 shockwave(vec2 uv, vec2 center, float age, float speed, float width, float 
 }
 
 vec2 computeDisplacement(vec2 uv) {
-  float slow = noise21(uv * 2.0  + uTime * 0.10) - 0.5;
+  // Slowest octave is now an iq recursive domain warp (cloudy turbulence,
+  // audio-modulated swirl). Mid/fine/warpN stay as plain value noise so
+  // transient audio reactivity (kick punch, treble shimmer) reads crisp.
+  float warpK = 3.0 + uBass * 3.0 + uMotionEnergy * 1.5; // 3..7.5
+  vec2 slowP = uv * 2.0 + uTime * 0.10;
+  float slowA = warpedFbm(slowP, warpK) - 0.5;
+  float slowB = warpedFbm(slowP + vec2(3.1, 7.8), warpK) - 0.5;
+  vec2 slowDisp = vec2(slowA, slowB);
+
   float mid  = noise21(uv * 6.0  + uTime * 0.45) - 0.5;
   float fine = noise21(uv * 24.0 + uTime * 1.8)  - 0.5;
   float warpN = noise21(uv * 3.5 + uTime * 0.18) - 0.5;
@@ -177,7 +208,7 @@ vec2 computeDisplacement(vec2 uv) {
   float fineAmp  = uTreble * 0.011 * gain;
   float warpAmp  = uWarp   * 0.020 * gain;
 
-  vec2 disp = vec2(slow * swellAmp * 1.2, slow * swellAmp * 0.8)
+  vec2 disp = slowDisp * swellAmp * vec2(1.2, 0.8)
             + vec2(mid  * midAmp,         mid  * midAmp  * 0.7)
             + vec2(fine * fineAmp * 0.6,  fine * fineAmp)
             + vec2(warpN * warpAmp * 1.1, warpN * warpAmp * 0.8);

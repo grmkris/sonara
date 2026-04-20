@@ -4,12 +4,13 @@ import {
   type DreamSceneState,
   type ServerEvent,
   defaultScene,
+  getSceneTemplate,
 } from "@music-visualizer/shared";
 import type { Logger } from "../lib/logger";
 import { streamPreview } from "../generation/fal-provider";
 import { buildPrompt } from "../generation/prompt-compiler";
 import { sampleDriftLayered } from "../generation/prompt-drift";
-import { synthesizeDrift } from "../generation/llm-drift";
+import { parseVoiceIntent, type VoiceIntent } from "../generation/voice-intent";
 import { semanticDiff } from "./semantic-diff";
 
 export interface SessionOpts {
@@ -26,14 +27,18 @@ type TriggerReason =
   | "commit"
   | "voice";
 
-// Voice phrases expire after this many ms (not consumed by Phase 1 yet —
-// Phase 3 will pull from this buffer when the LLM synthesizes drift).
 const VOICE_PHRASE_TTL_MS = 30_000;
 const VOICE_BUFFER_MAX = 8;
+
+// Reset-via-voice shows the user a 10s confirm toast before actually firing.
+const RESET_CONFIRM_TTL_MS = 10_000;
 
 // Baseline thresholds. PERIODIC_MS and PAUSE_MS are intensity-derived
 // (see cadenceFromIntensity below).
 const SEMANTIC_THRESHOLD = 0.3;
+// When a patch arrives via voice, drop the trigger threshold so mood /
+// palette-only changes still fire immediately.
+const SEMANTIC_THRESHOLD_VOICE = 0.1;
 const SECTION_DELTA_THRESHOLD = 0.5;
 const SECTION_SUSTAIN_MS = 500;
 
@@ -47,15 +52,10 @@ function lerp(a: number, b: number, t: number): number {
   return a + (b - a) * t;
 }
 
-// Intensity 0..1 → periodic + pause timing. Matches plan doc D1.
+// Intensity 0..1 → periodic + pause timing.
 function cadenceFromIntensity(i: number): { periodicMs: number; pauseMs: number } {
   const I = Math.max(0, Math.min(1, i));
   return {
-    // Cadence is shorter than the 4.5s bleed so new frames arrive while the
-    // last bleed is still in progress — the image never finishes settling
-    // before the next change starts, giving a continuous "always becoming"
-    // feel. Slot rotation + pushFrame not resetting crossfadeStartedAt
-    // handles the overlap gracefully.
     periodicMs: Math.round(lerp(7_000, 3_000, I)),
     pauseMs: Math.round(lerp(1_500, 400, I)),
   };
@@ -74,30 +74,18 @@ export class Session {
   private readonly logger: Logger;
 
   private seed: number = rollSeed();
-
-  // Single-hero identity anchor. Updated ONLY on commit-tier completion.
-  // Flow-tier frames condition on this but never mutate it — prevents the
-  // frame-to-frame drift compounding that a rolling ring buffer causes.
   private heroImageUrl: string | null = null;
 
   private lastSectionEnergy = 0;
   private sectionDeltaStartedAt: number | null = null;
   private lastAudioAt = 0;
-  // Latest smoothed mood components received from client audio features.
-  // Consumed by the LLM drift synthesizer so it can bias atmosphere to the music.
   private lastValence = 0.5;
   private lastArousal = 0;
 
-  // Rolling buffer of recent voice transcripts, newest-last.
   private voiceBuffer: { text: string; at: number }[] = [];
-
-  // LLM-synthesized atmospheric drift. Refreshed in the background; when
-  // fresh, it takes priority over raw voice phrases and the static pool.
-  private currentLlmDrift: string | null = null;
-  private lastSuggestedPreset: string | null = null;
-  private llmRefreshTimer?: ReturnType<typeof setTimeout>;
-  private llmInFlight?: AbortController;
-  private lastLlmRefreshAt = 0;
+  private currentAtmosphere: string | null = null;
+  private voiceInFlight?: AbortController;
+  private voiceDebounceTimer?: ReturnType<typeof setTimeout>;
 
   constructor(opts: SessionOpts) {
     this.id = opts.id;
@@ -113,14 +101,19 @@ export class Session {
     this.send({ type: "job.status", status: "idle" });
   }
 
-  applyPatch(patch: ClientScenePatch): void {
+  applyPatch(
+    patch: ClientScenePatch,
+    origin: "client" | "voice" = "client",
+  ): void {
     const next: DreamSceneState = { ...this.scene, ...patch };
     this.scene = next;
     this.send({ type: "scene.state", state: next });
 
+    const threshold =
+      origin === "voice" ? SEMANTIC_THRESHOLD_VOICE : SEMANTIC_THRESHOLD;
     const diff = semanticDiff(this.lastGeneratedScene, next);
-    if (diff > SEMANTIC_THRESHOLD) {
-      this.trigger("semantic");
+    if (diff > threshold) {
+      this.trigger(origin === "voice" ? "voice" : "semantic");
       return;
     }
     this.schedulePause();
@@ -164,81 +157,13 @@ export class Session {
     return null;
   }
 
-  // Min interval between LLM calls so rapid-fire voice doesn't spam Haiku.
-  // delayMs=0 means "fire on next tick subject to the floor below".
-  private static readonly LLM_MIN_INTERVAL_MS = 10_000;
-
-  private scheduleLlmRefresh(delayMs: number): void {
-    if (this.llmRefreshTimer) clearTimeout(this.llmRefreshTimer);
-    const sinceLast = Date.now() - this.lastLlmRefreshAt;
-    const floor = Math.max(0, Session.LLM_MIN_INTERVAL_MS - sinceLast);
-    const delay = Math.max(delayMs, floor);
-    this.llmRefreshTimer = setTimeout(() => {
-      this.llmRefreshTimer = undefined;
-      this.refreshLlmDrift().catch((err) => {
-        this.logger.warn({ err }, "refreshLlmDrift unhandled");
-      });
-    }, delay);
-  }
-
-  private async refreshLlmDrift(): Promise<void> {
-    // Nothing meaningful to synthesize yet — let the pool handle it.
-    const hasScene = this.scene.subject.trim().length > 0;
-    if (!hasScene && this.voiceBuffer.length === 0) return;
-
-    this.llmInFlight?.abort();
-    const controller = new AbortController();
-    this.llmInFlight = controller;
-    this.lastLlmRefreshAt = Date.now();
-
-    const voicePhrases = this.voiceBuffer
-      .slice()
-      .reverse()
-      .map((e) => e.text);
-
-    try {
-      const result = await synthesizeDrift(
-        {
-          scene: {
-            subject: this.scene.subject,
-            environment: this.scene.environment,
-            mood: this.scene.mood,
-            palette: this.scene.palette,
-          },
-          voicePhrases,
-          valence: this.lastValence,
-          arousal: this.lastArousal,
-          previousDrift: this.currentLlmDrift,
-          previousPreset: this.lastSuggestedPreset,
-        },
-        { signal: controller.signal, logger: this.logger },
-      );
-      if (controller.signal.aborted) return;
-      if (result.drift) {
-        this.currentLlmDrift = result.drift;
-        this.logger.info(
-          { drift: result.drift, preset: result.preset },
-          "llm drift refreshed",
-        );
-      }
-      if (result.preset && result.preset !== this.lastSuggestedPreset) {
-        this.lastSuggestedPreset = result.preset;
-        this.send({ type: "preset.suggest", name: result.preset });
-      }
-    } catch (err) {
-      if (!controller.signal.aborted) {
-        this.logger.warn({ err }, "refreshLlmDrift error");
-      }
-    } finally {
-      if (this.llmInFlight === controller) this.llmInFlight = undefined;
-    }
-  }
-
+  // Incoming voice transcript. Pushed onto the rolling buffer; after a 1.5s
+  // debounce we send the latest phrase through the LLM intent parser, then
+  // dispatch whatever structural / command intent it returned.
   applyVoice(text: string): void {
     const trimmed = text.trim();
     if (trimmed.length === 0) return;
     const now = Date.now();
-    // Drop expired entries before pushing.
     this.voiceBuffer = this.voiceBuffer.filter(
       (e) => now - e.at < VOICE_PHRASE_TTL_MS,
     );
@@ -250,13 +175,113 @@ export class Session {
       { text: trimmed, bufferLen: this.voiceBuffer.length },
       "voice phrase",
     );
-    // Debounce LLM refresh — wait for the user to finish a thought before
-    // spending a Haiku call. Resets on every new phrase.
-    this.scheduleLlmRefresh(1500);
+
+    // Debounce: wait for the user to finish the thought before spending
+    // an LLM call. Each new phrase resets the timer.
+    if (this.voiceDebounceTimer) clearTimeout(this.voiceDebounceTimer);
+    this.voiceDebounceTimer = setTimeout(() => {
+      this.voiceDebounceTimer = undefined;
+      this.dispatchVoice(trimmed).catch((err) => {
+        this.logger.warn({ err }, "dispatchVoice unhandled");
+      });
+    }, 1500);
+  }
+
+  private async dispatchVoice(phrase: string): Promise<void> {
+    this.voiceInFlight?.abort();
+    const controller = new AbortController();
+    this.voiceInFlight = controller;
+
+    const history = this.voiceBuffer
+      .slice()
+      .reverse()
+      .map((e) => e.text)
+      .filter((t) => t !== phrase);
+
+    let intent: VoiceIntent;
+    try {
+      intent = await parseVoiceIntent(
+        {
+          phrase,
+          scene: {
+            subject: this.scene.subject,
+            environment: this.scene.environment,
+            mood: this.scene.mood,
+            palette: this.scene.palette,
+            intensity: this.scene.intensity,
+          },
+          voiceHistory: history,
+          valence: this.lastValence,
+          arousal: this.lastArousal,
+          previousAtmosphere: this.currentAtmosphere,
+        },
+        { signal: controller.signal, logger: this.logger },
+      );
+    } catch (err) {
+      if (!controller.signal.aborted) {
+        this.logger.warn({ err }, "parseVoiceIntent threw");
+      }
+      return;
+    } finally {
+      if (this.voiceInFlight === controller) this.voiceInFlight = undefined;
+    }
+    if (controller.signal.aborted) return;
+
+    this.logger.info(
+      {
+        phrase,
+        patch: intent.patch,
+        commit: intent.commit,
+        reset: intent.reset,
+        preset: intent.preset,
+        atmosphere: intent.atmosphere,
+      },
+      "voice intent parsed",
+    );
+
+    // Always update atmosphere (flavors subsequent triggers).
+    if (intent.atmosphere) this.currentAtmosphere = intent.atmosphere;
+
+    // Reset wins but only after user confirms on the client.
+    if (intent.reset) {
+      this.send({
+        type: "confirm.reset",
+        ttlMs: RESET_CONFIRM_TTL_MS,
+        reason: `voice: "${phrase}"`,
+      });
+      return;
+    }
+
+    // Scene template fills blanks; explicit patch overrides template fields.
+    let patch: ClientScenePatch = { ...intent.patch };
+    if (intent.preset) {
+      const template = getSceneTemplate(intent.preset);
+      if (template) {
+        patch = { ...template.scene, ...patch };
+      } else {
+        this.logger.warn(
+          { key: intent.preset },
+          "unknown scene template from voice",
+        );
+      }
+    }
+
+    if (Object.keys(patch).length > 0) {
+      this.applyPatch(patch, "voice");
+    }
+
+    if (intent.commit) {
+      this.commit();
+    }
   }
 
   reset(): void {
     this.activeJob?.abort();
+    this.voiceInFlight?.abort();
+    if (this.voiceDebounceTimer) {
+      clearTimeout(this.voiceDebounceTimer);
+      this.voiceDebounceTimer = undefined;
+    }
     this.scene = { ...defaultScene };
     this.lastGeneratedScene = { ...defaultScene };
     this.activeVersion = 0;
@@ -264,24 +289,17 @@ export class Session {
     this.seed = rollSeed();
     this.heroImageUrl = null;
     this.voiceBuffer = [];
-    this.currentLlmDrift = null;
-    this.lastSuggestedPreset = null;
-    this.lastLlmRefreshAt = 0;
-    this.llmInFlight?.abort();
-    if (this.llmRefreshTimer) {
-      clearTimeout(this.llmRefreshTimer);
-      this.llmRefreshTimer = undefined;
-    }
+    this.currentAtmosphere = null;
     this.send({ type: "scene.state", state: this.scene });
     this.send({ type: "job.status", status: "idle" });
   }
 
   close(): void {
     this.activeJob?.abort();
-    this.llmInFlight?.abort();
+    this.voiceInFlight?.abort();
     if (this.pauseTimer) clearTimeout(this.pauseTimer);
     if (this.periodicTimer) clearInterval(this.periodicTimer);
-    if (this.llmRefreshTimer) clearTimeout(this.llmRefreshTimer);
+    if (this.voiceDebounceTimer) clearTimeout(this.voiceDebounceTimer);
   }
 
   private schedulePause(): void {
@@ -312,17 +330,14 @@ export class Session {
       this.logger.debug({ reason }, "trigger skipped: empty prompt");
       return;
     }
-    // Drift is layered: fresh LLM synthesis > most-recent voice phrase > static pool.
-    // Voice phrases are visible in generations the moment the user speaks;
-    // the LLM takes over once it has synthesized from {scene, voice, mood}.
+    // Drift layering: current atmosphere (from voice-intent) →
+    // most-recent voice phrase raw → static pool.
     const latestVoice = this.getLatestVoice();
     const drift = sampleDriftLayered({
-      llmDrift: this.currentLlmDrift,
+      llmDrift: this.currentAtmosphere,
       latestVoice,
     });
     const prompt = drift ? `${basePrompt}, ${drift}` : basePrompt;
-    // Keep the LLM warm in the background so next trigger has fresh synthesis.
-    this.scheduleLlmRefresh(0);
 
     this.activeJob?.abort();
     const controller = new AbortController();
@@ -330,8 +345,6 @@ export class Session {
 
     this.activeVersion += 1;
     const version = this.activeVersion;
-    // Surface hero URL in scene.references for wire compatibility; the real
-    // source of truth is this.heroImageUrl on the server.
     const nextReferences = this.heroImageUrl ? [this.heroImageUrl] : [];
     this.scene = { ...this.scene, version, references: nextReferences };
     const snapshot: DreamSceneState = this.scene;
@@ -344,7 +357,7 @@ export class Session {
         version,
         prompt,
         drift,
-        driftSource: this.currentLlmDrift
+        driftSource: this.currentAtmosphere
           ? "llm"
           : latestVoice
             ? "voice"
@@ -372,9 +385,6 @@ export class Session {
       onFinal: (url) => {
         if (version !== this.activeVersion) return;
         this.lastGeneratedScene = snapshot;
-        // Only commit-tier frames promote to hero. Flow-tier frames are
-        // transient and never become anchors; this is what stops identity
-        // drift from compounding.
         if (forCommit) {
           this.heroImageUrl = url;
           this.scene = { ...this.scene, references: [url] };

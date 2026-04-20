@@ -51,6 +51,13 @@ export const ServerEvent = z.discriminatedUnion("type", [
     type: z.literal("preset.suggest"),
     name: z.string().min(1).max(64),
   }),
+  // Voice-originated reset goes through a client confirm toast before the
+  // destructive session.reset actually runs — mishears are a real risk.
+  z.object({
+    type: z.literal("confirm.reset"),
+    ttlMs: z.number().int().positive(),
+    reason: z.string(),
+  }),
 ]);
 
 export type ServerEvent = z.infer<typeof ServerEvent>;

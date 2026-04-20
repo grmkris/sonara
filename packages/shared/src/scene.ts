@@ -17,12 +17,8 @@ export const DreamSceneState = z.object({
 
   // Master audio→visual coupling dial. Composes VU time-constants, onset
   // impulse gain, hue pump range, zoom impulse, periodic AI cadence, pause
-  // threshold, onset refractory. See plan doc D1.
+  // threshold, onset refractory.
   intensity: z.number().min(0).max(1),
-
-  preserveIdentity: z.boolean(),
-  preserveComposition: z.boolean(),
-  preservePalette: z.boolean(),
 
   references: z.array(z.string()),
   version: z.number().int().nonnegative(),
@@ -47,9 +43,6 @@ export const defaultScene: DreamSceneState = {
   abstraction: 0.6,
   stability: 0.5,
   intensity: 0.5,
-  preserveIdentity: false,
-  preserveComposition: false,
-  preservePalette: false,
   references: [],
   version: 0,
 };

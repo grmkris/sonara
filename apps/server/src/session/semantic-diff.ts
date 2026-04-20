@@ -2,6 +2,8 @@ import type { DreamSceneState } from "@music-visualizer/shared";
 
 // Field-weighted semantic distance. Returns 0..~3 (unbounded high).
 // Threshold ~0.3 = meaningful change, ~1.0 = major scene shift.
+// For voice-origin patches the session lowers the effective threshold to 0.1
+// so mood / palette-only tweaks still fire a regeneration.
 export function semanticDiff(
   prev: DreamSceneState,
   curr: DreamSceneState,
@@ -36,16 +38,6 @@ export function semanticDiff(
   for (const key of sliders) {
     const d = Math.abs(Number(curr[key]) - Number(prev[key]));
     score += d * 0.6;
-  }
-
-  // Preserve toggles flip the policy; treat as medium weight.
-  const toggles: (keyof DreamSceneState)[] = [
-    "preserveIdentity",
-    "preserveComposition",
-    "preservePalette",
-  ];
-  for (const key of toggles) {
-    if (prev[key] !== curr[key]) score += 0.4;
   }
 
   return score;

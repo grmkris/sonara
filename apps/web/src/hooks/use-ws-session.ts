@@ -59,6 +59,20 @@ export function useWsSession(): (event: ClientEvent) => void {
               s.setPreset(event.name);
             }
             break;
+          case "confirm.reset":
+            // Voice said "start over" / "reset". Show a toast with a
+            // Confirm action; user click fires session.reset. Mishears are
+            // a real risk, so never auto-reset.
+            toast("Reset the scene?", {
+              description: event.reason,
+              duration: event.ttlMs,
+              action: {
+                label: "Reset",
+                onClick: () =>
+                  clientRef.current?.send({ type: "session.reset" }),
+              },
+            });
+            break;
         }
       },
     });

@@ -11,30 +11,20 @@ import {
 } from "@/components/ui/tooltip";
 import { IntensityDial } from "@/components/visualizer/intensity-dial";
 import { PresetPicker } from "@/components/visualizer/preset-picker";
+import { SceneTemplatePicker } from "@/components/visualizer/scene-template-picker";
 import { useVisualizerStore } from "@/stores/visualizer-store";
-import { cn } from "@/lib/utils";
 
 interface ControlsPanelProps {
   send: (e: ClientEvent) => void;
 }
 
 type SliderKey = "softness" | "surrealness" | "abstraction" | "stability";
-type ToggleKey =
-  | "preserveIdentity"
-  | "preserveComposition"
-  | "preservePalette";
 
 const SLIDERS: { key: SliderKey; label: string }[] = [
   { key: "softness",    label: "soft"     },
   { key: "surrealness", label: "unreal"   },
   { key: "abstraction", label: "abstract" },
   { key: "stability",   label: "stable"   },
-];
-
-const TOGGLES: { key: ToggleKey; label: string }[] = [
-  { key: "preserveIdentity",    label: "identity"    },
-  { key: "preserveComposition", label: "composition" },
-  { key: "preservePalette",     label: "palette"     },
 ];
 
 export function ControlsPanel({ send }: ControlsPanelProps) {
@@ -45,14 +35,13 @@ export function ControlsPanel({ send }: ControlsPanelProps) {
       type: "scene.patch",
       patch: { [key]: value } as Partial<DreamSceneState>,
     });
-  const patchToggle = (key: ToggleKey, value: boolean) =>
-    send({
-      type: "scene.patch",
-      patch: { [key]: value } as Partial<DreamSceneState>,
-    });
 
   return (
     <div className="flex flex-col gap-6">
+      <SceneTemplatePicker send={send} />
+
+      <Separator className="bg-[color:var(--hairline)]/30" />
+
       <PresetPicker />
 
       <Separator className="bg-[color:var(--hairline)]/30" />
@@ -70,38 +59,6 @@ export function ControlsPanel({ send }: ControlsPanelProps) {
             onChange={(v) => patchSlider(s.key, v)}
           />
         ))}
-      </div>
-
-      <Separator className="bg-[color:var(--hairline)]/30" />
-
-      <div className="flex flex-col gap-1.5">
-        {TOGGLES.map((t) => {
-          const on = scene[t.key];
-          return (
-            <button
-              key={t.key}
-              type="button"
-              onClick={() => patchToggle(t.key, !on)}
-              className={cn(
-                "group flex items-baseline gap-3 self-start transition-colors",
-                on
-                  ? "text-[color:var(--paper)]"
-                  : "text-[color:var(--stone)] hover:text-[color:var(--paper)]/80",
-              )}
-            >
-              <span
-                aria-hidden
-                className={cn(
-                  "w-3 text-center text-[12px] leading-none transition-opacity",
-                  on ? "opacity-100" : "opacity-0",
-                )}
-              >
-                •
-              </span>
-              <span className="font-serif text-[13px]">{t.label}</span>
-            </button>
-          );
-        })}
       </div>
     </div>
   );

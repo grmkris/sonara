@@ -27,9 +27,6 @@ export function buildPrompt(s: DreamSceneState): string {
     s.surrealness > 0.7 && "surreal fluid transformations",
     s.abstraction > 0.6 && "dissolving edges, luminous ambiguity",
     s.stability < 0.4 && "morphing forms, shifting geometry",
-    s.preserveIdentity && "maintain subject identity",
-    s.preserveComposition && "preserve overall composition",
-    s.preservePalette && "preserve color family",
   ];
 
   const tailParts = tail.filter(
