@@ -1,16 +1,15 @@
-import Anthropic from "@anthropic-ai/sdk";
+import { fal } from "@fal-ai/client";
 import type { Logger } from "../lib/logger";
 
-// Haiku is the right tier for this: small, cheap, fast. A call is ~260 tokens
-// in / ~30 out, ~$0.0002/call. At the session's 10s min interval this is
-// ~$0.07/hour of use — fal dwarfs it.
+// Uses fal-ai/any-llm so we stay on one API key (FAL_KEY is already used for
+// image generation). The endpoint is marked deprecated in fal's docs but still
+// functions as of this writing. If it stops working, rebuild this module
+// against the Anthropic SDK (git log around this commit for the original shape).
 //
-// Note: Haiku 4.5 has a 4096-token minimum for prompt caching. Our system
-// prompt is ~180 tokens, so caching would silently not kick in — we don't
-// bother with cache_control here. If we ever expand the prompt above 4k
-// (e.g. many few-shot examples), add `cache_control: {type: "ephemeral"}`
-// to the system block.
-const MODEL = "claude-haiku-4-5";
+// Default model `google/gemini-2.5-flash-lite` is tiny and fast — our system
+// prompt is ~180 tokens and output is ~30, so any lightweight model works.
+// Override via FAL_LLM_MODEL env var.
+const DEFAULT_MODEL = "google/gemini-2.5-flash-lite";
 const MAX_OUTPUT_TOKENS = 80;
 
 const SYSTEM_PROMPT = `You are the atmospheric mind of a sumi-e dream visualizer. Given the current scene (a fixed subject the user has chosen), what the user has been saying out loud, and the mood of the music, emit a short comma-separated list of 1–3 atmospheric clauses that will steer the next AI image generation.
@@ -44,30 +43,7 @@ export interface SynthesizeOpts {
   logger: Logger;
 }
 
-// Lazy singleton — avoids constructing the client (and the auth warning)
-// unless a key is present. Returns null when unavailable so callers can
-// fall back to the static drift pool.
-let _client: Anthropic | null | undefined = undefined;
-let _warned = false;
-
-function getClient(logger: Logger): Anthropic | null {
-  if (_client !== undefined) return _client;
-  const key = process.env.ANTHROPIC_API_KEY;
-  if (!key) {
-    _client = null;
-    if (!_warned) {
-      _warned = true;
-      logger.warn(
-        "ANTHROPIC_API_KEY not set — LLM drift synthesis disabled, falling back to voice phrases and static pool",
-      );
-    }
-    return null;
-  }
-  _client = new Anthropic({ apiKey: key });
-  return _client;
-}
-
-function buildUserMessage(input: SynthesizeInput): string {
+function buildUserPrompt(input: SynthesizeInput): string {
   const voiceList =
     input.voicePhrases.length > 0
       ? input.voicePhrases.map((p) => `  - "${p}"`).join("\n")
@@ -94,55 +70,69 @@ Emit new drift.`;
 // accidentally wrapped around the clauses. Returns null if the result is empty.
 function sanitize(text: string): string | null {
   let out = text.trim();
-  // Strip outer quotes if present.
   if (
     (out.startsWith('"') && out.endsWith('"')) ||
     (out.startsWith("'") && out.endsWith("'"))
   ) {
     out = out.slice(1, -1).trim();
   }
-  // Kill any trailing period — the clauses are phrases, not sentences.
   out = out.replace(/\.+$/, "").trim();
   return out.length > 0 ? out : null;
 }
+
+interface AnyLlmResult {
+  output?: string;
+  error?: string;
+}
+
+function extractOutput(data: unknown): string | null {
+  if (!data || typeof data !== "object") return null;
+  const result = data as AnyLlmResult;
+  if (typeof result.output === "string") return result.output;
+  return null;
+}
+
+let _warnedNoKey = false;
 
 export async function synthesizeDrift(
   input: SynthesizeInput,
   opts: SynthesizeOpts,
 ): Promise<string | null> {
-  const client = getClient(opts.logger);
-  if (!client) return null;
+  if (!process.env.FAL_KEY) {
+    if (!_warnedNoKey) {
+      _warnedNoKey = true;
+      opts.logger.warn(
+        "FAL_KEY not set — LLM drift synthesis disabled, falling back to voice phrases and static pool",
+      );
+    }
+    return null;
+  }
+
+  const model = process.env.FAL_LLM_MODEL ?? DEFAULT_MODEL;
 
   try {
-    const response = await client.messages.create(
-      {
-        model: MODEL,
+    const result = await fal.subscribe("fal-ai/any-llm", {
+      input: {
+        model,
+        system_prompt: SYSTEM_PROMPT,
+        prompt: buildUserPrompt(input),
         max_tokens: MAX_OUTPUT_TOKENS,
-        system: SYSTEM_PROMPT,
-        messages: [{ role: "user", content: buildUserMessage(input) }],
+        priority: "latency",
       },
-      { signal: opts.signal },
-    );
+      logs: false,
+      abortSignal: opts.signal,
+    });
+    if (opts.signal.aborted) return null;
 
-    const textBlock = response.content.find(
-      (b): b is Anthropic.TextBlock => b.type === "text",
-    );
-    if (!textBlock) return null;
-    return sanitize(textBlock.text);
+    const output = extractOutput(result?.data);
+    if (!output) {
+      opts.logger.debug({ result }, "llm drift: empty output");
+      return null;
+    }
+    return sanitize(output);
   } catch (err) {
     if (opts.signal.aborted) return null;
-    if (err instanceof Anthropic.RateLimitError) {
-      opts.logger.warn({ status: err.status }, "llm drift: rate limited");
-    } else if (err instanceof Anthropic.AuthenticationError) {
-      opts.logger.warn("llm drift: authentication failed — check ANTHROPIC_API_KEY");
-    } else if (err instanceof Anthropic.APIError) {
-      opts.logger.warn(
-        { status: err.status, message: err.message },
-        "llm drift: API error",
-      );
-    } else {
-      opts.logger.warn({ err }, "llm drift: unexpected error");
-    }
+    opts.logger.warn({ err }, "llm drift: fal any-llm error");
     return null;
   }
 }

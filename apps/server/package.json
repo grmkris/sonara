@@ -10,7 +10,6 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.90.0",
     "@fal-ai/client": "^1.9.5",
     "@music-visualizer/shared": "workspace:*",
     "hono": "^4.12.12",
