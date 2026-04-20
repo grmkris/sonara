@@ -29,9 +29,9 @@ export class AudioEngine {
   private rafId: number | null = null;
   private mediaStream: MediaStream | null = null;
 
-  // Per-frame feature caches populated from Meyda callbacks.
-  private rmsFromMeyda = 0;
-  private centroidFromMeyda = 0;
+  // Per-frame feature caches populated from Meyda callbacks. RMS and centroid
+  // are *not* here — they're computed in-loop from the analyser's own data so
+  // they don't stall at 0 if Meyda's script processor fails to start.
   private flatnessFromMeyda = 0;
   private rolloffFromMeyda = 0;
   private fluxFromMeyda = 0;
@@ -40,6 +40,7 @@ export class AudioEngine {
 
   private prevSpectrum: Float32Array | null = null;
   private freqBuffer: Uint8Array<ArrayBuffer> | null = null;
+  private timeBuffer: Uint8Array<ArrayBuffer> | null = null;
   private fluxHistory: number[] = [];
   private rmsHistory: number[] = [];
   private lastOnsetAt = 0;
@@ -120,6 +121,13 @@ export class AudioEngine {
     if (this.rafId === null) this.loop();
   }
 
+  // Exposes the live AnalyserNode so high-rate consumers (WaveformRibbon,
+  // SpectrumCurve) can read byte data directly at 60Hz instead of going
+  // through the 5Hz Zustand upstream.
+  getAnalyser(): AnalyserNode | null {
+    return this.analyser;
+  }
+
   stop(): void {
     if (this.rafId !== null) cancelAnimationFrame(this.rafId);
     this.rafId = null;
@@ -131,6 +139,7 @@ export class AudioEngine {
     this.analyser = null;
     this.compressor = null;
     this.freqBuffer = null;
+    this.timeBuffer = null;
     this.prevSpectrum = null;
   }
 
@@ -166,6 +175,7 @@ export class AudioEngine {
     this.compressor = compressor;
     this.analyser = analyser;
     this.freqBuffer = new Uint8Array(new ArrayBuffer(analyser.frequencyBinCount));
+    this.timeBuffer = new Uint8Array(new ArrayBuffer(analyser.fftSize));
     this.prevSpectrum = new Float32Array(analyser.frequencyBinCount);
   }
 
@@ -177,8 +187,6 @@ export class AudioEngine {
         source,
         bufferSize: MEYDA_BUFFER_SIZE,
         featureExtractors: [
-          "rms",
-          "spectralCentroid",
           "spectralFlatness",
           "spectralRolloff",
           "spectralFlux",
@@ -186,22 +194,12 @@ export class AudioEngine {
           "mfcc",
         ],
         callback: (features: {
-          rms?: number;
-          spectralCentroid?: number;
           spectralFlatness?: number;
           spectralRolloff?: number;
           spectralFlux?: number;
           chroma?: number[];
           mfcc?: number[];
         }) => {
-          if (typeof features.rms === "number") this.rmsFromMeyda = features.rms;
-          if (typeof features.spectralCentroid === "number") {
-            const maxBin = MEYDA_BUFFER_SIZE / 2;
-            this.centroidFromMeyda = Math.min(
-              1,
-              features.spectralCentroid / maxBin,
-            );
-          }
           if (typeof features.spectralFlatness === "number") {
             this.flatnessFromMeyda = features.spectralFlatness;
           }
@@ -222,19 +220,54 @@ export class AudioEngine {
         },
       });
       this.meydaAnalyzer.start();
-    } catch {
+    } catch (err) {
+      // Meyda supplies flatness/rolloff/chroma/mfcc. RMS + centroid are now
+      // computed locally so this failure degrades gracefully — log so we
+      // notice instead of silently losing features.
+      console.warn(
+        "[AudioEngine] Meyda init failed — spectral flatness/rolloff/chroma/mfcc will stay at 0",
+        err,
+      );
       this.meydaAnalyzer = null;
     }
   }
 
   private loop = (): void => {
     this.rafId = requestAnimationFrame(this.loop);
-    if (!this.analyser || !this.ctx || !this.callback || !this.freqBuffer)
+    if (
+      !this.analyser ||
+      !this.ctx ||
+      !this.callback ||
+      !this.freqBuffer ||
+      !this.timeBuffer
+    )
       return;
 
     const bins = this.analyser.frequencyBinCount;
     const freq = this.freqBuffer;
+    const time = this.timeBuffer;
     this.analyser.getByteFrequencyData(freq);
+    this.analyser.getByteTimeDomainData(time);
+
+    // RMS computed from time-domain samples (byte, centred on 128). Matches
+    // WaveformRibbon's formula; independent of Meyda so it never stalls at 0.
+    let sumSq = 0;
+    for (let i = 0; i < time.length; i++) {
+      const d = (time[i] ?? 128) - 128;
+      sumSq += d * d;
+    }
+    const rms = Math.sqrt(sumSq / time.length) / 128;
+
+    // Spectral centroid from the frequency buffer — also free here, avoids
+    // the Meyda dependency for this core feature.
+    let num = 0;
+    let den = 0;
+    for (let i = 0; i < bins; i++) {
+      const v = (freq[i] ?? 0) / 255;
+      num += i * v;
+      den += v;
+    }
+    const centroid = den > 0 ? num / den / bins : 0;
 
     const nyquist = this.ctx.sampleRate / 2;
     const binHz = nyquist / bins;
@@ -282,13 +315,12 @@ export class AudioEngine {
         bass,
         mids,
         treble,
-        centroid: this.centroidFromMeyda,
-        rms: this.rmsFromMeyda,
+        centroid,
+        rms,
         flatness: this.flatnessFromMeyda,
       });
     }
 
-    const rms = this.rmsFromMeyda;
     this.rmsHistory.push(rms);
     if (this.rmsHistory.length > 60) this.rmsHistory.shift();
     const sectionEnergy = avg(this.rmsHistory);
@@ -298,7 +330,7 @@ export class AudioEngine {
       bass,
       mids,
       treble,
-      centroid: this.centroidFromMeyda,
+      centroid,
       flatness: this.flatnessFromMeyda,
       rolloff: this.rolloffFromMeyda,
       flux: this.fluxFromMeyda,

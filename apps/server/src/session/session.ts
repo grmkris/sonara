@@ -8,6 +8,7 @@ import {
 import type { Logger } from "../lib/logger";
 import { streamPreview } from "../generation/fal-provider";
 import { buildPrompt } from "../generation/prompt-compiler";
+import { sampleDrift } from "../generation/prompt-drift";
 import { semanticDiff } from "./semantic-diff";
 
 export interface SessionOpts {
@@ -38,8 +39,11 @@ function lerp(a: number, b: number, t: number): number {
 function cadenceFromIntensity(i: number): { periodicMs: number; pauseMs: number } {
   const I = Math.max(0, Math.min(1, i));
   return {
-    periodicMs: Math.round(lerp(20_000, 4_000, I)),
-    pauseMs: Math.round(lerp(2_000, 600, I)),
+    // Tighter cadence so the image is always in mid-evolution. Flow-tier
+    // frames don't promote to hero (see trigger() below), so identity stays
+    // pinned even at 2s regen intervals.
+    periodicMs: Math.round(lerp(8_000, 2_000, I)),
+    pauseMs: Math.round(lerp(1_500, 400, I)),
   };
 }
 
@@ -159,11 +163,16 @@ export class Session {
   }
 
   private trigger(reason: TriggerReason): void {
-    const prompt = buildPrompt(this.scene);
-    if (!prompt.trim()) {
+    const basePrompt = buildPrompt(this.scene);
+    if (!basePrompt.trim()) {
       this.logger.debug({ reason }, "trigger skipped: empty prompt");
       return;
     }
+    // Atmospheric modifier sampled fresh each trigger — same dream, different
+    // weather. Subject/identity clauses are untouched (composed on top of
+    // buildPrompt's output, never inside it).
+    const drift = sampleDrift();
+    const prompt = drift ? `${basePrompt}, ${drift}` : basePrompt;
 
     this.activeJob?.abort();
     const controller = new AbortController();
@@ -184,6 +193,7 @@ export class Session {
         reason,
         version,
         prompt,
+        drift,
         seed: this.seed,
         hasHero: this.heroImageUrl !== null,
         tier: forCommit ? "commit" : "flow",

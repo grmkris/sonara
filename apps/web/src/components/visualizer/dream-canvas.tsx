@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   markImageLoaded,
   useVisualizerStore,
@@ -10,17 +10,63 @@ import {
   targetsFromAudio,
 } from "@/lib/render/map-audio-to-visuals";
 import { createVuEnvelope, type VuEnvelope } from "@/lib/render/vu";
+import { isWebgl2Available } from "@/lib/render/webgl-util";
 import { CanvasGrain } from "@/components/visualizer/canvas-grain";
-import { OnsetRing } from "@/components/visualizer/onset-ring";
 import { InkDrops } from "@/components/visualizer/ink-drops";
+import { DisplacementCanvas } from "@/components/visualizer/displacement-canvas";
 
-const BLEED_MS = 1400;
-const FADE_MS = 640;
+// Top-level wrapper. Picks a renderer at mount: WebGL2 + motion OK → displacement
+// shader, otherwise the original <img>+CSS-filter path. Overlays (grain, onset
+// rings, ink drops, vignette) are composited over whichever renderer wins.
+export function DreamCanvas() {
+  const [mode, setMode] = useState<"css" | "gl">("css");
 
-function prefersReducedMotion(): boolean {
-  if (typeof window === "undefined") return false;
-  return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  useEffect(() => {
+    const reduced =
+      typeof window !== "undefined" &&
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (!reduced && isWebgl2Available()) setMode("gl");
+  }, []);
+
+  return (
+    <div
+      className="absolute inset-0 overflow-hidden bg-[color:var(--ink)]"
+      style={{ isolation: "isolate" }}
+    >
+      <EmptyIdeogram />
+      {mode === "gl" ? <DisplacementCanvas /> : <CssFrames />}
+      <CanvasGrain />
+      <InkDrops />
+      <div aria-hidden className="vignette-mask absolute inset-0" />
+    </div>
+  );
 }
+
+function EmptyIdeogram() {
+  const hasFrame = useVisualizerStore(
+    (s) => s.currentFrame !== null || s.previousFrame !== null,
+  );
+  if (hasFrame) return null;
+  return (
+    <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+      <span
+        aria-hidden
+        className="font-mincho breath text-[color:var(--paper)] select-none"
+        style={{ fontSize: "22vmin", fontWeight: 500, lineHeight: 1 }}
+      >
+        夢
+      </span>
+    </div>
+  );
+}
+
+// ————————————————————————————————————————————————————————————————————
+// CSS fallback renderer. Two <img> layers + per-frame CSS filter/transform
+// updates. Preserved for browsers without WebGL2 or prefers-reduced-motion.
+// ————————————————————————————————————————————————————————————————————
+
+const BLEED_MS = 4500;
+const FADE_MS = 1500;
 
 interface EnvelopeBundle {
   rms: VuEnvelope;
@@ -44,7 +90,6 @@ function buildEnvelopes(intensity: number): EnvelopeBundle {
     bass: createVuEnvelope(base),
     mids: createVuEnvelope(base),
     treble: createVuEnvelope(base),
-    // Palette moves slower — keep it smooth even at high intensity.
     palette: createVuEnvelope({
       attackMs: Math.max(800, c.vuAttackMs * 3),
       releaseMs: Math.max(2000, c.vuReleaseMs * 2),
@@ -55,7 +100,12 @@ function buildEnvelopes(intensity: number): EnvelopeBundle {
   };
 }
 
-export function DreamCanvas() {
+function prefersReducedMotion(): boolean {
+  if (typeof window === "undefined") return false;
+  return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+}
+
+function CssFrames() {
   const prevImgRef = useRef<HTMLImageElement | null>(null);
   const currImgRef = useRef<HTMLImageElement | null>(null);
   const driftStartRef = useRef<number>(performance.now());
@@ -63,14 +113,7 @@ export function DreamCanvas() {
   const lastIntensityRef = useRef<number>(-1);
   const envelopesRef = useRef<EnvelopeBundle | null>(null);
   const lastOnsetRef = useRef(false);
-
-  // Per-onset-type short-lived impulse envelopes (0..1, decays toward 0).
-  const impulseRef = useRef({
-    kick: 0,
-    snare: 0,
-    hat: 0,
-    vocal: 0,
-  });
+  const impulseRef = useRef({ kick: 0, snare: 0, hat: 0, vocal: 0 });
 
   useEffect(() => {
     const store = useVisualizerStore;
@@ -88,8 +131,6 @@ export function DreamCanvas() {
       lastTickRef.current = now;
 
       const intensity = state.scene.intensity;
-      // Rebuild envelopes when intensity changes meaningfully (avoids rebuild
-      // on every 0.01-step slider drag).
       if (
         envelopesRef.current === null ||
         Math.abs(intensity - lastIntensityRef.current) > 0.03
@@ -102,19 +143,17 @@ export function DreamCanvas() {
       const targets = targetsFromAudio(state.audio, intensity);
       const coef = intensityCoefficients(intensity);
 
-      // Feed VU envelopes with the per-band audio levels (not the target
-      // values) so each envelope can expose its own value + peak.
       env.rms.update(state.audio.rms, dtMs);
       env.bass.update(state.audio.bass, dtMs);
       env.mids.update(state.audio.mids, dtMs);
       env.treble.update(state.audio.treble, dtMs);
       env.palette.update(state.audio.centroid, dtMs);
 
-      // Onset-type impulse routing. Rising edge only.
+      // Onset-type impulse routing, rising edge only.
       const imp = impulseRef.current;
-      const risingOnset = state.audio.onset && !lastOnsetRef.current;
+      const rising = state.audio.onset && !lastOnsetRef.current;
       lastOnsetRef.current = state.audio.onset;
-      if (risingOnset) {
+      if (rising) {
         switch (state.audio.onsetType) {
           case "kick":
             imp.kick = 1;
@@ -132,7 +171,6 @@ export function DreamCanvas() {
             break;
         }
       }
-      // Impulses decay ~300 ms half-life; taut at high intensity, slack at low.
       const halfLife = 300 - 150 * intensity;
       const decay = Math.exp(-dtMs / Math.max(40, halfLife));
       imp.kick *= decay;
@@ -140,31 +178,33 @@ export function DreamCanvas() {
       imp.hat *= decay;
       imp.vocal *= decay;
 
-      // Compose the final look from VU values + impulse channels.
       const kickBoost = imp.kick * coef.zoomImpulseGain;
       const vocalBoost = imp.vocal * coef.onsetImpulseGain * 0.35;
       const hatBoost = imp.hat * coef.grainSwellGain * 0.6;
-      const snareFlash = imp.snare; // 0..1 drives contrast/saturation briefly
+      const snareFlash = imp.snare;
 
-      const zoomVu = targets.zoom + env.bass.peak * 0.04 * intensity;
+      const zoomVu = (targets.zoom ?? 1) + env.bass.peak * 0.04 * intensity;
       const zoomLevel = zoomVu + kickBoost * 0.035;
 
-      const bloomLevel =
-        0.15 + env.rms.value * 0.9 + vocalBoost + env.rms.peak * 0.25 * intensity;
+      // Bloom ceiling tightened so loud sections don't blow highlights to
+      // rainbow wash. Compressed multiplier further caps brightness at ~1.30.
+      const bloomLevelRaw =
+        0.05 + env.rms.value * 0.55 + vocalBoost + env.rms.peak * 0.15 * intensity;
+      const bloomLevel = Math.min(0.55, bloomLevelRaw);
 
       const warpLevel = env.bass.value * 0.6 + env.mids.value * 0.25;
-      const blurLevel = Math.max(0, 0.25 - env.treble.value * 0.18);
+      // Blur target from map-audio sits at 0 by default; we additionally cap
+      // the damped value to avoid the legacy "always blurred" starting state.
+      const blurTarget = Math.max(0, targets.blur ?? 0);
 
       const huePumpNorm = coef.huePumpRange / 18;
-      const paletteShift = (env.palette.value * 2 - 1) * huePumpNorm; // -huePumpNorm..+huePumpNorm
+      const paletteShift = (env.palette.value * 2 - 1) * huePumpNorm;
 
-      // Time-based drifts preserved from prior design.
       const driftT = (now - driftStartRef.current) / 1000;
       const slowPan = Math.sin(driftT * 0.05) * 12;
       const slowYaw = Math.cos(driftT * 0.07) * 1.2;
       const breath = 1 + Math.sin(driftT * 0.2) * 0.008;
 
-      // Kick-onset jitter: small translate offset scaled by intensity.
       const jitter = kickBoost * 6;
       const jitterX = jitter * (Math.random() - 0.5);
       const jitterY = jitter * (Math.random() - 0.5);
@@ -181,14 +221,11 @@ export function DreamCanvas() {
             );
       const useBleed = hasPrev && !reducedMotion;
 
-      // CSS filter composition. Snare fires a brief contrast/saturation flip
-      // (posterize-adjacent, CSS-only).
       const contrastBoost = 1 + warpLevel * 0.25 + snareFlash * 0.8;
-      const saturateBoost =
-        1 + env.rms.value * 0.4 - snareFlash * 0.7; // snare desaturates toward wood-block
-      const brightnessBoost = 1 + bloomLevel * 0.9;
+      const saturateBoost = 1 + env.rms.value * 0.4 - snareFlash * 0.7;
+      const brightnessBoost = 1 + Math.min(0.3, bloomLevel * 0.6);
 
-      const filter = `blur(${(blurLevel * 2).toFixed(2)}rem) brightness(${brightnessBoost.toFixed(3)}) contrast(${contrastBoost.toFixed(3)}) saturate(${Math.max(0.15, saturateBoost).toFixed(3)}) hue-rotate(${(paletteShift * 360).toFixed(2)}deg)`;
+      const filter = `blur(${(blurTarget * 2).toFixed(2)}rem) brightness(${brightnessBoost.toFixed(3)}) contrast(${contrastBoost.toFixed(3)}) saturate(${Math.max(0.15, saturateBoost).toFixed(3)}) hue-rotate(${(paletteShift * 360).toFixed(2)}deg)`;
 
       const transform = `scale(${(zoomLevel * breath).toFixed(4)}) translate3d(${(slowPan + jitterX).toFixed(2)}px, ${(-slowPan * 0.4 + jitterY).toFixed(2)}px, 0) rotate(${slowYaw.toFixed(3)}deg)`;
 
@@ -213,12 +250,16 @@ export function DreamCanvas() {
         prevImg.style.transform = transform;
       }
 
-      // Expose a snapshot to the grain+ink-drop overlays via dataset so they
-      // don't need a second rAF loop.
       const host = prevImg?.parentElement ?? currImg?.parentElement;
       if (host) {
-        host.style.setProperty("--grain-amp", String((targets.grainSwell + hatBoost).toFixed(3)));
-        host.style.setProperty("--vignette-amp", String(targets.vignette.toFixed(3)));
+        host.style.setProperty(
+          "--grain-amp",
+          ((targets.grainSwell ?? 0) + hatBoost).toFixed(3),
+        );
+        host.style.setProperty(
+          "--vignette-amp",
+          (targets.vignette ?? 0).toFixed(3),
+        );
       }
     };
     rafId = requestAnimationFrame(tick);
@@ -226,40 +267,14 @@ export function DreamCanvas() {
   }, []);
 
   return (
-    <div
-      className="absolute inset-0 overflow-hidden bg-[color:var(--ink)]"
-      style={{ isolation: "isolate" }}
-    >
-      <EmptyIdeogram />
+    <>
       <FrameLayer ref={prevImgRef} selector={(s) => s.previousFrame} />
       <FrameLayer
         ref={currImgRef}
         selector={(s) => s.currentFrame}
         onLoad={markImageLoaded}
       />
-      <CanvasGrain />
-      <InkDrops />
-      <OnsetRing />
-      <div aria-hidden className="vignette-mask absolute inset-0" />
-    </div>
-  );
-}
-
-function EmptyIdeogram() {
-  const hasFrame = useVisualizerStore(
-    (s) => s.currentFrame !== null || s.previousFrame !== null,
-  );
-  if (hasFrame) return null;
-  return (
-    <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-      <span
-        aria-hidden
-        className="font-mincho breath text-[color:var(--paper)] select-none"
-        style={{ fontSize: "22vmin", fontWeight: 500, lineHeight: 1 }}
-      >
-        夢
-      </span>
-    </div>
+    </>
   );
 }
 

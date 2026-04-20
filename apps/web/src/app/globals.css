@@ -148,13 +148,6 @@ input::placeholder {
 /* Tabular numerals for anything telemetric. */
 .nums { font-variant-numeric: tabular-nums; font-feature-settings: "tnum" on; }
 
-/* Onset ring — expanding paper-stroke circle pinned to the canvas centre. */
-@keyframes onset-ring {
-  0%   { r: 6;  opacity: 0.6; stroke-width: 0.6; }
-  60%  {        opacity: 0.3;                      }
-  100% { r: 48; opacity: 0;   stroke-width: 0.1; }
-}
-
 /* Trigger-log line fade-in. */
 @keyframes log-fade {
   0%   { opacity: 0; transform: translateY(4px); }

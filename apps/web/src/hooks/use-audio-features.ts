@@ -13,6 +13,14 @@ export type AudioSource =
   | { type: "element"; element: HTMLAudioElement }
   | { type: "mic" };
 
+// Module-level handle to the current AudioEngine so sibling components
+// (WaveformRibbon, SpectrumCurve, etc.) can read the AnalyserNode directly
+// without prop-drilling. Only ever one engine per app lifetime.
+let currentEngine: AudioEngine | null = null;
+export function getCurrentAudioEngine(): AudioEngine | null {
+  return currentEngine;
+}
+
 export function useAudioFeatures(
   source: AudioSource,
   send: (event: ClientEvent) => void,
@@ -26,6 +34,7 @@ export function useAudioFeatures(
   useEffect(() => {
     const engine = new AudioEngine();
     engineRef.current = engine;
+    currentEngine = engine;
 
     const tick = (features: AudioFeatures) => {
       useVisualizerStore.getState().setAudio(features);
@@ -40,6 +49,7 @@ export function useAudioFeatures(
     return () => {
       engine.stop();
       engineRef.current = null;
+      if (currentEngine === engine) currentEngine = null;
     };
   }, [send]);
 

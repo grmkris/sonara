@@ -12,6 +12,8 @@ import { Hanko } from "@/components/visualizer/hanko";
 import { ScanSweep } from "@/components/visualizer/scan-sweep";
 import { TriggerLog } from "@/components/visualizer/trigger-log";
 import { IntensityDial } from "@/components/visualizer/intensity-dial";
+import { WaveformRibbon } from "@/components/visualizer/waveform-ribbon";
+import { SpectrumCurve } from "@/components/visualizer/spectrum-curve";
 import { Button } from "@/components/ui/button";
 import { useWsSession } from "@/hooks/use-ws-session";
 import {
@@ -126,6 +128,12 @@ export default function Page() {
             <span className="font-kaku text-[9px] uppercase tracking-[0.3em] text-[color:var(--stone)]">
               audio
             </span>
+          </div>
+          <div className="mt-1.5">
+            <WaveformRibbon height={32} />
+          </div>
+          <div className="-mt-1">
+            <SpectrumCurve height={22} />
           </div>
           <div className="mt-2 flex items-center gap-8">
             <div className="flex-1">

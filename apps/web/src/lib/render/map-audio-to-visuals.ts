@@ -53,7 +53,11 @@ export function targetsFromAudio(
     zoom: 1 + audio.bass * 0.06 * (0.5 + intensity * 1.5),
     bloom: 0.15 + audio.rms * 0.9,
     warp: audio.bass * 0.6 + audio.mids * 0.25,
-    blur: Math.max(0, 0.25 - audio.treble * 0.18),
+    // New baseline: fully sharp by default. Only grows during loud-bass,
+    // treble-light passages (a "muffled dream" gesture). Most of playback —
+    // and all silence — sits at 0, so the image reads crisp instead of
+    // permanently out of focus.
+    blur: Math.max(0, audio.bass * 0.18 - audio.treble * 0.24),
     // centroid is 0..1; map to -1..1 then scale by huePumpNorm so intensity
     // controls amplitude. Hanko-red ← centroid 0 … indigo → centroid 1.
     paletteShift: (audio.centroid * 2 - 1) * huePumpNorm,
