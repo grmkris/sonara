@@ -16,6 +16,10 @@ export const ClientEvent = z.discriminatedUnion("type", [
   z.object({ type: z.literal("audio.features"), features: AudioFeatures }),
   z.object({ type: z.literal("generate.commit") }),
   z.object({ type: z.literal("session.reset") }),
+  z.object({
+    type: z.literal("voice.phrase"),
+    text: z.string().min(1).max(200),
+  }),
 ]);
 
 export type ClientEvent = z.infer<typeof ClientEvent>;
@@ -37,7 +41,7 @@ export const ServerEvent = z.discriminatedUnion("type", [
     status: z.enum(["idle", "running", "cancelled", "error"]),
     message: z.string().optional(),
     reason: z
-      .enum(["pause", "semantic", "section", "periodic", "commit"])
+      .enum(["pause", "semantic", "section", "periodic", "commit", "voice"])
       .optional(),
   }),
 ]);

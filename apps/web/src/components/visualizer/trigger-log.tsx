@@ -18,6 +18,7 @@ const REASON_META: Record<
   section:  { seal: "節", label: "section"  },
   periodic: { seal: "律", label: "periodic" },
   commit:   { seal: "印", label: "commit"   },
+  voice:    { seal: "声", label: "voice"    },
 };
 
 const VISIBLE = 5;

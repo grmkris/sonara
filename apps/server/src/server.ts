@@ -97,6 +97,9 @@ const server = Bun.serve<WsData, never>({
         case "session.reset":
           session.reset();
           break;
+        case "voice.phrase":
+          session.applyVoice(event.text);
+          break;
       }
     },
     close(ws) {

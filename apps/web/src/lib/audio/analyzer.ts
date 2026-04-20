@@ -41,6 +41,11 @@ export class AudioEngine {
   private prevSpectrum: Float32Array | null = null;
   private freqBuffer: Uint8Array<ArrayBuffer> | null = null;
   private timeBuffer: Uint8Array<ArrayBuffer> | null = null;
+  // EMA-smoothed mood components. Initialised to neutral so an idle UI
+  // doesn't display 0/0 before the first audio tick.
+  private valenceSmoothed = 0.5;
+  private arousalSmoothed = 0;
+  private lastTickAt: number | null = null;
   private fluxHistory: number[] = [];
   private rmsHistory: number[] = [];
   private lastOnsetAt = 0;
@@ -269,6 +274,23 @@ export class AudioEngine {
     }
     const centroid = den > 0 ? num / den / bins : 0;
 
+    // 2D mood vector. Valence (bright↔dark) from spectral brightness,
+    // arousal (calm↔energetic) from energy + change. EMA-smoothed so we feed
+    // a stable signal to the downstream LLM instead of per-frame jitter.
+    const tickNow = performance.now();
+    const lastTick = this.lastTickAt ?? tickNow;
+    const dtMs = Math.max(1, tickNow - lastTick);
+    this.lastTickAt = tickNow;
+    // τ ≈ 1300ms → α = 1 - exp(-dt/τ). Frame-rate independent.
+    const alpha = 1 - Math.exp(-dtMs / 1300);
+    const valenceRaw = centroid * 0.6 + this.rolloffFromMeyda * 0.4;
+    // Meyda's spectralFlux is unbounded; normalize via a soft compression
+    // (tanh on ×6) so the arousal component stays 0..1-ish.
+    const fluxNorm = Math.tanh(this.fluxFromMeyda * 6);
+    const arousalRaw = rms * 0.5 + fluxNorm * 0.5;
+    this.valenceSmoothed = this.valenceSmoothed + alpha * (valenceRaw - this.valenceSmoothed);
+    this.arousalSmoothed = this.arousalSmoothed + alpha * (arousalRaw - this.arousalSmoothed);
+
     const nyquist = this.ctx.sampleRate / 2;
     const binHz = nyquist / bins;
 
@@ -336,6 +358,8 @@ export class AudioEngine {
       flux: this.fluxFromMeyda,
       onset,
       sectionEnergy,
+      valence: Math.max(0, Math.min(1, this.valenceSmoothed)),
+      arousal: Math.max(0, Math.min(1, this.arousalSmoothed)),
     };
     if (onsetType) payload.onsetType = onsetType;
     if (this.chromaFromMeyda) payload.chroma = this.chromaFromMeyda;

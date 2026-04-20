@@ -41,3 +41,19 @@ export function sampleDrift(): string | null {
   const idx = Math.floor(Math.random() * DRIFT_POOL.length);
   return DRIFT_POOL[idx] ?? null;
 }
+
+// Priority chain for drift selection:
+//   1. Fresh LLM-synthesized drift (preferred when available)
+//   2. Most recent voice phrase (raw, if user spoke recently)
+//   3. Sampled static atmospheric pool (fallback)
+// This makes voice visible immediately (layer 2) while letting the LLM take
+// over the moment it finishes synthesizing (layer 1). Never returns null
+// unless the entire pool is empty, which it isn't.
+export function sampleDriftLayered(opts: {
+  llmDrift: string | null;
+  latestVoice: string | null;
+}): string | null {
+  if (opts.llmDrift && opts.llmDrift.trim().length > 0) return opts.llmDrift;
+  if (opts.latestVoice && opts.latestVoice.trim().length > 0) return opts.latestVoice;
+  return sampleDrift();
+}

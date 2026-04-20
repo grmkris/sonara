@@ -14,6 +14,7 @@ import { TriggerLog } from "@/components/visualizer/trigger-log";
 import { IntensityDial } from "@/components/visualizer/intensity-dial";
 import { WaveformRibbon } from "@/components/visualizer/waveform-ribbon";
 import { SpectrumCurve } from "@/components/visualizer/spectrum-curve";
+import { VoiceListen } from "@/components/visualizer/voice-listen";
 import { Button } from "@/components/ui/button";
 import { useWsSession } from "@/hooks/use-ws-session";
 import {
@@ -142,12 +143,15 @@ export default function Page() {
             <IntensityDial send={send} />
           </div>
           <div className="mt-3 flex items-center justify-between gap-6">
-            <MusicSource
-              source={audioSource}
-              setSource={setAudioSource}
-              micError={micError}
-              clearMicError={clearMicError}
-            />
+            <div className="flex items-start gap-8">
+              <MusicSource
+                source={audioSource}
+                setSource={setAudioSource}
+                micError={micError}
+                clearMicError={clearMicError}
+              />
+              <VoiceListen send={send} />
+            </div>
             <div className="flex items-center gap-3">
               <Button
                 variant="hanko"

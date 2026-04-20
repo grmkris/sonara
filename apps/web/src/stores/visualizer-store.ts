@@ -13,7 +13,8 @@ export type TriggerReason =
   | "semantic"
   | "section"
   | "periodic"
-  | "commit";
+  | "commit"
+  | "voice";
 
 export interface TriggerEntry {
   id: number;
@@ -86,10 +87,14 @@ export const useVisualizerStore = create<VisualizerState>()((set, get) => ({
   setAudio: (f) => set({ audio: f }),
   pushFrame: (url, version) => {
     if (version < get().latestVersion) return;
+    // Deliberately do NOT reset crossfadeStartedAt here. If we null it, the
+    // renderer branches to bleedT=1 until the new image actually decodes —
+    // which guillotines any in-progress bleed the instant a new URL arrives.
+    // markImageLoaded() is the sole writer, fired when the texture is actually
+    // ready. Until then, the old bleed continues gracefully.
     set((s) => ({
       previousFrame: s.currentFrame,
       currentFrame: url,
-      crossfadeStartedAt: null,
       latestVersion: version,
     }));
   },
