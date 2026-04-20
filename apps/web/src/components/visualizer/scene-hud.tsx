@@ -13,35 +13,29 @@ export function SceneHud() {
   const label = statusLabel(status);
 
   return (
-    <div className="font-plex flex items-center gap-4 text-[10px] uppercase tracking-[0.22em] text-[color:var(--stone)]">
+    <div className="font-mono flex items-center gap-4 text-[10px] uppercase tracking-[0.22em] text-[color:var(--stone)]">
       <span className="flex items-center gap-1.5">
         <span
           aria-hidden
           className={cn(
-            "inline-block h-1.5 w-1.5 rounded-full",
+            "inline-block size-1.5 rounded-full",
             connected
               ? "bg-[color:var(--paper)]"
-              : "bg-[color:var(--hanko)]",
+              : "bg-[color:var(--stone)]",
           )}
         />
         <span>ws</span>
       </span>
 
       <span className="flex items-baseline gap-1.5">
-        {/* 版 as a decorative hanko-red seal, not a label. */}
-        <span
-          aria-hidden
-          className="font-mincho text-[11px] normal-case tracking-normal text-[color:var(--hanko)]/90"
-        >
-          版
-        </span>
+        <span className="tracking-[0.18em]">ver</span>
         <span className="nums text-[color:var(--paper)]">
-          v{version.toString().padStart(2, "0")}
+          {version.toString().padStart(2, "0")}
         </span>
         {commitPulse > 0 && (
           <span
             key={commitPulse}
-            className="hanko-tick ml-1 inline-block h-1.5 w-1.5 bg-[color:var(--hanko)]"
+            className="commit-tick ml-1 inline-block size-1.5 bg-[color:var(--signal)]"
           />
         )}
       </span>
@@ -51,19 +45,19 @@ export function SceneHud() {
           {label.text}
         </span>
         {statusMessage && status !== "idle" && (
-          <span className="text-[color:var(--stone)] normal-case">
+          <span className="normal-case text-[color:var(--stone)]">
             · {statusMessage}
           </span>
         )}
       </span>
 
-      <span className="ml-auto flex items-center gap-4 normal-case tracking-[0.18em]">
+      <span className="ml-auto flex items-center gap-4 tracking-[0.18em]">
         <span className="flex items-baseline gap-1">
-          <span className="font-mincho text-[11px] text-[color:var(--paper)]">⏎</span>
+          <span className="text-[color:var(--paper)]">⏎</span>
           <span>commit</span>
         </span>
         <span className="flex items-baseline gap-1">
-          <span className="font-mincho text-[11px] text-[color:var(--paper)]">⌫</span>
+          <span className="text-[color:var(--paper)]">⌫</span>
           <span>reset</span>
         </span>
       </span>
@@ -76,10 +70,10 @@ function statusLabel(status: string): { text: string; tone: string } {
     case "running":
       return { text: "generating", tone: "text-[color:var(--paper)]" };
     case "error":
-      return { text: "error",      tone: "text-[color:var(--hanko)]" };
+      return { text: "error", tone: "text-[color:var(--signal)]" };
     case "cancelled":
-      return { text: "cancelled",  tone: "text-[color:var(--stone)]" };
+      return { text: "cancelled", tone: "text-[color:var(--stone)]" };
     default:
-      return { text: "idle",       tone: "text-[color:var(--stone)]" };
+      return { text: "idle", tone: "text-[color:var(--stone)]" };
   }
 }

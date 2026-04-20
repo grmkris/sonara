@@ -36,7 +36,7 @@ export interface VisualTargets {
   bloom: number;
   warp: number;
   blur: number;
-  paletteShift: number; // -1..1 along hanko↔indigo axis, pre-scaled by huePumpRange
+  paletteShift: number; // -1..1 along signal↔indigo axis, pre-scaled by huePumpRange
   motionEnergy: number;
   grainSwell: number;
   vignette: number; // 0..1, 0 = open, 1 = heavy

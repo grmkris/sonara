@@ -3,6 +3,7 @@
 import { useEffect, useRef } from "react";
 import type { AudioFeatures, ClientEvent } from "@music-visualizer/shared";
 import { AudioEngine } from "@/lib/audio/analyzer";
+import { createMusicalityGate } from "@/lib/audio/musicality-gate";
 import { useVisualizerStore } from "@/stores/visualizer-store";
 
 const UPSTREAM_HZ = 5;
@@ -36,10 +37,21 @@ export function useAudioFeatures(
     engineRef.current = engine;
     currentEngine = engine;
 
+    // Musicality gate: suppress the 5 Hz upstream send on silence / chatter /
+    // ambient noise so the server doesn't fire periodic fal keyframes when the
+    // room is quiet or only speech/applause is detected. Local visuals remain
+    // unconditional so the UI keeps breathing even when we aren't committing
+    // server cost.
+    const gate = createMusicalityGate();
+
     const tick = (features: AudioFeatures) => {
       useVisualizerStore.getState().setAudio(features);
       const now = performance.now();
-      if (now - lastSentAtRef.current >= UPSTREAM_INTERVAL_MS) {
+      gate.update(now, features.flatness, features.onset);
+      if (
+        gate.isMusic() &&
+        now - lastSentAtRef.current >= UPSTREAM_INTERVAL_MS
+      ) {
         lastSentAtRef.current = now;
         send({ type: "audio.features", features });
       }

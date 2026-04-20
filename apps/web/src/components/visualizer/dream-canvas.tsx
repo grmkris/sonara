@@ -14,6 +14,7 @@ import { isWebgl2Available } from "@/lib/render/webgl-util";
 import { CanvasGrain } from "@/components/visualizer/canvas-grain";
 import { InkDrops } from "@/components/visualizer/ink-drops";
 import { DisplacementCanvas } from "@/components/visualizer/displacement-canvas";
+import { CanvasOscilloscope } from "@/components/visualizer/canvas-oscilloscope";
 
 // Top-level wrapper. Picks a renderer at mount: WebGL2 + motion OK → displacement
 // shader, otherwise the original <img>+CSS-filter path. Overlays (grain, onset
@@ -37,6 +38,7 @@ export function DreamCanvas() {
       {mode === "gl" ? <DisplacementCanvas /> : <CssFrames />}
       <CanvasGrain />
       <InkDrops />
+      <CanvasOscilloscope />
       <div aria-hidden className="vignette-mask absolute inset-0" />
     </div>
   );
@@ -51,10 +53,10 @@ function EmptyIdeogram() {
     <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
       <span
         aria-hidden
-        className="font-mincho breath text-[color:var(--paper)] select-none"
-        style={{ fontSize: "22vmin", fontWeight: 500, lineHeight: 1 }}
+        className="font-serif breath text-[color:var(--paper)] select-none italic tracking-tight"
+        style={{ fontSize: "16vmin", fontWeight: 500, lineHeight: 1 }}
       >
-        夢
+        dream
       </span>
     </div>
   );

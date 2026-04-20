@@ -21,7 +21,7 @@ interface Drop {
   y: number; // 0..1
   strength: number; // 0..1, shapes radius + opacity
   born: number; // performance.now()
-  tint: number; // 0..1, bias from hanko-red (0) to indigo (1)
+  tint: number; // 0..1, bias from paper (0) to indigo (1)
 }
 
 export function InkDrops() {
@@ -112,12 +112,12 @@ export function InkDrops() {
         const cx = d.x * w;
         const cy = d.y * h;
 
-        // Tint: blend hanko-red (low tint) ↔ aizome-indigo (high tint),
-        // both muted. We paint onto paper-ink so multiply-ish look via
-        // low alpha + dark base color.
-        const r = Math.round(lerp(164, 28, d.tint));
-        const g = Math.round(lerp(52, 45, d.tint));
-        const b = Math.round(lerp(58, 82, d.tint));
+        // Tint: blend warm stone (low tint) ↔ indigo (high tint). Muted,
+        // multiply-blended onto the image. Signal red is reserved for the
+        // commit stamp and must not appear in ambient drops.
+        const r = Math.round(lerp(140, 28, d.tint));
+        const g = Math.round(lerp(133, 45, d.tint));
+        const b = Math.round(lerp(120, 82, d.tint));
 
         const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, radius);
         grad.addColorStop(0, `rgba(${r},${g},${b},${(a * d.strength * intensity).toFixed(3)})`);

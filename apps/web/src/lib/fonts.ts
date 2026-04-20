@@ -1,22 +1,30 @@
-import { Shippori_Mincho, Zen_Kaku_Gothic_New, IBM_Plex_Mono } from "next/font/google";
+import { Fraunces, Public_Sans, IBM_Plex_Mono } from "next/font/google";
 
-export const mincho = Shippori_Mincho({
+// Editorial serif for display, wordmark, typed scene values. Variable axes
+// (opsz, wght, soft) give us a single family that reads as magazine headline
+// at 42 px and as caption at 14 px.
+export const serif = Fraunces({
   subsets: ["latin"],
   weight: ["400", "500", "600", "700"],
-  variable: "--font-mincho",
+  style: ["normal", "italic"],
+  variable: "--font-serif",
   display: "swap",
 });
 
-export const kaku = Zen_Kaku_Gothic_New({
+// UI label sans — small-caps tracking for buttons, section labels, HUD
+// readouts. Public Sans is USWDS-derived (free, proportional workhorse, not
+// Inter / Space Grotesk / Geist).
+export const sans = Public_Sans({
   subsets: ["latin"],
-  weight: ["400", "500", "700"],
-  variable: "--font-kaku",
+  weight: ["400", "500", "600"],
+  variable: "--font-sans",
   display: "swap",
 });
 
-export const plex = IBM_Plex_Mono({
+// Tabular telemetry — version counters, timecodes, slider readouts.
+export const mono = IBM_Plex_Mono({
   subsets: ["latin"],
   weight: ["300", "400", "500"],
-  variable: "--font-plex",
+  variable: "--font-mono",
   display: "swap",
 });

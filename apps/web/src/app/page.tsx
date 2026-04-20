@@ -1,19 +1,18 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { toast } from "sonner";
 import { DreamCanvas } from "@/components/visualizer/dream-canvas";
 import { PromptInput } from "@/components/visualizer/prompt-input";
 import { MusicSource } from "@/components/visualizer/music-source";
-import { AudioMeter } from "@/components/visualizer/audio-meter";
+import { AudioRibbon } from "@/components/visualizer/audio-ribbon";
+import { SlitScanTrail } from "@/components/visualizer/slit-scan-trail";
 import { ControlsPanel } from "@/components/visualizer/controls-panel";
 import { SceneHud } from "@/components/visualizer/scene-hud";
 import { HideToggle } from "@/components/visualizer/hide-toggle";
-import { Hanko } from "@/components/visualizer/hanko";
-import { ScanSweep } from "@/components/visualizer/scan-sweep";
 import { TriggerLog } from "@/components/visualizer/trigger-log";
-import { IntensityDial } from "@/components/visualizer/intensity-dial";
-import { WaveformRibbon } from "@/components/visualizer/waveform-ribbon";
-import { SpectrumCurve } from "@/components/visualizer/spectrum-curve";
+import { ScanSweep } from "@/components/visualizer/scan-sweep";
+import { Stamp } from "@/components/visualizer/stamp";
 import { VoiceListen } from "@/components/visualizer/voice-listen";
 import { Button } from "@/components/ui/button";
 import { useWsSession } from "@/hooks/use-ws-session";
@@ -31,14 +30,12 @@ import { cn } from "@/lib/utils";
 export default function Page() {
   const send = useWsSession();
   const [audioSource, setAudioSource] = useState<AudioSource>({ type: "none" });
-  const [micError, setMicError] = useState<string | null>(null);
 
   const onAudioError = useCallback((err: unknown) => {
-    if (err instanceof Error) setMicError(err.name || err.message);
-    else setMicError("unavailable");
+    const name = err instanceof Error ? err.name || err.message : "unavailable";
+    toast.error("mic unavailable", { description: name, duration: 3200 });
     setAudioSource({ type: "none" });
   }, []);
-  const clearMicError = useCallback(() => setMicError(null), []);
 
   useAudioFeatures(audioSource, send, onAudioError);
 
@@ -49,13 +46,6 @@ export default function Page() {
   useEffect(() => {
     hydrateUiVisible();
   }, []);
-
-  // Clear mic-denied banner after a short window.
-  useEffect(() => {
-    if (!micError) return;
-    const t = setTimeout(() => setMicError(null), 3200);
-    return () => clearTimeout(t);
-  }, [micError]);
 
   useHotkey(
     "Enter",
@@ -88,10 +78,10 @@ export default function Page() {
       <DreamCanvas />
       <ScanSweep />
 
-      {/* Always-visible corner: 夢 wordmark + hide toggle. */}
+      {/* Always-visible corner: wordmark + hide toggle. */}
       <div className="pointer-events-none absolute inset-x-0 top-0 z-30 flex items-start justify-between px-10 pt-8">
         <Logotype />
-        <div className="flex items-baseline gap-6 pt-1">
+        <div className="flex items-center gap-6 pt-2">
           <Timestamp />
           <HideToggle />
         </div>
@@ -124,41 +114,25 @@ export default function Page() {
         {/* Bottom strip — audio meters + HUD + commit/reset. */}
         <section className="pointer-events-auto relative mb-6 px-10 pt-2">
           <div aria-hidden className="paper-scrim absolute -inset-x-4 -inset-y-2 -z-10" />
-          <div className="flex items-baseline gap-3">
-            <span className="font-mincho text-[15px] text-[color:var(--paper)]">音</span>
-            <span className="font-kaku text-[9px] uppercase tracking-[0.3em] text-[color:var(--stone)]">
-              audio
-            </span>
-          </div>
-          <div className="mt-1.5">
-            <WaveformRibbon height={32} />
-          </div>
-          <div className="-mt-1">
-            <SpectrumCurve height={22} />
-          </div>
-          <div className="mt-2 flex items-center gap-8">
-            <div className="flex-1">
-              <AudioMeter />
-            </div>
-            <IntensityDial send={send} />
-          </div>
+
+          {/* Row 0: time-compressed echo ribbon of the last ~8 seconds. */}
+          <SlitScanTrail height={24} />
+
+          {/* Row 1: merged waveform-over-spectrum ribbon. */}
+          <AudioRibbon height={48} />
+
+          {/* Row 2: sources + actions. */}
           <div className="mt-3 flex items-center justify-between gap-6">
             <div className="flex items-start gap-8">
-              <MusicSource
-                source={audioSource}
-                setSource={setAudioSource}
-                micError={micError}
-                clearMicError={clearMicError}
-              />
+              <MusicSource source={audioSource} setSource={setAudioSource} />
               <VoiceListen send={send} />
             </div>
             <div className="flex items-center gap-3">
               <Button
-                variant="hanko"
+                variant="signal"
                 size="sm"
                 onClick={() => send({ type: "generate.commit" })}
               >
-                <span className="font-mincho text-[12px] leading-none">印</span>
                 commit
               </Button>
               <Button
@@ -179,7 +153,7 @@ export default function Page() {
         </section>
       </div>
 
-      <Hanko />
+      <Stamp />
     </main>
   );
 }
@@ -188,13 +162,13 @@ function Logotype() {
   return (
     <div className="pointer-events-auto flex flex-col leading-none">
       <span
-        className="font-mincho text-[color:var(--paper)]/85 select-none"
-        style={{ fontSize: "42px", fontWeight: 600, lineHeight: 0.9 }}
+        className="font-serif text-[color:var(--paper)]/85 select-none italic tracking-tight"
+        style={{ fontSize: "34px", fontWeight: 500, lineHeight: 0.9 }}
       >
-        夢
+        dream
       </span>
-      <span className="font-kaku mt-2 text-[9px] uppercase tracking-[0.32em] text-[color:var(--stone)]">
-        dream · visualizer
+      <span className="font-sans mt-2 text-[9px] uppercase tracking-[0.32em] text-[color:var(--stone)]">
+        visualizer
       </span>
     </div>
   );
@@ -207,7 +181,7 @@ function Timestamp() {
     return () => clearInterval(t);
   }, []);
   return (
-    <span className="font-plex nums text-[10px] uppercase tracking-[0.22em] text-[color:var(--stone)]">
+    <span className="font-mono nums text-[10px] uppercase tracking-[0.22em] text-[color:var(--stone)]">
       {now}
     </span>
   );

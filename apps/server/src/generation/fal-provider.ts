@@ -127,13 +127,29 @@ export async function streamPreview(input: StreamPreviewInput): Promise<void> {
       tier,
     });
     if (ok || input.signal.aborted) return;
-    input.logger.warn({ model: primaryModel, tier }, "primary returned no image; trying text fallback");
+    input.logger.warn({ model: primaryModel, tier }, "primary returned no image");
   } catch (err) {
     if (input.signal.aborted) return;
-    input.logger.warn({ err, model: primaryModel, tier }, "primary fal model errored; trying text fallback");
+    input.logger.warn({ err, model: primaryModel, tier }, "primary fal model errored");
+    // Commit tier is the identity anchor — a schnell text-only stand-in would
+    // replace the hero with a drifted frame every subsequent flow edit
+    // compounds against. Better to surface the error than silently poison
+    // the scene. Flow tier may still try the fallback.
+    if (input.forCommit) {
+      input.onError(err);
+      return;
+    }
   }
 
-  // Text-only fallback sheds identity (no image_urls). Logged loudly.
+  // Commit-tier failures never fall through to the text-only path.
+  if (input.forCommit) {
+    input.onError(
+      new Error("commit-tier primary model failed and fallback is disabled for commits"),
+    );
+    return;
+  }
+
+  // Flow-tier text-only fallback sheds identity (no image_urls). Logged loudly.
   if (hasRef) {
     input.logger.warn(
       { model: FALLBACK_TEXT_MODEL },

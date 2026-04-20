@@ -51,10 +51,12 @@ function lerp(a: number, b: number, t: number): number {
 function cadenceFromIntensity(i: number): { periodicMs: number; pauseMs: number } {
   const I = Math.max(0, Math.min(1, i));
   return {
-    // Cadence tuned so the 4.5s mask-bleed plays out fully between frames.
-    // At I=1 → 5s periodic (500ms of settled time after each bleed); at I=0 → 10s.
-    // Flow-tier frames don't promote to hero, so identity stays pinned regardless.
-    periodicMs: Math.round(lerp(10_000, 5_000, I)),
+    // Cadence is shorter than the 4.5s bleed so new frames arrive while the
+    // last bleed is still in progress — the image never finishes settling
+    // before the next change starts, giving a continuous "always becoming"
+    // feel. Slot rotation + pushFrame not resetting crossfadeStartedAt
+    // handles the overlap gracefully.
+    periodicMs: Math.round(lerp(7_000, 3_000, I)),
     pauseMs: Math.round(lerp(1_500, 400, I)),
   };
 }

@@ -40,7 +40,6 @@ export function PromptInput({ send }: PromptInputProps) {
     palette: null,
   });
 
-  // Adopt remote scene updates when the user hasn't edited (draft is undefined).
   const sceneRef = useRef(scene);
   useEffect(() => {
     sceneRef.current = scene;
@@ -50,7 +49,10 @@ export function PromptInput({ send }: PromptInputProps) {
     const value = draft[key];
     if (value === undefined) return;
     if (value === scene[key]) return;
-    send({ type: "scene.patch", patch: { [key]: value } as Partial<DreamSceneState> });
+    send({
+      type: "scene.patch",
+      patch: { [key]: value } as Partial<DreamSceneState>,
+    });
     setDraft((d) => {
       const { [key]: _removed, ...rest } = d;
       return rest;
@@ -60,23 +62,16 @@ export function PromptInput({ send }: PromptInputProps) {
 
   return (
     <div className="flex flex-col gap-5">
-      <div className="flex items-baseline gap-2">
-        <span className="font-mincho text-[15px] text-[color:var(--paper)]">詩</span>
-        <span className="font-kaku text-[9px] uppercase tracking-[0.3em] text-[color:var(--stone)]">
-          scene
-        </span>
-      </div>
-
       {FIELDS.map((f) => {
         const value = draft[f.key] ?? scene[f.key];
         const sweep = sweepKey[f.key];
         return (
           <div key={f.key} className="group relative flex flex-col gap-1.5">
             <div className="flex items-baseline gap-3">
-              <span className="font-plex nums text-[color:var(--stone)] text-[10px] leading-none tracking-[0.2em]">
+              <span className="font-mono nums text-[10px] leading-none tracking-[0.2em] text-[color:var(--stone)]">
                 {f.index}
               </span>
-              <span className="font-kaku text-[10px] uppercase tracking-[0.28em] text-[color:var(--stone)]">
+              <span className="font-sans text-[10px] uppercase tracking-[0.28em] text-[color:var(--stone)]">
                 {f.label}
               </span>
             </div>
@@ -108,7 +103,7 @@ export function PromptInput({ send }: PromptInputProps) {
                   inputRefs.current[f.key]?.focus();
                 }}
               >
-                <ArrowRight className="h-3.5 w-3.5" strokeWidth={1.5} />
+                <ArrowRight className="size-3.5" strokeWidth={1.5} />
               </button>
               {sweep > 0 && (
                 <span

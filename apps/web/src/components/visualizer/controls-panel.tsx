@@ -9,6 +9,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { IntensityDial } from "@/components/visualizer/intensity-dial";
 import { useVisualizerStore } from "@/stores/visualizer-store";
 import { cn } from "@/lib/utils";
 
@@ -22,8 +23,6 @@ type ToggleKey =
   | "preserveComposition"
   | "preservePalette";
 
-// English is the primary label. Kanji is kept only as a single decorative seal
-// above each cluster — not on every row.
 const SLIDERS: { key: SliderKey; label: string }[] = [
   { key: "softness",    label: "soft"     },
   { key: "surrealness", label: "unreal"   },
@@ -53,7 +52,9 @@ export function ControlsPanel({ send }: ControlsPanelProps) {
 
   return (
     <div className="flex flex-col gap-6">
-      <ClusterHeader seal="操" label="controls" />
+      <IntensityDial send={send} />
+
+      <Separator className="bg-[color:var(--hairline)]/30" />
 
       <div className="flex flex-col gap-4">
         {SLIDERS.map((s) => (
@@ -86,13 +87,13 @@ export function ControlsPanel({ send }: ControlsPanelProps) {
               <span
                 aria-hidden
                 className={cn(
-                  "font-mincho w-3 text-center text-[12px] leading-none transition-opacity",
+                  "w-3 text-center text-[12px] leading-none transition-opacity",
                   on ? "opacity-100" : "opacity-0",
                 )}
               >
-                丶
+                •
               </span>
-              <span className="font-mincho text-[13px]">{t.label}</span>
+              <span className="font-serif text-[13px]">{t.label}</span>
             </button>
           );
         })}
@@ -131,7 +132,7 @@ function SliderRow({
 
   return (
     <div className="flex items-center gap-3">
-      <span className="font-mincho w-20 shrink-0 text-[13px] text-[color:var(--paper)]/85">
+      <span className="font-serif w-20 shrink-0 text-[13px] text-[color:var(--paper)]/85">
         {label}
       </span>
       <div className="flex-1">
@@ -142,27 +143,14 @@ function SliderRow({
           <TooltipContent
             side="top"
             sideOffset={6}
-            className="font-plex nums bg-[color:var(--ink)] text-[color:var(--paper)] border border-[color:var(--hairline)]/40 px-2 py-0.5 text-[10px] tracking-[0.14em]"
+            className="font-mono nums bg-[color:var(--ink)] text-[color:var(--paper)] border border-[color:var(--hairline)]/40 px-2 py-0.5 text-[10px] tracking-[0.14em]"
           >
             {value.toFixed(2)}
           </TooltipContent>
         </Tooltip>
       </div>
-      <span className="font-plex nums w-10 text-right text-[10px] text-[color:var(--stone)]">
+      <span className="font-mono nums w-10 text-right text-[10px] text-[color:var(--stone)]">
         {value.toFixed(2)}
-      </span>
-    </div>
-  );
-}
-
-function ClusterHeader({ seal, label }: { seal: string; label: string }) {
-  return (
-    <div className="flex items-baseline gap-2">
-      <span className="font-mincho text-[15px] text-[color:var(--paper)]">
-        {seal}
-      </span>
-      <span className="font-kaku text-[9px] uppercase tracking-[0.3em] text-[color:var(--stone)]">
-        {label}
       </span>
     </div>
   );

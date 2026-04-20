@@ -30,7 +30,7 @@ export function VoiceListen({ send }: VoiceListenProps) {
   const disabled = !supported;
 
   return (
-    <div className="flex flex-col gap-1 font-kaku">
+    <div className="flex flex-col gap-1 font-sans">
       <button
         type="button"
         onClick={toggle}
@@ -51,23 +51,23 @@ export function VoiceListen({ send }: VoiceListenProps) {
               : "text-[color:var(--stone)] hover:text-[color:var(--paper)]",
         )}
       >
-        <span className="font-mincho text-[13px] leading-none">
+        <span className="font-serif text-[13px] leading-none">
           {listening ? "●" : "○"}
         </span>
-        <span className="font-mincho text-[13px]">voice</span>
+        <span className="font-serif text-[13px]">voice</span>
         {listening && (
-          <span className="font-plex text-[9px] uppercase tracking-[0.22em] text-[color:var(--stone)]">
+          <span className="font-mono text-[9px] uppercase tracking-[0.22em] text-[color:var(--stone)]">
             listening
           </span>
         )}
       </button>
       {lastPhrase && (
-        <div className="font-plex nums max-w-[280px] truncate text-[10px] italic text-[color:var(--stone)]/80">
+        <div className="font-mono nums max-w-[280px] truncate text-[10px] italic text-[color:var(--stone)]/80">
           &ldquo;{lastPhrase}&rdquo;
         </div>
       )}
       {error && (
-        <div className="font-plex text-[9px] uppercase tracking-[0.2em] text-[color:var(--hanko)]">
+        <div className="font-mono text-[9px] uppercase tracking-[0.2em] text-[color:var(--stone)]">
           {error === "unsupported" ? "not supported" : `error · ${error}`}
         </div>
       )}

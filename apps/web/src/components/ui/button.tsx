@@ -6,7 +6,7 @@ import type { ComponentProps } from "react";
 import { cn } from "@/lib/utils";
 
 const buttonVariants = cva(
-  "inline-flex items-center justify-center gap-2 whitespace-nowrap font-kaku text-[11px] uppercase tracking-[0.14em] transition-colors duration-150 disabled:pointer-events-none disabled:opacity-40 focus-visible:outline-none",
+  "inline-flex items-center justify-center gap-2 whitespace-nowrap font-sans text-[11px] uppercase tracking-[0.14em] transition-colors duration-150 disabled:pointer-events-none disabled:opacity-40 focus-visible:outline-none",
   {
     variants: {
       variant: {
@@ -16,8 +16,8 @@ const buttonVariants = cva(
           "text-[color:var(--stone)] hover:text-[color:var(--paper)]",
         primary:
           "text-[color:var(--paper)] border-b border-[color:var(--indigo)] hover:border-b-2",
-        hanko:
-          "text-[color:var(--paper)] bg-[color:var(--hanko)]/90 hover:bg-[color:var(--hanko)] px-3 py-1",
+        signal:
+          "text-[color:var(--paper)] bg-[color:var(--signal)]/90 hover:bg-[color:var(--signal)] px-3 py-1",
       },
       size: {
         default: "h-7 px-2 py-1",

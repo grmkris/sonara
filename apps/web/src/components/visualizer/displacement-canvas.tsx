@@ -26,6 +26,14 @@ import {
 const BLEED_MS = 4500;
 const FADE_MS = 1500;
 
+// Module-level ref to the active WebGL canvas so sibling overlays (e.g. the
+// slit-scan trail) can sample from it without prop-drilling. Mirrors the
+// pattern used by `getCurrentAudioEngine`.
+let currentCanvas: HTMLCanvasElement | null = null;
+export function getCurrentDisplacementCanvas(): HTMLCanvasElement | null {
+  return currentCanvas;
+}
+
 interface EnvelopeBundle {
   rms: VuEnvelope;
   bass: VuEnvelope;
@@ -64,25 +72,84 @@ interface TextureSlot {
   loaded: boolean;
 }
 
-// Four ink-blot origins + per-blot stagger delays. Regenerated on every new
-// frame so each transition looks different.
-interface DropConfig {
-  ab: [number, number, number, number]; // a.x, a.y, b.x, b.y
-  cd: [number, number, number, number]; // c.x, c.y, d.x, d.y
+// One ink-blot layer — four drop positions + per-drop stagger delays.
+interface DropLayer {
+  ab: [number, number, number, number]; // (a.x, a.y, b.x, b.y)
+  cd: [number, number, number, number]; // (c.x, c.y, d.x, d.y)
   delays: [number, number, number, number];
 }
 
-function randomDrops(): DropConfig {
+// Three stacked layers: fg (bold, fast), mg (delayed, medium), bg (slow).
+// Regenerated every time a new image lands so no two transitions look alike.
+interface DropLayers {
+  l1: DropLayer;
+  l2: DropLayer;
+  l3: DropLayer;
+}
+
+function randomDropLayers(): DropLayers {
   const rand = () => Math.random();
-  // First drop stays near centre so the primary bleed always anchors there.
+  // Foreground: anchor near centre so the primary bleed always emerges
+  // from the heart of the image.
   const aX = 0.5 + (rand() - 0.5) * 0.25;
   const aY = 0.5 + (rand() - 0.5) * 0.25;
-  return {
+  const l1: DropLayer = {
     ab: [aX, aY, rand(), rand()],
     cd: [rand(), rand(), rand(), rand()],
-    // Drop A starts immediately; others stagger up to ~0.45 into the transition.
     delays: [0, rand() * 0.25 + 0.05, rand() * 0.35 + 0.10, rand() * 0.40 + 0.15],
   };
+  // Midground: fully random origins, slightly later starts.
+  const l2: DropLayer = {
+    ab: [rand(), rand(), rand(), rand()],
+    cd: [rand(), rand(), rand(), rand()],
+    delays: [rand() * 0.15, rand() * 0.30 + 0.10, rand() * 0.35 + 0.15, rand() * 0.40 + 0.20],
+  };
+  // Background: scattered fine pinpricks, slowest.
+  const l3: DropLayer = {
+    ab: [rand(), rand(), rand(), rand()],
+    cd: [rand(), rand(), rand(), rand()],
+    delays: [rand() * 0.20 + 0.05, rand() * 0.30 + 0.15, rand() * 0.35 + 0.20, rand() * 0.40 + 0.25],
+  };
+  return { l1, l2, l3 };
+}
+
+// Per-onset dab positions. Each onset type has its own preferred band so the
+// drums are spatially recognisable.
+interface DabPositions {
+  kick: [number, number];
+  snare: [number, number];
+  hat: [number, number];
+  vocal: [number, number];
+}
+
+function initialDabs(): DabPositions {
+  return {
+    kick: [0.5, 0.72],
+    snare: [0.5, 0.5],
+    hat: [0.5, 0.22],
+    vocal: [0.5, 0.48],
+  };
+}
+
+function rollDab(
+  kind: "kick" | "snare" | "hat" | "vocal",
+  centroid: number,
+): [number, number] {
+  const r = () => Math.random();
+  switch (kind) {
+    case "kick":
+      // Lower third, bass-biased: slight lateral scatter.
+      return [0.2 + r() * 0.6, 0.6 + r() * 0.25];
+    case "snare":
+      // Middle band.
+      return [0.2 + r() * 0.6, 0.4 + r() * 0.2];
+    case "hat":
+      // Upper band, wider lateral scatter.
+      return [0.15 + r() * 0.7, 0.1 + r() * 0.25];
+    case "vocal":
+      // Centroid-biased horizontally so vocals land where the spectrum lives.
+      return [0.25 + centroid * 0.5 + (r() - 0.5) * 0.15, 0.3 + r() * 0.4];
+  }
 }
 
 export function DisplacementCanvas() {
@@ -91,6 +158,7 @@ export function DisplacementCanvas() {
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
+    currentCanvas = canvas;
     const gl = canvas.getContext("webgl2", {
       premultipliedAlpha: false,
       antialias: false,
@@ -133,18 +201,27 @@ export function DisplacementCanvas() {
       uPrevTexSize: gl.getUniformLocation(program, "uPrevTexSize"),
       uViewSize: gl.getUniformLocation(program, "uViewSize"),
       uImpulseAges: gl.getUniformLocation(program, "uImpulseAges"),
-      uDropsAB: gl.getUniformLocation(program, "uDropsAB"),
-      uDropsCD: gl.getUniformLocation(program, "uDropsCD"),
-      uDropDelays: gl.getUniformLocation(program, "uDropDelays"),
+      // Newly wired — see displacement-shaders.ts comments.
+      uWarp: gl.getUniformLocation(program, "uWarp"),
+      uMotionEnergy: gl.getUniformLocation(program, "uMotionEnergy"),
+      uVignette: gl.getUniformLocation(program, "uVignette"),
+      uDabPosKS: gl.getUniformLocation(program, "uDabPosKS"),
+      uDabPosHV: gl.getUniformLocation(program, "uDabPosHV"),
+      uDropsL1A: gl.getUniformLocation(program, "uDropsL1A"),
+      uDropsL1B: gl.getUniformLocation(program, "uDropsL1B"),
+      uDropDelaysL1: gl.getUniformLocation(program, "uDropDelaysL1"),
+      uDropsL2A: gl.getUniformLocation(program, "uDropsL2A"),
+      uDropsL2B: gl.getUniformLocation(program, "uDropsL2B"),
+      uDropDelaysL2: gl.getUniformLocation(program, "uDropDelaysL2"),
+      uDropsL3A: gl.getUniformLocation(program, "uDropsL3A"),
+      uDropsL3B: gl.getUniformLocation(program, "uDropsL3B"),
+      uDropDelaysL3: gl.getUniformLocation(program, "uDropDelaysL3"),
     };
-    // Sampler unit bindings.
     gl.uniform1i(uni.uCurr, 0);
     gl.uniform1i(uni.uPrev, 1);
 
     const { vao } = createQuadBuffer(gl);
 
-    // Two texture slots rotated by flag — new image goes into the inactive
-    // slot; currIsSlotA flips on successful load. Avoids an extra blit.
     const slotA: TextureSlot = {
       tex: createTexture(gl),
       size: [1, 1],
@@ -160,10 +237,8 @@ export function DisplacementCanvas() {
     const getPrev = (): TextureSlot => (currIsA ? slotB : slotA);
     const getInactive = (): TextureSlot => (currIsA ? slotB : slotA);
 
-    // Ink-blot drop configuration — regenerated on each successful frame load.
-    let drops: DropConfig = randomDrops();
+    let drops: DropLayers = randomDropLayers();
 
-    // Image loader: watches the store for currentFrame changes.
     let lastLoadedUrl: string | null = null;
     let pendingImg: HTMLImageElement | null = null;
     const unsubFrame = useVisualizerStore.subscribe((state) => {
@@ -193,7 +268,7 @@ export function DisplacementCanvas() {
         target.size = [img.naturalWidth, img.naturalHeight];
         target.loaded = true;
         currIsA = !currIsA;
-        drops = randomDrops();
+        drops = randomDropLayers();
         markImageLoaded();
       };
       img.onerror = (err) => {
@@ -228,6 +303,7 @@ export function DisplacementCanvas() {
           target.size = [img.naturalWidth, img.naturalHeight];
           target.loaded = true;
           currIsA = !currIsA;
+          drops = randomDropLayers();
           markImageLoaded();
         };
         img.onerror = () => {
@@ -237,13 +313,11 @@ export function DisplacementCanvas() {
       }
     }
 
-    // Render state.
     let envelopes = buildEnvelopes(1);
     let lastIntensity = -1;
     const impulses = { kick: 0, snare: 0, hat: 0, vocal: 0 };
-    // Seconds since each impulse-type last fired. Feeds the shader's
-    // shockwave uniform so rings propagate outward from the centre over time.
     const ages = { kick: 99, snare: 99, hat: 99, vocal: 99 };
+    const dabs: DabPositions = initialDabs();
     let lastOnset = false;
     let lastTick = performance.now();
     const driftStart = performance.now();
@@ -274,7 +348,6 @@ export function DisplacementCanvas() {
       envelopes.treble.update(state.audio.treble, dtMs);
       envelopes.palette.update(state.audio.centroid, dtMs);
 
-      // Onset-type impulse routing on rising edge.
       const rising = state.audio.onset && !lastOnset;
       lastOnset = state.audio.onset;
       if (rising) {
@@ -282,18 +355,22 @@ export function DisplacementCanvas() {
           case "kick":
             impulses.kick = 1;
             ages.kick = 0;
+            dabs.kick = rollDab("kick", state.audio.centroid);
             break;
           case "snare":
             impulses.snare = 1;
             ages.snare = 0;
+            dabs.snare = rollDab("snare", state.audio.centroid);
             break;
           case "hat":
             impulses.hat = 1;
             ages.hat = 0;
+            dabs.hat = rollDab("hat", state.audio.centroid);
             break;
           case "vocal":
             impulses.vocal = 1;
             ages.vocal = 0;
+            dabs.vocal = rollDab("vocal", state.audio.centroid);
             break;
           default:
             break;
@@ -311,7 +388,6 @@ export function DisplacementCanvas() {
       ages.hat += dtSec;
       ages.vocal += dtSec;
 
-      // CSS transform for drift + breath + kick jitter on the canvas itself.
       const driftT = (now - driftStart) / 1000;
       const slowPan = Math.sin(driftT * 0.05) * 12;
       const slowYaw = Math.cos(driftT * 0.07) * 1.2;
@@ -327,7 +403,6 @@ export function DisplacementCanvas() {
         2,
       )}px, 0) rotate(${slowYaw.toFixed(3)}deg)`;
 
-      // Bleed T. If no previous or the prev slot hasn't actually loaded, fade.
       const currSlot = getCurr();
       const prevSlot = getPrev();
       const hasPrev = state.previousFrame !== null && prevSlot.loaded;
@@ -343,8 +418,6 @@ export function DisplacementCanvas() {
 
       resizeCanvasToDisplay(canvas, gl);
 
-      // Bind active program + textures each frame (multi-component scenes would
-      // otherwise leak state; cheap).
       gl.useProgram(program);
       gl.activeTexture(gl.TEXTURE0);
       gl.bindTexture(gl.TEXTURE_2D, currSlot.tex);
@@ -377,26 +450,56 @@ export function DisplacementCanvas() {
         ages.hat,
         ages.vocal,
       );
+
+      // Reclaimed signals: warp, motionEnergy, vignette.
+      gl.uniform1f(uni.uWarp, targets.warp ?? 0);
+      gl.uniform1f(uni.uMotionEnergy, targets.motionEnergy ?? 0);
+      gl.uniform1f(uni.uVignette, targets.vignette ?? 0);
+
+      // Onset ink-dab positions packed as two vec4s.
       gl.uniform4f(
-        uni.uDropsAB,
-        drops.ab[0],
-        drops.ab[1],
-        drops.ab[2],
-        drops.ab[3],
+        uni.uDabPosKS,
+        dabs.kick[0],
+        dabs.kick[1],
+        dabs.snare[0],
+        dabs.snare[1],
       );
       gl.uniform4f(
-        uni.uDropsCD,
-        drops.cd[0],
-        drops.cd[1],
-        drops.cd[2],
-        drops.cd[3],
+        uni.uDabPosHV,
+        dabs.hat[0],
+        dabs.hat[1],
+        dabs.vocal[0],
+        dabs.vocal[1],
       );
+
+      // Three ink-bleed layers — fg / mg / bg.
+      const { l1, l2, l3 } = drops;
+      gl.uniform4f(uni.uDropsL1A, l1.ab[0], l1.ab[1], l1.ab[2], l1.ab[3]);
+      gl.uniform4f(uni.uDropsL1B, l1.cd[0], l1.cd[1], l1.cd[2], l1.cd[3]);
       gl.uniform4f(
-        uni.uDropDelays,
-        drops.delays[0],
-        drops.delays[1],
-        drops.delays[2],
-        drops.delays[3],
+        uni.uDropDelaysL1,
+        l1.delays[0],
+        l1.delays[1],
+        l1.delays[2],
+        l1.delays[3],
+      );
+      gl.uniform4f(uni.uDropsL2A, l2.ab[0], l2.ab[1], l2.ab[2], l2.ab[3]);
+      gl.uniform4f(uni.uDropsL2B, l2.cd[0], l2.cd[1], l2.cd[2], l2.cd[3]);
+      gl.uniform4f(
+        uni.uDropDelaysL2,
+        l2.delays[0],
+        l2.delays[1],
+        l2.delays[2],
+        l2.delays[3],
+      );
+      gl.uniform4f(uni.uDropsL3A, l3.ab[0], l3.ab[1], l3.ab[2], l3.ab[3]);
+      gl.uniform4f(uni.uDropsL3B, l3.cd[0], l3.cd[1], l3.cd[2], l3.cd[3]);
+      gl.uniform4f(
+        uni.uDropDelaysL3,
+        l3.delays[0],
+        l3.delays[1],
+        l3.delays[2],
+        l3.delays[3],
       );
 
       gl.bindVertexArray(vao);
@@ -411,6 +514,7 @@ export function DisplacementCanvas() {
         pendingImg.onload = null;
         pendingImg.onerror = null;
       }
+      if (currentCanvas === canvas) currentCanvas = null;
       gl.deleteProgram(program);
       gl.deleteTexture(slotA.tex);
       gl.deleteTexture(slotB.tex);

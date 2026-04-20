@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback } from "react";
+import { Eye, EyeOff } from "lucide-react";
 import { useHotkey } from "@/hooks/use-hotkey";
 import { useVisualizerStore } from "@/stores/visualizer-store";
 import { cn } from "@/lib/utils";
@@ -19,20 +20,18 @@ export function HideToggle() {
     useCallback(() => setUiVisible(false), [setUiVisible]),
   );
 
+  const Icon = uiVisible ? EyeOff : Eye;
+
   return (
     <button
       type="button"
       onClick={toggleUi}
       aria-label={uiVisible ? "Hide interface" : "Show interface"}
       className={cn(
-        "pointer-events-auto flex items-baseline gap-2 font-kaku text-[10px] uppercase tracking-[0.28em] text-[color:var(--stone)] transition-colors hover:text-[color:var(--paper)]",
-        // When UI is hidden, this button stays visible (opacity handled by
-        // parent wrapper, which excludes this element).
+        "pointer-events-auto flex items-center gap-1.5 font-sans text-[10px] uppercase tracking-[0.28em] text-[color:var(--stone)] transition-colors hover:text-[color:var(--paper)]",
       )}
     >
-      <span className="font-mincho text-[13px] normal-case tracking-normal text-[color:var(--paper)]">
-        {uiVisible ? "隠" : "現"}
-      </span>
+      <Icon className="size-3" strokeWidth={1.5} />
       <span>{uiVisible ? "hide · h" : "show · h"}</span>
     </button>
   );

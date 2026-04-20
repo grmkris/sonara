@@ -55,7 +55,21 @@ export class AudioEngine {
     await this.ensureContext();
     this.detachSource();
     if (!this.ctx || !this.analyser || !this.compressor) return;
+    // A cached source node created against a previous (now-closed)
+    // AudioContext will throw InvalidAccessError on connect() below — the
+    // cache survives stop() because WeakMap keys the node to the <audio>
+    // element, not the context. Validate context identity before reuse and
+    // drop stale entries.
     let node = elementSourceCache.get(el);
+    if (node && node.context !== this.ctx) {
+      try {
+        node.disconnect();
+      } catch {
+        // noop
+      }
+      elementSourceCache.delete(el);
+      node = undefined;
+    }
     if (!node) {
       node = this.ctx.createMediaElementSource(el);
       elementSourceCache.set(el, node);
