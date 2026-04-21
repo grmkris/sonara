@@ -1,3 +1,7 @@
 export * from "./api";
 export * from "./context";
-export { appRouter, type AppRouter } from "./routers/app-router";
+export {
+  appRouter,
+  type AppRouter,
+  type AppRouterClient,
+} from "./routers/app-router";
