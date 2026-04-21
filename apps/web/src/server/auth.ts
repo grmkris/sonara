@@ -3,6 +3,7 @@ import { siwe } from "better-auth/plugins";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { generateRandomString } from "better-auth/crypto";
 import { verifyMessage } from "viem/actions";
+import { env } from "@/env";
 import { mainnetClient } from "@/lib/chain-clients";
 import { fetchReownIdentity } from "@/lib/reown-identity";
 import { createDb, SCHEMA, type Database } from "./db";
@@ -75,13 +76,12 @@ export type Auth = ReturnType<typeof createAuth>;
 let cached: Auth | null = null;
 export function getAuth(): Auth {
   if (cached) return cached;
-  const databaseUrl = process.env.DATABASE_URL;
-  const secret = process.env.BETTER_AUTH_SECRET;
-  const domain = process.env.AUTH_DOMAIN ?? "localhost:3000";
-  const baseURL = process.env.APP_URL ?? "http://localhost:3000";
-  if (!databaseUrl) throw new Error("DATABASE_URL is not set");
-  if (!secret) throw new Error("BETTER_AUTH_SECRET is not set");
-  const db = createDb(databaseUrl);
-  cached = createAuth({ db, secret, domain, baseURL });
+  const db = createDb(env.DATABASE_URL);
+  cached = createAuth({
+    db,
+    secret: env.BETTER_AUTH_SECRET,
+    domain: env.AUTH_DOMAIN,
+    baseURL: env.APP_URL,
+  });
   return cached;
 }

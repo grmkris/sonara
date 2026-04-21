@@ -1,3 +1,5 @@
+import { publicEnv } from "@/env";
+
 const IDENTITY_API = "https://rpc.walletconnect.org/v1/identity";
 
 export interface ReownIdentity {
@@ -12,7 +14,7 @@ export interface ReownIdentity {
 export async function fetchReownIdentity(
   address: string,
 ): Promise<ReownIdentity> {
-  const projectId = process.env.NEXT_PUBLIC_REOWN_PROJECT_ID;
+  const projectId = publicEnv.NEXT_PUBLIC_REOWN_PROJECT_ID;
   if (!projectId) return { name: null, avatar: null };
   try {
     const url = `${IDENTITY_API}/${address}?projectId=${projectId}&chainId=eip155:1`;
