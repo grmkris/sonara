@@ -3,8 +3,10 @@ import {
   SCENE_TEMPLATE_KEYS,
   VISUAL_PRESET_DESCRIPTIONS,
   VISUAL_PRESET_NAMES,
+  type NowPlaying,
   type VisualPresetName,
 } from "@music-visualizer/shared";
+import { env } from "../env";
 import type { Logger } from "../lib/logger";
 import { sampleDrift } from "./prompt-drift";
 
@@ -90,6 +92,9 @@ export interface VoiceIntentInput {
   valence: number; // 0..1, bright↔dark
   arousal: number; // 0..1, calm↔energetic
   previousAtmosphere: string | null;
+  // Optional — the song currently identified as playing. Used as LOOSE
+  // context to flavor atmosphere clauses. User intent still wins.
+  nowPlaying?: NowPlaying | null;
 }
 
 export interface VoiceIntentOpts {
@@ -112,6 +117,22 @@ export interface VoiceIntent {
   atmosphere: string | null;
 }
 
+function nowPlayingBlock(np: NowPlaying | null | undefined): string {
+  if (!np) return "  (unknown)";
+  const lines: string[] = [];
+  lines.push(`  title: ${np.title}`);
+  lines.push(`  artist: ${np.artist}`);
+  if (np.genre) lines.push(`  genre: ${np.genre}`);
+  if (np.spotify) {
+    lines.push(
+      `  energy: ${np.spotify.energy.toFixed(2)}, valence: ${np.spotify.valence.toFixed(
+        2,
+      )}, tempo: ${Math.round(np.spotify.tempo)}bpm, acousticness: ${np.spotify.acousticness.toFixed(2)}`,
+    );
+  }
+  return lines.join("\n");
+}
+
 function buildUserPrompt(input: VoiceIntentInput): string {
   const historyBlock =
     input.voiceHistory.length > 0
@@ -130,6 +151,9 @@ ${historyBlock}
 Music mood:
   valence (bright↔dark): ${input.valence.toFixed(2)}
   arousal (calm↔energetic): ${input.arousal.toFixed(2)}
+
+Now playing (loose context — user intent wins):
+${nowPlayingBlock(input.nowPlaying)}
 
 Previous atmosphere (vary from this): "${input.previousAtmosphere ?? "(none)"}"
 
@@ -229,7 +253,7 @@ export async function parseVoiceIntent(
   input: VoiceIntentInput,
   opts: VoiceIntentOpts,
 ): Promise<VoiceIntent> {
-  if (!process.env.FAL_KEY) {
+  if (!env.FAL_KEY) {
     if (!_warnedNoKey) {
       _warnedNoKey = true;
       opts.logger.warn(
@@ -239,7 +263,7 @@ export async function parseVoiceIntent(
     return fallbackIntent();
   }
 
-  const model = process.env.FAL_LLM_MODEL ?? DEFAULT_MODEL;
+  const model = env.FAL_LLM_MODEL ?? DEFAULT_MODEL;
 
   try {
     const result = await fal.subscribe("fal-ai/any-llm", {
