@@ -12,6 +12,7 @@
     "dev:server": "turbo run dev --filter=server",
     "build": "turbo run build",
     "typecheck": "turbo run typecheck",
+    "test": "turbo run test",
     "lint": "turbo run lint",
     "check": "ultracite check --type-aware --type-check",
     "fix": "ultracite fix --type-aware --type-check",

@@ -10,6 +10,7 @@
     "typecheck": "tsc --noEmit",
     "lint": "oxlint",
     "fix": "oxlint --fix",
+    "test": "bun test || echo 'no tests yet'",
     "ingest-demo": "bun run src/scripts/ingest-demo.ts"
   },
   "dependencies": {
