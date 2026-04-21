@@ -1,0 +1,76 @@
+import { fromString, getType, TypeID, toUUID, typeid } from "typeid-js";
+import { z } from "zod";
+
+// Master list of domain entity prefixes. Extend as new entities are added.
+// Prefixes must be unique, lowercase, and stable — they become part of the
+// serialized id format and renaming one is a breaking change.
+export const idTypesMapNameToPrefix = {
+  user: "usr",
+  session: "ses",
+  account: "acc",
+  verification: "ver",
+  walletAddress: "wal",
+  credits: "crd",
+  usageLedger: "usg",
+} as const;
+
+export type IdTypePrefixNames = keyof typeof idTypesMapNameToPrefix;
+
+export type TypeIdString<T extends IdTypePrefixNames> =
+  `${(typeof idTypesMapNameToPrefix)[T]}_${string}`;
+
+export const typeIdGenerator = <const T extends IdTypePrefixNames>(prefix: T) =>
+  typeid(idTypesMapNameToPrefix[prefix]).toString() as TypeIdString<T>;
+
+export const typeIdFromUuid = <const T extends IdTypePrefixNames>(
+  prefix: T,
+  uuid: string,
+) => {
+  const actualPrefix = idTypesMapNameToPrefix[prefix];
+  return TypeID.fromUUID(actualPrefix, uuid).toString() as TypeIdString<T>;
+};
+
+export const typeIdToUuid = <const T extends IdTypePrefixNames>(
+  input: TypeIdString<T>,
+) => {
+  const id = fromString(input);
+  return {
+    uuid: toUUID(id).toString(),
+    prefix: getType(id),
+  };
+};
+
+// Zod validator for an entity's typeid. Usable directly in RPC input schemas
+// so wrong-prefix ids are rejected at the boundary.
+export const typeIdValidator = <const T extends IdTypePrefixNames>(
+  prefix: T,
+) => {
+  const expected = idTypesMapNameToPrefix[prefix];
+  return z
+    .string()
+    .refine(
+      (v) =>
+        v.startsWith(`${expected}_`) &&
+        v.length > expected.length + 1,
+      { message: `Expected a ${prefix} id (prefix "${expected}_")` },
+    )
+    .transform((v) => v as TypeIdString<T>);
+};
+
+// Branded types — use with `.$type<UserId>()` on schema columns, and as
+// RPC input shapes via the matching validators below.
+export type UserId = TypeIdString<"user">;
+export type SessionId = TypeIdString<"session">;
+export type AccountId = TypeIdString<"account">;
+export type VerificationId = TypeIdString<"verification">;
+export type WalletAddressId = TypeIdString<"walletAddress">;
+export type CreditsId = TypeIdString<"credits">;
+export type UsageLedgerId = TypeIdString<"usageLedger">;
+
+export const UserIdSchema = typeIdValidator("user");
+export const SessionIdSchema = typeIdValidator("session");
+export const AccountIdSchema = typeIdValidator("account");
+export const VerificationIdSchema = typeIdValidator("verification");
+export const WalletAddressIdSchema = typeIdValidator("walletAddress");
+export const CreditsIdSchema = typeIdValidator("credits");
+export const UsageLedgerIdSchema = typeIdValidator("usageLedger");

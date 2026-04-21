@@ -85,6 +85,7 @@
       "name": "@music-visualizer/shared",
       "version": "0.1.0",
       "dependencies": {
+        "typeid-js": "^1.2.0",
         "zod": "^4.3.6",
       },
       "devDependencies": {
