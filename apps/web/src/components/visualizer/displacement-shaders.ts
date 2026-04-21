@@ -122,6 +122,17 @@ uniform float uCurl;
 uniform float uDither;
 uniform float uSeal;
 uniform float uEnso;
+// Session arc (0..1 over ~20min). Feeds trail decay + palette temp shift.
+uniform float uSessionProgress;
+// Watercolor primitives — 0 = off, 1 = full.
+uniform float uWetEdge;
+uniform float uGranulation;
+// Halftone / riso post-pass — 0 = off, 1 = full.
+uniform float uHalftone;
+// Gray-Scott reaction-diffusion density mask. Sampled from a separate
+// simulation layer (rd-layer.ts). uRDAmount blends the mask in; 0 = off.
+uniform sampler2D uRD;
+uniform float uRDAmount;
 
 float hash21(vec2 p) {
   p = fract(p * vec2(234.34, 435.345));
@@ -347,7 +358,9 @@ void main() {
   // v=0 at clip-space top. Flip so the feedback overlay tracks the current
   // image rather than an inverted ghost.
   vec3 fbPrev = texture(uFeedback, vec2(uv.x, 1.0 - uv.y)).rgb;
-  vec3 colorWithFb = mix(curr, max(curr, fbPrev * 0.92), clamp(uFeedbackAmount, 0.0, 0.85));
+  // Trail multiplier deepens over the session arc (0.92 → 0.98).
+  float fbDecay = 0.92 + 0.06 * uSessionProgress;
+  vec3 colorWithFb = mix(curr, max(curr, fbPrev * fbDecay), clamp(uFeedbackAmount, 0.0, 0.85));
   // Use colorWithFb for subsequent transitions; scale "curr" alias.
   vec3 color;
 
@@ -396,6 +409,17 @@ void main() {
     color = floor(color * uPosterizeAlways + 0.5) / uPosterizeAlways;
   }
 
+  // --- Gray-Scott RD overlay ---
+  // Sample the simulation texture as an ink-density mask. The V channel
+  // holds the growth species, so bright-V = active pattern. We darken the
+  // base image there, producing slow organic blobs that merge and drift.
+  if (uRDAmount > 0.001) {
+    float rdV = texture(uRD, vUv).g;
+    float inkMask = smoothstep(0.15, 0.45, rdV);
+    vec3 inkTone = mix(uDuotoneLo, vec3(0.06, 0.05, 0.05), 0.5);
+    color = mix(color, inkTone, inkMask * clamp(uRDAmount, 0.0, 1.0) * 0.75);
+  }
+
   // --- Bokashi: wet gradient wash ---
   // Slow, low-frequency fbm tinted by the duotone endpoints. Reads as a
   // watered-down ink pool laid on top; not audio-reactive.
@@ -441,6 +465,38 @@ void main() {
   float invertAmt = clamp(uInvert * uKick, 0.0, 1.0);
   if (invertAmt > 0.001) {
     color = mix(color, vec3(1.0) - color, invertAmt);
+  }
+
+  // --- Wet-edge darkening (classic sumi-e bleed ring) ---
+  // Dark halo where luminance transitions steeply, simulating ink pooling
+  // at the edge of a wet brush stroke. Sample a small-radius luma blur of
+  // the source texture, subtract current luma; the positive side darkens
+  // the image where the blurred neighbourhood is brighter than here.
+  if (uWetEdge > 0.001) {
+    vec2 pxW = 1.0 / max(vec2(1.0), uCurrTexSize);
+    vec2 uvW = coverUv(uv, uCurrTexSize, uViewSize);
+    float rW = 2.5;
+    vec3 lumaK = vec3(0.299, 0.587, 0.114);
+    float lc = dot(color, lumaK);
+    float lb = 0.0;
+    lb += dot(texture(uCurr, uvW + pxW * vec2( rW, 0.0)).rgb, lumaK);
+    lb += dot(texture(uCurr, uvW + pxW * vec2(-rW, 0.0)).rgb, lumaK);
+    lb += dot(texture(uCurr, uvW + pxW * vec2(0.0,  rW)).rgb, lumaK);
+    lb += dot(texture(uCurr, uvW + pxW * vec2(0.0, -rW)).rgb, lumaK);
+    lb *= 0.25;
+    float ring = max(0.0, lb - lc);
+    color *= 1.0 - ring * clamp(uWetEdge, 0.0, 1.0) * 2.0;
+  }
+
+  // --- Pigment granulation ---
+  // Two-octave fbm speckle that only bites mid-tones (dark solids and pure
+  // highlights stay clean). Reads like pigment settling into paper texture.
+  if (uGranulation > 0.001) {
+    float n = fbm2(vUv * 180.0) * 0.6 + fbm2(vUv * 60.0) * 0.4;
+    float speckle = (n - 0.5) * 2.0;
+    float lumG = dot(color, vec3(0.299, 0.587, 0.114));
+    float midMask = 1.0 - abs(lumG - 0.5) * 2.0;
+    color *= 1.0 + speckle * 0.09 * clamp(uGranulation, 0.0, 1.0) * max(0.0, midMask);
   }
 
   // --- Washi: paper-fiber texture ---
@@ -584,6 +640,34 @@ void main() {
     float g = hash21(gl_FragCoord.xy + vec2(fract(uTime * 7.0), fract(uTime * 13.0)));
     color += (g - 0.5) * uGrain * 0.12;
   }
+
+  // --- Halftone / riso post-pass ---
+  // Luminance-thresholded rotated dot screen. Reads as print on paper;
+  // pairs well with dither for a risograph feel. Single 45° angle keeps
+  // things sumi-e; a second cross-screen angle would read more western.
+  if (uHalftone > 0.001) {
+    float ang = 0.785398;  // 45°
+    float freq = 200.0;
+    vec2 cUv = vUv - 0.5;
+    vec2 rUv = vec2(
+      cUv.x * cos(ang) - cUv.y * sin(ang),
+      cUv.x * sin(ang) + cUv.y * cos(ang)
+    );
+    float dotField = 0.5 + 0.5 * cos(rUv.x * freq) * cos(rUv.y * freq);
+    float lumH2 = dot(color, vec3(0.299, 0.587, 0.114));
+    float mask = smoothstep(lumH2 - 0.12, lumH2 + 0.12, dotField);
+    vec3 inked = mix(vec3(0.08, 0.07, 0.06), vec3(0.94, 0.91, 0.84), mask);
+    color = mix(color, inked, clamp(uHalftone, 0.0, 1.0));
+  }
+
+  // --- Session arc palette temp ---
+  // Cold→warm shift across the arc. At 0 nudges toward cool (slight blue),
+  // at 1 nudges toward warm (slight amber). Small amplitude so it reads
+  // as a subtle horizon drift, not a filter.
+  float arcT = clamp(uSessionProgress, 0.0, 1.0);
+  vec3 coolTint = vec3(-0.015, -0.005, 0.020);
+  vec3 warmTint = vec3( 0.025,  0.010, -0.015);
+  color += mix(coolTint, warmTint, arcT) * 0.9;
 
   // --- Dynamic vignette ---
   float r = distance(vUv, vec2(0.5));

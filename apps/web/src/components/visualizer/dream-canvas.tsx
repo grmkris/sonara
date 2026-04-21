@@ -67,8 +67,8 @@ function EmptyIdeogram() {
 // updates. Preserved for browsers without WebGL2 or prefers-reduced-motion.
 // ————————————————————————————————————————————————————————————————————
 
-const BLEED_MS = 4500;
-const FADE_MS = 1500;
+const BLEED_MS = 7000;
+const FADE_MS = 2200;
 
 interface EnvelopeBundle {
   rms: VuEnvelope;

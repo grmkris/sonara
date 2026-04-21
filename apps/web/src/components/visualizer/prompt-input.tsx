@@ -1,7 +1,7 @@
 "use client";
 
 import { ArrowRight } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { ClientEvent, DreamSceneState } from "@music-visualizer/shared";
 import { Input } from "@/components/ui/input";
 import { useVisualizerStore } from "@/stores/visualizer-store";
@@ -70,8 +70,16 @@ const FIELDS: {
   { key: "palette",     index: "4", label: "PALETTE"  },
 ];
 
-// One random seed per field at mount so each session opens with a different
-// example — avoids an identical first-load every time.
+// One random seed per field, set post-mount so each session opens with a
+// different example — avoids an identical first-load every time. SSR + first
+// client-hydrate render use `0` (stable, matching) so React doesn't flag a
+// hydration mismatch on the `placeholder` attribute.
+const ZERO_SEEDS: Record<FieldKey, number> = {
+  subject: 0,
+  environment: 0,
+  mood: 0,
+  palette: 0,
+};
 function randomSeeds(): Record<FieldKey, number> {
   return {
     subject: Math.floor(Math.random() * PLACEHOLDERS.subject.length),
@@ -97,7 +105,8 @@ export function PromptInput({ send }: PromptInputProps) {
     palette: null,
   });
 
-  const seeds = useMemo(randomSeeds, []);
+  const [seeds, setSeeds] = useState<Record<FieldKey, number>>(ZERO_SEEDS);
+  useEffect(() => setSeeds(randomSeeds()), []);
   const [tick, setTick] = useState(0);
   useEffect(() => {
     const id = setInterval(() => setTick((t) => t + 1), PLACEHOLDER_INTERVAL_MS);

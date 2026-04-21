@@ -44,6 +44,16 @@ export interface PresetConfig {
   dither: number; // ordered Bayer dither
   seal: number; // kanji stamp overlay
   enso: number; // single-stroke circle accent
+  // Watercolor primitives (0 = off, 1 = full)
+  wetEdge: number; // dark bleed ring at luminance boundaries (classic sumi-e)
+  granulation: number; // pigment speckle on mid-tones from fbm noise
+  halftone: number; // printmaking dot/line screen overlay
+  // Gray-Scott reaction-diffusion overlay.
+  // rd: amount (0 = off, 1 = fully blended ink-density mask).
+  // rdFeed / rdKill: parameter zone (see rd-layer.ts for Pearson zones).
+  rd: number;
+  rdFeed: number;
+  rdKill: number;
 }
 
 export const BASE: PresetConfig = {
@@ -71,12 +81,19 @@ export const BASE: PresetConfig = {
   dither: 0,
   seal: 0,
   enso: 0,
+  wetEdge: 0,
+  granulation: 0,
+  halftone: 0,
+  rd: 0,
+  // Default to "spots" zone per Pearson. Active when rd > 0.
+  rdFeed: 0.037,
+  rdKill: 0.060,
 };
 
 // Preset registry. Order roughly "closest to baseline" → "most distinct".
 // Keys MUST match `VISUAL_PRESET_NAMES` in `packages/shared/src/visual-presets.ts`.
 export const PRESETS: Record<PresetName, PresetConfig> = {
-  wet_ink: { ...BASE },
+  wet_ink: { ...BASE, wetEdge: 0.4, granulation: 0.25 },
 
   ember: {
     ...BASE,
@@ -152,6 +169,10 @@ export const PRESETS: Record<PresetName, PresetConfig> = {
     bloomMult: 0.9,
     washi: 0.35,
     grain: 0.15,
+    // Subtle drift of dissolving spots — like rain spots settling on paper.
+    rd: 0.3,
+    rdFeed: 0.029,
+    rdKill: 0.057,
   },
 
   bone_china: {
@@ -164,6 +185,8 @@ export const PRESETS: Record<PresetName, PresetConfig> = {
     bloomMult: 0.8,
     washi: 0.45,
     grain: 0.18,
+    granulation: 0.4,
+    wetEdge: 0.25,
   },
 
   tide_pool: {
@@ -177,6 +200,12 @@ export const PRESETS: Record<PresetName, PresetConfig> = {
     noiseMult: 0.8,
     curl: 0.5,
     bokashi: 0.45,
+    wetEdge: 0.55,
+    granulation: 0.35,
+    // Pearson "spots" zone — discrete organic dots that form, persist, divide.
+    rd: 0.45,
+    rdFeed: 0.037,
+    rdKill: 0.060,
   },
 
   struck_bell: {
@@ -212,6 +241,10 @@ export const PRESETS: Record<PresetName, PresetConfig> = {
     bloomMult: 0.7,
     grain: 0.25,
     focal: 0.4,
+    // Pearson "mitosis" zone — cells divide and spread slowly, ghostly trails.
+    rd: 0.5,
+    rdFeed: 0.014,
+    rdKill: 0.054,
   },
 
   knife_cut: {
@@ -300,6 +333,7 @@ export const PRESETS: Record<PresetName, PresetConfig> = {
     bloomMult: 0.9,
     nijimi: 0.4,
     dither: 0.3,
+    halftone: 0.5,
   },
 };
 
@@ -376,5 +410,11 @@ export function lerpPreset(
     dither: lerpNumber(a.dither, b.dither, k),
     seal: lerpNumber(a.seal, b.seal, k),
     enso: lerpNumber(a.enso, b.enso, k),
+    wetEdge: lerpNumber(a.wetEdge, b.wetEdge, k),
+    granulation: lerpNumber(a.granulation, b.granulation, k),
+    halftone: lerpNumber(a.halftone, b.halftone, k),
+    rd: lerpNumber(a.rd, b.rd, k),
+    rdFeed: lerpNumber(a.rdFeed, b.rdFeed, k),
+    rdKill: lerpNumber(a.rdKill, b.rdKill, k),
   };
 }

@@ -20,6 +20,8 @@ import {
   type PresetDrift,
   type PresetName,
 } from "@/lib/render/presets";
+import { resolveAudio } from "@/lib/render/preset-audio-routing";
+import { RDLayer } from "@/lib/render/rd-layer";
 import {
   createFbo,
   createProgram,
@@ -38,9 +40,14 @@ import {
   VERTEX_SHADER,
 } from "./displacement-shaders";
 
-const BLEED_MS = 4500;
-const FADE_MS = 1500;
-const PRESET_CROSSFADE_MS = 2000;
+const BLEED_MS = 7000;
+const FADE_MS = 2200;
+const PRESET_CROSSFADE_MS = 3500;
+// Client-side session arc length. sessionProgress = min(1, (now-mountedAt)/ARC).
+// Drives glitch-peek cadence, feedback trail depth, and a subtle palette temp
+// via uSessionProgress in the fragment shader. Server has its own arc in
+// session.ts — drift-pool bias lives there.
+const SESSION_ARC_MS = 20 * 60_000;
 
 // Module-level ref to the active WebGL canvas so sibling overlays (e.g. the
 // slit-scan trail) can sample from it without prop-drilling.
@@ -284,10 +291,17 @@ export function DisplacementCanvas() {
       uDither: gl.getUniformLocation(program, "uDither"),
       uSeal: gl.getUniformLocation(program, "uSeal"),
       uEnso: gl.getUniformLocation(program, "uEnso"),
+      uSessionProgress: gl.getUniformLocation(program, "uSessionProgress"),
+      uWetEdge: gl.getUniformLocation(program, "uWetEdge"),
+      uGranulation: gl.getUniformLocation(program, "uGranulation"),
+      uHalftone: gl.getUniformLocation(program, "uHalftone"),
+      uRD: gl.getUniformLocation(program, "uRD"),
+      uRDAmount: gl.getUniformLocation(program, "uRDAmount"),
     };
     gl.uniform1i(uni.uCurr, 0);
     gl.uniform1i(uni.uPrev, 1);
     gl.uniform1i(uni.uFeedback, 2);
+    gl.uniform1i(uni.uRD, 3);
 
     // Blit program uniform (samples the just-drawn offscreen FBO).
     const blitUSrc = gl.getUniformLocation(blitProgram, "uSrc");
@@ -296,6 +310,10 @@ export function DisplacementCanvas() {
     gl.useProgram(program);
 
     const { vao } = createQuadBuffer(gl);
+
+    // Reaction-diffusion overlay. Runs its own ping-pong FBO pair at fixed
+    // 256×256, independent of canvas size. Presets enable it via cfg.rd > 0.
+    const rdLayer = new RDLayer(gl, { vao });
 
     const slotA: TextureSlot = {
       tex: createTexture(gl),
@@ -577,6 +595,17 @@ export function DisplacementCanvas() {
         (now - mountedAt) / 1000,
       );
 
+      // Session progress drives glitch-peek cadence (shorter gaps late in the
+      // session), feedback trail depth, and a subtle palette temp shift.
+      const sessionProgress = Math.min(
+        1,
+        (now - mountedAt) / SESSION_ARC_MS,
+      );
+      // As progress → 1, peek interval halves: 30s→15s min, 30s→15s jitter.
+      const peekIntervalMinNow = peekIntervalMin * (1 - 0.5 * sessionProgress);
+      const peekIntervalJitterNow =
+        peekIntervalJitter * (1 - 0.5 * sessionProgress);
+
       // Glitch-peek overlay: triangle envelope (0→1→1→0 over 0.4/0.2/0.4s)
       // blended on top of the drifted base. Fires at random intervals so
       // long listening sessions never feel static.
@@ -588,7 +617,7 @@ export function DisplacementCanvas() {
           peekActive = peekCfg !== null;
           peekStartAt = now;
         } else {
-          nextPeekAt = now + peekIntervalMin;
+          nextPeekAt = now + peekIntervalMinNow;
         }
       }
       if (peekActive && peekCfg) {
@@ -597,7 +626,7 @@ export function DisplacementCanvas() {
           peekActive = false;
           peekCfg = null;
           nextPeekAt =
-            now + peekIntervalMin + Math.random() * peekIntervalJitter;
+            now + peekIntervalMinNow + Math.random() * peekIntervalJitterNow;
         } else {
           const peekT =
             p < 0.4 ? p / 0.4 : p < 0.6 ? 1 : 1 - (p - 0.6) / 0.4;
@@ -608,6 +637,20 @@ export function DisplacementCanvas() {
       lastEffective = effective;
       useVisualizerStore.getState().setLastEffective(effective);
 
+      // ===== Advance reaction-diffusion overlay =====
+      // Only step when any preset is asking for it (cfg.rd > 0). Skipping
+      // when off keeps the GPU idle on non-RD presets. Uses absolute kick
+      // amplitude so rising-edge seeding is stable across the crossfade.
+      const rdTex =
+        effective.rd > 0.001
+          ? rdLayer.update({
+              feed: effective.rdFeed,
+              kill: effective.rdKill,
+              kickImpulse: impulses.kick,
+              rms: envelopes.rms.value,
+            })
+          : rdLayer.getTexture();
+
       // ===== Render main pass to offscreen FBO =====
       const writeFbo = fboWriteIsA ? fboA : fboB;
       const readFbo = fboWriteIsA ? fboB : fboA;
@@ -615,22 +658,41 @@ export function DisplacementCanvas() {
       gl.viewport(0, 0, writeFbo.width, writeFbo.height);
 
       gl.useProgram(program);
+      gl.bindVertexArray(vao);
       gl.activeTexture(gl.TEXTURE0);
       gl.bindTexture(gl.TEXTURE_2D, currSlot.tex);
       gl.activeTexture(gl.TEXTURE1);
       gl.bindTexture(gl.TEXTURE_2D, prevSlot.tex);
       gl.activeTexture(gl.TEXTURE2);
       gl.bindTexture(gl.TEXTURE_2D, readFbo.tex);
+      gl.activeTexture(gl.TEXTURE3);
+      gl.bindTexture(gl.TEXTURE_2D, rdTex);
 
       gl.uniform1f(uni.uTime, (now - mountedAt) / 1000);
-      gl.uniform1f(uni.uBass, envelopes.bass.value);
-      gl.uniform1f(uni.uMids, envelopes.mids.value);
-      gl.uniform1f(uni.uTreble, envelopes.treble.value);
-      gl.uniform1f(uni.uRms, envelopes.rms.value);
+      // Per-preset audio routing: each preset can redirect which audio source
+      // feeds which logical slot (e.g. frost.kick reads rms, neon_line.bass
+      // reads treble). Unrouted presets get identity mapping (bass→bass, …).
+      // rmsPeak is always the raw value — it's the master "peak" channel
+      // and isn't semantically remappable.
+      const routedAudio = resolveAudio(currentPresetName, {
+        rms: envelopes.rms.value,
+        rmsPeak: envelopes.rms.peak,
+        bass: envelopes.bass.value,
+        mids: envelopes.mids.value,
+        treble: envelopes.treble.value,
+        kick: impulses.kick,
+        snare: impulses.snare,
+        hat: impulses.hat,
+        vocal: impulses.vocal,
+      });
+      gl.uniform1f(uni.uBass, routedAudio.bass);
+      gl.uniform1f(uni.uMids, routedAudio.mids);
+      gl.uniform1f(uni.uTreble, routedAudio.treble);
+      gl.uniform1f(uni.uRms, routedAudio.rms);
       gl.uniform1f(uni.uRmsPeak, envelopes.rms.peak);
-      gl.uniform1f(uni.uKick, impulses.kick);
-      gl.uniform1f(uni.uSnare, impulses.snare);
-      gl.uniform1f(uni.uVocal, impulses.vocal);
+      gl.uniform1f(uni.uKick, routedAudio.kick);
+      gl.uniform1f(uni.uSnare, routedAudio.snare);
+      gl.uniform1f(uni.uVocal, routedAudio.vocal);
       gl.uniform1f(uni.uIntensity, intensity);
       const huePumpNorm = coef.huePumpRange / 18;
       gl.uniform1f(uni.uHuePumpNorm, huePumpNorm);
@@ -701,6 +763,11 @@ export function DisplacementCanvas() {
       gl.uniform1f(uni.uDither, effective.dither);
       gl.uniform1f(uni.uSeal, effective.seal);
       gl.uniform1f(uni.uEnso, effective.enso);
+      gl.uniform1f(uni.uSessionProgress, sessionProgress);
+      gl.uniform1f(uni.uWetEdge, effective.wetEdge);
+      gl.uniform1f(uni.uGranulation, effective.granulation);
+      gl.uniform1f(uni.uHalftone, effective.halftone);
+      gl.uniform1f(uni.uRDAmount, effective.rd);
 
       gl.bindVertexArray(vao);
       gl.drawArrays(gl.TRIANGLES, 0, 6);
@@ -734,6 +801,7 @@ export function DisplacementCanvas() {
       gl.deleteTexture(slotB.tex);
       deleteFbo(gl, fboA);
       deleteFbo(gl, fboB);
+      rdLayer.dispose();
       gl.deleteVertexArray(vao);
     };
   }, []);

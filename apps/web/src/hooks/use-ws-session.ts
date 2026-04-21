@@ -36,8 +36,12 @@ export function useWsSession(): (event: ClientEvent) => void {
             s.setScene(event.state);
             break;
           case "frame.preview":
+            s.pushFrame(event.imageUrl, event.version);
+            break;
           case "frame.final":
             s.pushFrame(event.imageUrl, event.version);
+            // Settled images go into the ghost callback ring; previews don't.
+            s.pushHero(event.imageUrl);
             break;
           case "job.status":
             s.setStatus(event.status, event.message);

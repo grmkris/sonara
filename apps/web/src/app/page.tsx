@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { DreamCanvas } from "@/components/visualizer/dream-canvas";
+import { GhostOverlay } from "@/components/visualizer/ghost-overlay";
 import { PromptInput } from "@/components/visualizer/prompt-input";
 import { MusicSource } from "@/components/visualizer/music-source";
 import { AudioRibbon } from "@/components/visualizer/audio-ribbon";
@@ -80,6 +81,7 @@ export default function Page() {
   return (
     <main className="fixed inset-0 overflow-hidden">
       <DreamCanvas />
+      <GhostOverlay />
       <ScanSweep />
 
       {/* Always-visible corner: wordmark + hide toggle. */}

@@ -42,6 +42,7 @@ export function UserControls() {
         size="sm"
         onClick={() => open()}
         aria-label="connect wallet"
+        className="pointer-events-auto"
       >
         <WalletIcon size={12} />
         connect
@@ -52,7 +53,7 @@ export function UserControls() {
   const label = identity ?? (address ? shortAddress(address) : "signed in");
 
   return (
-    <div className="flex items-center gap-2">
+    <div className="pointer-events-auto flex items-center gap-2">
       <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-[color:var(--paper)]/80">
         {label}
       </span>

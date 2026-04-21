@@ -105,6 +105,9 @@ export interface VisualizerState {
   customPreset: PresetConfig | null;
   // Renderer writes here each tick so snapshotCurrentPreset can capture it.
   lastEffective: PresetConfig | null;
+  // Ring buffer of recent final frame URLs, newest-first. Used by the ghost
+  // callback overlay to resurface earlier scenes at low opacity.
+  heroBank: string[];
 
   setScene: (state: DreamSceneState) => void;
   setAudio: (f: AudioFeatures) => void;
@@ -124,6 +127,7 @@ export interface VisualizerState {
   snapshotCurrentPreset: (name: string) => void;
   selectSavedPreset: (name: string) => void;
   deleteSavedPreset: (name: string) => void;
+  pushHero: (url: string) => void;
 }
 
 export const useVisualizerStore = create<VisualizerState>()((set, get) => ({
@@ -149,6 +153,7 @@ export const useVisualizerStore = create<VisualizerState>()((set, get) => ({
   savedPresets: {},
   customPreset: null,
   lastEffective: null,
+  heroBank: [],
 
   setScene: (state) => set({ scene: state }),
   setAudio: (f) => set({ audio: f }),
@@ -252,6 +257,14 @@ export const useVisualizerStore = create<VisualizerState>()((set, get) => ({
         window.localStorage.setItem(SAVED_PRESETS_KEY, JSON.stringify(next));
       }
       return { savedPresets: next };
+    }),
+  // Ring buffer: keep last 6 unique URLs, newest-first. Dedupes on push so
+  // a preview+final pair doesn't store two slots for one generation.
+  pushHero: (url) =>
+    set((s) => {
+      if (!url || s.heroBank[0] === url) return {};
+      const next = [url, ...s.heroBank.filter((u) => u !== url)].slice(0, 6);
+      return { heroBank: next };
     }),
 }));
 

@@ -36,6 +36,12 @@ const VOICE_BUFFER_MAX = 8;
 // drift clause — images stop subtly morphing between generations.
 const ATMOSPHERE_TTL_MS = 15_000;
 
+// Full-arc length. sessionProgress = min(1, (now - sessionStartAt) / SESSION_ARC_MS).
+// Drives: drift-pool act bias (intro/build/dissolve weights in prompt-drift).
+// Also exposed on the client over scene.state so the renderer can modulate
+// trail decay, glitch-peek cadence, and a subtle palette-temp over the arc.
+const SESSION_ARC_MS = 20 * 60_000;
+
 // Reset-via-voice shows the user a 10s confirm toast before actually firing.
 const RESET_CONFIRM_TTL_MS = 10_000;
 
@@ -91,6 +97,7 @@ export class Session {
   private voiceBuffer: { text: string; at: number }[] = [];
   private currentAtmosphere: string | null = null;
   private currentAtmosphereAt = 0;
+  private sessionStartAt = Date.now();
   private voiceInFlight?: AbortController;
   private voiceDebounceTimer?: ReturnType<typeof setTimeout>;
 
@@ -307,6 +314,7 @@ export class Session {
     this.voiceBuffer = [];
     this.currentAtmosphere = null;
     this.currentAtmosphereAt = 0;
+    this.sessionStartAt = Date.now();
     this.send({ type: "scene.state", state: this.scene });
     this.send({ type: "job.status", status: "idle" });
   }
@@ -353,9 +361,14 @@ export class Session {
     const atmosphereFresh =
       this.currentAtmosphere !== null &&
       Date.now() - this.currentAtmosphereAt < ATMOSPHERE_TTL_MS;
+    const sessionProgress = Math.min(
+      1,
+      (Date.now() - this.sessionStartAt) / SESSION_ARC_MS,
+    );
     const drift = sampleDriftLayered({
       llmDrift: atmosphereFresh ? this.currentAtmosphere : null,
       latestVoice,
+      sessionProgress,
     });
     const prompt = drift ? `${basePrompt}, ${drift}` : basePrompt;
 
@@ -382,6 +395,7 @@ export class Session {
           : latestVoice
             ? "voice"
             : "pool",
+        sessionProgress: Number(sessionProgress.toFixed(2)),
         seed: this.seed,
         hasHero: this.heroImageUrl !== null,
         tier: forCommit ? "commit" : "flow",

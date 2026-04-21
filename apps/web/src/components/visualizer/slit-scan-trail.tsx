@@ -2,6 +2,7 @@
 
 import { useEffect, useRef } from "react";
 import { getCurrentDisplacementCanvas } from "@/components/visualizer/displacement-canvas";
+import { useVisualizerStore } from "@/stores/visualizer-store";
 
 // Time-compressed echo ribbon pinned above the bottom audio strip. Every
 // SAMPLE_MS, grabs the current WebGL canvas frame and draws it into a
@@ -46,6 +47,11 @@ export function SlitScanTrail({ height = 28 }: { height?: number }) {
       const now = performance.now();
       if (now - lastSampleAt < SAMPLE_MS) return;
       lastSampleAt = now;
+
+      // Skip sampling until the first image has actually loaded. Before
+      // that the WebGL canvas clears to opaque black, and the strip would
+      // fill with a solid black bar.
+      if (useVisualizerStore.getState().currentFrame === null) return;
 
       const source = getCurrentDisplacementCanvas();
       const { clientWidth: w, clientHeight: h } = canvas;

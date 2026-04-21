@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
+import Script from "next/script";
 import { mono, sans, serif } from "@/lib/fonts";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Toaster } from "@/components/ui/sonner";
@@ -17,6 +18,15 @@ export default function RootLayout({ children }: { children: ReactNode }) {
       lang="en"
       className={`${serif.variable} ${sans.variable} ${mono.variable}`}
     >
+      <head>
+        {process.env.NODE_ENV === "development" && (
+          <Script
+            src="//unpkg.com/react-grab/dist/index.global.js"
+            crossOrigin="anonymous"
+            strategy="beforeInteractive"
+          />
+        )}
+      </head>
       <body>
         <Web3Provider>
           <TooltipProvider delayDuration={100}>
