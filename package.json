@@ -11,7 +11,11 @@
     "dev:web": "turbo run dev --filter=web",
     "dev:server": "turbo run dev --filter=server",
     "build": "turbo run build",
-    "typecheck": "turbo run typecheck"
+    "typecheck": "turbo run typecheck",
+    "lint": "turbo run lint",
+    "check": "ultracite check --type-aware --type-check",
+    "fix": "ultracite fix --type-aware --type-check",
+    "fix:unsafe": "ultracite fix --unsafe --type-aware --type-check"
   },
   "devDependencies": {
     "@types/bun": "^1.1.14",

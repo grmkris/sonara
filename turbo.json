@@ -12,6 +12,10 @@
       "outputs": [],
       "cache": true
     },
+    "lint": {
+      "outputs": [],
+      "cache": true
+    },
     "dev": {
       "cache": false,
       "persistent": true
