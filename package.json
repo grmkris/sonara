@@ -16,7 +16,8 @@
     "lint": "turbo run lint",
     "check": "ultracite check --type-aware --type-check",
     "fix": "ultracite fix --type-aware --type-check",
-    "fix:unsafe": "ultracite fix --unsafe --type-aware --type-check"
+    "fix:unsafe": "ultracite fix --unsafe --type-aware --type-check",
+    "ci:local": "turbo run lint typecheck test build --concurrency=1"
   },
   "devDependencies": {
     "@types/bun": "^1.1.14",
