@@ -37,7 +37,9 @@
       "name": "web",
       "version": "0.1.0",
       "dependencies": {
+        "@music-visualizer/api": "workspace:*",
         "@music-visualizer/shared": "workspace:*",
+        "@orpc/server": "^1.13.14",
         "@radix-ui/react-slider": "^1.2.4",
         "@radix-ui/react-slot": "^1.2.4",
         "@radix-ui/react-switch": "^1.2.6",
