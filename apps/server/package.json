@@ -8,18 +8,22 @@
     "dev": "bun run --hot src/server.ts",
     "start": "bun run src/server.ts",
     "typecheck": "tsc --noEmit",
+    "lint": "oxlint",
+    "fix": "oxlint --fix",
     "ingest-demo": "bun run src/scripts/ingest-demo.ts"
   },
   "dependencies": {
     "@fal-ai/client": "^1.9.5",
     "@music-visualizer/shared": "workspace:*",
     "hono": "^4.12.12",
+    "pg": "^8.20.0",
     "pino": "^10.3.1",
     "pino-pretty": "^13.0.0",
     "zod": "^4.3.6"
   },
   "devDependencies": {
     "@types/bun": "^1.1.14",
+    "@types/pg": "^8.20.0",
     "typescript": "^6.0.3"
   }
 }
