@@ -1,7 +1,8 @@
-import { fal } from "@fal-ai/client";
+import { createFalClient, fal } from "@fal-ai/client";
+import { env } from "../env";
 import type { Logger } from "../lib/logger";
 
-const FAL_KEY = process.env.FAL_KEY;
+const FAL_KEY = env.FAL_KEY;
 if (FAL_KEY) {
   fal.config({ credentials: FAL_KEY });
 }
@@ -15,14 +16,10 @@ if (FAL_KEY) {
 //   Default: flux-2-pro/edit (state-of-the-art multi-reference editor).
 //   The commit frame becomes the hero that all subsequent flow frames edit on top of.
 // Fallback — text-only last resort when both above 404/error.
-const FLOW_TEXT_MODEL =
-  process.env.FAL_TEXT_MODEL ?? "fal-ai/flux-2/klein/9b";
-const FLOW_EDIT_MODEL =
-  process.env.FAL_EDIT_MODEL ?? "fal-ai/flux-2/klein/9b/edit";
-const COMMIT_TEXT_MODEL =
-  process.env.FAL_COMMIT_TEXT_MODEL ?? "fal-ai/flux-2-pro";
-const COMMIT_EDIT_MODEL =
-  process.env.FAL_COMMIT_EDIT_MODEL ?? "fal-ai/flux-2-pro/edit";
+const FLOW_TEXT_MODEL = env.FAL_TEXT_MODEL;
+const FLOW_EDIT_MODEL = env.FAL_EDIT_MODEL;
+const COMMIT_TEXT_MODEL = env.FAL_COMMIT_TEXT_MODEL;
+const COMMIT_EDIT_MODEL = env.FAL_COMMIT_EDIT_MODEL;
 const FALLBACK_TEXT_MODEL = "fal-ai/flux/schnell";
 
 export interface StreamPreviewInput {
@@ -30,12 +27,17 @@ export interface StreamPreviewInput {
   referenceImages?: string[];
   seed?: number;
   forCommit?: boolean;
+  // BYOK override — when set, fal calls are billed to the user's account
+  // instead of ours.
+  falKey?: string;
   signal: AbortSignal;
   logger: Logger;
   onPreview: (url: string) => void;
   onFinal: (url: string) => void;
   onError: (err: unknown) => void;
 }
+
+type FalSubscriber = typeof fal.subscribe;
 
 interface FalImage {
   url: string;
@@ -61,6 +63,7 @@ interface SubscribeArgs {
   onPreview: (url: string) => void;
   onFinal: (url: string) => void;
   tier: "flow" | "commit" | "fallback";
+  subscribe: FalSubscriber;
 }
 
 async function subscribeOnce(args: SubscribeArgs): Promise<boolean> {
@@ -69,7 +72,7 @@ async function subscribeOnce(args: SubscribeArgs): Promise<boolean> {
     "fal subscribe start",
   );
 
-  const result = await fal.subscribe(args.model, {
+  const result = await args.subscribe(args.model, {
     input: args.input,
     logs: false,
     abortSignal: args.signal,
@@ -88,10 +91,17 @@ async function subscribeOnce(args: SubscribeArgs): Promise<boolean> {
 }
 
 export async function streamPreview(input: StreamPreviewInput): Promise<void> {
-  if (!FAL_KEY) {
-    input.onError(new Error("FAL_KEY not set"));
+  const credentials = input.falKey ?? FAL_KEY;
+  if (!credentials) {
+    input.onError(new Error("No fal credentials available (no FAL_KEY and no BYOK)"));
     return;
   }
+  // Per-call scoped client. If BYOK key is supplied, this call bills the
+  // user's fal account; otherwise it falls back to the platform key.
+  const scoped = input.falKey
+    ? createFalClient({ credentials: input.falKey })
+    : fal;
+  const subscribe = scoped.subscribe.bind(scoped);
 
   const refs = (input.referenceImages ?? []).filter(Boolean);
   const hasRef = refs.length > 0;
@@ -125,6 +135,7 @@ export async function streamPreview(input: StreamPreviewInput): Promise<void> {
       onPreview: input.onPreview,
       onFinal: input.onFinal,
       tier,
+      subscribe,
     });
     if (ok || input.signal.aborted) return;
     input.logger.warn({ model: primaryModel, tier }, "primary returned no image");
@@ -165,8 +176,96 @@ export async function streamPreview(input: StreamPreviewInput): Promise<void> {
       onPreview: input.onPreview,
       onFinal: input.onFinal,
       tier: "fallback",
+      subscribe,
     });
   } catch (err2) {
     if (!input.signal.aborted) input.onError(err2);
+  }
+}
+
+// Morph chain — sequential img2img steps that move the hero from fromPrompt
+// to toPrompt via N intermediate prompts. Each step feeds its output as the
+// image_url of the next so identity carries through the transformation.
+// Used for voice intents and big semantic deltas, where we want the viewer
+// to SEE the change happen instead of a hard replacement.
+export interface StreamMorphChainInput {
+  fromPrompt: string;
+  toPrompt: string;
+  heroImageUrl: string;
+  steps?: number;
+  seed?: number;
+  falKey?: string;
+  signal: AbortSignal;
+  logger: Logger;
+  onStep: (url: string, index: number, total: number) => void;
+  onError: (err: unknown) => void;
+}
+
+function blendPrompts(fromPrompt: string, toPrompt: string, t: number): string {
+  if (t <= 0.34) return `${fromPrompt}, beginning to transform toward ${toPrompt}`;
+  if (t <= 0.67) return `${fromPrompt} and ${toPrompt}, mid-transformation`;
+  return `${toPrompt}, emerging from ${fromPrompt}`;
+}
+
+export async function streamMorphChain(input: StreamMorphChainInput): Promise<void> {
+  const credentials = input.falKey ?? FAL_KEY;
+  if (!credentials) {
+    input.onError(new Error("No fal credentials available for morph chain"));
+    return;
+  }
+  const scoped = input.falKey
+    ? createFalClient({ credentials: input.falKey })
+    : fal;
+  const subscribe = scoped.subscribe.bind(scoped);
+
+  const total = Math.max(2, Math.min(5, input.steps ?? 3));
+  let refUrl = input.heroImageUrl;
+
+  for (let i = 0; i < total; i++) {
+    if (input.signal.aborted) return;
+
+    const t = i / (total - 1);
+    const stepPrompt = blendPrompts(input.fromPrompt, input.toPrompt, t);
+    // Inference steps climb as we approach the target so the final frame is
+    // sharpest. Early frames stay cheap; they're the "in-between" motion.
+    const inferenceSteps = Math.round(4 + t * 4);
+
+    const payload: Record<string, unknown> = {
+      prompt: stepPrompt,
+      image_urls: [refUrl],
+      num_images: 1,
+      num_inference_steps: inferenceSteps,
+      image_size: "square_hd",
+      output_format: "jpeg",
+      enable_safety_checker: false,
+    };
+    if (typeof input.seed === "number") payload.seed = input.seed + i;
+
+    input.logger.info(
+      { step: i, total, model: FLOW_EDIT_MODEL, inferenceSteps },
+      "morph chain step start",
+    );
+
+    try {
+      const result = await subscribe(FLOW_EDIT_MODEL, {
+        input: payload,
+        logs: false,
+        abortSignal: input.signal,
+      });
+      if (input.signal.aborted) return;
+      const url = extractImageUrl(result?.data);
+      if (!url) {
+        input.logger.warn({ step: i, total }, "morph chain step returned no image");
+        input.onError(new Error(`morph chain step ${i} returned no image`));
+        return;
+      }
+      input.onStep(url, i, total);
+      refUrl = url;
+    } catch (err) {
+      if (input.signal.aborted) return;
+      input.logger.warn({ err, step: i }, "morph chain step errored");
+      input.onError(err);
+      return;
+    }
   }
 }

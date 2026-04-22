@@ -1,10 +1,21 @@
 import { Hono } from "hono";
-import { ClientEvent, ServerEvent } from "@music-visualizer/shared";
+import {
+  ClientEvent,
+  ServerEvent,
+  verifyTicket,
+} from "@music-visualizer/shared";
+import { env } from "./env";
 import { logger } from "./lib/logger";
 import { SessionManager } from "./session/session-manager";
 
-const port = Number(process.env.PORT ?? 3001);
-const isDev = process.env.NODE_ENV !== "production";
+const port = env.PORT;
+const isDev = env.NODE_ENV !== "production";
+const BETTER_AUTH_SECRET = env.BETTER_AUTH_SECRET;
+if (!BETTER_AUTH_SECRET) {
+  logger.warn(
+    "BETTER_AUTH_SECRET not set — WS upgrades will be rejected until it is",
+  );
+}
 
 const app = new Hono();
 
@@ -17,17 +28,33 @@ const manager = new SessionManager(logger);
 
 interface WsData {
   sessionId: string;
+  userId: string; // raw UUID, extracted from the signed ticket
 }
 
 const server = Bun.serve<WsData, never>({
   port,
-  fetch(req, srv) {
+  async fetch(req, srv) {
     const url = new URL(req.url);
     if (url.pathname === "/ws") {
+      // Require a short-lived HMAC ticket minted by apps/web after SIWE.
+      // No ticket → no connection, even if the user guesses the URL.
+      if (!BETTER_AUTH_SECRET) {
+        return new Response("server not configured", { status: 503 });
+      }
+      const token = url.searchParams.get("token");
+      if (!token) {
+        return new Response("missing token", { status: 401 });
+      }
+      const payload = await verifyTicket(token, BETTER_AUTH_SECRET);
+      if (!payload) {
+        return new Response("invalid or expired token", { status: 401 });
+      }
       const sessionId =
         url.searchParams.get("sessionId") ??
         `sess_${Math.random().toString(36).slice(2, 10)}`;
-      const upgraded = srv.upgrade(req, { data: { sessionId } });
+      const upgraded = srv.upgrade(req, {
+        data: { sessionId, userId: payload.userId },
+      });
       return upgraded
         ? undefined
         : new Response("upgrade failed", { status: 400 });
@@ -36,8 +63,8 @@ const server = Bun.serve<WsData, never>({
   },
   websocket: {
     open(ws) {
-      const { sessionId } = ws.data;
-      const session = manager.create(sessionId, (event: ServerEvent) => {
+      const { sessionId, userId } = ws.data;
+      const session = manager.create(sessionId, userId, (event: ServerEvent) => {
         if (isDev) {
           const check = ServerEvent.safeParse(event);
           if (!check.success) {
@@ -54,7 +81,7 @@ const server = Bun.serve<WsData, never>({
           logger.warn({ err, sessionId }, "ws send failed");
         }
       });
-      logger.info({ sessionId }, "ws opened");
+      logger.info({ sessionId, userId }, "ws opened");
       session.init();
     },
     message(ws, raw) {
@@ -94,7 +121,7 @@ const server = Bun.serve<WsData, never>({
       const event = result.data;
       switch (event.type) {
         case "hello":
-          session.init();
+          session.init({ falKey: event.falKey });
           break;
         case "scene.patch":
           session.applyPatch(event.patch);
@@ -110,6 +137,13 @@ const server = Bun.serve<WsData, never>({
           break;
         case "voice.phrase":
           session.applyVoice(event.text);
+          break;
+        case "audio.recognize":
+          session
+            .recognize(event.clipBase64, event.mimeType, event.trigger)
+            .catch((err) => {
+              logger.warn({ err, sessionId }, "session.recognize threw");
+            });
           break;
       }
     },

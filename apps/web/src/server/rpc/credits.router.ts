@@ -3,6 +3,7 @@ import { findPack } from "@music-visualizer/shared";
 import { and, eq, gte, sql, sum } from "drizzle-orm";
 import { decodeEventLog, getAddress, parseAbiItem } from "viem";
 import { z } from "zod";
+import { publicEnv } from "@/env";
 import { typeIdGenerator } from "@/lib/typeid";
 import { baseClient } from "@/lib/chain-clients";
 import { SCHEMA } from "../db";
@@ -85,7 +86,7 @@ export const creditsRouter = {
         throw new ORPCError("BAD_REQUEST", { message: "unknown pack" });
       }
 
-      const recipientRaw = process.env.NEXT_PUBLIC_PAY_RECIPIENT_BASE;
+      const recipientRaw = publicEnv.NEXT_PUBLIC_PAY_RECIPIENT_BASE;
       if (!recipientRaw) {
         throw new ORPCError("INTERNAL_SERVER_ERROR", {
           message: "NEXT_PUBLIC_PAY_RECIPIENT_BASE not set",
