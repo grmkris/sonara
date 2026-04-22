@@ -6,6 +6,7 @@ import { baseUSDC } from "@reown/appkit-pay";
 import { toast } from "sonner";
 import { PACKS, type Pack } from "@music-visualizer/shared";
 import { publicEnv } from "@/env";
+import { rpcClient } from "@/lib/orpc";
 
 const RECIPIENT = publicEnv.NEXT_PUBLIC_PAY_RECIPIENT_BASE;
 // Chain is embedded in `baseUSDC.network` (`eip155:8453`); server expects 8453.
@@ -36,35 +37,21 @@ export function TopUpButton({ onCredited }: TopUpButtonProps) {
         return;
       }
       try {
-        const res = await fetch("/api/credits/confirm", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          credentials: "include",
-          body: JSON.stringify({
-            txHash,
-            chainId: BASE_CHAIN_ID,
-            packId: pack.id,
-          }),
+        const json = await rpcClient.credits.confirmTopUp({
+          txHash,
+          chainId: BASE_CHAIN_ID,
+          packId: pack.id,
         });
-        const json = (await res.json().catch(() => ({}))) as {
-          ok?: boolean;
-          error?: string;
-          idempotent?: boolean;
-        };
-        if (!res.ok || !json.ok) {
-          toast.error(json.error ?? "credit confirmation failed", {
-            duration: 6000,
-          });
-        } else {
-          toast.success(
-            json.idempotent
-              ? "already credited"
-              : `+${pack.frames} frames, +${pack.commits} commits`,
-          );
-          onCredited?.({ frames: pack.frames, commits: pack.commits });
-        }
+        toast.success(
+          "idempotent" in json && json.idempotent
+            ? "already credited"
+            : `+${pack.frames} frames, +${pack.commits} commits`,
+        );
+        onCredited?.({ frames: pack.frames, commits: pack.commits });
       } catch (err) {
-        toast.error(err instanceof Error ? err.message : "confirm failed");
+        toast.error(err instanceof Error ? err.message : "confirm failed", {
+          duration: 6000,
+        });
       } finally {
         setBusy(null);
         setPendingPack(null);

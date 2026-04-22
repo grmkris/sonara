@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef } from "react";
 import { toast } from "sonner";
 import type { ClientEvent } from "@music-visualizer/shared";
 import { publicEnv } from "@/env";
+import { rpcClient } from "@/lib/orpc";
 import { WsClient } from "@/lib/ws/ws-client";
 import { useVisualizerStore } from "@/stores/visualizer-store";
 import { PRESET_NAMES, type PresetName } from "@/lib/render/presets";
@@ -34,19 +35,15 @@ export function useWsSession(): (event: ClientEvent) => void {
     const connect = async (): Promise<void> => {
       let token: string | null = null;
       try {
-        const res = await fetch("/api/auth/ws-ticket", {
-          method: "POST",
-          credentials: "include",
-        });
-        if (res.status === 401) return; // not signed in — stay offline
-        if (!res.ok) {
-          console.warn("[ws] ticket fetch failed:", res.status);
-          return;
-        }
-        const data = (await res.json()) as { token?: string };
-        token = data.token ?? null;
+        const data = await rpcClient.auth.mintWsTicket();
+        token = data.token;
       } catch (err) {
-        console.warn("[ws] ticket fetch threw:", err);
+        // UNAUTHORIZED → not signed in, stay offline quietly.
+        // Any other error is logged so we can spot misconfigured secrets.
+        const msg = err instanceof Error ? err.message : String(err);
+        if (!/unauthorized/i.test(msg)) {
+          console.warn("[ws] ticket fetch failed:", msg);
+        }
         return;
       }
       if (!token || cancelled) return;
