@@ -15,7 +15,7 @@
     "fix": "oxlint --fix"
   },
   "dependencies": {
-    "@electric-sql/pglite": "^0.2.15"
+    "@electric-sql/pglite": "^0.4.4"
   },
   "devDependencies": {
     "typescript": "^6.0.3"

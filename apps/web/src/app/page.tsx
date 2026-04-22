@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { Suspense, useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { DreamCanvas } from "@/components/visualizer/dream-canvas";
 import { GhostOverlay } from "@/components/visualizer/ghost-overlay";
@@ -17,13 +17,16 @@ import { TriggerLog } from "@/components/visualizer/trigger-log";
 import { ScanSweep } from "@/components/visualizer/scan-sweep";
 import { Stamp } from "@/components/visualizer/stamp";
 import { VoiceListen } from "@/components/visualizer/voice-listen";
+import { NowPlaying } from "@/components/visualizer/now-playing";
 import { Button } from "@/components/ui/button";
 import { useWsSession } from "@/hooks/use-ws-session";
 import {
   useAudioFeatures,
   type AudioSource,
 } from "@/hooks/use-audio-features";
+import { useSongRecognition } from "@/hooks/use-song-recognition";
 import { useHotkey } from "@/hooks/use-hotkey";
+import { useChainDrain } from "@/hooks/use-chain-drain";
 import {
   hydratePresetPrefs,
   hydrateUiVisible,
@@ -33,15 +36,34 @@ import { cn } from "@/lib/utils";
 
 export default function Page() {
   const send = useWsSession();
+  useChainDrain();
   const [audioSource, setAudioSource] = useState<AudioSource>({ type: "none" });
 
-  const onAudioError = useCallback((err: unknown) => {
-    const name = err instanceof Error ? err.name || err.message : "unavailable";
-    toast.error("mic unavailable", { description: name, duration: 3200 });
+  const onAudioError = useCallback(
+    (err: unknown) => {
+      const name =
+        err instanceof Error ? err.name || err.message : "unavailable";
+      // NotAllowedError fires when the user cancels the share picker or
+      // denies mic permission — silent reset is friendlier than a toast.
+      if (name === "NotAllowedError") {
+        setAudioSource({ type: "none" });
+        return;
+      }
+      const label =
+        audioSource.type === "display" ? "audio share failed" : "mic unavailable";
+      toast.error(label, { description: name, duration: 3200 });
+      setAudioSource({ type: "none" });
+    },
+    [audioSource.type],
+  );
+
+  const onAudioSourceLost = useCallback(() => {
+    toast("audio share stopped", { duration: 2200 });
     setAudioSource({ type: "none" });
   }, []);
 
-  useAudioFeatures(audioSource, send, onAudioError);
+  useAudioFeatures(audioSource, send, onAudioError, onAudioSourceLost);
+  useSongRecognition(send);
 
   const uiVisible = useVisualizerStore((s) => s.uiVisible);
   const setUiVisible = useVisualizerStore((s) => s.setUiVisible);
@@ -88,6 +110,7 @@ export default function Page() {
       <div className="pointer-events-none absolute inset-x-0 top-0 z-30 flex items-start justify-between px-10 pt-8">
         <Logotype />
         <div className="flex items-center gap-6 pt-2">
+          <NowPlaying />
           <Timestamp />
           <UserControls />
           <HideToggle />
@@ -161,7 +184,12 @@ export default function Page() {
       </div>
 
       <Stamp />
-      <DemoRecorder />
+      {/* DemoRecorder reads `?record=` via useSearchParams, which Next 16
+          requires inside a Suspense boundary so the rest of the page can
+          prerender. */}
+      <Suspense fallback={null}>
+        <DemoRecorder />
+      </Suspense>
     </main>
   );
 }
