@@ -1,4 +1,4 @@
-import { fal } from "@fal-ai/client";
+import { createFalClient } from "@fal-ai/client";
 import {
   SCENE_TEMPLATE_KEYS,
   VISUAL_PRESET_DESCRIPTIONS,
@@ -119,17 +119,8 @@ export interface VoiceIntent {
 
 function nowPlayingBlock(np: NowPlaying | null | undefined): string {
   if (!np) return "  (unknown)";
-  const lines: string[] = [];
-  lines.push(`  title: ${np.title}`);
-  lines.push(`  artist: ${np.artist}`);
+  const lines: string[] = [`  title: ${np.title}`, `  artist: ${np.artist}`];
   if (np.genre) lines.push(`  genre: ${np.genre}`);
-  if (np.spotify) {
-    lines.push(
-      `  energy: ${np.spotify.energy.toFixed(2)}, valence: ${np.spotify.valence.toFixed(
-        2,
-      )}, tempo: ${Math.round(np.spotify.tempo)}bpm, acousticness: ${np.spotify.acousticness.toFixed(2)}`,
-    );
-  }
   return lines.join("\n");
 }
 
@@ -233,11 +224,9 @@ function coerceIntent(raw: unknown): VoiceIntent | null {
   return { patch, commit, reset, preset, lookPreset, atmosphere };
 }
 
-let _warnedNoKey = false;
-
-// Fallback intent used when the LLM is unavailable. Atmosphere still flows
-// (via the curated static pool) so the image keeps breathing; structural
-// intent stays empty.
+// Fallback intent used when the LLM errors out. Atmosphere still flows (via
+// the curated static pool) so the image keeps breathing; structural intent
+// stays empty.
 function fallbackIntent(): VoiceIntent {
   return {
     patch: {},
@@ -253,20 +242,11 @@ export async function parseVoiceIntent(
   input: VoiceIntentInput,
   opts: VoiceIntentOpts,
 ): Promise<VoiceIntent> {
-  if (!env.FAL_KEY) {
-    if (!_warnedNoKey) {
-      _warnedNoKey = true;
-      opts.logger.warn(
-        "FAL_KEY not set — voice-intent LLM disabled, falling back to atmospheric pool",
-      );
-    }
-    return fallbackIntent();
-  }
-
   const model = env.FAL_LLM_MODEL ?? DEFAULT_MODEL;
+  const scoped = createFalClient({ credentials: env.FAL_KEY });
 
   try {
-    const result = await fal.subscribe("fal-ai/any-llm", {
+    const result = await scoped.subscribe("fal-ai/any-llm", {
       input: {
         model,
         system_prompt: buildSystemPrompt(),

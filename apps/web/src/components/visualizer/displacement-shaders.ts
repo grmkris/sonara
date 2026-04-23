@@ -129,10 +129,21 @@ uniform float uWetEdge;
 uniform float uGranulation;
 // Halftone / riso post-pass — 0 = off, 1 = full.
 uniform float uHalftone;
+// Papari–Kuwahara painterly filter mix — 0 = off, 1 = full.
+uniform float uPainterly;
+// Watercolour traditions — 0 = off, 1 = full.
+uniform float uSalt;         // crystalline absorption spots
+uniform float uCauliflower;  // wet-on-damp backrun rings
+uniform float uSplatter;     // brush-flick droplets
 // Gray-Scott reaction-diffusion density mask. Sampled from a separate
 // simulation layer (rd-layer.ts). uRDAmount blends the mask in; 0 = off.
 uniform sampler2D uRD;
 uniform float uRDAmount;
+// Reveal-from-noise (diffusion-materialize). uRevealActive is 0/1, uRevealT
+// animates 0..1 per frame-arrival. Drives a per-pixel threshold gate so the
+// newly-landed image crystallises in patches, reading as "diffusion denoise".
+uniform float uRevealActive;
+uniform float uRevealT;
 
 float hash21(vec2 p) {
   p = fract(p * vec2(234.34, 435.345));
@@ -551,6 +562,63 @@ void main() {
     color += spread * hiMask * uHalation * 0.5;
   }
 
+  // --- Papari–Kuwahara painterly filter ---
+  // Reference: Papari, Petkov, Campisi (2007), "Artistic Edge and Corner
+  // Enhancing Smoothing", IEEE TIP — polynomial-weighted variant of Kuwahara
+  // (1976). Samples a small disk around the current texel in 8 angular
+  // sectors, picks the sector with the lowest luminance variance, outputs its
+  // mean. Edge-preserving — flat regions smooth, real edges stay sharp.
+  // Reads as settled painterly brushwork.
+  if (uPainterly > 0.001) {
+    vec2 pxK = 1.0 / max(vec2(1.0), uCurrTexSize);
+    vec2 uvK = coverUv(uv, uCurrTexSize, uViewSize);
+    vec3 sumRgb[8];
+    vec3 sumRgb2[8];
+    float sumW[8];
+    for (int i = 0; i < 8; i++) {
+      sumRgb[i] = vec3(0.0);
+      sumRgb2[i] = vec3(0.0);
+      sumW[i] = 0.0;
+    }
+    // 3 concentric rings × 8 angular samples = 24 disk samples.
+    // Inner samples are weighted more so the mean tracks local colour.
+    for (int ir = 1; ir <= 3; ir++) {
+      float r = float(ir) * 1.1;
+      float rw = 1.0 / (1.0 + float(ir - 1) * 0.6);
+      for (int ia = 0; ia < 8; ia++) {
+        float theta = (float(ia) + 0.5) * 0.78539816;
+        vec2 off = vec2(cos(theta), sin(theta)) * r;
+        vec3 c = texture(uCurr, uvK + pxK * off).rgb;
+        sumRgb[ia]  += c * rw;
+        sumRgb2[ia] += c * c * rw;
+        sumW[ia]    += rw;
+      }
+    }
+    // Centre sample shared across all sectors — anchors the result so 8
+    // disjoint means don't drift wildly when the neighbourhood is flat.
+    vec3 cc = texture(uCurr, uvK).rgb;
+    for (int k = 0; k < 8; k++) {
+      sumRgb[k]  += cc * 0.35;
+      sumRgb2[k] += cc * cc * 0.35;
+      sumW[k]    += 0.35;
+    }
+    vec3 lumaK = vec3(0.299, 0.587, 0.114);
+    vec3 bestMean = cc;
+    float bestVar = 1e10;
+    for (int k = 0; k < 8; k++) {
+      float w = max(1e-5, sumW[k]);
+      vec3 mean = sumRgb[k] / w;
+      vec3 mean2 = sumRgb2[k] / w;
+      vec3 variance = max(vec3(0.0), mean2 - mean * mean);
+      float lumaVar = dot(variance, lumaK);
+      if (lumaVar < bestVar) {
+        bestVar = lumaVar;
+        bestMean = mean;
+      }
+    }
+    color = mix(color, bestMean, clamp(uPainterly, 0.0, 1.0));
+  }
+
   // --- Focal: radial depth-of-field ---
   // Pixels outside the focus ring are replaced by a blurred copy of the
   // source texture, proportional to how far from centre they are.
@@ -668,6 +736,34 @@ void main() {
   vec3 coolTint = vec3(-0.015, -0.005, 0.020);
   vec3 warmTint = vec3( 0.025,  0.010, -0.015);
   color += mix(coolTint, warmTint, arcT) * 0.9;
+
+  // --- Reveal-from-noise (diffusion materialise) ---
+  // Each time a new frame lands, revealT animates 0→1 over ~1.1s. A per-pixel
+  // threshold map (low-freq fbm + high-freq hash) gates the final color:
+  // pixels whose threshold is below revealT are revealed; the rest show a
+  // hash-noise substrate tinted by the ambient colour of the frame. Reads
+  // like diffusion denoising — the image crystallises in patches rather
+  // than uniformly fading.
+  if (uRevealActive > 0.5 && uRevealT < 0.999) {
+    float thrLow = fbm2(vUv * 3.0 + uTime * 0.04);
+    float thrHi = hash21(vUv * 800.0);
+    float thr = mix(thrLow, thrHi, 0.35);
+    float revealEdge = smoothstep(thr - 0.12, thr + 0.04, uRevealT);
+    float n1 = hash21(gl_FragCoord.xy + vec2(fract(uTime * 3.0), 0.0));
+    float n2 = hash21(gl_FragCoord.xy + vec2(0.0, fract(uTime * 5.0)));
+    float n3 = hash21(gl_FragCoord.xy + vec2(fract(uTime * 7.0), fract(uTime * 11.0)));
+    vec3 substrate = vec3(n1, n2, n3) * 0.45 + 0.18;
+    // Tint substrate by the four corners of uCurr so the noise doesn't look
+    // disconnected from the incoming image's palette.
+    vec3 ambient = (
+      texture(uCurr, vec2(0.08, 0.08)).rgb +
+      texture(uCurr, vec2(0.92, 0.08)).rgb +
+      texture(uCurr, vec2(0.08, 0.92)).rgb +
+      texture(uCurr, vec2(0.92, 0.92)).rgb
+    ) * 0.25;
+    substrate = mix(substrate, (substrate + ambient) * 0.5, 0.55);
+    color = mix(substrate, color, revealEdge);
+  }
 
   // --- Dynamic vignette ---
   float r = distance(vUv, vec2(0.5));

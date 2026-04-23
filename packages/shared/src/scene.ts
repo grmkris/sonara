@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { NowPlaying } from "./now-playing";
 
 export const DreamSceneState = z.object({
   subject: z.string(),
@@ -22,6 +23,10 @@ export const DreamSceneState = z.object({
 
   references: z.array(z.string()),
   version: z.number().int().nonnegative(),
+
+  // Server-authoritative. Set by the song-recognition pipeline; cleared on
+  // sustained silence or reset. Clients never patch this field.
+  nowPlaying: NowPlaying.optional(),
 });
 
 export type DreamSceneState = z.infer<typeof DreamSceneState>;

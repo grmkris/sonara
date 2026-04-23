@@ -2,6 +2,7 @@ import { create } from "zustand";
 import {
   type AudioFeatures,
   type DreamSceneState,
+  type NowPlaying,
   defaultAudio,
   defaultScene,
 } from "@music-visualizer/shared";
@@ -109,9 +110,29 @@ export interface VisualizerState {
   // callback overlay to resurface earlier scenes at low opacity.
   heroBank: string[];
 
+  // Identified song (or null). Mirrored from scene.nowPlaying on server
+  // updates so UI doesn't have to dig through scene on every render. Also
+  // used as the "have we recognized yet?" gate for the client's auto-trigger.
+  nowPlaying: NowPlaying | null;
+  // Monotonic — bumped whenever a manual "identify this" request is made
+  // from the UI. `use-song-recognition` subscribes and kicks a new call.
+  identifyTick: number;
+
+  // Morph-chain queue. Server emits chain frames as `frame.final` with
+  // chainIndex/chainLength; we buffer them here and release one at a time
+  // from the drain hook so beats (or a 600 ms fallback) gate the reveal.
+  pendingChain: { url: string; version: number; index: number; total: number }[];
+
   setScene: (state: DreamSceneState) => void;
   setAudio: (f: AudioFeatures) => void;
   pushFrame: (url: string, version: number) => void;
+  enqueueChainFrame: (entry: {
+    url: string;
+    version: number;
+    index: number;
+    total: number;
+  }) => void;
+  dequeueChainFrame: () => void;
   setStatus: (s: JobStatus, msg?: string) => void;
   setConnected: (c: boolean) => void;
 
@@ -128,6 +149,9 @@ export interface VisualizerState {
   selectSavedPreset: (name: string) => void;
   deleteSavedPreset: (name: string) => void;
   pushHero: (url: string) => void;
+
+  setNowPlaying: (track: NowPlaying | null) => void;
+  requestIdentify: () => void;
 }
 
 export const useVisualizerStore = create<VisualizerState>()((set, get) => ({
@@ -154,6 +178,9 @@ export const useVisualizerStore = create<VisualizerState>()((set, get) => ({
   customPreset: null,
   lastEffective: null,
   heroBank: [],
+  nowPlaying: null,
+  identifyTick: 0,
+  pendingChain: [],
 
   setScene: (state) => set({ scene: state }),
   setAudio: (f) => set({ audio: f }),
@@ -169,6 +196,46 @@ export const useVisualizerStore = create<VisualizerState>()((set, get) => ({
       currentFrame: url,
       latestVersion: version,
     }));
+  },
+  enqueueChainFrame: (entry) => {
+    set((s) => {
+      // If a newer version has started, drop the older chain entirely.
+      const trimmed =
+        s.pendingChain[0] && s.pendingChain[0].version < entry.version
+          ? []
+          : s.pendingChain;
+      // Display the first frame of a chain immediately so the user gets
+      // instant feedback; subsequent frames go through the beat-drain. This
+      // prevents the "nothing happens for 1.2s after I speak" lag.
+      if (entry.index === 0) {
+        if (entry.version < s.latestVersion) {
+          return { pendingChain: trimmed };
+        }
+        return {
+          previousFrame: s.currentFrame,
+          currentFrame: entry.url,
+          latestVersion: entry.version,
+          pendingChain: trimmed,
+        };
+      }
+      return { pendingChain: [...trimmed, entry] };
+    });
+  },
+  dequeueChainFrame: () => {
+    set((s) => {
+      const head = s.pendingChain[0];
+      if (!head) return {};
+      if (head.version < s.latestVersion) {
+        // Stale chain tail from a superseded version — just drop it.
+        return { pendingChain: s.pendingChain.slice(1) };
+      }
+      return {
+        previousFrame: s.currentFrame,
+        currentFrame: head.url,
+        latestVersion: head.version,
+        pendingChain: s.pendingChain.slice(1),
+      };
+    });
   },
   setStatus: (status, message) => {
     set({ status, statusMessage: message ?? null });
@@ -266,6 +333,9 @@ export const useVisualizerStore = create<VisualizerState>()((set, get) => ({
       const next = [url, ...s.heroBank.filter((u) => u !== url)].slice(0, 6);
       return { heroBank: next };
     }),
+
+  setNowPlaying: (track) => set({ nowPlaying: track }),
+  requestIdentify: () => set((s) => ({ identifyTick: s.identifyTick + 1 })),
 }));
 
 /**

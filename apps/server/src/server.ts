@@ -1,21 +1,15 @@
 import { Hono } from "hono";
 import {
-  ClientEvent,
-  ServerEvent,
-  verifyTicket,
-} from "@music-visualizer/shared";
+  sessionRouter,
+  WsRPCHandler,
+  type SessionContext,
+} from "@music-visualizer/api/server";
+import { verifyTicket } from "@music-visualizer/shared";
 import { env } from "./env";
 import { logger } from "./lib/logger";
 import { SessionManager } from "./session/session-manager";
 
 const port = env.PORT;
-const isDev = env.NODE_ENV !== "production";
-const BETTER_AUTH_SECRET = env.BETTER_AUTH_SECRET;
-if (!BETTER_AUTH_SECRET) {
-  logger.warn(
-    "BETTER_AUTH_SECRET not set — WS upgrades will be rejected until it is",
-  );
-}
 
 const app = new Hono();
 
@@ -25,6 +19,12 @@ app.get("/", (c) =>
 );
 
 const manager = new SessionManager(logger);
+
+// One oRPC handler for the whole session surface. Bun's websocket hooks
+// delegate message/close routing to this handler; the per-connection
+// context pulls the Session instance from the manager using sessionId from
+// ws.data.
+const wsHandler = new WsRPCHandler<SessionContext>(sessionRouter);
 
 interface WsData {
   sessionId: string;
@@ -38,14 +38,11 @@ const server = Bun.serve<WsData, never>({
     if (url.pathname === "/ws") {
       // Require a short-lived HMAC ticket minted by apps/web after SIWE.
       // No ticket → no connection, even if the user guesses the URL.
-      if (!BETTER_AUTH_SECRET) {
-        return new Response("server not configured", { status: 503 });
-      }
       const token = url.searchParams.get("token");
       if (!token) {
         return new Response("missing token", { status: 401 });
       }
-      const payload = await verifyTicket(token, BETTER_AUTH_SECRET);
+      const payload = await verifyTicket(token, env.BETTER_AUTH_SECRET);
       if (!payload) {
         return new Response("invalid or expired token", { status: 401 });
       }
@@ -64,91 +61,23 @@ const server = Bun.serve<WsData, never>({
   websocket: {
     open(ws) {
       const { sessionId, userId } = ws.data;
-      const session = manager.create(sessionId, userId, (event: ServerEvent) => {
-        if (isDev) {
-          const check = ServerEvent.safeParse(event);
-          if (!check.success) {
-            logger.error(
-              { issues: check.error.issues, type: (event as { type?: unknown }).type, sessionId },
-              "outbound ServerEvent failed validation — dropped",
-            );
-            return;
-          }
-        }
-        try {
-          ws.send(JSON.stringify(event));
-        } catch (err) {
-          logger.warn({ err, sessionId }, "ws send failed");
-        }
-      });
+      manager.create(sessionId, userId);
       logger.info({ sessionId, userId }, "ws opened");
-      session.init();
     },
-    message(ws, raw) {
+    async message(ws, raw) {
       const { sessionId } = ws.data;
       const session = manager.get(sessionId);
       if (!session) {
         logger.warn({ sessionId }, "message with no session");
         return;
       }
-      let parsed: unknown;
-      try {
-        const text =
-          typeof raw === "string"
-            ? raw
-            : new TextDecoder().decode(
-                raw instanceof ArrayBuffer
-                  ? raw
-                  : new Uint8Array(
-                      raw.buffer,
-                      raw.byteOffset,
-                      raw.byteLength,
-                    ),
-              );
-        parsed = JSON.parse(text);
-      } catch (err) {
-        logger.warn({ err, sessionId }, "ws message parse error");
-        return;
-      }
-      const result = ClientEvent.safeParse(parsed);
-      if (!result.success) {
-        logger.warn(
-          { issues: result.error.issues, sessionId },
-          "invalid ClientEvent",
-        );
-        return;
-      }
-      const event = result.data;
-      switch (event.type) {
-        case "hello":
-          session.init({ falKey: event.falKey });
-          break;
-        case "scene.patch":
-          session.applyPatch(event.patch);
-          break;
-        case "audio.features":
-          session.applyAudio(event.features);
-          break;
-        case "generate.commit":
-          session.commit();
-          break;
-        case "session.reset":
-          session.reset();
-          break;
-        case "voice.phrase":
-          session.applyVoice(event.text);
-          break;
-        case "audio.recognize":
-          session
-            .recognize(event.clipBase64, event.mimeType, event.trigger)
-            .catch((err) => {
-              logger.warn({ err, sessionId }, "session.recognize threw");
-            });
-          break;
-      }
+      await wsHandler.message(ws, raw, {
+        context: { session },
+      });
     },
     close(ws) {
       const { sessionId } = ws.data;
+      wsHandler.close(ws);
       manager.destroy(sessionId);
       logger.info({ sessionId }, "ws closed");
     },

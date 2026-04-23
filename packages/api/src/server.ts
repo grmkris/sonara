@@ -1,6 +1,19 @@
-// Server-side surface. Consumers mount the router via RPCHandler and can
-// build their own procedures via `os.$context<...>()`.
+// Server-side surface. Consumers mount the router via one of the adapters:
+//   - `RPCHandler` (HTTP fetch) for Next.js / Hono
+//   - `WsRPCHandler` (Bun WebSocket) for apps/server's realtime surface
 export { RPCHandler } from "@orpc/server/fetch";
-export { ORPCError, os } from "@orpc/server";
+export { RPCHandler as WsRPCHandler } from "@orpc/server/bun-ws";
+export {
+  EventPublisher,
+  ORPCError,
+  eventIterator,
+  os,
+} from "@orpc/server";
 export { appRouter, type AppRouter } from "./routers/app-router";
+export {
+  sessionRouter,
+  type SessionContext,
+  type SessionLike,
+  type SessionRouter,
+} from "./routers/session.router";
 export { buildContext, type ApiContext, type ApiSession } from "./context";

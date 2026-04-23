@@ -1,12 +1,12 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import type { ClientEvent } from "@music-visualizer/shared";
+import type { SessionSend } from "@/lib/session-actions";
 import { useVoiceRecognition } from "@/hooks/use-voice-recognition";
 import { cn } from "@/lib/utils";
 
 interface VoiceListenProps {
-  send: (event: ClientEvent) => void;
+  send: SessionSend;
 }
 
 // Rotating "try: …" hints shown beneath the listening indicator. Rotate every

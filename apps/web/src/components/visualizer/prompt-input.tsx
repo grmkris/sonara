@@ -2,12 +2,13 @@
 
 import { ArrowRight } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import type { ClientEvent, DreamSceneState } from "@music-visualizer/shared";
+import type { DreamSceneState } from "@music-visualizer/shared";
+import type { SessionSend } from "@/lib/session-actions";
 import { Input } from "@/components/ui/input";
 import { useVisualizerStore } from "@/stores/visualizer-store";
 
 interface PromptInputProps {
-  send: (e: ClientEvent) => void;
+  send: SessionSend;
 }
 
 type FieldKey = "subject" | "environment" | "mood" | "palette";

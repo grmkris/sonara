@@ -48,6 +48,17 @@ export interface PresetConfig {
   wetEdge: number; // dark bleed ring at luminance boundaries (classic sumi-e)
   granulation: number; // pigment speckle on mid-tones from fbm noise
   halftone: number; // printmaking dot/line screen overlay
+  // Papari–Kuwahara polynomial painterly filter. 0 = off, 1 = full mix.
+  painterly: number;
+  // Watercolour traditions.
+  // salt: crystalline absorption spots — bright centres with dark pigment halos,
+  //   scattered sparsely, mid-tone gated.
+  // cauliflower: wet-on-damp backrun — fractal dark ring with lighter interior,
+  //   uses domain-warped fbm for organic edges.
+  // splatter: brush-flick droplets — dark soft disks of varied size.
+  salt: number;
+  cauliflower: number;
+  splatter: number;
   // Gray-Scott reaction-diffusion overlay.
   // rd: amount (0 = off, 1 = fully blended ink-density mask).
   // rdFeed / rdKill: parameter zone (see rd-layer.ts for Pearson zones).
@@ -84,6 +95,10 @@ export const BASE: PresetConfig = {
   wetEdge: 0,
   granulation: 0,
   halftone: 0,
+  painterly: 0,
+  salt: 0,
+  cauliflower: 0,
+  splatter: 0,
   rd: 0,
   // Default to "spots" zone per Pearson. Active when rd > 0.
   rdFeed: 0.037,
@@ -93,7 +108,7 @@ export const BASE: PresetConfig = {
 // Preset registry. Order roughly "closest to baseline" → "most distinct".
 // Keys MUST match `VISUAL_PRESET_NAMES` in `packages/shared/src/visual-presets.ts`.
 export const PRESETS: Record<PresetName, PresetConfig> = {
-  wet_ink: { ...BASE, wetEdge: 0.4, granulation: 0.25 },
+  wet_ink: { ...BASE, wetEdge: 0.4, granulation: 0.25, painterly: 0.35, salt: 0.3 },
 
   ember: {
     ...BASE,
@@ -136,6 +151,7 @@ export const PRESETS: Record<PresetName, PresetConfig> = {
     noiseMult: 1.3,
     feedbackAmount: 0.1,
     invert: 0.35,
+    splatter: 0.35,
   },
 
   silent_film: {
@@ -169,6 +185,7 @@ export const PRESETS: Record<PresetName, PresetConfig> = {
     bloomMult: 0.9,
     washi: 0.35,
     grain: 0.15,
+    splatter: 0.3,
     // Subtle drift of dissolving spots — like rain spots settling on paper.
     rd: 0.3,
     rdFeed: 0.029,
@@ -187,6 +204,8 @@ export const PRESETS: Record<PresetName, PresetConfig> = {
     grain: 0.18,
     granulation: 0.4,
     wetEdge: 0.25,
+    painterly: 0.45,
+    salt: 0.25,
   },
 
   tide_pool: {
@@ -202,6 +221,7 @@ export const PRESETS: Record<PresetName, PresetConfig> = {
     bokashi: 0.45,
     wetEdge: 0.55,
     granulation: 0.35,
+    cauliflower: 0.45,
     // Pearson "spots" zone — discrete organic dots that form, persist, divide.
     rd: 0.45,
     rdFeed: 0.037,
@@ -270,6 +290,7 @@ export const PRESETS: Record<PresetName, PresetConfig> = {
     washi: 0.5,
     deckle: 0.3,
     drybrush: 0.25,
+    painterly: 0.35,
   },
 
   salt_flat: {
@@ -319,6 +340,7 @@ export const PRESETS: Record<PresetName, PresetConfig> = {
     duotoneHi: [0.92, 0.90, 0.88],
     halation: 0.45,
     focal: 0.35,
+    painterly: 0.4,
   },
 
   transfer_paper: {
@@ -413,6 +435,10 @@ export function lerpPreset(
     wetEdge: lerpNumber(a.wetEdge, b.wetEdge, k),
     granulation: lerpNumber(a.granulation, b.granulation, k),
     halftone: lerpNumber(a.halftone, b.halftone, k),
+    painterly: lerpNumber(a.painterly, b.painterly, k),
+    salt: lerpNumber(a.salt, b.salt, k),
+    cauliflower: lerpNumber(a.cauliflower, b.cauliflower, k),
+    splatter: lerpNumber(a.splatter, b.splatter, k),
     rd: lerpNumber(a.rd, b.rd, k),
     rdFeed: lerpNumber(a.rdFeed, b.rdFeed, k),
     rdKill: lerpNumber(a.rdKill, b.rdKill, k),

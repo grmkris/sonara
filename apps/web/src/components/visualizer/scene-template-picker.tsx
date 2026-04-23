@@ -1,13 +1,14 @@
 "use client";
 
 import { useCallback } from "react";
-import type { ClientEvent, DreamSceneState } from "@music-visualizer/shared";
+import type { DreamSceneState } from "@music-visualizer/shared";
 import { SCENE_TEMPLATES } from "@music-visualizer/shared";
+import type { SessionSend } from "@/lib/session-actions";
 import { useVisualizerStore } from "@/stores/visualizer-store";
 import { cn } from "@/lib/utils";
 
 interface SceneTemplatePickerProps {
-  send: (e: ClientEvent) => void;
+  send: SessionSend;
 }
 
 // Horizontal chip-row of 8 scene templates. One click loads the template's

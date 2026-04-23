@@ -1,7 +1,8 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import type { ClientEvent, DreamSceneState } from "@music-visualizer/shared";
+import type { DreamSceneState } from "@music-visualizer/shared";
+import type { SessionSend } from "@/lib/session-actions";
 import { Slider } from "@/components/ui/slider";
 import { Separator } from "@/components/ui/separator";
 import {
@@ -16,7 +17,7 @@ import { useVisualizerStore } from "@/stores/visualizer-store";
 import { debounce } from "@/lib/debounce";
 
 interface ControlsPanelProps {
-  send: (e: ClientEvent) => void;
+  send: SessionSend;
 }
 
 type SliderKey = "softness" | "surrealness" | "abstraction" | "stability";

@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import type { AudioFeatures, ClientEvent } from "@music-visualizer/shared";
+import type { AudioFeatures } from "@music-visualizer/shared";
+import type { SessionSend } from "@/lib/session-actions";
 import { AudioEngine } from "@/lib/audio/analyzer";
 import { createMusicalityGate } from "@/lib/audio/musicality-gate";
 import { useVisualizerStore } from "@/stores/visualizer-store";
@@ -12,7 +13,8 @@ const UPSTREAM_INTERVAL_MS = 1000 / UPSTREAM_HZ;
 export type AudioSource =
   | { type: "none" }
   | { type: "element"; element: HTMLAudioElement }
-  | { type: "mic" };
+  | { type: "mic" }
+  | { type: "display" };
 
 // Module-level handle to the current AudioEngine so sibling components
 // (WaveformRibbon, SpectrumCurve, etc.) can read the AnalyserNode directly
@@ -24,8 +26,9 @@ export function getCurrentAudioEngine(): AudioEngine | null {
 
 export function useAudioFeatures(
   source: AudioSource,
-  send: (event: ClientEvent) => void,
+  send: SessionSend,
   onError?: (err: unknown) => void,
+  onSourceLost?: () => void,
 ): void {
   const engineRef = useRef<AudioEngine | null>(null);
   const lastSentAtRef = useRef(0);
@@ -57,13 +60,16 @@ export function useAudioFeatures(
       }
     };
     engine.onTick(tick);
+    // Relay "source lost" (user hit Stop sharing in the browser) so the UI
+    // can reset the source picker to "none".
+    engine.onSourceLost(() => onSourceLost?.());
 
     return () => {
       engine.stop();
       engineRef.current = null;
       if (currentEngine === engine) currentEngine = null;
     };
-  }, [send]);
+  }, [send, onSourceLost]);
 
   useEffect(() => {
     const engine = engineRef.current;
@@ -76,6 +82,8 @@ export function useAudioFeatures(
           await engine.attachElement(source.element);
         } else if (source.type === "mic") {
           await engine.attachMic();
+        } else if (source.type === "display") {
+          await engine.attachDisplay();
         } else {
           engine.detachSource();
         }

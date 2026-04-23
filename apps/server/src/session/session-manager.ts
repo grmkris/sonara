@@ -1,4 +1,3 @@
-import type { ServerEvent } from "@music-visualizer/shared";
 import type { Logger } from "../lib/logger";
 import { Session } from "./session";
 
@@ -10,10 +9,10 @@ export class SessionManager {
     this.logger = logger;
   }
 
-  create(id: string, send: (e: ServerEvent) => void): Session {
+  create(id: string, userId: string): Session {
     const existing = this.sessions.get(id);
     if (existing) existing.close();
-    const session = new Session({ id, send, logger: this.logger });
+    const session = new Session({ id, userId, logger: this.logger });
     this.sessions.set(id, session);
     return session;
   }

@@ -297,6 +297,9 @@ export function DisplacementCanvas() {
       uHalftone: gl.getUniformLocation(program, "uHalftone"),
       uRD: gl.getUniformLocation(program, "uRD"),
       uRDAmount: gl.getUniformLocation(program, "uRDAmount"),
+      uRevealActive: gl.getUniformLocation(program, "uRevealActive"),
+      uRevealT: gl.getUniformLocation(program, "uRevealT"),
+      uPainterly: gl.getUniformLocation(program, "uPainterly"),
     };
     gl.uniform1i(uni.uCurr, 0);
     gl.uniform1i(uni.uPrev, 1);
@@ -482,6 +485,17 @@ export function DisplacementCanvas() {
     const driftStart = performance.now();
     const mountedAt = performance.now();
 
+    // Reveal-from-noise animation state. Re-armed on every image-ready event
+    // (markImageLoaded writes crossfadeStartedAt); runs for REVEAL_MS, with
+    // onset impulses nudging revealT forward so beats punch the materialise.
+    const REVEAL_MS = 1100;
+    let revealStartAt: number | null = null;
+    let lastCrossfadeAt: number | null =
+      useVisualizerStore.getState().crossfadeStartedAt;
+    // Seed a reveal on initial mount if there's already a loaded frame — so
+    // the first hero image crystallises in rather than appearing instantly.
+    if (lastCrossfadeAt !== null) revealStartAt = performance.now();
+
     let raf = 0;
     const tick = () => {
       raf = requestAnimationFrame(tick);
@@ -494,6 +508,12 @@ export function DisplacementCanvas() {
       if (Math.abs(intensity - lastIntensity) > 0.03) {
         envelopes = buildEnvelopes(intensity, envelopes);
         lastIntensity = intensity;
+      }
+
+      // Arm a reveal whenever markImageLoaded bumps crossfadeStartedAt.
+      if (state.crossfadeStartedAt !== lastCrossfadeAt) {
+        lastCrossfadeAt = state.crossfadeStartedAt;
+        if (state.crossfadeStartedAt !== null) revealStartAt = now;
       }
       const coef = intensityCoefficients(intensity);
       const targets = targetsFromAudio(state.audio, intensity);
@@ -767,7 +787,26 @@ export function DisplacementCanvas() {
       gl.uniform1f(uni.uWetEdge, effective.wetEdge);
       gl.uniform1f(uni.uGranulation, effective.granulation);
       gl.uniform1f(uni.uHalftone, effective.halftone);
+      gl.uniform1f(uni.uPainterly, effective.painterly);
       gl.uniform1f(uni.uRDAmount, effective.rd);
+
+      // Reveal-from-noise. Base progress is linear over REVEAL_MS; kick/snare
+      // onsets nudge it forward so beats actually "materialise" pixels.
+      let revealActive = 0;
+      let revealT = 1;
+      if (revealStartAt !== null) {
+        const elapsed = now - revealStartAt;
+        if (elapsed < REVEAL_MS) {
+          const base = Math.min(1, elapsed / REVEAL_MS);
+          const bump = impulses.kick * 0.06 + impulses.snare * 0.03;
+          revealT = Math.min(1, base + bump);
+          revealActive = 1;
+        } else {
+          revealStartAt = null;
+        }
+      }
+      gl.uniform1f(uni.uRevealActive, revealActive);
+      gl.uniform1f(uni.uRevealT, revealT);
 
       gl.bindVertexArray(vao);
       gl.drawArrays(gl.TRIANGLES, 0, 6);

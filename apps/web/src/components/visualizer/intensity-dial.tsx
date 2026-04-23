@@ -1,13 +1,14 @@
 "use client";
 
 import { useMemo } from "react";
-import type { ClientEvent, DreamSceneState } from "@music-visualizer/shared";
+import type { DreamSceneState } from "@music-visualizer/shared";
+import type { SessionSend } from "@/lib/session-actions";
 import { Slider } from "@/components/ui/slider";
 import { useVisualizerStore } from "@/stores/visualizer-store";
 import { debounce } from "@/lib/debounce";
 
 interface IntensityDialProps {
-  send: (e: ClientEvent) => void;
+  send: SessionSend;
 }
 
 // Master audio→visual coupling dial. Continuous 0..1. Composes VU

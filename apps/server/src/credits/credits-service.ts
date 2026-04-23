@@ -9,11 +9,6 @@ import type { Logger } from "../lib/logger";
 let pool: pg.Pool | null = null;
 function getPool(): pg.Pool {
   if (!pool) {
-    if (!env.DATABASE_URL) {
-      throw new Error(
-        "DATABASE_URL not set — credits-service can't reach the DB",
-      );
-    }
     pool = new pg.Pool({ connectionString: env.DATABASE_URL });
   }
   return pool;

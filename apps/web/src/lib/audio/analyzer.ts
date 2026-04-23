@@ -3,6 +3,7 @@
 import Meyda from "meyda";
 import type { AudioFeatures, OnsetType } from "@music-visualizer/shared";
 import { classifyOnset } from "./onset-classify";
+import { createClipRecorder, type ClipRecorder } from "./recorder";
 
 // Browser-side audio engine. Runs a single AudioContext + AnalyserNode for the
 // life of the component. Sources (an <audio> element or a mic MediaStream) are
@@ -26,6 +27,7 @@ export class AudioEngine {
   private source: AudioNode | null = null;
   private meydaAnalyzer: ReturnType<typeof Meyda.createMeydaAnalyzer> | null =
     null;
+  private clipRecorder: ClipRecorder | null = null;
   private rafId: number | null = null;
   private mediaStream: MediaStream | null = null;
 
@@ -58,6 +60,10 @@ export class AudioEngine {
   private lastBpmAnalysisAt = 0;
   private lastOnsetAt = 0;
   private callback: TickCallback | null = null;
+  // Fired when the active source disappears of its own accord — primarily
+  // when the user hits "Stop sharing" in the browser chrome on a display
+  // capture. Component code can listen and reset the UI source selector.
+  private sourceLostCb: (() => void) | null = null;
 
   async attachElement(el: HTMLAudioElement): Promise<void> {
     await this.ensureContext();
@@ -87,6 +93,7 @@ export class AudioEngine {
     this.analyser.connect(this.ctx.destination);
     this.source = node;
     this.startMeyda(this.compressor);
+    this.startClipRecorder(this.compressor);
   }
 
   async attachMic(): Promise<void> {
@@ -104,6 +111,52 @@ export class AudioEngine {
     // Do NOT connect analyser to destination on mic (avoid feedback).
     this.source = node;
     this.startMeyda(this.compressor);
+    this.startClipRecorder(this.compressor);
+  }
+
+  // Capture a MediaStream from `getDisplayMedia` — lets the user share a
+  // browser tab (or window/screen where supported) and visualise its audio.
+  // Spec requires video: true even when we only want audio; we stop the
+  // video track immediately. The analyser is NOT routed to destination
+  // because the shared tab is still playing to the system output — routing
+  // again would double-play.
+  async attachDisplay(): Promise<void> {
+    await this.ensureContext();
+    this.detachSource();
+    if (!this.ctx || !this.analyser || !this.compressor) return;
+    const stream = await navigator.mediaDevices.getDisplayMedia({
+      audio: true,
+      video: true,
+    });
+    // We only want audio; stop the video track immediately.
+    for (const t of stream.getVideoTracks()) t.stop();
+    const audioTrack = stream.getAudioTracks()[0];
+    if (!audioTrack) {
+      // User shared a source with no audio (or Safari silently stripped it).
+      for (const t of stream.getTracks()) t.stop();
+      throw Object.assign(new Error("no audio track in display capture"), {
+        name: "NoAudioTrackError",
+      });
+    }
+    this.mediaStream = stream;
+    const node = this.ctx.createMediaStreamSource(stream);
+    node.connect(this.compressor);
+    this.compressor.connect(this.analyser);
+    // Do NOT connect to destination — the tab is still playing normally.
+    this.source = node;
+    this.startMeyda(this.compressor);
+    this.startClipRecorder(this.compressor);
+    // When the user clicks "Stop sharing" in the browser chrome, the track
+    // ends on its own. Detach and notify the UI so it can reset the source
+    // picker back to "none".
+    audioTrack.addEventListener("ended", () => {
+      this.detachSource();
+      this.sourceLostCb?.();
+    });
+  }
+
+  onSourceLost(cb: () => void): void {
+    this.sourceLostCb = cb;
   }
 
   detachSource(): void {
@@ -114,6 +167,10 @@ export class AudioEngine {
         // noop
       }
       this.meydaAnalyzer = null;
+    }
+    if (this.clipRecorder) {
+      this.clipRecorder.stop();
+      this.clipRecorder = null;
     }
     if (this.source) {
       try {
@@ -153,6 +210,17 @@ export class AudioEngine {
   // through the 5Hz Zustand upstream.
   getAnalyser(): AnalyserNode | null {
     return this.analyser;
+  }
+
+  // Grab the most recent ~6s of audio from the clip-recorder ring buffer,
+  // base64-encoded and ready to ship over WS for song recognition. Null if
+  // no source is attached or MediaRecorder isn't available.
+  async grabClip(): Promise<{
+    blob: Blob;
+    mimeType: string;
+  } | null> {
+    if (!this.clipRecorder) return null;
+    return this.clipRecorder.grabClip();
   }
 
   stop(): void {
@@ -204,6 +272,23 @@ export class AudioEngine {
     this.freqBuffer = new Uint8Array(new ArrayBuffer(analyser.frequencyBinCount));
     this.timeBuffer = new Uint8Array(new ArrayBuffer(analyser.fftSize));
     this.prevSpectrum = new Float32Array(analyser.frequencyBinCount);
+  }
+
+  private startClipRecorder(source: AudioNode): void {
+    if (!this.ctx) return;
+    try {
+      this.clipRecorder = createClipRecorder(this.ctx, source, {
+        windowMs: 6000,
+      });
+      if (!this.clipRecorder) {
+        console.warn(
+          "[AudioEngine] MediaRecorder unsupported — song recognition disabled in this browser",
+        );
+      }
+    } catch (err) {
+      console.warn("[AudioEngine] clip recorder init failed", err);
+      this.clipRecorder = null;
+    }
   }
 
   private startMeyda(source: AudioNode): void {

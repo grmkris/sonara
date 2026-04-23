@@ -1,30 +1,21 @@
 import { z } from "zod";
 import { DreamSceneState } from "./scene";
-import { AudioFeatures } from "./audio";
+import { NowPlaying } from "./now-playing";
 import { VISUAL_PRESET_NAMES } from "./visual-presets";
 
-// Clients may only patch user-authored fields. version/references are
-// server-authoritative and are omitted from the patch payload.
+// Clients may only patch user-authored fields. version/references/nowPlaying
+// are server-authoritative and are omitted from the patch payload.
 export const ClientScenePatch = DreamSceneState.omit({
   version: true,
   references: true,
+  nowPlaying: true,
 }).partial();
 export type ClientScenePatch = z.infer<typeof ClientScenePatch>;
 
-export const ClientEvent = z.discriminatedUnion("type", [
-  z.object({ type: z.literal("hello"), sessionId: z.string() }),
-  z.object({ type: z.literal("scene.patch"), patch: ClientScenePatch }),
-  z.object({ type: z.literal("audio.features"), features: AudioFeatures }),
-  z.object({ type: z.literal("generate.commit") }),
-  z.object({ type: z.literal("session.reset") }),
-  z.object({
-    type: z.literal("voice.phrase"),
-    text: z.string().min(1).max(200),
-  }),
-]);
-
-export type ClientEvent = z.infer<typeof ClientEvent>;
-
+// Server-initiated events yielded by the `session.events` oRPC iterator.
+// Every push from server → client flows through this union; per-procedure
+// inputs (scenePatch, audioFeatures, voicePhrase, recognize, …) carry the
+// client → server side.
 export const ServerEvent = z.discriminatedUnion("type", [
   z.object({ type: z.literal("scene.state"), state: DreamSceneState }),
   z.object({
@@ -36,6 +27,11 @@ export const ServerEvent = z.discriminatedUnion("type", [
     type: z.literal("frame.final"),
     imageUrl: z.string(),
     version: z.number(),
+    // When the frame is part of a morph chain (voice / big-semantic target
+    // shift), these describe its position so the client can beat-gate release.
+    // Absent = single-frame path (existing behaviour, display immediately).
+    chainIndex: z.number().int().nonnegative().optional(),
+    chainLength: z.number().int().positive().optional(),
   }),
   z.object({
     type: z.literal("job.status"),
@@ -57,6 +53,14 @@ export const ServerEvent = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("preset.suggest"),
     name: z.enum(VISUAL_PRESET_NAMES),
+  }),
+  // Song-recognition result. `track: null` means the recognizer had no match
+  // (unknown song, silence, too-noisy mic, or API unavailable).
+  z.object({
+    type: z.literal("now.playing"),
+    track: NowPlaying.nullable(),
+    source: z.enum(["audd", "cache"]),
+    trigger: z.enum(["auto", "manual"]),
   }),
 ]);
 

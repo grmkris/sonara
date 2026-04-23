@@ -1,11 +1,6 @@
-import { createFalClient, fal } from "@fal-ai/client";
+import { createFalClient } from "@fal-ai/client";
 import { env } from "../env";
 import type { Logger } from "../lib/logger";
-
-const FAL_KEY = env.FAL_KEY;
-if (FAL_KEY) {
-  fal.config({ credentials: FAL_KEY });
-}
 
 // FLUX.2 tier routing.
 //
@@ -37,7 +32,8 @@ export interface StreamPreviewInput {
   onError: (err: unknown) => void;
 }
 
-type FalSubscriber = typeof fal.subscribe;
+type FalClient = ReturnType<typeof createFalClient>;
+type FalSubscriber = FalClient["subscribe"];
 
 interface FalImage {
   url: string;
@@ -91,16 +87,12 @@ async function subscribeOnce(args: SubscribeArgs): Promise<boolean> {
 }
 
 export async function streamPreview(input: StreamPreviewInput): Promise<void> {
-  const credentials = input.falKey ?? FAL_KEY;
-  if (!credentials) {
-    input.onError(new Error("No fal credentials available (no FAL_KEY and no BYOK)"));
-    return;
-  }
-  // Per-call scoped client. If BYOK key is supplied, this call bills the
-  // user's fal account; otherwise it falls back to the platform key.
-  const scoped = input.falKey
-    ? createFalClient({ credentials: input.falKey })
-    : fal;
+  // Per-call scoped client. BYOK bills the user's fal account; otherwise the
+  // platform key (env.FAL_KEY, required at startup) is used. No global
+  // singleton — avoids cross-session credential races under hot reload/test.
+  const scoped = createFalClient({
+    credentials: input.falKey ?? env.FAL_KEY,
+  });
   const subscribe = scoped.subscribe.bind(scoped);
 
   const refs = (input.referenceImages ?? []).filter(Boolean);
@@ -208,14 +200,9 @@ function blendPrompts(fromPrompt: string, toPrompt: string, t: number): string {
 }
 
 export async function streamMorphChain(input: StreamMorphChainInput): Promise<void> {
-  const credentials = input.falKey ?? FAL_KEY;
-  if (!credentials) {
-    input.onError(new Error("No fal credentials available for morph chain"));
-    return;
-  }
-  const scoped = input.falKey
-    ? createFalClient({ credentials: input.falKey })
-    : fal;
+  const scoped = createFalClient({
+    credentials: input.falKey ?? env.FAL_KEY,
+  });
   const subscribe = scoped.subscribe.bind(scoped);
 
   const total = Math.max(2, Math.min(5, input.steps ?? 3));

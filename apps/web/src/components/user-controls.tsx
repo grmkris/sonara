@@ -1,12 +1,13 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useAppKit } from "@reown/appkit/react";
 import { useAccount } from "wagmi";
 import { WalletIcon, LogOutIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { signOut, useSession } from "@/lib/auth-client";
 import { fetchReownIdentity } from "@/lib/reown-identity";
+import { UsagePanel } from "@/components/usage-panel";
 
 function shortAddress(addr: string): string {
   return `${addr.slice(0, 6)}…${addr.slice(-4)}`;
@@ -18,9 +19,10 @@ export function UserControls() {
   const { address } = useAccount();
   const { open } = useAppKit();
   const [identity, setIdentity] = useState<string | null>(null);
+  const [panelOpen, setPanelOpen] = useState(false);
+  const popoverRef = useRef<HTMLDivElement | null>(null);
 
-  // Resolve ENS / Reown profile name for the active wallet. Post-mount only;
-  // falls back to short address on any failure.
+  // Resolve ENS / Reown profile name for the active wallet.
   useEffect(() => {
     if (!address) {
       setIdentity(null);
@@ -34,6 +36,17 @@ export function UserControls() {
       cancelled = true;
     };
   }, [address]);
+
+  // Close popover on outside click.
+  useEffect(() => {
+    if (!panelOpen) return;
+    const onDown = (e: MouseEvent) => {
+      if (!popoverRef.current) return;
+      if (!popoverRef.current.contains(e.target as Node)) setPanelOpen(false);
+    };
+    window.addEventListener("mousedown", onDown);
+    return () => window.removeEventListener("mousedown", onDown);
+  }, [panelOpen]);
 
   if (!isSignedIn) {
     return (
@@ -53,10 +66,15 @@ export function UserControls() {
   const label = identity ?? (address ? shortAddress(address) : "signed in");
 
   return (
-    <div className="pointer-events-auto flex items-center gap-2">
-      <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-[color:var(--paper)]/80">
+    <div className="pointer-events-auto relative flex items-center gap-2">
+      <button
+        type="button"
+        onClick={() => setPanelOpen((v) => !v)}
+        className="font-mono text-[10px] uppercase tracking-[0.18em] text-[color:var(--paper)]/80 transition-colors hover:text-[color:var(--paper)]"
+        aria-label="open usage panel"
+      >
         {label}
-      </span>
+      </button>
       <Button
         variant="ghost"
         size="icon"
@@ -68,6 +86,14 @@ export function UserControls() {
       >
         <LogOutIcon size={12} />
       </Button>
+      {panelOpen ? (
+        <div
+          ref={popoverRef}
+          className="absolute right-0 top-full z-40 mt-3"
+        >
+          <UsagePanel onClose={() => setPanelOpen(false)} />
+        </div>
+      ) : null}
     </div>
   );
 }
