@@ -15,10 +15,16 @@ skills-lock.json
 *.log
 .DS_Store
 coverage
+
+# Never leak local secrets into the image.
 .env
-.env.local
-.env.*.local
+.env.*
+**/.env
+**/.env.*
+
 apps/web/.next
 apps/web/node_modules
 apps/server/node_modules
+packages/api/node_modules
 packages/shared/node_modules
+packages/test-utils/node_modules

@@ -4,7 +4,7 @@ import type { AppRouterClient } from "@/server/rpc/app-router";
 const link = new RPCLink({
   url:
     typeof window === "undefined"
-      ? "http://localhost:3000/rpc"
+      ? "http://localhost:4470/rpc"
       : `${window.location.origin}/rpc`,
   fetch(url, options) {
     return fetch(url, { ...options, credentials: "include" });

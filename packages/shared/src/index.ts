@@ -1,4 +1,5 @@
 export * from "./scene";
+export * from "./scene-resolved";
 export * from "./audio";
 export * from "./now-playing";
 export * from "./events";

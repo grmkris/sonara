@@ -7,6 +7,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 // We only touch the handful of fields this hook uses.
 interface SRAlternative {
   readonly transcript: string;
+  readonly confidence?: number;
 }
 interface SRResult {
   readonly isFinal: boolean;
@@ -60,6 +61,15 @@ export interface VoiceRecognitionState {
 
 export interface UseVoiceRecognitionOpts {
   onPhrase: (text: string) => void;
+  // Optional interim hook. Fires for every result (final or not) with the
+  // current best-guess transcript, so the trail UI can show what's being
+  // heard live. Web Speech confidence is wildly unreliable and frequently
+  // 0 for interim results — treated as "unknown" downstream.
+  onPartial?: (opts: {
+    text: string;
+    isFinal: boolean;
+    confidence?: number;
+  }) => void;
   lang?: string;
 }
 
@@ -78,9 +88,13 @@ export function useVoiceRecognition(
   const recRef = useRef<SpeechRecognitionLike | null>(null);
   const wantsListenRef = useRef(false);
   const onPhraseRef = useRef(opts.onPhrase);
+  const onPartialRef = useRef(opts.onPartial);
   useEffect(() => {
     onPhraseRef.current = opts.onPhrase;
   }, [opts.onPhrase]);
+  useEffect(() => {
+    onPartialRef.current = opts.onPartial;
+  }, [opts.onPartial]);
 
   // Lazy-init recognition object on first use (requires window).
   const ensureRecognizer = useCallback((): SpeechRecognitionLike | null => {
@@ -89,7 +103,10 @@ export function useVoiceRecognition(
     if (!Ctor) return null;
     const rec = new Ctor();
     rec.continuous = true;
-    rec.interimResults = false;
+    // Interim results power the live transcript in the trail UI. The hook
+    // still only fires onPhrase for FINAL results so server-side dispatch
+    // semantics are unchanged; interim text is delivered via onPartial only.
+    rec.interimResults = true;
     rec.maxAlternatives = 1;
     rec.lang = opts.lang ?? "en-US";
     rec.onstart = () => setListening(true);
@@ -124,10 +141,18 @@ export function useVoiceRecognition(
     rec.onresult = (ev: SREvent) => {
       for (let i = ev.resultIndex; i < ev.results.length; i++) {
         const r = ev.results.item(i);
-        if (!r.isFinal) continue;
         const alt = r.item(0);
         const text = alt?.transcript?.trim();
         if (!text) continue;
+        const confidence =
+          typeof alt?.confidence === "number" ? alt.confidence : undefined;
+        // Always fire the partial callback (covers both interim + final).
+        onPartialRef.current?.({
+          text,
+          isFinal: r.isFinal,
+          ...(typeof confidence === "number" ? { confidence } : {}),
+        });
+        if (!r.isFinal) continue;
         setLastPhrase(text);
         setError(null);
         onPhraseRef.current(text);

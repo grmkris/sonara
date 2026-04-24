@@ -36,8 +36,14 @@ export class AudioEngine {
   // they don't stall at 0 if Meyda's script processor fails to start.
   private flatnessFromMeyda = 0;
   private rolloffFromMeyda = 0;
-  private fluxFromMeyda = 0;
   private chromaFromMeyda: number[] = new Array(12).fill(0);
+  // Local spectral flux carried across ticks so the arousal EMA has a fresh
+  // value before this tick recomputes it. Meyda's own spectralFlux extractor
+  // was removed — it throws inside its ScriptProcessorNode callback at ~90Hz
+  // when the previousSignal buffer is missing/malformed, spamming the console
+  // with uncaught TypeErrors. Our local flux (computed below from AnalyserNode
+  // byte-freq data) is what we want anyway.
+  private lastFluxLocal = 0;
 
   private prevSpectrum: Float32Array | null = null;
   private freqBuffer: Uint8Array<ArrayBuffer> | null = null;
@@ -223,6 +229,14 @@ export class AudioEngine {
     return this.clipRecorder.grabClip();
   }
 
+  // Cheap presence check for the recognition hook — lets the identify UI
+  // distinguish "no audio source attached" (show a nudge) from "audio
+  // attached but recogniser returned no match" (show the couldn't-identify
+  // toast). Doesn't consult the ring's fill state — that's grabClip's job.
+  hasClipRecorder(): boolean {
+    return this.clipRecorder !== null;
+  }
+
   stop(): void {
     if (this.rafId !== null) cancelAnimationFrame(this.rafId);
     this.rafId = null;
@@ -301,13 +315,11 @@ export class AudioEngine {
         featureExtractors: [
           "spectralFlatness",
           "spectralRolloff",
-          "spectralFlux",
           "chroma",
         ],
         callback: (features: {
           spectralFlatness?: number;
           spectralRolloff?: number;
-          spectralFlux?: number;
           chroma?: number[];
         }) => {
           if (typeof features.spectralFlatness === "number") {
@@ -318,9 +330,6 @@ export class AudioEngine {
             const nyq = (this.ctx?.sampleRate ?? SAMPLE_RATE) / 2;
             this.rolloffFromMeyda = Math.min(1, features.spectralRolloff / nyq);
           }
-          if (typeof features.spectralFlux === "number") {
-            this.fluxFromMeyda = features.spectralFlux;
-          }
           if (Array.isArray(features.chroma) && features.chroma.length === 12) {
             this.chromaFromMeyda = features.chroma;
           }
@@ -328,11 +337,11 @@ export class AudioEngine {
       });
       this.meydaAnalyzer.start();
     } catch (err) {
-      // Meyda supplies flatness/rolloff/flux. RMS + centroid are now computed
-      // locally so this failure degrades gracefully — log so we notice instead
-      // of silently losing features.
+      // Meyda supplies flatness/rolloff/chroma. RMS, centroid, and flux are
+      // computed locally so this failure degrades gracefully — log so we notice
+      // instead of silently losing features.
       console.warn(
-        "[AudioEngine] Meyda init failed — spectral flatness/rolloff/flux will stay at 0",
+        "[AudioEngine] Meyda init failed — spectral flatness/rolloff/chroma will stay at 0",
         err,
       );
       this.meydaAnalyzer = null;
@@ -386,9 +395,10 @@ export class AudioEngine {
     // τ ≈ 1300ms → α = 1 - exp(-dt/τ). Frame-rate independent.
     const alpha = 1 - Math.exp(-dtMs / 1300);
     const valenceRaw = centroid * 0.6 + this.rolloffFromMeyda * 0.4;
-    // Meyda's spectralFlux is unbounded; normalize via a soft compression
-    // (tanh on ×6) so the arousal component stays 0..1-ish.
-    const fluxNorm = Math.tanh(this.fluxFromMeyda * 6);
+    // Local spectral flux (previous tick's value — see `lastFluxLocal` field;
+    // recomputed below for this tick). Normalised with tanh(×6) so arousal
+    // stays in a 0..1-ish range; the EMA τ of 1.3s absorbs the 1-frame lag.
+    const fluxNorm = Math.tanh(this.lastFluxLocal * 6);
     const arousalRaw = rms * 0.5 + fluxNorm * 0.5;
     this.valenceSmoothed = this.valenceSmoothed + alpha * (valenceRaw - this.valenceSmoothed);
     this.arousalSmoothed = this.arousalSmoothed + alpha * (arousalRaw - this.arousalSmoothed);
@@ -434,6 +444,8 @@ export class AudioEngine {
     if (p) {
       for (let i = 0; i < bins; i++) p[i] = (freq[i] ?? 0) / 255;
     }
+
+    this.lastFluxLocal = flux;
 
     this.fluxHistory.push(flux);
     if (this.fluxHistory.length > 60) this.fluxHistory.shift();
@@ -488,7 +500,7 @@ export class AudioEngine {
       centroid,
       flatness: this.flatnessFromMeyda,
       rolloff: this.rolloffFromMeyda,
-      flux: this.fluxFromMeyda,
+      flux,
       onset,
       sectionEnergy,
       valence: Math.max(0, Math.min(1, this.valenceSmoothed)),

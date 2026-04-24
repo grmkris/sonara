@@ -101,9 +101,12 @@ export function mergeNowPlayingIntoScene(
 ): MergeResult {
   const patch: Partial<DreamSceneState> = {};
 
-  if (isDefault(scene, "subject")) {
-    patch.subject = `${track.artist} — ${track.title}`;
-  }
+  // NOTE: `subject` is intentionally NOT filled here. A literal
+  // `${artist} — ${title}` reads as quotation inside the FLUX prompt rather
+  // than as a scene. The server's `recognize()` handler calls the LLM muse
+  // (`song-muse.ts`) after this deterministic merge to synthesize an evocative
+  // sumi-e subject that abstracts the song instead of quoting it; the muse
+  // also falls back to `track.title` alone if LLM synthesis is unavailable.
 
   if (isDefault(scene, "mood")) {
     patch.mood = moodFromAudio(audio);

@@ -55,9 +55,21 @@ export function createClipRecorder(
     audioBitsPerSecond: 64_000,
   });
 
+  // Chrome's MediaRecorder emits the WebM init segment (EBML + Segment header
+  // + first Cluster) in the very first `ondataavailable` event; every later
+  // event is pure Cluster data. If we drop the first chunk from the ring
+  // (which a plain sliding window does once maxChunks fills), every grabClip
+  // produces a headerless WebM that AudD cannot fingerprint ("problem with
+  // creating an audio fingerprint"). Hold the init chunk out of the ring and
+  // prepend it to every snapshot.
+  let initChunk: Blob | null = null;
   const ring: Blob[] = [];
   recorder.ondataavailable = (ev) => {
     if (!ev.data || ev.data.size === 0) return;
+    if (initChunk === null) {
+      initChunk = ev.data;
+      return;
+    }
     ring.push(ev.data);
     while (ring.length > maxChunks) ring.shift();
   };
@@ -79,7 +91,7 @@ export function createClipRecorder(
   return {
     mimeType,
     async grabClip() {
-      if (stopped || ring.length === 0) return null;
+      if (stopped) return null;
       // `requestData` fires an ondataavailable synchronously from the user's
       // perspective — we await a short microtask window to ensure the chunk
       // lands in the ring before we snapshot it.
@@ -89,9 +101,8 @@ export function createClipRecorder(
         // some browsers complain if state != "recording"; ignore
       }
       await new Promise((r) => setTimeout(r, 60));
-      if (ring.length === 0) return null;
-      const snapshot = ring.slice();
-      const blob = new Blob(snapshot, { type: mimeType });
+      if (initChunk === null || ring.length === 0) return null;
+      const blob = new Blob([initChunk, ...ring], { type: mimeType });
       return { blob, mimeType };
     },
     stop() {
@@ -109,6 +120,7 @@ export function createClipRecorder(
       }
       for (const track of dest.stream.getTracks()) track.stop();
       ring.length = 0;
+      initChunk = null;
     },
   };
 }

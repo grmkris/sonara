@@ -98,6 +98,31 @@ interface DropLayer {
   cd: [number, number, number, number];
   delays: [number, number, number, number];
 }
+
+// Pick four representative stops from a palette of arbitrary length so the
+// gradient covers dark→light without dropping detail when the LLM returns
+// only 3 colours or 7. Always returns exactly 4 #RRGGBB strings.
+function padPaletteToFour(colors: string[]): [string, string, string, string] {
+  if (colors.length === 0) return ["#000000", "#444444", "#aaaaaa", "#ffffff"];
+  if (colors.length >= 4) {
+    return [
+      colors[0]!,
+      colors[Math.floor(colors.length / 3)]!,
+      colors[Math.floor((2 * colors.length) / 3)]!,
+      colors[colors.length - 1]!,
+    ];
+  }
+  const out = [...colors];
+  while (out.length < 4) out.push(colors[colors.length - 1]!);
+  return [out[0]!, out[1]!, out[2]!, out[3]!];
+}
+
+function hexToRgb(hex: string): [number, number, number] {
+  const r = Number.parseInt(hex.slice(1, 3), 16) / 255;
+  const g = Number.parseInt(hex.slice(3, 5), 16) / 255;
+  const b = Number.parseInt(hex.slice(5, 7), 16) / 255;
+  return [r, g, b];
+}
 interface DropLayers {
   l1: DropLayer;
   l2: DropLayer;
@@ -297,9 +322,13 @@ export function DisplacementCanvas() {
       uHalftone: gl.getUniformLocation(program, "uHalftone"),
       uRD: gl.getUniformLocation(program, "uRD"),
       uRDAmount: gl.getUniformLocation(program, "uRDAmount"),
-      uRevealActive: gl.getUniformLocation(program, "uRevealActive"),
-      uRevealT: gl.getUniformLocation(program, "uRevealT"),
       uPainterly: gl.getUniformLocation(program, "uPainterly"),
+      uSalt: gl.getUniformLocation(program, "uSalt"),
+      uCauliflower: gl.getUniformLocation(program, "uCauliflower"),
+      uSplatter: gl.getUniformLocation(program, "uSplatter"),
+      // AI palette tint — vec3 uPalette[4] flat array (length 12).
+      uPalette: gl.getUniformLocation(program, "uPalette[0]"),
+      uPaletteAmount: gl.getUniformLocation(program, "uPaletteAmount"),
     };
     gl.uniform1i(uni.uCurr, 0);
     gl.uniform1i(uni.uPrev, 1);
@@ -452,6 +481,43 @@ export function DisplacementCanvas() {
       }
     });
 
+    // ===== AI palette (FLUX color_palette → uPalette uniform array) =====
+    // Each frame we lerp `currentPalette` toward `targetPalette` (~1.5s τ)
+    // so new palettes from the resolver fade in instead of snapping. Length
+    // is always 12 floats (4 vec3 stops). Empty palette → amount lerps to 0
+    // and the shader skips the tint block.
+    const currentPalette = new Float32Array(12);
+    const targetPalette = new Float32Array(12);
+    let currentPaletteAmount = 0;
+    let targetPaletteAmount = 0;
+
+    const setPaletteTarget = (hexes: string[]) => {
+      if (hexes.length === 0) {
+        targetPaletteAmount = 0;
+        return;
+      }
+      const stops = padPaletteToFour(hexes);
+      for (let i = 0; i < 4; i++) {
+        const stop = stops[i];
+        if (!stop) continue;
+        const [r, g, b] = hexToRgb(stop);
+        targetPalette[i * 3] = r;
+        targetPalette[i * 3 + 1] = g;
+        targetPalette[i * 3 + 2] = b;
+      }
+      targetPaletteAmount = 1;
+    };
+    setPaletteTarget(
+      useVisualizerStore.getState().inspector?.resolvedScene.color_palette ?? [],
+    );
+
+    const unsubPalette = useVisualizerStore.subscribe((state, prev) => {
+      const cur = state.inspector?.resolvedScene.color_palette ?? [];
+      const prv = prev.inspector?.resolvedScene.color_palette ?? [];
+      if (cur.length === prv.length && cur.every((c, i) => c === prv[i])) return;
+      setPaletteTarget(cur);
+    });
+
     // Initialise fromCfg/toCfg to the starting preset (custom takes priority
     // if a saved snapshot was already the active target post-hydration).
     const initCustom = useVisualizerStore.getState().customPreset;
@@ -485,17 +551,6 @@ export function DisplacementCanvas() {
     const driftStart = performance.now();
     const mountedAt = performance.now();
 
-    // Reveal-from-noise animation state. Re-armed on every image-ready event
-    // (markImageLoaded writes crossfadeStartedAt); runs for REVEAL_MS, with
-    // onset impulses nudging revealT forward so beats punch the materialise.
-    const REVEAL_MS = 1100;
-    let revealStartAt: number | null = null;
-    let lastCrossfadeAt: number | null =
-      useVisualizerStore.getState().crossfadeStartedAt;
-    // Seed a reveal on initial mount if there's already a loaded frame — so
-    // the first hero image crystallises in rather than appearing instantly.
-    if (lastCrossfadeAt !== null) revealStartAt = performance.now();
-
     let raf = 0;
     const tick = () => {
       raf = requestAnimationFrame(tick);
@@ -510,11 +565,6 @@ export function DisplacementCanvas() {
         lastIntensity = intensity;
       }
 
-      // Arm a reveal whenever markImageLoaded bumps crossfadeStartedAt.
-      if (state.crossfadeStartedAt !== lastCrossfadeAt) {
-        lastCrossfadeAt = state.crossfadeStartedAt;
-        if (state.crossfadeStartedAt !== null) revealStartAt = now;
-      }
       const coef = intensityCoefficients(intensity);
       const targets = targetsFromAudio(state.audio, intensity);
 
@@ -788,25 +838,20 @@ export function DisplacementCanvas() {
       gl.uniform1f(uni.uGranulation, effective.granulation);
       gl.uniform1f(uni.uHalftone, effective.halftone);
       gl.uniform1f(uni.uPainterly, effective.painterly);
+      gl.uniform1f(uni.uSalt, effective.salt);
+      gl.uniform1f(uni.uCauliflower, effective.cauliflower);
+      gl.uniform1f(uni.uSplatter, effective.splatter);
       gl.uniform1f(uni.uRDAmount, effective.rd);
 
-      // Reveal-from-noise. Base progress is linear over REVEAL_MS; kick/snare
-      // onsets nudge it forward so beats actually "materialise" pixels.
-      let revealActive = 0;
-      let revealT = 1;
-      if (revealStartAt !== null) {
-        const elapsed = now - revealStartAt;
-        if (elapsed < REVEAL_MS) {
-          const base = Math.min(1, elapsed / REVEAL_MS);
-          const bump = impulses.kick * 0.06 + impulses.snare * 0.03;
-          revealT = Math.min(1, base + bump);
-          revealActive = 1;
-        } else {
-          revealStartAt = null;
-        }
+      // Palette lerp: 1.5s time-constant fade toward the FLUX-derived palette.
+      // Frame-rate independent (alpha derived from dtMs).
+      const palAlpha = 1 - Math.exp(-dtMs / 1500);
+      for (let i = 0; i < 12; i++) {
+        currentPalette[i]! += palAlpha * (targetPalette[i]! - currentPalette[i]!);
       }
-      gl.uniform1f(uni.uRevealActive, revealActive);
-      gl.uniform1f(uni.uRevealT, revealT);
+      currentPaletteAmount += palAlpha * (targetPaletteAmount - currentPaletteAmount);
+      gl.uniform3fv(uni.uPalette, currentPalette);
+      gl.uniform1f(uni.uPaletteAmount, currentPaletteAmount);
 
       gl.bindVertexArray(vao);
       gl.drawArrays(gl.TRIANGLES, 0, 6);
@@ -829,6 +874,7 @@ export function DisplacementCanvas() {
       cancelAnimationFrame(raf);
       unsubFrame();
       unsubPreset();
+      unsubPalette();
       if (pendingImg) {
         pendingImg.onload = null;
         pendingImg.onerror = null;

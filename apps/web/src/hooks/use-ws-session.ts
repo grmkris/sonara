@@ -41,27 +41,9 @@ export function useWsSession(): SessionSend {
           s.pushFrame(event.imageUrl, event.version);
           break;
         case "frame.final":
-          if (
-            typeof event.chainIndex === "number" &&
-            typeof event.chainLength === "number"
-          ) {
-            // Morph-chain frame. Enqueue for beat-gated release; only the
-            // last step gets banked as a hero so the ghost overlay doesn't
-            // flood with in-between frames.
-            s.enqueueChainFrame({
-              url: event.imageUrl,
-              version: event.version,
-              index: event.chainIndex,
-              total: event.chainLength,
-            });
-            if (event.chainIndex === event.chainLength - 1) {
-              s.pushHero(event.imageUrl);
-            }
-          } else {
-            s.pushFrame(event.imageUrl, event.version);
-            // Settled images go into the ghost callback ring; previews don't.
-            s.pushHero(event.imageUrl);
-          }
+          s.pushFrame(event.imageUrl, event.version);
+          // Settled images go into the ghost callback ring; previews don't.
+          s.pushHero(event.imageUrl);
           break;
         case "job.status":
           s.setStatus(event.status, event.message);
@@ -98,6 +80,9 @@ export function useWsSession(): SessionSend {
           break;
         case "now.playing":
           s.setNowPlaying(event.track);
+          // Clear the manual-trigger spinner on every manual response,
+          // whether AudD matched or not. Auto triggers never set it.
+          if (event.trigger === "manual") s.setRecognizing(false);
           if (event.track && event.trigger === "manual") {
             toast(`${event.track.artist} — ${event.track.title}`, {
               duration: 2800,
@@ -105,6 +90,52 @@ export function useWsSession(): SessionSend {
           } else if (!event.track && event.trigger === "manual") {
             toast("couldn't identify the song", { duration: 2200 });
           }
+          break;
+        case "generation.requested":
+          s.setInspectorRequested({
+            reason: event.reason,
+            version: event.version,
+            promptString: event.promptString,
+            driftSource: event.driftSource,
+            resolvedScene: event.resolvedScene,
+            requestedAt: event.requestedAt,
+            nextKeyframeAt: event.nextKeyframeAt,
+          });
+          break;
+        case "generation.completed":
+          s.setInspectorCompleted(
+            event.version,
+            event.durationMs,
+            event.success,
+          );
+          break;
+        case "voice.partial":
+          s.voicePartial({
+            phraseId: event.phraseId,
+            text: event.text,
+            isFinal: event.isFinal,
+            ...(typeof event.confidence === "number"
+              ? { confidence: event.confidence }
+              : {}),
+            provider: event.provider,
+          });
+          break;
+        case "voice.parsed":
+          s.voiceParsed({
+            phraseId: event.phraseId,
+            intent: event.intent,
+            latencyMs: event.latencyMs,
+          });
+          break;
+        case "voice.applied":
+          s.voiceApplied({
+            phraseId: event.phraseId,
+            patch: event.patch,
+            triggered: event.triggered,
+            ...(typeof event.triggeredVersion === "number"
+              ? { triggeredVersion: event.triggeredVersion }
+              : {}),
+          });
           break;
       }
     };
@@ -151,10 +182,24 @@ export function useWsSession(): SessionSend {
 
       // Events iterator: restart whenever it drops (socket reconnect, transient
       // error). orpc's iterator throws on socket close; the outer loop retries.
+      // After each subscribe, pull session.state() to cover the race where
+      // init()'s initial publishes land before our subscribe attached — and to
+      // re-hydrate scene after reconnect.
       const runEvents = async (): Promise<void> => {
         while (!cancelled) {
           try {
-            for await (const event of await client.events()) {
+            const iter = await client.events();
+            try {
+              const snap = await client.state();
+              if (!cancelled) {
+                store.getState().setScene(snap.scene);
+                store.getState().setSttProvider(snap.sttProvider);
+              }
+            } catch (err) {
+              const msg = err instanceof Error ? err.message : String(err);
+              console.warn("[ws] state snapshot failed:", msg);
+            }
+            for await (const event of iter) {
               if (cancelled) return;
               handleEvent(event);
             }

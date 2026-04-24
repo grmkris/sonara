@@ -3,6 +3,7 @@ import {
   type AudioFeatures,
   type DreamSceneState,
   type NowPlaying,
+  type ResolvedScene,
   defaultAudio,
   defaultScene,
 } from "@music-visualizer/shared";
@@ -31,10 +32,61 @@ export interface TriggerEntry {
   reason: TriggerReason;
   version: number;
   at: number;
+  durationMs?: number;
+  success?: boolean;
+}
+
+export type DriftSource = "llm" | "voice" | "pool" | "none";
+
+// Single in-flight voice utterance for the trail UI. The three stages each
+// land independently (voice.partial → voice.parsed → voice.applied) so we
+// keep them as nullable fields and a stage cursor advances as they arrive.
+// On a fresh phraseId we discard the prior trail.
+export type VoiceTrailStage = "idle" | "heard" | "understood" | "applied";
+
+export interface VoiceTrailIntent {
+  patch: Record<string, unknown>;
+  commit: boolean;
+  reset: boolean;
+  preset: string | null;
+  lookPreset: string | null;
+  atmosphere: string | null;
+}
+
+export interface VoiceTrailState {
+  phraseId: number;
+  text: string;
+  isFinal: boolean;
+  confidence: number | null;
+  provider: "web-speech" | "deepgram";
+  intent: VoiceTrailIntent | null;
+  parsedLatencyMs: number | null;
+  appliedPatch: Record<string, unknown> | null;
+  triggered: boolean | null;
+  triggeredVersion: number | null;
+  startedAt: number;
+  updatedAt: number;
+}
+
+// Snapshot of the most recent server-side trigger for the inspector HUD.
+// Populated from `generation.requested`; durationMs/success arrive via
+// `generation.completed`.
+export interface InspectorState {
+  reason: TriggerReason;
+  version: number;
+  promptString: string;
+  driftSource: DriftSource;
+  resolvedScene: ResolvedScene;
+  requestedAt: number;
+  nextKeyframeAt: number;
+  completedAt: number | null;
+  durationMs: number | null;
+  success: boolean | null;
 }
 
 const TRIGGER_LOG_MAX = 16;
 const UI_VISIBLE_KEY = "dream.uiVisible";
+const VOICE_MODE_KEY = "dream.voiceMode";
 
 // Always `true` on first render (server + client) so SSR hydrates cleanly. The
 // stored preference is applied post-mount via `hydrateUiVisible()`.
@@ -73,6 +125,15 @@ export function hydratePresetPrefs(): void {
   if (Object.keys(update).length > 0) useVisualizerStore.setState(update);
 }
 
+// Pulls the voice input mode from localStorage post-mount. SSR + first client
+// render use the default ("ptt") so hydration matches.
+export function hydrateVoiceMode(): void {
+  if (typeof window === "undefined") return;
+  const raw = window.localStorage.getItem(VOICE_MODE_KEY);
+  if (raw !== "live" && raw !== "ptt") return;
+  useVisualizerStore.setState({ voiceMode: raw });
+}
+
 export interface VisualizerState {
   scene: DreamSceneState;
   audio: AudioFeatures;
@@ -88,6 +149,24 @@ export interface VisualizerState {
   sweepPulse: number;
   latestVersion: number;
   triggerLog: TriggerEntry[];
+  // Most recent generation snapshot — drives the inspector HUD.
+  inspector: InspectorState | null;
+  // Most recent voice utterance — drives the three-stage voice trail UI.
+  voiceTrail: VoiceTrailState | null;
+  // STT provider the server reported at handshake. Used by voice-listen to
+  // pick between Web Speech (client-side) and audio-relay (server-side
+  // Deepgram Flux). Defaults to web-speech until the state snapshot lands.
+  sttProvider: "web-speech" | "deepgram";
+
+  // Voice input mode.
+  //   "live" — always-on; Flux's EndOfTurn event drives commits.
+  //   "ptt"  — hold SPACE; mic forwards only while held, key release flushes
+  //            the voice debounce immediately.
+  // Default is "ptt" — safer in multi-person rooms. Persisted in localStorage.
+  voiceMode: "live" | "ptt";
+  // Ephemeral — true while the PTT key is currently held. Drives the armed
+  // indicator in the voice-listen UI.
+  voicePtt: boolean;
 
   // Effects-deck preset state. Controls which named look the shader is
   // cross-fading toward; driven manually, by a timer, by section triggers
@@ -117,22 +196,14 @@ export interface VisualizerState {
   // Monotonic — bumped whenever a manual "identify this" request is made
   // from the UI. `use-song-recognition` subscribes and kicks a new call.
   identifyTick: number;
-
-  // Morph-chain queue. Server emits chain frames as `frame.final` with
-  // chainIndex/chainLength; we buffer them here and release one at a time
-  // from the drain hook so beats (or a 600 ms fallback) gate the reveal.
-  pendingChain: { url: string; version: number; index: number; total: number }[];
+  // True while a recognition call is in flight (from clip grab through the
+  // AudD server round-trip). Drives the now-playing button's spinner so the
+  // user sees "listening…" instead of a silent button.
+  recognizing: boolean;
 
   setScene: (state: DreamSceneState) => void;
   setAudio: (f: AudioFeatures) => void;
   pushFrame: (url: string, version: number) => void;
-  enqueueChainFrame: (entry: {
-    url: string;
-    version: number;
-    index: number;
-    total: number;
-  }) => void;
-  dequeueChainFrame: () => void;
   setStatus: (s: JobStatus, msg?: string) => void;
   setConnected: (c: boolean) => void;
 
@@ -140,6 +211,30 @@ export interface VisualizerState {
   setUiVisible: (v: boolean) => void;
   pulseCommit: () => void;
   pushTrigger: (reason: TriggerReason, version: number) => void;
+  setInspectorRequested: (entry: Omit<InspectorState, "completedAt" | "durationMs" | "success">) => void;
+  setInspectorCompleted: (version: number, durationMs: number, success: boolean) => void;
+  voicePartial: (opts: {
+    phraseId: number;
+    text: string;
+    isFinal: boolean;
+    confidence?: number;
+    provider: "web-speech" | "deepgram";
+  }) => void;
+  voiceParsed: (opts: {
+    phraseId: number;
+    intent: VoiceTrailIntent;
+    latencyMs: number;
+  }) => void;
+  voiceApplied: (opts: {
+    phraseId: number;
+    patch: Record<string, unknown>;
+    triggered: boolean;
+    triggeredVersion?: number;
+  }) => void;
+  clearVoiceTrail: () => void;
+  setSttProvider: (p: "web-speech" | "deepgram") => void;
+  setVoiceMode: (m: "live" | "ptt") => void;
+  setVoicePtt: (v: boolean) => void;
 
   setPreset: (name: PresetName) => void;
   setPresetMode: (m: PresetMode) => void;
@@ -152,6 +247,7 @@ export interface VisualizerState {
 
   setNowPlaying: (track: NowPlaying | null) => void;
   requestIdentify: () => void;
+  setRecognizing: (r: boolean) => void;
 }
 
 export const useVisualizerStore = create<VisualizerState>()((set, get) => ({
@@ -169,6 +265,11 @@ export const useVisualizerStore = create<VisualizerState>()((set, get) => ({
   sweepPulse: 0,
   latestVersion: 0,
   triggerLog: [],
+  inspector: null,
+  voiceTrail: null,
+  sttProvider: "web-speech",
+  voiceMode: "ptt",
+  voicePtt: false,
 
   preset: "wet_ink",
   presetMode: "manual",
@@ -180,7 +281,7 @@ export const useVisualizerStore = create<VisualizerState>()((set, get) => ({
   heroBank: [],
   nowPlaying: null,
   identifyTick: 0,
-  pendingChain: [],
+  recognizing: false,
 
   setScene: (state) => set({ scene: state }),
   setAudio: (f) => set({ audio: f }),
@@ -196,46 +297,6 @@ export const useVisualizerStore = create<VisualizerState>()((set, get) => ({
       currentFrame: url,
       latestVersion: version,
     }));
-  },
-  enqueueChainFrame: (entry) => {
-    set((s) => {
-      // If a newer version has started, drop the older chain entirely.
-      const trimmed =
-        s.pendingChain[0] && s.pendingChain[0].version < entry.version
-          ? []
-          : s.pendingChain;
-      // Display the first frame of a chain immediately so the user gets
-      // instant feedback; subsequent frames go through the beat-drain. This
-      // prevents the "nothing happens for 1.2s after I speak" lag.
-      if (entry.index === 0) {
-        if (entry.version < s.latestVersion) {
-          return { pendingChain: trimmed };
-        }
-        return {
-          previousFrame: s.currentFrame,
-          currentFrame: entry.url,
-          latestVersion: entry.version,
-          pendingChain: trimmed,
-        };
-      }
-      return { pendingChain: [...trimmed, entry] };
-    });
-  },
-  dequeueChainFrame: () => {
-    set((s) => {
-      const head = s.pendingChain[0];
-      if (!head) return {};
-      if (head.version < s.latestVersion) {
-        // Stale chain tail from a superseded version — just drop it.
-        return { pendingChain: s.pendingChain.slice(1) };
-      }
-      return {
-        previousFrame: s.currentFrame,
-        currentFrame: head.url,
-        latestVersion: head.version,
-        pendingChain: s.pendingChain.slice(1),
-      };
-    });
   },
   setStatus: (status, message) => {
     set({ status, statusMessage: message ?? null });
@@ -268,6 +329,92 @@ export const useVisualizerStore = create<VisualizerState>()((set, get) => ({
       };
       return { triggerLog: [entry, ...s.triggerLog].slice(0, TRIGGER_LOG_MAX) };
     }),
+  setInspectorRequested: (entry) =>
+    set({
+      inspector: {
+        ...entry,
+        completedAt: null,
+        durationMs: null,
+        success: null,
+      },
+    }),
+  setInspectorCompleted: (version, durationMs, success) =>
+    set((s) => {
+      const triggerLog = s.triggerLog.map((e) =>
+        e.version === version ? { ...e, durationMs, success } : e,
+      );
+      // Stale completion arrives after a newer requested — keep the log
+      // patch but don't overwrite the live inspector header.
+      if (!s.inspector || s.inspector.version !== version) {
+        return { triggerLog };
+      }
+      return {
+        triggerLog,
+        inspector: {
+          ...s.inspector,
+          completedAt: Date.now(),
+          durationMs,
+          success,
+        },
+      };
+    }),
+  voicePartial: (opts) =>
+    set((s) => {
+      const isNewPhrase =
+        !s.voiceTrail || s.voiceTrail.phraseId !== opts.phraseId;
+      const now = Date.now();
+      return {
+        voiceTrail: {
+          phraseId: opts.phraseId,
+          text: opts.text,
+          isFinal: opts.isFinal,
+          confidence: typeof opts.confidence === "number" ? opts.confidence : null,
+          provider: opts.provider,
+          intent: isNewPhrase ? null : (s.voiceTrail?.intent ?? null),
+          parsedLatencyMs: isNewPhrase ? null : (s.voiceTrail?.parsedLatencyMs ?? null),
+          appliedPatch: isNewPhrase ? null : (s.voiceTrail?.appliedPatch ?? null),
+          triggered: isNewPhrase ? null : (s.voiceTrail?.triggered ?? null),
+          triggeredVersion: isNewPhrase ? null : (s.voiceTrail?.triggeredVersion ?? null),
+          startedAt: isNewPhrase ? now : (s.voiceTrail?.startedAt ?? now),
+          updatedAt: now,
+        },
+      };
+    }),
+  voiceParsed: (opts) =>
+    set((s) => {
+      // Late-arriving parse for an already-replaced phrase: ignore.
+      if (!s.voiceTrail || s.voiceTrail.phraseId !== opts.phraseId) return {};
+      return {
+        voiceTrail: {
+          ...s.voiceTrail,
+          intent: opts.intent,
+          parsedLatencyMs: opts.latencyMs,
+          updatedAt: Date.now(),
+        },
+      };
+    }),
+  voiceApplied: (opts) =>
+    set((s) => {
+      if (!s.voiceTrail || s.voiceTrail.phraseId !== opts.phraseId) return {};
+      return {
+        voiceTrail: {
+          ...s.voiceTrail,
+          appliedPatch: opts.patch,
+          triggered: opts.triggered,
+          triggeredVersion: opts.triggeredVersion ?? null,
+          updatedAt: Date.now(),
+        },
+      };
+    }),
+  clearVoiceTrail: () => set({ voiceTrail: null }),
+  setSttProvider: (p) => set({ sttProvider: p }),
+  setVoiceMode: (m) => {
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem(VOICE_MODE_KEY, m);
+    }
+    set({ voiceMode: m });
+  },
+  setVoicePtt: (v) => set({ voicePtt: v }),
 
   setPreset: (name) =>
     set((s) => {
@@ -336,6 +483,7 @@ export const useVisualizerStore = create<VisualizerState>()((set, get) => ({
 
   setNowPlaying: (track) => set({ nowPlaying: track }),
   requestIdentify: () => set((s) => ({ identifyTick: s.identifyTick + 1 })),
+  setRecognizing: (r) => set({ recognizing: r }),
 }));
 
 /**

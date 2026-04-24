@@ -96,6 +96,12 @@ uniform float uPosterizeAlways;
 uniform float uDuotoneMix;
 uniform vec3 uDuotoneLo;
 uniform vec3 uDuotoneHi;
+// AI-derived palette (FLUX scene resolver → hex codes parsed client-side).
+// Four stops covering dark → light. uPaletteAmount fades the contribution
+// in/out smoothly; 0 means no AI palette known yet (deterministic resolve
+// returns empty array).
+uniform vec3 uPalette[4];
+uniform float uPaletteAmount;
 // Edge detection strength (Sobel on luminance, paper-coloured overlay).
 uniform float uEdge;
 // Invert flash mix, gated by kick impulse when > 0.
@@ -139,11 +145,6 @@ uniform float uSplatter;     // brush-flick droplets
 // simulation layer (rd-layer.ts). uRDAmount blends the mask in; 0 = off.
 uniform sampler2D uRD;
 uniform float uRDAmount;
-// Reveal-from-noise (diffusion-materialize). uRevealActive is 0/1, uRevealT
-// animates 0..1 per frame-arrival. Drives a per-pixel threshold gate so the
-// newly-landed image crystallises in patches, reading as "diffusion denoise".
-uniform float uRevealActive;
-uniform float uRevealT;
 
 float hash21(vec2 p) {
   p = fract(p * vec2(234.34, 435.345));
@@ -440,6 +441,24 @@ void main() {
     color = mix(color, (color + washColor) * 0.5, clamp(uBokashi, 0.0, 1.0) * 0.55);
   }
 
+  // --- Cauliflower: wet-on-damp backrun ---
+  // A wet paint region meeting damp paper flows outward, carrying pigment
+  // into an irregular dark ring with a lighter interior. Uses the existing
+  // iq recursive domain-warped fbm so ring edges are fractal-branching
+  // rather than clean circles. Gated by mid-tone luminance — cauliflower
+  // only appears in wet paint, not in dry darks or paper whites.
+  if (uCauliflower > 0.001) {
+    float nCf = warpedFbm(vUv * 2.2 + vec2(13.1, 7.3), 2.5);
+    float innerCf = smoothstep(0.48, 0.54, nCf);
+    float outerCf = smoothstep(0.40, 0.48, nCf);
+    float ringCf = outerCf - innerCf;
+    float lumCf = dot(color, vec3(0.299, 0.587, 0.114));
+    float midMaskCf = max(0.0, 1.0 - abs(lumCf - 0.55) * 1.6);
+    float aCf = clamp(uCauliflower, 0.0, 1.0);
+    color *= 1.0 - ringCf * 0.40 * midMaskCf * aCf;
+    color += vec3(0.03) * innerCf * midMaskCf * aCf;
+  }
+
   // --- Bloom + tonemap (preset multiplier on top of audio) ---
   float bloom = (0.06 + uRms * 0.80 + uRmsPeak * 0.25 + uMotionEnergy * 0.20) * max(0.0, uBloomMult);
   color *= (1.0 + bloom * 0.55);
@@ -449,6 +468,21 @@ void main() {
   float lum = dot(color, vec3(0.299, 0.587, 0.114));
   float sat = clamp(1.0 + uRms * 0.30 - uSnare * 0.55, 0.15, 1.8);
   color = mix(vec3(lum), color, sat);
+
+  // --- AI palette tint ---
+  // Maps current pixel luminance to a 4-stop gradient built from the FLUX-
+  // resolver's hex palette. Soft-blends the gradient into the image so it
+  // tints rather than flattens — preserves AI-image structure while giving
+  // the renderer a colour anchor that survives between keyframes. amount
+  // ramps over ~1.5s on the JS side so palette swaps don't flash.
+  if (uPaletteAmount > 0.001) {
+    float ly = clamp(dot(color, vec3(0.299, 0.587, 0.114)), 0.0, 1.0);
+    vec3 gradC;
+    if (ly < 0.333) gradC = mix(uPalette[0], uPalette[1], ly / 0.333);
+    else if (ly < 0.666) gradC = mix(uPalette[1], uPalette[2], (ly - 0.333) / 0.333);
+    else gradC = mix(uPalette[2], uPalette[3], (ly - 0.666) / 0.334);
+    color = mix(color, (color + gradC) * 0.5, clamp(uPaletteAmount, 0.0, 1.0) * 0.32);
+  }
 
   // --- Palette bias (centroid → signal / indigo) ---
   float amt = uPaletteShift * uHuePumpNorm;
@@ -508,6 +542,28 @@ void main() {
     float lumG = dot(color, vec3(0.299, 0.587, 0.114));
     float midMask = 1.0 - abs(lumG - 0.5) * 2.0;
     color *= 1.0 + speckle * 0.09 * clamp(uGranulation, 0.0, 1.0) * max(0.0, midMask);
+  }
+
+  // --- Salt: crystalline absorption spots ---
+  // Cell-hash point field: each ~90th cell hosts a small bright spot with a
+  // dark surrounding halo (pigment displaced outward by the dissolving salt
+  // crystal). Gated by mid-tones so dark ink pools and highlights stay clean.
+  if (uSalt > 0.001) {
+    vec2 gvS = vUv * 65.0;
+    vec2 cellS = floor(gvS);
+    vec2 fS = fract(gvS);
+    float hasSalt = step(0.90, hash21(cellS + 17.0));
+    vec2 posS = vec2(0.25 + hash21(cellS + 2.3) * 0.5,
+                     0.25 + hash21(cellS + 4.9) * 0.5);
+    float radS = 0.18 + hash21(cellS + 7.1) * 0.14;
+    float dS = length(fS - posS);
+    float centerS = smoothstep(radS * 0.9, radS * 0.25, dS);
+    float haloS = smoothstep(radS * 1.5, radS * 1.0, dS) - centerS;
+    float lumS = dot(color, vec3(0.299, 0.587, 0.114));
+    float midMaskS = max(0.0, 1.0 - abs(lumS - 0.5) * 1.7);
+    float aS = clamp(uSalt, 0.0, 1.0);
+    color += vec3(0.22) * hasSalt * centerS * midMaskS * aS;
+    color *= 1.0 - hasSalt * haloS * 0.22 * midMaskS * aS;
   }
 
   // --- Washi: paper-fiber texture ---
@@ -709,6 +765,23 @@ void main() {
     color += (g - 0.5) * uGrain * 0.12;
   }
 
+  // --- Splatter: brush-flick droplets ---
+  // Sparse cell-hash point field, one soft dark disk per populated cell with
+  // varied radius. No luminance gating — splatters in real watercolour cross
+  // light and dark regions alike. Reads as ink flicked onto paper.
+  if (uSplatter > 0.001) {
+    vec2 gvSp = vUv * 22.0;
+    vec2 cellSp = floor(gvSp);
+    vec2 fSp = fract(gvSp);
+    float hasDrop = step(0.93, hash21(cellSp + 31.0));
+    vec2 posSp = vec2(0.2 + hash21(cellSp + 3.7) * 0.6,
+                      0.2 + hash21(cellSp + 5.1) * 0.6);
+    float radSp = 0.10 + hash21(cellSp + 8.3) * 0.30;
+    float dSp = length(fSp - posSp);
+    float splat = hasDrop * smoothstep(radSp, radSp * 0.15, dSp);
+    color *= 1.0 - splat * 0.55 * clamp(uSplatter, 0.0, 1.0);
+  }
+
   // --- Halftone / riso post-pass ---
   // Luminance-thresholded rotated dot screen. Reads as print on paper;
   // pairs well with dither for a risograph feel. Single 45° angle keeps
@@ -736,34 +809,6 @@ void main() {
   vec3 coolTint = vec3(-0.015, -0.005, 0.020);
   vec3 warmTint = vec3( 0.025,  0.010, -0.015);
   color += mix(coolTint, warmTint, arcT) * 0.9;
-
-  // --- Reveal-from-noise (diffusion materialise) ---
-  // Each time a new frame lands, revealT animates 0→1 over ~1.1s. A per-pixel
-  // threshold map (low-freq fbm + high-freq hash) gates the final color:
-  // pixels whose threshold is below revealT are revealed; the rest show a
-  // hash-noise substrate tinted by the ambient colour of the frame. Reads
-  // like diffusion denoising — the image crystallises in patches rather
-  // than uniformly fading.
-  if (uRevealActive > 0.5 && uRevealT < 0.999) {
-    float thrLow = fbm2(vUv * 3.0 + uTime * 0.04);
-    float thrHi = hash21(vUv * 800.0);
-    float thr = mix(thrLow, thrHi, 0.35);
-    float revealEdge = smoothstep(thr - 0.12, thr + 0.04, uRevealT);
-    float n1 = hash21(gl_FragCoord.xy + vec2(fract(uTime * 3.0), 0.0));
-    float n2 = hash21(gl_FragCoord.xy + vec2(0.0, fract(uTime * 5.0)));
-    float n3 = hash21(gl_FragCoord.xy + vec2(fract(uTime * 7.0), fract(uTime * 11.0)));
-    vec3 substrate = vec3(n1, n2, n3) * 0.45 + 0.18;
-    // Tint substrate by the four corners of uCurr so the noise doesn't look
-    // disconnected from the incoming image's palette.
-    vec3 ambient = (
-      texture(uCurr, vec2(0.08, 0.08)).rgb +
-      texture(uCurr, vec2(0.92, 0.08)).rgb +
-      texture(uCurr, vec2(0.08, 0.92)).rgb +
-      texture(uCurr, vec2(0.92, 0.92)).rgb
-    ) * 0.25;
-    substrate = mix(substrate, (substrate + ambient) * 0.5, 0.55);
-    color = mix(substrate, color, revealEdge);
-  }
 
   // --- Dynamic vignette ---
   float r = distance(vUv, vec2(0.5));

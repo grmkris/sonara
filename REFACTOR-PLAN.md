@@ -8,7 +8,7 @@ Follow-up to `ARCHITECTURE.md`. This is an action list informed by three paralle
 |---|---|---|
 | Tier 1 #1 — Delete CSS fallback | ✅ done | `dream-canvas.tsx` 309 → 66 lines; WebGL2 overlay added |
 | Tier 2 #2 — Papari–Kuwahara pass | ✅ done | new `uPainterly` uniform; 4 presets tuned (wet_ink 0.35, bone_china 0.45, worn_linen 0.35, long_exposure 0.4) |
-| Tier 2 #3 — Salt / cauliflower / splatter | ⏳ pending | original code, ~2 hr |
+| Tier 2 #3 — Salt / cauliflower / splatter | ✅ done | 3 new uniforms `uSalt`/`uCauliflower`/`uSplatter`; tuned on wet_ink, bone_china, tide_pool, paper_rain, storm |
 | Tier 3 #4 — lygia include refactor | ❌ dropped | Prosperity + Patron license incompatible with proprietary project; monolithic shader stays |
 | Tier 3 #5 — Fluid-sim preset | 💤 deferred | additive, not cleanup |
 
@@ -44,22 +44,16 @@ Project is `private: true` with no LICENSE file = proprietary. Only permissive (
 
 ---
 
-### Step 3 — Three new ink primitives: salt, cauliflower, splatter (~2 hr)
+### Step 3 — Three new ink primitives: salt, cauliflower, splatter ✅ DONE
 
-**Technique sources:** common watercolour traditions, well-documented in shader literature broadly. We implement from first principles, not from any specific repo.
-
-**What each does**
-- **salt** — sprinkle of high-frequency dark dots that displace pigment locally; reads as crystallised salt absorbing wet ink.
-- **cauliflower** (backrun) — irregular dark blooming edge where wet meets damp paper; an fbm-based ring with broken edges that intrudes on smooth gradients.
-- **splatter** — sparse scattered dots from a brush flick; thresholded value-noise sized inversely with `intensity`.
-
-**Files**
-- `apps/web/src/components/visualizer/displacement-shaders.ts` — three new uniforms `uSalt`, `uCauliflower`, `uSplatter`. Three new gated blocks in the same place as existing `uWashi`/`uDeckle`/`uBokashi`. ~15 lines GLSL each (~45 total).
-- `apps/web/src/components/visualizer/displacement-canvas.tsx` — three new uniform locations + per-frame push from `effective.{salt,cauliflower,splatter}`.
-- `apps/web/src/lib/render/presets.ts` — add three fields to `PresetConfig`, default 0 in `BASE`. Tune values into existing presets where they fit (e.g. `salt: 0.4` on `wet_ink`, `cauliflower: 0.3` on `bokashi-ish` presets, `splatter: 0.2` on `storm`).
-- `lerpPreset` adds the three to the lerp list.
-
-**Verification:** boot dev. Each preset that uses one of these should show the new primitive. Quick test: set preset → confirm the visible new behaviour. `bun run typecheck` clean.
+**Final change:**
+- Shader: added `uSalt`, `uCauliflower`, `uSplatter` uniforms; three gated blocks each ~15 lines.
+  - **Cauliflower** placed after bokashi (wet-paint zone), reuses existing `warpedFbm` for fractal ring edges, mid-tone gated.
+  - **Salt** placed after granulation (pigment-texture zone), cell-hash point field with bright centre + dark halo, mid-tone gated.
+  - **Splatter** placed after grain (surface-texture zone), cell-hash point field with varied-radius dark disks, no luminance gate.
+- Canvas wiring: three uni entries + three per-frame pushes.
+- Presets: `PresetConfig` fields + `BASE` defaults + `lerpPreset` entries. Tuned: `wet_ink` salt 0.3 · `bone_china` salt 0.25 · `tide_pool` cauliflower 0.45 · `paper_rain` splatter 0.3 · `storm` splatter 0.35.
+- All algorithms implemented from first principles (folk watercolour techniques), license-safe.
 
 ---
 

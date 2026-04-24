@@ -34,7 +34,7 @@ createAppKit({
     url:
       typeof window !== "undefined"
         ? window.location.origin
-        : "http://localhost:3000",
+        : "http://localhost:4470",
     icons: [],
   },
   features: {

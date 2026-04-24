@@ -13,10 +13,11 @@ import { SceneHud } from "@/components/visualizer/scene-hud";
 import { HideToggle } from "@/components/visualizer/hide-toggle";
 import { UserControls } from "@/components/user-controls";
 import { DemoRecorder } from "@/components/visualizer/demo-recorder";
-import { TriggerLog } from "@/components/visualizer/trigger-log";
+import { GenerationInspector } from "@/components/visualizer/generation-inspector";
 import { ScanSweep } from "@/components/visualizer/scan-sweep";
 import { Stamp } from "@/components/visualizer/stamp";
 import { VoiceListen } from "@/components/visualizer/voice-listen";
+import { VoiceTrail } from "@/components/visualizer/voice-trail";
 import { NowPlaying } from "@/components/visualizer/now-playing";
 import { Button } from "@/components/ui/button";
 import { useWsSession } from "@/hooks/use-ws-session";
@@ -26,17 +27,16 @@ import {
 } from "@/hooks/use-audio-features";
 import { useSongRecognition } from "@/hooks/use-song-recognition";
 import { useHotkey } from "@/hooks/use-hotkey";
-import { useChainDrain } from "@/hooks/use-chain-drain";
 import {
   hydratePresetPrefs,
   hydrateUiVisible,
+  hydrateVoiceMode,
   useVisualizerStore,
 } from "@/stores/visualizer-store";
 import { cn } from "@/lib/utils";
 
 export default function Page() {
   const send = useWsSession();
-  useChainDrain();
   const [audioSource, setAudioSource] = useState<AudioSource>({ type: "none" });
 
   const onAudioError = useCallback(
@@ -72,6 +72,7 @@ export default function Page() {
   useEffect(() => {
     hydrateUiVisible();
     hydratePresetPrefs();
+    hydrateVoiceMode();
   }, []);
 
   useHotkey(
@@ -137,7 +138,7 @@ export default function Page() {
           <div className="relative flex w-[260px] shrink-0 flex-col gap-10">
             <div aria-hidden className="paper-scrim absolute -inset-6 -z-10" />
             <ControlsPanel send={send} />
-            <TriggerLog />
+            <GenerationInspector />
           </div>
         </section>
 
@@ -150,6 +151,11 @@ export default function Page() {
 
           {/* Row 1: merged waveform-over-spectrum ribbon. */}
           <AudioRibbon height={48} />
+
+          {/* Row 1.5: voice transparency trail. Renders nothing when idle. */}
+          <div className="mt-3">
+            <VoiceTrail />
+          </div>
 
           {/* Row 2: sources + actions. */}
           <div className="mt-3 flex items-center justify-between gap-6">

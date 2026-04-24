@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { DreamSceneState } from "./scene";
 import { NowPlaying } from "./now-playing";
+import { ResolvedScene } from "./scene-resolved";
 import { VISUAL_PRESET_NAMES } from "./visual-presets";
 
 // Clients may only patch user-authored fields. version/references/nowPlaying
@@ -27,11 +28,6 @@ export const ServerEvent = z.discriminatedUnion("type", [
     type: z.literal("frame.final"),
     imageUrl: z.string(),
     version: z.number(),
-    // When the frame is part of a morph chain (voice / big-semantic target
-    // shift), these describe its position so the client can beat-gate release.
-    // Absent = single-frame path (existing behaviour, display immediately).
-    chainIndex: z.number().int().nonnegative().optional(),
-    chainLength: z.number().int().positive().optional(),
   }),
   z.object({
     type: z.literal("job.status"),
@@ -61,6 +57,64 @@ export const ServerEvent = z.discriminatedUnion("type", [
     track: NowPlaying.nullable(),
     source: z.enum(["audd", "cache"]),
     trigger: z.enum(["auto", "manual"]),
+  }),
+  // Voice transparency stream. Three stages:
+  //   voice.partial → live transcript (Web Speech: interim+final; Deepgram
+  //                   Flux: Update / StartOfTurn / EagerEndOfTurn / EndOfTurn
+  //                   events). UI shows what was heard.
+  //   voice.parsed  → LLM intent JSON + latency. UI shows what was understood.
+  //   voice.applied → diff vs prior scene + optional generationVersion. UI
+  //                   shows what actually changed and whether a generation
+  //                   was queued. phraseId correlates the three stages so the
+  //                   trail UI can advance from one to the next.
+  z.object({
+    type: z.literal("voice.partial"),
+    phraseId: z.number().int().nonnegative(),
+    text: z.string(),
+    isFinal: z.boolean(),
+    confidence: z.number().min(0).max(1).optional(),
+    provider: z.enum(["web-speech", "deepgram"]),
+  }),
+  z.object({
+    type: z.literal("voice.parsed"),
+    phraseId: z.number().int().nonnegative(),
+    intent: z.object({
+      patch: z.record(z.string(), z.unknown()),
+      commit: z.boolean(),
+      reset: z.boolean(),
+      preset: z.string().nullable(),
+      lookPreset: z.string().nullable(),
+      atmosphere: z.string().nullable(),
+    }),
+    latencyMs: z.number().nonnegative(),
+  }),
+  z.object({
+    type: z.literal("voice.applied"),
+    phraseId: z.number().int().nonnegative(),
+    patch: z.record(z.string(), z.unknown()),
+    triggered: z.boolean(),
+    triggeredVersion: z.number().int().positive().optional(),
+  }),
+  // Generation-pipeline observability. Emitted around every trigger() so the
+  // inspector HUD can show what scene + prompt the model received and how
+  // long the call took. Phase 2 ships these alongside `job.status`; phase 6
+  // makes them the primary signal once trigger-log is replaced.
+  z.object({
+    type: z.literal("generation.requested"),
+    reason: z.enum(["pause", "semantic", "section", "periodic", "commit", "voice"]),
+    version: z.number().int().positive(),
+    promptString: z.string(),
+    driftSource: z.enum(["llm", "voice", "pool", "none"]),
+    resolvedScene: ResolvedScene,
+    requestedAt: z.number(),
+    nextKeyframeAt: z.number(),
+  }),
+  z.object({
+    type: z.literal("generation.completed"),
+    version: z.number().int().positive(),
+    durationMs: z.number().nonnegative(),
+    success: z.boolean(),
+    message: z.string().optional(),
   }),
 ]);
 

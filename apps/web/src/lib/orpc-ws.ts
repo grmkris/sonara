@@ -10,7 +10,7 @@ import { rpcClient } from "./orpc";
 // the URL provider on every (re)connect — so we mint a fresh HMAC ticket
 // each time without any bespoke reconnect glue.
 
-const WS_URL_BASE = process.env.NEXT_PUBLIC_WS_URL ?? "ws://localhost:3001/ws";
+const WS_URL_BASE = process.env.NEXT_PUBLIC_WS_URL ?? "ws://localhost:4471/ws";
 
 export interface SessionConnection {
   socket: ReconnectingWebSocket;

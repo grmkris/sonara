@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
+import { toast } from "sonner";
 import type { SessionSend } from "@/lib/session-actions";
 import { getCurrentAudioEngine } from "@/hooks/use-audio-features";
 import { useVisualizerStore } from "@/stores/visualizer-store";
@@ -33,12 +34,41 @@ export function useSongRecognition(send: SessionSend): void {
   useEffect(() => {
     const fire = async (trigger: "auto" | "manual") => {
       const engine = getCurrentAudioEngine();
-      if (!engine) return;
+      if (!engine) {
+        if (trigger === "manual") {
+          toast("attach an audio source first", { duration: 2400 });
+        }
+        return;
+      }
+      // Manual trigger pre-check: if no clip recorder yet (MediaRecorder not
+      // ready / no source attached / still warming the ring), surface a toast
+      // instead of silently no-op'ing. Auto trigger stays silent — it already
+      // has its own active-audio gate upstream.
+      if (!engine.hasClipRecorder()) {
+        if (trigger === "manual") {
+          toast("attach an audio source and wait a sec", { duration: 2400 });
+        }
+        return;
+      }
       if (inFlightRef.current) return;
       inFlightRef.current = true;
+      const setRecognizing = useVisualizerStore.getState().setRecognizing;
+      // Only flip the spinner for manual triggers — auto ones shouldn't
+      // distract. The flag is cleared when the server's `now.playing` event
+      // lands (see use-ws-session.ts), NOT in this try/finally, because the
+      // `send()` above is fire-and-forget and resolves before AudD does.
+      if (trigger === "manual") setRecognizing(true);
       try {
         const clip = await engine.grabClip();
-        if (!clip) return;
+        if (!clip) {
+          if (trigger === "manual") {
+            toast("mic is warming up — try again in a second", {
+              duration: 2400,
+            });
+            setRecognizing(false);
+          }
+          return;
+        }
         const clipBase64 = await blobToBase64(clip.blob);
         send({
           type: "audio.recognize",
@@ -49,6 +79,7 @@ export function useSongRecognition(send: SessionSend): void {
         });
       } catch (err) {
         console.warn("[song-recognition] grab/send failed", err);
+        if (trigger === "manual") setRecognizing(false);
       } finally {
         inFlightRef.current = false;
       }

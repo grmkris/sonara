@@ -5,22 +5,27 @@ import {
   type NowPlaying,
   type ServerEvent,
   defaultScene,
-  getSceneTemplate,
 } from "@music-visualizer/shared";
 import { EventPublisher } from "@orpc/server";
 import type { Logger } from "../lib/logger";
-import { streamPreview, streamMorphChain } from "../generation/fal-provider";
-import { buildPrompt } from "../generation/prompt-compiler";
-import { sampleDriftLayered } from "../generation/prompt-drift";
-import { parseVoiceIntent, type VoiceIntent } from "../generation/voice-intent";
+import { streamPreview } from "../generation/fal-provider";
+import { serializeResolvedScene } from "../generation/prompt-compiler";
+import { DriftTrajectory, sampleDriftLayered } from "../generation/prompt-drift";
+import { resolveScene } from "../generation/scene-resolver";
 import {
   debitFrame,
   tryConsumeFreeTier,
   type FrameKind,
 } from "../credits/credits-service";
 import { recognizeClip } from "../recognition/recognition-service";
+import {
+  synthesizeFromTrack,
+  type SongMusePatch,
+} from "../generation/song-muse";
+import { SttService } from "../recognition/stt/stt-service";
 import { mergeNowPlayingIntoScene } from "./now-playing-merge";
 import { semanticDiff } from "./semantic-diff";
+import { VoiceController } from "./voice-controller";
 
 export interface SessionOpts {
   id: string;
@@ -36,33 +41,17 @@ type TriggerReason =
   | "commit"
   | "voice";
 
-const VOICE_PHRASE_TTL_MS = 30_000;
-const VOICE_BUFFER_MAX = 8;
-
-// How long a voice-derived atmosphere clause stays "fresh" before we let
-// drift fall through to the rotating static pool. Without this, one voice
-// phrase sticks forever and every subsequent trigger reuses the identical
-// drift clause — images stop subtly morphing between generations.
-const ATMOSPHERE_TTL_MS = 15_000;
-
 // Full-arc length. sessionProgress = min(1, (now - sessionStartAt) / SESSION_ARC_MS).
 // Drives: drift-pool act bias (intro/build/dissolve weights in prompt-drift).
 // Also exposed on the client over scene.state so the renderer can modulate
 // trail decay, glitch-peek cadence, and a subtle palette-temp over the arc.
 const SESSION_ARC_MS = 20 * 60_000;
 
-// Reset-via-voice shows the user a 10s confirm toast before actually firing.
-const RESET_CONFIRM_TTL_MS = 10_000;
-
 // Baseline thresholds. PERIODIC_MS and PAUSE_MS are intensity-derived
-// (see cadenceFromIntensity below).
-const SEMANTIC_THRESHOLD = 0.3;
-
-// Semantic diff above this, OR any voice-origin trigger, upgrades the flow
-// from a single frame to a morph chain so the viewer sees the transformation
-// as a sequence of img2img steps instead of one replacement frame.
-const MORPH_CHAIN_DIFF_THRESHOLD = 0.6;
-const MORPH_CHAIN_STEPS = 3;
+// (see cadenceFromIntensity below). 0.4 (raised from 0.3 in phase 3) reduces
+// re-triggers for tiny prompt edits now that the periodic cadence is slower
+// and per-trigger cost is felt more.
+const SEMANTIC_THRESHOLD = 0.4;
 
 // After the first "out of credits" error on an auto-trigger (periodic /
 // section), suppress further errors for this long before re-emitting.
@@ -73,6 +62,12 @@ const CREDIT_DENIAL_COOLDOWN_MS = 60_000;
 const SEMANTIC_THRESHOLD_VOICE = 0.1;
 const SECTION_DELTA_THRESHOLD = 0.5;
 const SECTION_SUSTAIN_MS = 500;
+// Refractory window after a section trigger fires. Without this, a
+// chorus-into-bridge transition could produce three section triggers in 2s
+// because sectionEnergy oscillates around the smoothed midpoint while it
+// re-stabilises. 12s matches the new keyframe base cadence so we never
+// stack two image generations on top of each other for energy reasons.
+const SECTION_REFRACTORY_MS = 12_000;
 
 // When audio has been effectively silent for this long we assume the song
 // ended / the tab changed and we clear nowPlaying so the next active segment
@@ -92,10 +87,16 @@ function lerp(a: number, b: number, t: number): number {
 }
 
 // Intensity 0..1 → periodic + pause timing.
+//
+// Phase 3 raised the periodic floor from 3-7s to 8-16s. The per-frame audio
+// reactivity already lives in the client shader (uBass/uMids/uTreble drive
+// displacement, bloom, hue every render frame), so slowing the cadence saves
+// FAL credits without making the visual feel less alive. pauseMs unchanged —
+// the user still wants snappy feedback after a deliberate edit.
 function cadenceFromIntensity(i: number): { periodicMs: number; pauseMs: number } {
   const I = Math.max(0, Math.min(1, i));
   return {
-    periodicMs: Math.round(lerp(7_000, 3_000, I)),
+    periodicMs: Math.round(lerp(16_000, 8_000, I)),
     pauseMs: Math.round(lerp(1_500, 400, I)),
   };
 }
@@ -128,6 +129,7 @@ export class Session {
 
   private lastSectionEnergy = 0;
   private sectionDeltaStartedAt: number | null = null;
+  private lastSectionTriggerAt = 0;
   private lastAudioAt = 0;
   private lastValence = 0.5;
   private lastArousal = 0;
@@ -136,13 +138,22 @@ export class Session {
   private silentSinceAt: number | null = null;
   private recognitionInFlight: AbortController | null = null;
 
-  private voiceBuffer: { text: string; at: number }[] = [];
-  private currentAtmosphere: string | null = null;
-  private currentAtmosphereAt = 0;
   private sessionStartAt = Date.now();
-  private voiceInFlight?: AbortController;
-  private voiceDebounceTimer?: ReturnType<typeof setTimeout>;
   private lastCreditDenialAt = 0;
+
+  // Voice input mode. "live" = always-on VAD (Flux decides end-of-turn);
+  // "ptt" = mic only forwards to Flux while the client holds SPACE (see
+  // `pttStart`/`pttEnd`). Defaults to PTT — safer in multi-person rooms
+  // where ambient speech otherwise triggers false commits.
+  private voiceMode: "live" | "ptt" = "ptt";
+
+  // Stateful per-keyframe drift sequence. Reseeded whenever the resolver
+  // returns fresh LLM-generated drift_candidates (i.e., scene-hash changed).
+  // Falls back to the curated static pool until the first LLM cache fill.
+  private readonly driftTrajectory = new DriftTrajectory();
+
+  private readonly voice: VoiceController;
+  private readonly stt: SttService;
 
   constructor(opts: SessionOpts) {
     this.id = opts.id;
@@ -153,6 +164,43 @@ export class Session {
     });
     this.scene = { ...defaultScene };
     this.lastGeneratedScene = { ...defaultScene };
+    this.voice = new VoiceController({
+      logger: this.logger,
+      send: (event) => this.send(event),
+      getSceneForIntent: () => ({
+        subject: this.scene.subject,
+        environment: this.scene.environment,
+        mood: this.scene.mood,
+        palette: this.scene.palette,
+        intensity: this.scene.intensity,
+      }),
+      getLiveMood: () => ({
+        valence: this.lastValence,
+        arousal: this.lastArousal,
+      }),
+      getNowPlaying: () => this.scene.nowPlaying ?? null,
+      applyPatch: (patch, origin) => this.applyPatch(patch, origin),
+      commit: () => this.commit(),
+      getActiveVersion: () => this.activeVersion,
+    });
+    this.stt = new SttService({
+      logger: this.logger,
+      // STT partials/finals route through the same VoiceController surface
+      // as Web Speech client-pushed partials, so the trail UI sees the
+      // same voice.partial → voice.parsed → voice.applied chain regardless
+      // of provider.
+      onPartial: (opts) => this.voice.applyPartial(opts),
+      // Flux emits EndOfTurn when it's highly confident the speaker is done.
+      // Flush the VoiceController debounce so the LLM intent dispatches
+      // immediately (Live mode); PTT mode reaches commitNow via ptt.end.
+      onEndOfTurn: ({ transcript, confidence }) => {
+        this.logger.debug(
+          { transcript, confidence },
+          "stt: end-of-turn, flushing voice debounce",
+        );
+        this.voice.commitNow();
+      },
+    });
     this.startPeriodic();
   }
 
@@ -163,6 +211,13 @@ export class Session {
     }
     this.send({ type: "scene.state", state: this.scene });
     this.send({ type: "job.status", status: "idle" });
+  }
+
+  // Idempotent snapshot of server-authoritative state for the client's
+  // bootstrap pull (see session.router state procedure). Kept tiny on
+  // purpose — the rest flows through the events stream.
+  getSnapshot(): DreamSceneState {
+    return this.scene;
   }
 
   applyPatch(
@@ -223,7 +278,10 @@ export class Session {
       } else if (now - this.sectionDeltaStartedAt >= SECTION_SUSTAIN_MS) {
         this.sectionDeltaStartedAt = null;
         this.lastSectionEnergy = features.sectionEnergy;
-        this.trigger("section");
+        if (now - this.lastSectionTriggerAt >= SECTION_REFRACTORY_MS) {
+          this.lastSectionTriggerAt = now;
+          this.trigger("section");
+        }
         return;
       }
     } else {
@@ -284,6 +342,9 @@ export class Session {
 
     // Apply nowPlaying + deterministic scene-field backfill (only fills
     // fields that still match defaultScene — user-authored wins).
+    // Deterministic merge handles mood/palette/camera/intensity. Subject is
+    // intentionally NOT set here; the LLM muse below synthesizes an evocative
+    // sumi-e subject that abstracts the song rather than quoting its title.
     const { patch } = mergeNowPlayingIntoScene(this.scene, track, {
       valence: this.lastValence,
       arousal: this.lastArousal,
@@ -292,6 +353,56 @@ export class Session {
     });
     this.scene = { ...this.scene, ...patch, nowPlaying: track };
     this.send({ type: "scene.state", state: this.scene });
+
+    // LLM muse — translate the track into an evocative visual scene.
+    // Awaited so we fire a single trigger with a good subject instead of
+    // triggering twice (once for the deterministic fill, once for the muse).
+    // ~1-2s on gemini-2.5-flash-lite; user is already waiting on the identify
+    // click. Failures fall through to `track.title` as a last-resort subject.
+    let muse: SongMusePatch | null = null;
+    try {
+      muse = await synthesizeFromTrack(
+        {
+          track,
+          valence: this.lastValence,
+          arousal: this.lastArousal,
+          bpm: this.lastBpm,
+        },
+        { signal: controller.signal, logger: this.logger },
+      );
+    } catch (err) {
+      this.logger.warn({ err }, "song-muse: unhandled");
+    }
+    if (controller.signal.aborted) return null;
+
+    const museExtra: Partial<DreamSceneState> = {};
+    if (muse?.subject && this.scene.subject === defaultScene.subject) {
+      museExtra.subject = muse.subject;
+    }
+    if (muse?.environment && this.scene.environment === defaultScene.environment) {
+      museExtra.environment = muse.environment;
+    }
+    if (muse?.action && this.scene.action === defaultScene.action) {
+      museExtra.action = muse.action;
+    }
+    if (muse?.mood && this.scene.mood === defaultScene.mood) {
+      museExtra.mood = muse.mood;
+    }
+    // Fallback so the trigger below actually fires: if the muse failed AND
+    // the user still hasn't authored a subject, at least populate it with the
+    // bare title (no "Artist — Title" literal dump — that used to read as
+    // quotation inside FLUX).
+    if (!museExtra.subject && this.scene.subject === defaultScene.subject) {
+      museExtra.subject = track.title;
+    }
+    if (Object.keys(museExtra).length > 0) {
+      this.scene = { ...this.scene, ...museExtra };
+      this.send({ type: "scene.state", state: this.scene });
+      this.logger.info(
+        { museExtra, hasLlmSynth: muse !== null },
+        "song-muse: scene enriched",
+      );
+    }
 
     // Fire a regeneration so the new subject/mood/palette lands immediately.
     // "section" is the closest semantic match ("the song changed").
@@ -303,152 +414,82 @@ export class Session {
     this.trigger("commit");
   }
 
-  // Returns the most recent unexpired voice phrase, or null.
-  private getLatestVoice(): string | null {
-    const now = Date.now();
-    for (let i = this.voiceBuffer.length - 1; i >= 0; i--) {
-      const entry = this.voiceBuffer[i];
-      if (!entry) continue;
-      if (now - entry.at < VOICE_PHRASE_TTL_MS) return entry.text;
-    }
-    return null;
-  }
-
-  // Incoming voice transcript. Pushed onto the rolling buffer; after a 1.5s
-  // debounce we send the latest phrase through the LLM intent parser, then
-  // dispatch whatever structural / command intent it returned.
   applyVoice(text: string): void {
-    const trimmed = text.trim();
-    if (trimmed.length === 0) return;
-    const now = Date.now();
-    this.voiceBuffer = this.voiceBuffer.filter(
-      (e) => now - e.at < VOICE_PHRASE_TTL_MS,
-    );
-    this.voiceBuffer.push({ text: trimmed, at: now });
-    while (this.voiceBuffer.length > VOICE_BUFFER_MAX) {
-      this.voiceBuffer.shift();
-    }
-    this.logger.info(
-      { text: trimmed, bufferLen: this.voiceBuffer.length },
-      "voice phrase",
-    );
-
-    // Debounce: wait for the user to finish the thought before spending
-    // an LLM call. Each new phrase resets the timer.
-    if (this.voiceDebounceTimer) clearTimeout(this.voiceDebounceTimer);
-    this.voiceDebounceTimer = setTimeout(() => {
-      this.voiceDebounceTimer = undefined;
-      this.dispatchVoice(trimmed).catch((err) => {
-        this.logger.warn({ err }, "dispatchVoice unhandled");
-      });
-    }, 1500);
+    this.voice.applyVoice(text);
   }
 
-  private async dispatchVoice(phrase: string): Promise<void> {
-    this.voiceInFlight?.abort();
-    const controller = new AbortController();
-    this.voiceInFlight = controller;
+  // Live transcript ingress from a client-side STT (Web Speech) or the
+  // server-side Deepgram Flux relay. Emits voice.partial back to the client
+  // and — when isFinal — schedules the LLM intent dispatch via applyVoice.
+  applyVoicePartial(opts: {
+    text: string;
+    isFinal: boolean;
+    confidence?: number;
+    provider: "web-speech" | "deepgram";
+  }): void {
+    this.voice.applyPartial(opts);
+  }
 
-    const history = this.voiceBuffer
-      .slice()
-      .reverse()
-      .map((e) => e.text)
-      .filter((t) => t !== phrase);
+  // ===== Server-side STT relay (Deepgram Flux path) =====
+  // No-ops when DEEPGRAM_API_KEY isn't set — the client falls back to
+  // browser Web Speech and pushes finals via voicePhrase / partials via
+  // voicePartial. With a key, audioStart opens the Flux WS, audioChunk pumps
+  // PCM16 frames, audioStop closes. Flux emits EndOfTurn events which flush
+  // the voice debounce (see SttService.onEndOfTurn wiring in constructor).
+  audioStart(opts: { sampleRate: number }): void {
+    // Forwarding gate defaults to the current voice mode: Live forwards
+    // immediately, PTT starts closed and opens on voice.ptt.start.
+    this.stt.start(opts);
+    this.stt.setForwardAudio(this.voiceMode === "live");
+  }
+  audioStop(): void {
+    this.stt.stop();
+  }
+  audioChunk(base64: string): void {
+    this.stt.push(base64);
+  }
+  // Surface to the client (via session.router.state) which STT path to
+  // activate. Mirrors SttService.isEnabled — never exposes the actual key.
+  sttProvider(): "deepgram" | "web-speech" {
+    return this.stt.isEnabled() ? "deepgram" : "web-speech";
+  }
 
-    let intent: VoiceIntent;
-    try {
-      intent = await parseVoiceIntent(
-        {
-          phrase,
-          scene: {
-            subject: this.scene.subject,
-            environment: this.scene.environment,
-            mood: this.scene.mood,
-            palette: this.scene.palette,
-            intensity: this.scene.intensity,
-          },
-          voiceHistory: history,
-          valence: this.lastValence,
-          arousal: this.lastArousal,
-          previousAtmosphere: this.currentAtmosphere,
-          nowPlaying: this.scene.nowPlaying ?? null,
-        },
-        { signal: controller.signal, logger: this.logger },
-      );
-    } catch (err) {
-      if (!controller.signal.aborted) {
-        this.logger.warn({ err }, "parseVoiceIntent threw");
-      }
-      return;
-    } finally {
-      if (this.voiceInFlight === controller) this.voiceInFlight = undefined;
-    }
-    if (controller.signal.aborted) return;
+  // ===== Voice mode + PTT =====
+  // Live mode: always forward audio → Flux commits on its own EndOfTurn.
+  // PTT  mode: forward only while ptt is held; on release flush the voice
+  // debounce so the current utterance dispatches immediately regardless of
+  // whether Flux has reached its EOT threshold yet.
+  setVoiceMode(mode: "live" | "ptt"): void {
+    if (this.voiceMode === mode) return;
+    this.voiceMode = mode;
+    this.logger.info({ mode }, "voice mode changed");
+    // When flipping to Live, audio flows immediately. When flipping to PTT,
+    // close the gate until the next ptt.start — any in-flight utterance is
+    // left to finish naturally (Flux will send EndOfTurn or time out).
+    this.stt.setForwardAudio(mode === "live");
+  }
 
-    this.logger.info(
-      {
-        phrase,
-        patch: intent.patch,
-        commit: intent.commit,
-        reset: intent.reset,
-        preset: intent.preset,
-        atmosphere: intent.atmosphere,
-      },
-      "voice intent parsed",
-    );
+  pttStart(): void {
+    if (this.voiceMode !== "ptt") return;
+    this.logger.debug("voice ptt start");
+    this.stt.setForwardAudio(true);
+  }
 
-    // Always update atmosphere (flavors subsequent triggers).
-    if (intent.atmosphere) {
-      this.currentAtmosphere = intent.atmosphere;
-      this.currentAtmosphereAt = Date.now();
-    }
-
-    // Visual-preset suggestion is advisory. The client gates on its own
-    // presetMode === "llm" before actually applying it.
-    if (intent.lookPreset) {
-      this.send({ type: "preset.suggest", name: intent.lookPreset });
-    }
-
-    // Reset wins but only after user confirms on the client.
-    if (intent.reset) {
-      this.send({
-        type: "confirm.reset",
-        ttlMs: RESET_CONFIRM_TTL_MS,
-        reason: `voice: "${phrase}"`,
-      });
-      return;
-    }
-
-    // Scene template fills blanks; explicit patch overrides template fields.
-    let patch: ClientScenePatch = { ...intent.patch };
-    if (intent.preset) {
-      const template = getSceneTemplate(intent.preset);
-      if (template) {
-        patch = { ...template.scene, ...patch };
-      } else {
-        this.logger.warn(
-          { key: intent.preset },
-          "unknown scene template from voice",
-        );
-      }
-    }
-
-    if (Object.keys(patch).length > 0) {
-      this.applyPatch(patch, "voice");
-    }
-
-    if (intent.commit) {
-      this.commit();
-    }
+  pttEnd(): void {
+    if (this.voiceMode !== "ptt") return;
+    this.logger.debug("voice ptt end");
+    // Dispatch the LLM intent immediately. Done before the gate closes so
+    // `commitNow` can still read the freshest partial transcript — and so
+    // trailing audio still in flight from the client reaches Flux, letting
+    // it emit a real EndOfTurn for the trail UI afterwards.
+    this.voice.commitNow();
+    setTimeout(() => this.stt.setForwardAudio(false), 250);
   }
 
   reset(): void {
     this.activeJob?.abort();
-    this.voiceInFlight?.abort();
-    if (this.voiceDebounceTimer) {
-      clearTimeout(this.voiceDebounceTimer);
-      this.voiceDebounceTimer = undefined;
-    }
+    this.voice.reset();
+    this.stt.stop();
     if (this.pauseTimer) {
       clearTimeout(this.pauseTimer);
       this.pauseTimer = undefined;
@@ -463,9 +504,6 @@ export class Session {
     this.lastKeyframeAt = 0;
     this.seed = rollSeed();
     this.heroImageUrl = null;
-    this.voiceBuffer = [];
-    this.currentAtmosphere = null;
-    this.currentAtmosphereAt = 0;
     this.sessionStartAt = Date.now();
     this.silentSinceAt = null;
     this.recognitionInFlight?.abort();
@@ -478,10 +516,10 @@ export class Session {
 
   close(): void {
     this.activeJob?.abort();
-    this.voiceInFlight?.abort();
+    this.voice.close();
+    this.stt.stop();
     if (this.pauseTimer) clearTimeout(this.pauseTimer);
     if (this.periodicTimer) clearInterval(this.periodicTimer);
-    if (this.voiceDebounceTimer) clearTimeout(this.voiceDebounceTimer);
   }
 
   private schedulePause(): void {
@@ -507,9 +545,11 @@ export class Session {
   }
 
   private async trigger(reason: TriggerReason): Promise<void> {
-    const basePrompt = buildPrompt(this.scene);
-    if (!basePrompt.trim()) {
-      this.logger.debug({ reason }, "trigger skipped: empty prompt");
+    // Empty-subject fast-exit. `serializeResolvedScene` also returns "" when
+    // subjects[0] is blank, but short-circuiting here saves the resolver and
+    // credit-gate work when there's nothing to generate.
+    if (!this.scene.subject.trim()) {
+      this.logger.debug({ reason }, "trigger skipped: empty subject");
       return;
     }
 
@@ -582,20 +622,25 @@ export class Session {
 
     // Drift layering: current atmosphere (from voice-intent) →
     // most-recent voice phrase raw → static pool.
-    const latestVoice = this.getLatestVoice();
-    const atmosphereFresh =
-      this.currentAtmosphere !== null &&
-      Date.now() - this.currentAtmosphereAt < ATMOSPHERE_TTL_MS;
+    const latestVoice = this.voice.getLatestVoice();
+    const atmosphere = this.voice.getAtmosphere();
     const sessionProgress = Math.min(
       1,
       (Date.now() - this.sessionStartAt) / SESSION_ARC_MS,
     );
     const drift = sampleDriftLayered({
-      llmDrift: atmosphereFresh ? this.currentAtmosphere : null,
+      llmDrift: atmosphere,
       latestVoice,
+      trajectory: this.driftTrajectory,
       sessionProgress,
     });
-    const prompt = drift ? `${basePrompt}, ${drift}` : basePrompt;
+    const driftSource: "llm" | "voice" | "pool" | "none" = atmosphere
+      ? "llm"
+      : latestVoice
+        ? "voice"
+        : drift
+          ? "pool"
+          : "none";
 
     this.activeJob?.abort();
     const controller = new AbortController();
@@ -617,17 +662,53 @@ export class Session {
     const snapshot: DreamSceneState = this.scene;
 
     this.send({ type: "scene.state", state: this.scene });
+
+    // Resolve the flat scene into the structured ResolvedScene, then serialise
+    // to the FLUX prompt. Single source of truth: the inspector HUD's
+    // `promptString` and `resolvedScene` both come from this one build.
+    const resolved = resolveScene(this.scene, {
+      driftModifiers: drift ? [drift] : [],
+      audio: {
+        intensity: this.scene.intensity,
+        section: this.lastSectionEnergy,
+        energyDelta: 0,
+      },
+      logger: this.logger,
+    });
+    // Reseed the drift trajectory whenever fresh LLM candidates land. Same-
+    // pool calls are no-ops (trajectory checks pool equality), so this is
+    // safe to call on every trigger.
+    if (resolved.drift_candidates.length > 0) {
+      const reseeded = this.driftTrajectory.reseed({
+        candidates: resolved.drift_candidates,
+        sessionProgress,
+      });
+      if (reseeded) {
+        this.logger.debug(
+          { candidates: resolved.drift_candidates.length },
+          "drift trajectory reseeded",
+        );
+      }
+    }
+    const prompt = serializeResolvedScene(resolved);
+    if (!prompt.trim()) {
+      // Shouldn't happen — the empty-subject guard at the top already caught
+      // the most common case. Logged at debug so a future serializer bug
+      // surfaces instead of silently firing an empty FAL request.
+      this.logger.debug(
+        { reason, resolved },
+        "trigger skipped: empty resolved prompt",
+      );
+      return;
+    }
+
     this.logger.info(
       {
         reason,
         version,
         prompt,
         drift,
-        driftSource: atmosphereFresh
-          ? "llm"
-          : latestVoice
-            ? "voice"
-            : "pool",
+        driftSource,
         sessionProgress: Number(sessionProgress.toFixed(2)),
         seed: this.seed,
         hasHero: this.heroImageUrl !== null,
@@ -638,86 +719,18 @@ export class Session {
     this.send({ type: "job.status", status: "running", reason });
     this.lastKeyframeAt = Date.now();
 
-    // Morph-chain decision. We upgrade to a chain when the viewer should see
-    // the change happen (voice, or a big semantic rewrite) AND we have a
-    // hero to use as the img2img anchor. Commits always go single-shot — the
-    // commit tier is the identity anchor, a chain there would blur it.
-    const heroForChain = this.heroImageUrl;
-    const diffFromLast = semanticDiff(this.lastGeneratedScene, this.scene);
-    const chainCandidate =
-      !forCommit &&
-      heroForChain !== null &&
-      (reason === "voice" || diffFromLast > MORPH_CHAIN_DIFF_THRESHOLD);
-
-    let chainSteps = 0;
-    if (chainCandidate) {
-      if (this.byokFalKey) {
-        chainSteps = MORPH_CHAIN_STEPS;
-      } else {
-        // First credit already debited above. Try to reserve the remaining
-        // N-1. Whatever we can pay for is what we'll actually generate; any
-        // partial reservation (0..N-1) falls back to the single-frame path
-        // or short chain as appropriate.
-        let extra = 0;
-        for (let i = 0; i < MORPH_CHAIN_STEPS - 1; i++) {
-          try {
-            const rem = await debitFrame(this.userId, "frame", this.logger);
-            if (rem === null) break;
-            extra += 1;
-          } catch (err) {
-            this.logger.warn({ err, i }, "morph chain extra-debit errored");
-            break;
-          }
-        }
-        chainSteps = extra >= 1 ? 1 + extra : 0;
-      }
-    }
-
-    if (chainSteps >= 2 && heroForChain !== null) {
-      const fromPrompt = buildPrompt(this.lastGeneratedScene) || prompt;
-      this.logger.info(
-        { steps: chainSteps, diffFromLast, fromPrompt, toPrompt: prompt },
-        "morph chain start",
-      );
-      streamMorphChain({
-        fromPrompt,
-        toPrompt: prompt,
-        heroImageUrl: heroForChain,
-        steps: chainSteps,
-        seed: this.seed,
-        falKey: this.byokFalKey ?? undefined,
-        signal: controller.signal,
-        logger: this.logger,
-        onStep: (url, index, total) => {
-          if (version !== this.activeVersion) return;
-          this.send({
-            type: "frame.final",
-            imageUrl: url,
-            version,
-            chainIndex: index,
-            chainLength: total,
-          });
-          if (index === total - 1) {
-            this.lastGeneratedScene = snapshot;
-            this.send({ type: "job.status", status: "idle" });
-          }
-        },
-        onError: (err) => {
-          if (controller.signal.aborted) return;
-          this.logger.error({ err }, "morph chain error");
-          this.send({
-            type: "job.status",
-            status: "error",
-            message: err instanceof Error ? err.message : String(err),
-          });
-        },
-      }).catch((err) => {
-        if (!controller.signal.aborted) {
-          this.logger.error({ err }, "streamMorphChain unhandled");
-        }
-      });
-      return;
-    }
+    const requestedAt = Date.now();
+    const { periodicMs } = cadenceFromIntensity(this.scene.intensity);
+    this.send({
+      type: "generation.requested",
+      reason,
+      version,
+      promptString: prompt,
+      driftSource,
+      resolvedScene: resolved,
+      requestedAt,
+      nextKeyframeAt: this.lastKeyframeAt + periodicMs,
+    });
 
     streamPreview({
       prompt,
@@ -742,14 +755,28 @@ export class Session {
         }
         this.send({ type: "frame.final", imageUrl: url, version });
         this.send({ type: "job.status", status: "idle" });
+        this.send({
+          type: "generation.completed",
+          version,
+          durationMs: Date.now() - requestedAt,
+          success: true,
+        });
       },
       onError: (err) => {
         if (controller.signal.aborted) return;
         this.logger.error({ err }, "fal stream error");
+        const message = err instanceof Error ? err.message : String(err);
         this.send({
           type: "job.status",
           status: "error",
-          message: err instanceof Error ? err.message : String(err),
+          message,
+        });
+        this.send({
+          type: "generation.completed",
+          version,
+          durationMs: Date.now() - requestedAt,
+          success: false,
+          message,
         });
       },
     }).catch((err) => {

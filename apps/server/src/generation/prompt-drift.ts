@@ -87,16 +87,113 @@ export function sampleDrift(sessionProgress?: number): string | null {
 // Priority chain for drift selection:
 //   1. Fresh LLM-synthesized drift (preferred when available)
 //   2. Most recent voice phrase (raw, if user spoke recently)
-//   3. Sampled static atmospheric pool (fallback)
+//   3. The session's drift trajectory (LLM-seeded sequence; falls back to
+//      the weighted static pool if no candidates are seeded yet)
+//   4. Sampled static atmospheric pool (final fallback when no trajectory
+//      is supplied — kept for callers that don't hold one, e.g. the voice
+//      intent fallback path)
+//
 // This makes voice visible immediately (layer 2) while letting the LLM take
 // over the moment it finishes synthesizing (layer 1). Never returns null
-// unless the entire pool is empty, which it isn't.
+// unless every layer is empty, which the static pool prevents in practice.
 export function sampleDriftLayered(opts: {
   llmDrift: string | null;
   latestVoice: string | null;
+  trajectory?: DriftTrajectory;
   sessionProgress?: number;
 }): string | null {
   if (opts.llmDrift && opts.llmDrift.trim().length > 0) return opts.llmDrift;
   if (opts.latestVoice && opts.latestVoice.trim().length > 0) return opts.latestVoice;
+  if (opts.trajectory) return opts.trajectory.next();
   return sampleDrift(opts.sessionProgress);
+}
+
+// Stateful drift sequence held by each Session. Pre-samples a fixed-length
+// trajectory of modifiers and advances one slot per keyframe; the slot order
+// gives the session a quasi-thematic cadence instead of the previous random
+// per-trigger draw, which often produced jarring jumps ("dappled light" →
+// "deep shadow" between consecutive keyframes).
+//
+// `candidates` is the per-scene LLM-generated pool (resolvedScene.drift_
+// candidates). When empty, the trajectory falls back to the curated static
+// pool. `reseed()` is called from Session whenever the resolver returns a
+// new candidate set (i.e., scene-hash changed and the expander filled the
+// cache).
+const TRAJECTORY_LENGTH = 10;
+const RECOMBINE_PROB = 0.18;
+
+export class DriftTrajectory {
+  private slots: string[] = [];
+  private cursor = 0;
+  private candidatePool: string[] = [];
+  private progress = 0;
+
+  constructor(opts?: { candidates?: string[]; sessionProgress?: number }) {
+    this.reseed(opts ?? {});
+  }
+
+  // Re-fill the trajectory. No-ops when called with the same candidate pool
+  // we already hold (cheap pool-equality check) so the cursor doesn't reset
+  // on every periodic trigger when nothing has actually changed.
+  reseed(opts: { candidates?: string[]; sessionProgress?: number }): boolean {
+    if (typeof opts.sessionProgress === "number") this.progress = opts.sessionProgress;
+    const next = opts.candidates ?? [];
+    const sameCandidates =
+      next.length === this.candidatePool.length &&
+      next.every((c, i) => c === this.candidatePool[i]);
+    if (sameCandidates && this.slots.length > 0) return false;
+    this.candidatePool = [...next];
+    this.slots = this.sampleSlots();
+    this.cursor = 0;
+    return true;
+  }
+
+  next(): string | null {
+    if (this.slots.length === 0) {
+      // Empty trajectory — refill on demand from current pool (or static
+      // fallback). Should be rare; only happens if reseed() was somehow
+      // called with no candidates and the static pool is empty.
+      this.slots = this.sampleSlots();
+      if (this.slots.length === 0) return null;
+    }
+    const idx = this.cursor % this.slots.length;
+    const phrase = this.slots[idx] ?? null;
+    this.cursor += 1;
+
+    // Occasional in-place recombination keeps long sessions from looping
+    // through the same 10-slot rota. Targets a future slot so the user
+    // doesn't perceive a sudden swap on the next trigger.
+    if (Math.random() < RECOMBINE_PROB) {
+      const replacement = this.sampleOne();
+      if (replacement) {
+        const offset = 2 + Math.floor(Math.random() * 4); // 2..5 ahead
+        const replaceIdx = (this.cursor + offset) % this.slots.length;
+        this.slots[replaceIdx] = replacement;
+      }
+    }
+
+    return phrase;
+  }
+
+  // Diagnostic — used by trigger() logs / tests.
+  inspect(): { slots: string[]; cursor: number; pool: string[] } {
+    return { slots: [...this.slots], cursor: this.cursor, pool: [...this.candidatePool] };
+  }
+
+  private sampleSlots(): string[] {
+    const out: string[] = [];
+    for (let i = 0; i < TRAJECTORY_LENGTH; i++) {
+      const phrase = this.sampleOne();
+      if (phrase) out.push(phrase);
+    }
+    return out;
+  }
+
+  private sampleOne(): string | null {
+    if (this.candidatePool.length > 0) {
+      const r = Math.floor(Math.random() * this.candidatePool.length);
+      return this.candidatePool[r] ?? null;
+    }
+    return sampleDrift(this.progress);
+  }
 }

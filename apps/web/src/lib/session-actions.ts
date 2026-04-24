@@ -12,6 +12,19 @@ export type SessionAction =
   | { type: "scene.patch"; patch: ClientScenePatch }
   | { type: "audio.features"; features: AudioFeatures }
   | { type: "voice.phrase"; text: string }
+  | {
+      type: "voice.partial";
+      text: string;
+      isFinal: boolean;
+      confidence?: number;
+      provider: "web-speech" | "deepgram";
+    }
+  | { type: "voice.mode"; mode: "live" | "ptt" }
+  | { type: "voice.ptt.start" }
+  | { type: "voice.ptt.end" }
+  | { type: "audio.start"; sampleRate: number }
+  | { type: "audio.stop" }
+  | { type: "audio.chunk"; base64: string }
   | { type: "generate.commit" }
   | { type: "session.reset" }
   | {
@@ -37,6 +50,27 @@ export function dispatchSessionAction(
       return client.audioFeatures({ features: action.features });
     case "voice.phrase":
       return client.voicePhrase({ text: action.text });
+    case "voice.partial":
+      return client.voicePartial({
+        text: action.text,
+        isFinal: action.isFinal,
+        provider: action.provider,
+        ...(typeof action.confidence === "number"
+          ? { confidence: action.confidence }
+          : {}),
+      });
+    case "voice.mode":
+      return client.voiceMode({ mode: action.mode });
+    case "voice.ptt.start":
+      return client.pttStart();
+    case "voice.ptt.end":
+      return client.pttEnd();
+    case "audio.start":
+      return client.audioStart({ sampleRate: action.sampleRate });
+    case "audio.stop":
+      return client.audioStop();
+    case "audio.chunk":
+      return client.audioChunk({ base64: action.base64 });
     case "generate.commit":
       return client.commit();
     case "session.reset":
