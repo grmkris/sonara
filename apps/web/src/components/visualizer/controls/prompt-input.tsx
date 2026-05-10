@@ -92,6 +92,7 @@ function randomSeeds(): Record<FieldKey, number> {
 
 export function PromptInput({ send }: PromptInputProps) {
   const scene = useVisualizerStore((s) => s.scene);
+  const status = useVisualizerStore((s) => s.status);
   const [draft, setDraft] = useState<Partial<Record<FieldKey, string>>>({});
   const [sweepKey, setSweepKey] = useState<Record<FieldKey, number>>({
     subject: 0,
@@ -99,6 +100,11 @@ export function PromptInput({ send }: PromptInputProps) {
     mood: 0,
     palette: 0,
   });
+  // Most-recently-committed field. Drives the "⟲ regenerating…" chip beneath
+  // that field while a job is in flight, so the user sees their edit was
+  // received even though the fal generation takes a few seconds. Cleared
+  // when status returns to idle.
+  const [lastCommittedKey, setLastCommittedKey] = useState<FieldKey | null>(null);
   const inputRefs = useRef<Record<FieldKey, HTMLInputElement | null>>({
     subject: null,
     environment: null,
@@ -114,6 +120,13 @@ export function PromptInput({ send }: PromptInputProps) {
     return () => clearInterval(id);
   }, []);
 
+  // Drop the in-flight indicator the moment the server settles. "running" is
+  // the only state where we want the chip visible; idle / cancelled / error
+  // all imply the wait is over.
+  useEffect(() => {
+    if (status !== "running") setLastCommittedKey(null);
+  }, [status]);
+
   const commit = (key: FieldKey) => {
     const value = draft[key];
     if (value === undefined) return;
@@ -127,6 +140,7 @@ export function PromptInput({ send }: PromptInputProps) {
       return rest;
     });
     setSweepKey((s) => ({ ...s, [key]: s[key] + 1 }));
+    setLastCommittedKey(key);
   };
 
   return (
@@ -184,6 +198,14 @@ export function PromptInput({ send }: PromptInputProps) {
                 />
               )}
             </div>
+            {lastCommittedKey === f.key && status === "running" && (
+              <div
+                aria-live="polite"
+                className="font-sans text-[10px] italic tracking-[0.04em] text-[color:var(--stone)]/80"
+              >
+                ⟲ regenerating…
+              </div>
+            )}
           </div>
         );
       })}
