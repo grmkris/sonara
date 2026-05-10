@@ -6,12 +6,37 @@ import type { Logger } from "../lib/logger";
 // just to run three atomic queries. Uses the same DATABASE_URL that apps/web
 // uses for Better Auth.
 
-let pool: pg.Pool | null = null;
-function getPool(): pg.Pool {
+// Subset of `pg.Pool` used by this module. Defined as an interface so tests
+// can substitute a pglite-backed shim without dragging the full pg surface
+// into test-utils.
+export interface PoolLike {
+  connect(): Promise<{
+    query<T = unknown>(
+      sql: string,
+      params?: readonly unknown[],
+    ): Promise<{ rows: T[]; rowCount: number | null }>;
+    release(): void;
+  }>;
+  query<T = unknown>(
+    sql: string,
+    params?: readonly unknown[],
+  ): Promise<{ rows: T[]; rowCount: number | null }>;
+  end?(): Promise<void>;
+}
+
+let pool: PoolLike | null = null;
+function getPool(): PoolLike {
   if (!pool) {
     pool = new pg.Pool({ connectionString: env.DATABASE_URL });
   }
   return pool;
+}
+
+// Test-only override. Tests inject a pglite-backed shim; pass `null` to clear
+// and force getPool() to rebuild from env on the next call. Not part of the
+// production surface — never call from app code.
+export function __setPoolForTests(p: PoolLike | null): void {
+  pool = p;
 }
 
 export type FrameKind = "frame" | "commit";
@@ -118,7 +143,7 @@ export async function getBalance(
 
 export async function closePool(): Promise<void> {
   if (pool) {
-    await pool.end();
+    await pool.end?.();
     pool = null;
   }
 }
