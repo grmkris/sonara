@@ -98,10 +98,18 @@ export async function streamPreview(input: StreamPreviewInput): Promise<void> {
   const refs = (input.referenceImages ?? []).filter(Boolean);
   const hasRef = refs.length > 0;
 
+  // Inference-step budget. Flow-tier (default) is tuned for snappy keyframes
+  // — 3 text-only / 4 with a hero reference. Commit-tier (user-initiated)
+  // pays for the extra detail with 4 / 6 since those frames are anchors the
+  // user explicitly asked for. Trade-off on flow-tier: ~25% faster generation
+  // for slight loss of fine detail on hair / fabric / textures, which the
+  // shader's painterly post-pass largely papers over.
+  const stepsTextOnly = input.forCommit ? 4 : 3;
+  const stepsWithRef = input.forCommit ? 6 : 4;
   const commonInput: Record<string, unknown> = {
     prompt: input.prompt,
     num_images: 1,
-    num_inference_steps: hasRef ? 6 : 4,
+    num_inference_steps: hasRef ? stepsWithRef : stepsTextOnly,
     image_size: "square_hd",
     output_format: "jpeg",
     enable_safety_checker: false,
