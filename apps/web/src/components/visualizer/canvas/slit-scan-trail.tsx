@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import { getCurrentDisplacementCanvas } from "@/components/visualizer/displacement-canvas";
+import { getCurrentDisplacementCanvas } from "@/components/visualizer/canvas/displacement-canvas";
 import { useVisualizerStore } from "@/stores/visualizer-store";
 
 // Time-compressed echo ribbon pinned above the bottom audio strip. Every

@@ -3,10 +3,10 @@
 import { useEffect, useState } from "react";
 import { useVisualizerStore } from "@/stores/visualizer-store";
 import { isWebgl2Available } from "@/lib/render/webgl-util";
-import { CanvasGrain } from "@/components/visualizer/canvas-grain";
-import { InkDrops } from "@/components/visualizer/ink-drops";
-import { DisplacementCanvas } from "@/components/visualizer/displacement-canvas";
-import { CanvasOscilloscope } from "@/components/visualizer/canvas-oscilloscope";
+import { CanvasGrain } from "@/components/visualizer/audio/canvas-grain";
+import { InkDrops } from "@/components/visualizer/canvas/ink-drops";
+import { DisplacementCanvas } from "@/components/visualizer/canvas/displacement-canvas";
+import { CanvasOscilloscope } from "@/components/visualizer/audio/canvas-oscilloscope";
 
 // WebGL2-only renderer. The previous CSS fallback path drifted from the WebGL
 // pipeline (missed reveal, presets, RD, glitch-peek) and was deleted.

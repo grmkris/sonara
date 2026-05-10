@@ -1,0 +1,16 @@
+import type { InspectorSlice } from "./inspector-slice";
+import type { PlaybackSlice } from "./playback-slice";
+import type { PresetSlice } from "./preset-slice";
+import type { SceneSlice } from "./scene-slice";
+import type { UiSlice } from "./ui-slice";
+import type { VoiceSlice } from "./voice-slice";
+
+// The full root state — union of every slice. Each slice's StateCreator is
+// parameterised by this so cross-slice reads (e.g., `setStatus` bumping
+// `sweepPulse`) typecheck against the merged shape.
+export type VisualizerState = SceneSlice &
+  PlaybackSlice &
+  UiSlice &
+  InspectorSlice &
+  VoiceSlice &
+  PresetSlice;

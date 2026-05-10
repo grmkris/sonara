@@ -10,9 +10,9 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { IntensityDial } from "@/components/visualizer/intensity-dial";
-import { PresetPicker } from "@/components/visualizer/preset-picker";
-import { SceneTemplatePicker } from "@/components/visualizer/scene-template-picker";
+import { IntensityDial } from "@/components/visualizer/controls/intensity-dial";
+import { PresetPicker } from "@/components/visualizer/controls/preset-picker";
+import { SceneTemplatePicker } from "@/components/visualizer/controls/scene-template-picker";
 import { useVisualizerStore } from "@/stores/visualizer-store";
 import { debounce } from "@/lib/debounce";
 

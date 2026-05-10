@@ -1,0 +1,128 @@
+import type { StateCreator } from "zustand";
+import {
+  PRESET_NAMES,
+  type PresetConfig,
+  type PresetName,
+} from "@/lib/render/presets";
+import type { VisualizerState } from "./types";
+
+export const PRESET_KEY = "dream.preset";
+export const PRESET_MODE_KEY = "dream.presetMode";
+export const SAVED_PRESETS_KEY = "dream.savedPresets";
+
+export type PresetMode = "manual" | "cycle" | "section" | "llm";
+
+export const PRESET_NAMES_RUNTIME = PRESET_NAMES;
+
+export interface PresetSlice {
+  // Effects-deck preset state. Controls which named look the shader is
+  // cross-fading toward; driven manually, by a timer, by section triggers
+  // (from job.status reason="section"), or by LLM suggestions.
+  preset: PresetName;
+  presetMode: PresetMode;
+  presetCycleMs: number;
+  // Monotonic counter — bumped whenever a new preset is SELECTED (from any
+  // source). DisplacementCanvas subscribes to this to start a cross-fade.
+  presetTick: number;
+  // Ad-hoc saved presets captured from mid-crossfade effective state.
+  // Keys are user-supplied names; values are full PresetConfig snapshots.
+  savedPresets: Record<string, PresetConfig>;
+  // When set, takes precedence over `preset` as the crossfade target. Used
+  // for saved snapshots since their configs don't live in the PRESETS map.
+  customPreset: PresetConfig | null;
+  // Renderer writes here each tick so snapshotCurrentPreset can capture it.
+  lastEffective: PresetConfig | null;
+  // Ring buffer of recent final frame URLs, newest-first. Used by the ghost
+  // callback overlay to resurface earlier scenes at low opacity.
+  heroBank: string[];
+
+  setPreset: (name: PresetName) => void;
+  setPresetMode: (m: PresetMode) => void;
+  setPresetCycleMs: (ms: number) => void;
+  setLastEffective: (cfg: PresetConfig) => void;
+  snapshotCurrentPreset: (name: string) => void;
+  selectSavedPreset: (name: string) => void;
+  deleteSavedPreset: (name: string) => void;
+  pushHero: (url: string) => void;
+}
+
+export const createPresetSlice: StateCreator<
+  VisualizerState,
+  [],
+  [],
+  PresetSlice
+> = (set) => ({
+  preset: "wet_ink",
+  presetMode: "manual",
+  presetCycleMs: 90_000,
+  presetTick: 0,
+  savedPresets: {},
+  customPreset: null,
+  lastEffective: null,
+  heroBank: [],
+
+  setPreset: (name) =>
+    set((s) => {
+      // Selecting a built-in always clears any active custom (saved) preset
+      // override so the chip UI stays consistent with what's rendering.
+      if (s.preset === name && s.customPreset === null) return {};
+      if (typeof window !== "undefined") {
+        window.localStorage.setItem(PRESET_KEY, name);
+      }
+      return {
+        preset: name,
+        customPreset: null,
+        presetTick: s.presetTick + 1,
+      };
+    }),
+  setPresetMode: (m) => {
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem(PRESET_MODE_KEY, m);
+    }
+    set({ presetMode: m });
+  },
+  setPresetCycleMs: (ms) => set({ presetCycleMs: Math.max(5_000, ms) }),
+  setLastEffective: (cfg) => set({ lastEffective: cfg }),
+  snapshotCurrentPreset: (name) =>
+    set((s) => {
+      if (!s.lastEffective) return {};
+      const trimmed = name.trim();
+      if (!trimmed) return {};
+      const next = { ...s.savedPresets, [trimmed]: { ...s.lastEffective } };
+      if (typeof window !== "undefined") {
+        window.localStorage.setItem(SAVED_PRESETS_KEY, JSON.stringify(next));
+      }
+      return {
+        savedPresets: next,
+        customPreset: { ...s.lastEffective },
+        presetTick: s.presetTick + 1,
+      };
+    }),
+  selectSavedPreset: (name) =>
+    set((s) => {
+      const cfg = s.savedPresets[name];
+      if (!cfg) return {};
+      return {
+        customPreset: { ...cfg },
+        presetTick: s.presetTick + 1,
+      };
+    }),
+  deleteSavedPreset: (name) =>
+    set((s) => {
+      if (!(name in s.savedPresets)) return {};
+      const next = { ...s.savedPresets };
+      delete next[name];
+      if (typeof window !== "undefined") {
+        window.localStorage.setItem(SAVED_PRESETS_KEY, JSON.stringify(next));
+      }
+      return { savedPresets: next };
+    }),
+  // Ring buffer: keep last 6 unique URLs, newest-first. Dedupes on push so
+  // a preview+final pair doesn't store two slots for one generation.
+  pushHero: (url) =>
+    set((s) => {
+      if (!url || s.heroBank[0] === url) return {};
+      const next = [url, ...s.heroBank.filter((u) => u !== url)].slice(0, 6);
+      return { heroBank: next };
+    }),
+});
