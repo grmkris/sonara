@@ -12,7 +12,8 @@
     "test": "bun test || echo 'no tests yet'",
     "db:generate": "drizzle-kit generate",
     "db:push": "drizzle-kit push",
-    "db:studio": "drizzle-kit studio"
+    "db:studio": "drizzle-kit studio",
+    "seed-credits": "bun run src/scripts/seed-credits.ts"
   },
   "dependencies": {
     "@music-visualizer/api": "workspace:*",
