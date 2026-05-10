@@ -1,19 +1,14 @@
 import { ORPCError } from "@music-visualizer/api/server";
 import { findPack } from "@music-visualizer/shared";
 import { and, eq, gte, sql, sum } from "drizzle-orm";
-import { decodeEventLog, getAddress, parseAbiItem } from "viem";
+import { getAddress } from "viem";
 import { z } from "zod";
 import { publicEnv } from "@/env";
 import { typeIdGenerator } from "@/lib/typeid";
 import { baseClient } from "@/lib/chain-clients";
 import { SCHEMA } from "../db";
 import { protectedProcedure } from "./procedures";
-
-const USDC_BASE = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913";
-const USDC_DECIMALS = 6;
-const TRANSFER_EVENT = parseAbiItem(
-  "event Transfer(address indexed from, address indexed to, uint256 value)",
-);
+import { expectedMinForUsd, findUsdcTransfer } from "./topup-verifier";
 
 const ConfirmInput = z.object({
   txHash: z.string().regex(/^0x[0-9a-fA-F]{64}$/, "invalid txHash"),
@@ -115,37 +110,18 @@ export const creditsRouter = {
         throw new ORPCError("BAD_REQUEST", { message: "transaction reverted" });
       }
 
-      const expectedMin = BigInt(pack.usd) * 10n ** BigInt(USDC_DECIMALS);
-      const usdcAddress = getAddress(USDC_BASE);
-      let paidFrom: `0x${string}` | null = null;
-      let paidValue = 0n;
-
-      for (const log of receipt.logs) {
-        if (getAddress(log.address) !== usdcAddress) continue;
-        try {
-          const decoded = decodeEventLog({
-            abi: [TRANSFER_EVENT],
-            data: log.data,
-            topics: log.topics,
-          });
-          if (decoded.eventName !== "Transfer") continue;
-          const { from, to, value } = decoded.args;
-          if (getAddress(to) !== recipient) continue;
-          if (value < expectedMin) continue;
-          paidFrom = getAddress(from);
-          paidValue = value;
-          break;
-        } catch {
-          // skip non-USDC logs
-        }
-      }
-
-      if (!paidFrom) {
+      const match = findUsdcTransfer(
+        receipt.logs,
+        recipient,
+        expectedMinForUsd(pack.usd),
+      );
+      if (!match) {
         throw new ORPCError("BAD_REQUEST", {
           message:
             "no matching USDC Transfer found in this transaction (check recipient, amount, and chain)",
         });
       }
+      const { paidFrom, paidValue } = match;
 
       try {
         await db.transaction(async (tx) => {
