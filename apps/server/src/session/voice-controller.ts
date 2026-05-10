@@ -18,9 +18,6 @@ import {
 
 const VOICE_PHRASE_TTL_MS = 30_000;
 const VOICE_BUFFER_MAX = 8;
-// Debounce — wait for the user to finish their thought before spending an
-// LLM call. Each new phrase resets this timer.
-const VOICE_DEBOUNCE_MS = 1500;
 // How long a voice-derived atmosphere clause stays "fresh" before we let
 // drift fall through to the rotating static pool. Without this, one voice
 // phrase sticks forever and every subsequent trigger reuses the identical
@@ -54,7 +51,6 @@ export class VoiceController {
   private currentAtmosphere: string | null = null;
   private currentAtmosphereAt = 0;
   private inFlight?: AbortController;
-  private debounceTimer?: ReturnType<typeof setTimeout>;
   // Monotonic phrase IDs let the client correlate voice.partial / voice.parsed
   // / voice.applied for the same utterance. New ID per applyVoice call (the
   // user has finished a thought) AND per applyPartial burst that comes from
@@ -67,7 +63,7 @@ export class VoiceController {
 
   // Live transcript ingress from the browser's Web Speech API. partial.isFinal
   // = true means the recogniser is committing this segment; the controller
-  // routes it through applyVoice (debounced LLM intent) once final, and just
+  // routes it through applyVoice (immediate LLM dispatch) once final, and just
   // mirrors interim text to the client trail. Idempotent on identical text
   // so quick repeated partials don't spam the WS.
   applyPartial(opts: {
@@ -76,9 +72,8 @@ export class VoiceController {
     confidence?: number;
     provider: "web-speech";
   }): void {
-    // Web Speech partials rely on the natural 1.5s debounce — the browser
-    // emits a `final` once it's confident speech has paused. PTT release on
-    // the client is purely a mic gate; the server has no separate flush path.
+    // Web Speech already pause-detects before emitting `final` — no extra
+    // server-side debounce is needed (would just add 1.5s of dead time).
     const text = opts.text.trim();
     if (text.length === 0) return;
     if (text === this.lastPartialText && !opts.isFinal) return;
@@ -137,55 +132,24 @@ export class VoiceController {
       "voice phrase",
     );
 
-    if (this.debounceTimer) clearTimeout(this.debounceTimer);
-    this.debounceTimer = setTimeout(() => {
-      this.debounceTimer = undefined;
-      this.dispatch(trimmed, phraseId).catch((err) => {
-        this.deps.logger.warn({ err }, "dispatchVoice unhandled");
-      });
-      // Reset so the NEXT utterance opens a fresh phraseId.
-      this.currentPhraseId = 0;
-      this.lastPartialText = "";
-    }, VOICE_DEBOUNCE_MS);
-  }
-
-  // Flush the debounce and dispatch the LLM intent for the most recent
-  // voice phrase immediately. No external caller today — kept as a public
-  // hook so a future "flush now" client signal (e.g. an explicit "send"
-  // button) can wire to it without re-deriving the buffer/partial fallback.
-  commitNow(): void {
-    const latest = this.voiceBuffer[this.voiceBuffer.length - 1];
-    const now = Date.now();
-    const fromBuffer =
-      latest && now - latest.at < VOICE_PHRASE_TTL_MS ? latest.text : "";
-    const text = fromBuffer || this.lastPartialText.trim();
-    if (!text) {
-      this.deps.logger.debug("voice commit now: no transcript, skipping");
-      return;
-    }
-    if (this.debounceTimer) {
-      clearTimeout(this.debounceTimer);
-      this.debounceTimer = undefined;
-    }
-    // If we're dispatching from an interim (not a buffered final), push it
-    // into the buffer so subsequent drift-layer reads see the utterance.
-    if (!fromBuffer) {
-      this.voiceBuffer.push({ text, at: now });
-      while (this.voiceBuffer.length > VOICE_BUFFER_MAX) {
-        this.voiceBuffer.shift();
-      }
-    }
-    const phraseId =
-      this.currentPhraseId === 0 ? this.nextPhraseId++ : this.currentPhraseId;
-    this.deps.logger.info(
-      { text, phraseId, source: fromBuffer ? "buffer" : "partial" },
-      "voice commit now",
-    );
-    this.dispatch(text, phraseId).catch((err) => {
-      this.deps.logger.warn({ err }, "dispatchVoice (commitNow) unhandled");
+    // Dispatch immediately. Web Speech only emits `final` once it has already
+    // pause-detected, so an additional server timer just adds dead time. If
+    // a fresh utterance lands while the previous LLM call is still in flight,
+    // `dispatch()` aborts the prior controller and supersedes it.
+    this.dispatch(trimmed, phraseId).catch((err) => {
+      this.deps.logger.warn({ err }, "dispatchVoice unhandled");
     });
     this.currentPhraseId = 0;
     this.lastPartialText = "";
+  }
+
+  // No-op shim — preserved on the public surface so a future "flush now"
+  // signal (e.g., a manual send button) can wire to it without callers
+  // re-deriving the buffer/partial fallback. With the debounce removed,
+  // each `final` already dispatches immediately so there is nothing to
+  // flush at the moment.
+  commitNow(): void {
+    this.deps.logger.debug("voice commit now: no-op (debounce removed)");
   }
 
   private async dispatch(phrase: string, phraseId: number): Promise<void> {
@@ -310,10 +274,6 @@ export class VoiceController {
   reset(): void {
     this.inFlight?.abort();
     this.inFlight = undefined;
-    if (this.debounceTimer) {
-      clearTimeout(this.debounceTimer);
-      this.debounceTimer = undefined;
-    }
     this.voiceBuffer = [];
     this.currentAtmosphere = null;
     this.currentAtmosphereAt = 0;
@@ -321,6 +281,5 @@ export class VoiceController {
 
   close(): void {
     this.inFlight?.abort();
-    if (this.debounceTimer) clearTimeout(this.debounceTimer);
   }
 }
