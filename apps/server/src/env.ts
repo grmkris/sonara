@@ -33,7 +33,7 @@ const envSchema = z.object({
   // speakers; higher = slower, safer against mid-thought commits).
   DEEPGRAM_API_KEY: z.string().min(1).optional(),
   DEEPGRAM_STT_MODEL: z.string().default("flux-general-en"),
-  DEEPGRAM_EOT_THRESHOLD: z.coerce.number().min(0).max(1).default(0.55),
+  DEEPGRAM_EOT_THRESHOLD: z.coerce.number().min(0).max(1).default(0.7),
   DEEPGRAM_EOT_TIMEOUT_MS: z.coerce.number().int().nonnegative().default(5000),
 });
 

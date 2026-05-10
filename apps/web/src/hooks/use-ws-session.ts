@@ -110,6 +110,9 @@ export function useWsSession(): SessionSend {
           );
           break;
         case "voice.partial":
+          console.debug(
+            `[voice] partial#${event.phraseId} ${event.isFinal ? "final" : "interim"} (${event.provider}): ${event.text}`,
+          );
           s.voicePartial({
             phraseId: event.phraseId,
             text: event.text,
@@ -121,6 +124,10 @@ export function useWsSession(): SessionSend {
           });
           break;
         case "voice.parsed":
+          console.debug(
+            `[voice] parsed#${event.phraseId} in ${event.latencyMs}ms`,
+            event.intent,
+          );
           s.voiceParsed({
             phraseId: event.phraseId,
             intent: event.intent,
@@ -128,6 +135,14 @@ export function useWsSession(): SessionSend {
           });
           break;
         case "voice.applied":
+          console.debug(
+            `[voice] applied#${event.phraseId} triggered=${event.triggered}${
+              typeof event.triggeredVersion === "number"
+                ? ` v${event.triggeredVersion}`
+                : ""
+            }`,
+            event.patch,
+          );
           s.voiceApplied({
             phraseId: event.phraseId,
             patch: event.patch,
@@ -192,6 +207,9 @@ export function useWsSession(): SessionSend {
             try {
               const snap = await client.state();
               if (!cancelled) {
+                console.info(
+                  `[voice] sttProvider=${snap.sttProvider} (from server snapshot)`,
+                );
                 store.getState().setScene(snap.scene);
                 store.getState().setSttProvider(snap.sttProvider);
               }

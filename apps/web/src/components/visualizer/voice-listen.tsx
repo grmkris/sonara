@@ -134,9 +134,13 @@ function WebSpeechListen({ send }: VoiceListenProps) {
       send={send}
       start={() => {
         if (!supported) return;
+        console.info("[voice] start requested (web-speech)");
         void start();
       }}
-      stop={stop}
+      stop={() => {
+        console.info("[voice] stop requested (web-speech)");
+        stop();
+      }}
     />
   );
 }
@@ -152,7 +156,7 @@ function DeepgramListen({ send }: VoiceListenProps) {
     [send],
   );
   const onStop = useCallback(() => send({ type: "audio.stop" }), [send]);
-  const { active, error, start, stop } = useAudioCapture({
+  const { active, error, chunkCount, level, start, stop } = useAudioCapture({
     onChunk,
     onStart,
     onStop,
@@ -165,8 +169,16 @@ function DeepgramListen({ send }: VoiceListenProps) {
       listening={active}
       error={error}
       send={send}
-      start={() => void start()}
-      stop={stop}
+      start={() => {
+        console.info("[voice] start requested (deepgram)");
+        void start();
+      }}
+      stop={() => {
+        console.info("[voice] stop requested (deepgram)");
+        stop();
+      }}
+      chunkCount={chunkCount}
+      level={level}
     />
   );
 }
@@ -179,6 +191,10 @@ interface ModeAwareListenProps {
   send: SessionSend;
   start: () => void;
   stop: () => void;
+  // Deepgram-only diagnostics. Web Speech path doesn't surface these because
+  // recognition runs entirely in the browser and we never see raw audio.
+  chunkCount?: number;
+  level?: number;
 }
 
 // Renders the mic toggle + Live/PTT mode switch, and owns the PTT keyboard
@@ -192,6 +208,8 @@ function ModeAwareListen({
   send,
   start,
   stop,
+  chunkCount,
+  level,
 }: ModeAwareListenProps) {
   const voiceMode = useVisualizerStore((s) => s.voiceMode);
   const setVoiceMode = useVisualizerStore((s) => s.setVoiceMode);
@@ -289,11 +307,35 @@ function ModeAwareListen({
           hold space to speak
         </div>
       )}
+      {listening && typeof chunkCount === "number" && (
+        <MicReadout chunkCount={chunkCount} level={level ?? 0} />
+      )}
       {error && (
         <div className="font-mono text-[9px] uppercase tracking-[0.2em] text-[color:var(--stone)]">
           {error === "unsupported" ? "not supported" : `error · ${error}`}
         </div>
       )}
+    </div>
+  );
+}
+
+// Mic readout: chunk counter proves capture is running; peak-level bar proves
+// the mic is actually hearing sound. Together they distinguish "mic stuck",
+// "mic muted", "audio flowing but no transcripts" at a glance.
+function MicReadout({ chunkCount, level }: { chunkCount: number; level: number }) {
+  const pct = Math.min(1, level * 4); // amplify so normal speech fills the bar
+  return (
+    <div className="flex items-center gap-2 font-mono text-[9px] uppercase tracking-[0.2em] text-[color:var(--stone)]/70">
+      <span className="nums tabular-nums">{chunkCount}</span>
+      <span
+        aria-hidden
+        className="relative inline-block h-[3px] w-16 overflow-hidden bg-[color:var(--stone)]/25"
+      >
+        <span
+          className="absolute inset-y-0 left-0 bg-[color:var(--paper)]/70 transition-[width] duration-75"
+          style={{ width: `${pct * 100}%` }}
+        />
+      </span>
     </div>
   );
 }

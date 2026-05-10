@@ -156,12 +156,15 @@ export class DeepgramSttSession {
               });
               break;
             case "EagerEndOfTurn":
-              // Moderate-confidence end. Surface as final partial so the UI
-              // shows the completed text, but do NOT commit yet — Flux may
-              // still send TurnResumed if the speaker continues.
+              // Moderate-confidence end. Route as INTERIM so VoiceController
+              // does NOT kick the LLM dispatch path — Flux may still send
+              // TurnResumed if the speaker continues. Previously this was
+              // `isFinal: true`, which caused every eager event (including
+              // false positives on ambient bursts) to dispatch, overwriting
+              // user-typed fields. Only EndOfTurn commits now.
               this.opts.onPartial({
                 text,
-                isFinal: true,
+                isFinal: false,
                 confidence: message.end_of_turn_confidence,
                 provider: "deepgram",
               });

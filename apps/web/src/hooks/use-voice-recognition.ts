@@ -109,7 +109,10 @@ export function useVoiceRecognition(
     rec.interimResults = true;
     rec.maxAlternatives = 1;
     rec.lang = opts.lang ?? "en-US";
-    rec.onstart = () => setListening(true);
+    rec.onstart = () => {
+      console.info("[voice] web-speech recognition started");
+      setListening(true);
+    };
     rec.onend = () => {
       setListening(false);
       // Auto-restart if still wanted (Chrome drops recognition ~60s).
@@ -135,6 +138,7 @@ export function useVoiceRecognition(
         typeof ev === "object" && ev && "error" in ev
           ? String((ev as { error: unknown }).error)
           : "error";
+      console.warn(`[voice] web-speech error: ${code}`);
       // `no-speech` and `aborted` are routine — don't surface.
       if (code !== "no-speech" && code !== "aborted") setError(code);
     };

@@ -24,6 +24,13 @@ export interface UseAudioCaptureOpts {
 export interface AudioCaptureState {
   active: boolean;
   error: string | null;
+  // Number of PCM chunks delivered since start(). Zero = worklet connected
+  // but no audio is flowing (mic muted, wrong device, OS-level gate).
+  chunkCount: number;
+  // Peak absolute amplitude (0..1) of the most recent chunk. Gives the UI
+  // a cheap mic-level meter — user can see if the mic is hearing them at
+  // all without waiting for a transcript.
+  level: number;
   start: () => Promise<void>;
   stop: () => void;
 }
@@ -43,9 +50,25 @@ function int16BufferToBase64(buf: ArrayBuffer): string {
   return btoa(bin);
 }
 
+// Peak absolute amplitude across an Int16 PCM chunk, normalised to 0..1.
+// Cheap enough to run on every worklet message (chunks are ~1600 samples).
+function peakLevel(buf: ArrayBuffer): number {
+  const view = new Int16Array(buf);
+  let peak = 0;
+  for (let i = 0; i < view.length; i++) {
+    const v = view[i];
+    if (v === undefined) continue;
+    const a = v < 0 ? -v : v;
+    if (a > peak) peak = a;
+  }
+  return peak / 32768;
+}
+
 export function useAudioCapture(opts: UseAudioCaptureOpts): AudioCaptureState {
   const [active, setActive] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [chunkCount, setChunkCount] = useState(0);
+  const [level, setLevel] = useState(0);
   const ctxRef = useRef<AudioContext | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const nodeRef = useRef<AudioWorkletNode | null>(null);
@@ -80,6 +103,9 @@ export function useAudioCapture(opts: UseAudioCaptureOpts): AudioCaptureState {
     streamRef.current = null;
     ctxRef.current = null;
     setActive(false);
+    setChunkCount(0);
+    setLevel(0);
+    console.info("[voice] audio capture stopped");
     onStopRef.current?.();
   }, []);
 
@@ -143,6 +169,8 @@ export function useAudioCapture(opts: UseAudioCaptureOpts): AudioCaptureState {
       const buf = ev.data as ArrayBuffer;
       if (!(buf instanceof ArrayBuffer)) return;
       try {
+        setLevel(peakLevel(buf));
+        setChunkCount((n) => n + 1);
         const b64 = int16BufferToBase64(buf);
         onChunkRef.current(b64);
       } catch (err) {
@@ -156,6 +184,9 @@ export function useAudioCapture(opts: UseAudioCaptureOpts): AudioCaptureState {
     sourceRef.current = source;
 
     setActive(true);
+    console.info(
+      `[voice] audio capture started (ctx=${ctx.sampleRate}Hz → 16kHz)`,
+    );
     onStartRef.current?.({ targetSampleRate: 16000 });
   }, [active, stop]);
 
@@ -166,5 +197,5 @@ export function useAudioCapture(opts: UseAudioCaptureOpts): AudioCaptureState {
     };
   }, [stop]);
 
-  return { active, error, start, stop };
+  return { active, error, chunkCount, level, start, stop };
 }
