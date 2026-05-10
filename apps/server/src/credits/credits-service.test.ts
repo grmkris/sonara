@@ -15,6 +15,7 @@ import {
   __setPoolForTests,
   debitFrame,
   getBalance,
+  refundFrame,
   tryConsumeFreeTier,
 } from "./credits-service";
 
@@ -179,6 +180,43 @@ describe("tryConsumeFreeTier", () => {
     expect(res.rows.length).toBe(1);
     expect(res.rows[0]?.kind).toBe("free");
     expect(res.rows[0]?.delta).toBe(-1);
+  });
+});
+
+describe("refundFrame", () => {
+  test("increments balance_frames + writes a refund ledger row", async () => {
+    await seedCredits(USER, 4, 0);
+    const newBalance = await refundFrame(USER, "frame");
+    expect(newBalance).toBe(5);
+    const res = await pg.query<{ kind: string; delta: number }>(
+      `SELECT kind, delta FROM usage_ledger WHERE user_id = $1`,
+      [USER],
+    );
+    expect(res.rows.length).toBe(1);
+    expect(res.rows[0]?.kind).toBe("refund");
+    expect(res.rows[0]?.delta).toBe(1);
+  });
+
+  test("increments balance_commits when kind=commit", async () => {
+    await seedCredits(USER, 0, 2);
+    expect(await refundFrame(USER, "commit")).toBe(3);
+  });
+
+  test("returns null when user has no credits row", async () => {
+    expect(await refundFrame(USER, "frame")).toBeNull();
+    expect(await ledgerCount()).toBe(0);
+  });
+
+  test("debit followed by refund leaves balance unchanged", async () => {
+    await seedCredits(USER, 10, 0);
+    expect(await debitFrame(USER, "frame")).toBe(9);
+    expect(await refundFrame(USER, "frame")).toBe(10);
+    // 1 debit row (delta=-1) + 1 refund row (delta=+1) = net 0.
+    const res = await pg.query<{ sum: string }>(
+      `SELECT COALESCE(SUM(delta), 0)::text AS sum FROM usage_ledger WHERE user_id = $1`,
+      [USER],
+    );
+    expect(Number(res.rows[0]?.sum ?? 0)).toBe(0);
   });
 });
 

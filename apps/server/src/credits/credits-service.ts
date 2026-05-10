@@ -96,6 +96,56 @@ export async function debitFrame(
 }
 
 /**
+ * Inverse of `debitFrame`. Increments the matching balance and appends a
+ * `kind: "refund"` ledger row with delta=+1 in the same transaction. Returns
+ * the new balance, or `null` when the user has no `credits` row at all
+ * (which means there was no prior debit to refund — caller should treat as
+ * a no-op rather than an error).
+ *
+ * Use case: a fal generation fails after the credit was already debited.
+ * The trigger version that paid is the version that gets refunded — callers
+ * must capture `kind` at the debit site so the refund hits the right column.
+ */
+export async function refundFrame(
+  userId: string,
+  kind: FrameKind,
+  logger?: Logger,
+): Promise<number | null> {
+  const client = await getPool().connect();
+  try {
+    await client.query("BEGIN");
+    const col = kind === "frame" ? "balance_frames" : "balance_commits";
+    const upd = await client.query<{ balance: number }>(
+      `UPDATE credits
+         SET ${col} = ${col} + 1, updated_at = now()
+         WHERE user_id = $1
+         RETURNING ${col} AS balance`,
+      [userId],
+    );
+    if (upd.rowCount === 0) {
+      // No row to refund into. Most likely the user was BYOK or never had a
+      // credits row — caller should never have called us. Roll back and
+      // return null so the trigger logs and moves on.
+      await client.query("ROLLBACK");
+      return null;
+    }
+    await client.query(
+      `INSERT INTO usage_ledger (id, user_id, kind, delta, created_at)
+       VALUES ($1, $2, 'refund', 1, now())`,
+      [newLedgerId(), userId],
+    );
+    await client.query("COMMIT");
+    return upd.rows[0]?.balance ?? 0;
+  } catch (err) {
+    await client.query("ROLLBACK").catch(() => {});
+    logger?.error({ err, userId, kind }, "refundFrame failed");
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
+/**
  * Try to consume one free-tier slot in the current hourly window. Returns
  * true iff the user was under the hourly limit. Composite PK on
  * (user_id, window_start) makes this race-safe without an explicit tx —
