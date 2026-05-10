@@ -14,6 +14,7 @@ import { DriftTrajectory, sampleDriftLayered } from "../generation/prompt-drift"
 import { resolveScene } from "../generation/scene-resolver";
 import {
   debitFrame,
+  refundFrame,
   tryConsumeFreeTier,
   type FrameKind,
 } from "../credits/credits-service";
@@ -571,6 +572,10 @@ export class Session {
     ];
     const isUserInitiated = USER_INITIATED.includes(reason);
 
+    // Tracks the column to refund into if the fal call fails after we paid.
+    // Stays null on BYOK and free-tier paths (which we never refund).
+    let paidKind: FrameKind | null = null;
+
     if (!this.byokFalKey) {
       try {
         const kind: FrameKind = forCommit ? "commit" : "frame";
@@ -603,6 +608,7 @@ export class Session {
           // Successful debit clears the denial window — fresh errors surface
           // again if credits run out later in the same session.
           this.lastCreditDenialAt = 0;
+          paidKind = kind;
           this.logger.debug({ reason, kind, remaining }, "credit debited");
         }
       } catch (err) {
@@ -763,6 +769,18 @@ export class Session {
         });
       },
       onError: (err) => {
+        // Refund the paid credit before surfacing the error. Free-tier and
+        // BYOK paths set paidKind=null so this is a no-op for them. Aborts
+        // refund too — a superseded trigger never delivered a frame, so
+        // the user should get the credit back regardless of the cause.
+        if (paidKind) {
+          refundFrame(this.userId, paidKind, this.logger).catch((e) => {
+            this.logger.error(
+              { err: e, version, kind: paidKind },
+              "refundFrame after fal error failed",
+            );
+          });
+        }
         if (controller.signal.aborted) return;
         this.logger.error({ err }, "fal stream error");
         const message = err instanceof Error ? err.message : String(err);
