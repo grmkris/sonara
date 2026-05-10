@@ -1,6 +1,16 @@
+import { typeIdGenerator, typeIdToUuid } from "@music-visualizer/shared/typeid";
 import pg from "pg";
 import { env } from "../env";
 import type { Logger } from "../lib/logger";
+
+// Generate a fresh `usage_ledger` row id as a UUID. The DB column is `uuid`
+// but the application layer thinks in typeid-prefixed strings — use the
+// shared typeid generator so ledger rows from apps/server are time-sortable
+// and round-trip through drizzle's `typeId` customType the same way as rows
+// written via the web router.
+function newLedgerId(): string {
+  return typeIdToUuid(typeIdGenerator("usageLedger")).uuid;
+}
 
 // Direct pg access — avoids pulling drizzle + schema types into apps/server
 // just to run three atomic queries. Uses the same DATABASE_URL that apps/web
@@ -71,8 +81,8 @@ export async function debitFrame(
     }
     await client.query(
       `INSERT INTO usage_ledger (id, user_id, kind, delta, created_at)
-       VALUES (gen_random_uuid(), $1, $2, -1, now())`,
-      [userId, kind],
+       VALUES ($1, $2, $3, -1, now())`,
+      [newLedgerId(), userId, kind],
     );
     await client.query("COMMIT");
     return upd.rows[0]?.balance ?? 0;
@@ -117,8 +127,8 @@ export async function tryConsumeFreeTier(
   try {
     await getPool().query(
       `INSERT INTO usage_ledger (id, user_id, kind, delta, created_at)
-       VALUES (gen_random_uuid(), $1, 'free', -1, now())`,
-      [userId],
+       VALUES ($1, $2, 'free', -1, now())`,
+      [newLedgerId(), userId],
     );
   } catch (err) {
     logger?.warn({ err, userId }, "failed to append free-tier ledger row");
