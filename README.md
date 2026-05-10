@@ -32,9 +32,20 @@ bun run dev
 - `bun run lint` — oxlint across the workspace
 - `bun run ci:local` — lint + typecheck + test + build serially
 
+## Migrations
+
+Drizzle migrations live in `apps/web/drizzle/`. After editing `apps/web/src/server/db/schema.ts`:
+
+```bash
+cd apps/web
+bun run db:generate    # writes a new migration file alongside the existing baseline
+```
+
+Apply with `bun run db:push` (dev) or `bun run db:migrate` (prod) — both are run by hand, never automatically. Always commit the generated SQL alongside the schema change so history stays in lockstep.
+
 ## Architecture
 
-See `ARCHITECTURE.md` for the current code tour — data flow, layer-by-layer map, and the tracked cleanup list. `REFACTOR-PLAN.md` tracks the tiered action list.
+See `ARCHITECTURE.md` for the current code tour — data flow, layer-by-layer map, and the tracked cleanup list. `REFACTOR-PLAN.md` tracks the tiered action list. `AGENTS.md` documents repo conventions for human + AI contributors.
 
 **In short:** the browser captures audio (file / mic / tab share), extracts ~15 features via Meyda + a hand-rolled analyzer at 60 Hz, upstreams them at 5 Hz over an oRPC WebSocket. The server session runs scene / voice-intent / song-recognition / morph-chain / credits logic and pushes frame URLs + state updates back through an `eventIterator`. The client renders via a WebGL2 displacement shader with feedback FBO, Kuwahara painterly pass, and reveal-from-noise gate.
 
