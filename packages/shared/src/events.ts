@@ -59,9 +59,8 @@ export const ServerEvent = z.discriminatedUnion("type", [
     trigger: z.enum(["auto", "manual"]),
   }),
   // Voice transparency stream. Three stages:
-  //   voice.partial → live transcript (Web Speech: interim+final; Deepgram
-  //                   Flux: Update / StartOfTurn / EagerEndOfTurn / EndOfTurn
-  //                   events). UI shows what was heard.
+  //   voice.partial → live transcript from the browser's Web Speech API
+  //                   (interim + final). UI shows what was heard.
   //   voice.parsed  → LLM intent JSON + latency. UI shows what was understood.
   //   voice.applied → diff vs prior scene + optional generationVersion. UI
   //                   shows what actually changed and whether a generation
@@ -73,7 +72,7 @@ export const ServerEvent = z.discriminatedUnion("type", [
     text: z.string(),
     isFinal: z.boolean(),
     confidence: z.number().min(0).max(1).optional(),
-    provider: z.enum(["web-speech", "deepgram"]),
+    provider: z.enum(["web-speech"]),
   }),
   z.object({
     type: z.literal("voice.parsed"),

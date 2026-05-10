@@ -207,11 +207,7 @@ export function useWsSession(): SessionSend {
             try {
               const snap = await client.state();
               if (!cancelled) {
-                console.info(
-                  `[voice] sttProvider=${snap.sttProvider} (from server snapshot)`,
-                );
                 store.getState().setScene(snap.scene);
-                store.getState().setSttProvider(snap.sttProvider);
               }
             } catch (err) {
               const msg = err instanceof Error ? err.message : String(err);

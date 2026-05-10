@@ -14,7 +14,6 @@
     "ingest-demo": "bun run src/scripts/ingest-demo.ts"
   },
   "dependencies": {
-    "@deepgram/sdk": "^5.0.0",
     "@fal-ai/client": "^1.9.5",
     "@music-visualizer/api": "workspace:*",
     "@music-visualizer/shared": "workspace:*",

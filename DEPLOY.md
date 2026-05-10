@@ -20,7 +20,7 @@ Postgres lives externally on Neon (Railway's Postgres addon works too — pick o
 └────────────────────────── │ ────────┘
                             ▼
                     Neon Postgres
-                    fal.ai / AudD / Deepgram
+                    fal.ai / AudD
 ```
 
 ---
@@ -63,7 +63,6 @@ Create these as **shared variables** in the project and reference them from each
 |---|---|
 | `FAL_KEY` | from fal.ai dashboard |
 | `AUDD_API_KEY` | from audd.io |
-| `DEEPGRAM_API_KEY` | optional; falls back to Web Speech API if unset |
 | `LOG_LEVEL` | `info` |
 | `PORT` | auto-injected by Railway — **do not set manually** |
 

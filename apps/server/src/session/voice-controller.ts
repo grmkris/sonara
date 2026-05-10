@@ -65,7 +65,7 @@ export class VoiceController {
 
   constructor(private readonly deps: VoiceControllerDeps) {}
 
-  // Live transcript ingress from the active STT provider. partial.isFinal
+  // Live transcript ingress from the browser's Web Speech API. partial.isFinal
   // = true means the recogniser is committing this segment; the controller
   // routes it through applyVoice (debounced LLM intent) once final, and just
   // mirrors interim text to the client trail. Idempotent on identical text
@@ -74,12 +74,11 @@ export class VoiceController {
     text: string;
     isFinal: boolean;
     confidence?: number;
-    provider: "web-speech" | "deepgram";
+    provider: "web-speech";
   }): void {
-    // Note: "deepgram" partials come from the server-side Flux relay; the
-    // confirmation (EndOfTurn) path calls commitNow() separately to flush
-    // the debounce. "web-speech" partials rely on the natural 1.5s debounce
-    // since the browser API has no reliable EOT signal.
+    // Web Speech partials rely on the natural 1.5s debounce — the browser
+    // emits a `final` once it's confident speech has paused. PTT release on
+    // the client is purely a mic gate; the server has no separate flush path.
     const text = opts.text.trim();
     if (text.length === 0) return;
     if (text === this.lastPartialText && !opts.isFinal) return;
@@ -151,16 +150,9 @@ export class VoiceController {
   }
 
   // Flush the debounce and dispatch the LLM intent for the most recent
-  // voice phrase immediately. Called by:
-  //   - Flux EndOfTurn events (Live mode) — the model signals high-confidence
-  //     speaker-done; no reason to keep waiting the 1.5s display debounce.
-  //   - PTT key release (PTT mode) — user has explicitly finished their turn.
-  //
-  // Prefers a buffered (finalized) phrase, but falls back to the most recent
-  // interim partial. PTT release often fires before Flux reaches its EOT
-  // threshold for short utterances, leaving the buffer empty even though
-  // `lastPartialText` holds the transcript. Without this fallback, short
-  // utterances in PTT mode silently dropped.
+  // voice phrase immediately. No external caller today — kept as a public
+  // hook so a future "flush now" client signal (e.g. an explicit "send"
+  // button) can wire to it without re-deriving the buffer/partial fallback.
   commitNow(): void {
     const latest = this.voiceBuffer[this.voiceBuffer.length - 1];
     const now = Date.now();

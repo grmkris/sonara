@@ -23,7 +23,7 @@ export interface VoiceTrailState {
   text: string;
   isFinal: boolean;
   confidence: number | null;
-  provider: "web-speech" | "deepgram";
+  provider: "web-speech";
   intent: VoiceTrailIntent | null;
   parsedLatencyMs: number | null;
   appliedPatch: Record<string, unknown> | null;
@@ -35,14 +35,9 @@ export interface VoiceTrailState {
 
 export interface VoiceSlice {
   voiceTrail: VoiceTrailState | null;
-  // STT provider the server reported at handshake. Used by voice-listen to
-  // pick between Web Speech (client-side) and audio-relay (server-side
-  // Deepgram Flux). Defaults to web-speech until the state snapshot lands.
-  sttProvider: "web-speech" | "deepgram";
-  // Voice input mode.
-  //   "live" — always-on; Flux's EndOfTurn event drives commits.
-  //   "ptt"  — hold SPACE; mic forwards only while held, key release flushes
-  //            the voice debounce immediately.
+  // Voice input mode (purely client-side).
+  //   "live" — recognition runs continuously while toggled on.
+  //   "ptt"  — hold SPACE to start recognition; release stops it.
   // Default is "ptt" — safer in multi-person rooms. Persisted in localStorage.
   voiceMode: "live" | "ptt";
   // Ephemeral — true while the PTT key is currently held. Drives the armed
@@ -54,7 +49,7 @@ export interface VoiceSlice {
     text: string;
     isFinal: boolean;
     confidence?: number;
-    provider: "web-speech" | "deepgram";
+    provider: "web-speech";
   }) => void;
   voiceParsed: (opts: {
     phraseId: number;
@@ -68,7 +63,6 @@ export interface VoiceSlice {
     triggeredVersion?: number;
   }) => void;
   clearVoiceTrail: () => void;
-  setSttProvider: (p: "web-speech" | "deepgram") => void;
   setVoiceMode: (m: "live" | "ptt") => void;
   setVoicePtt: (v: boolean) => void;
 }
@@ -80,7 +74,6 @@ export const createVoiceSlice: StateCreator<
   VoiceSlice
 > = (set) => ({
   voiceTrail: null,
-  sttProvider: "web-speech",
   voiceMode: "ptt",
   voicePtt: false,
 
@@ -140,7 +133,6 @@ export const createVoiceSlice: StateCreator<
       };
     }),
   clearVoiceTrail: () => set({ voiceTrail: null }),
-  setSttProvider: (p) => set({ sttProvider: p }),
   setVoiceMode: (m) => {
     if (typeof window !== "undefined") {
       window.localStorage.setItem(VOICE_MODE_KEY, m);

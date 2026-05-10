@@ -17,14 +17,8 @@ export type SessionAction =
       text: string;
       isFinal: boolean;
       confidence?: number;
-      provider: "web-speech" | "deepgram";
+      provider: "web-speech";
     }
-  | { type: "voice.mode"; mode: "live" | "ptt" }
-  | { type: "voice.ptt.start" }
-  | { type: "voice.ptt.end" }
-  | { type: "audio.start"; sampleRate: number }
-  | { type: "audio.stop" }
-  | { type: "audio.chunk"; base64: string }
   | { type: "generate.commit" }
   | { type: "session.reset" }
   | {
@@ -59,18 +53,6 @@ export function dispatchSessionAction(
           ? { confidence: action.confidence }
           : {}),
       });
-    case "voice.mode":
-      return client.voiceMode({ mode: action.mode });
-    case "voice.ptt.start":
-      return client.pttStart();
-    case "voice.ptt.end":
-      return client.pttEnd();
-    case "audio.start":
-      return client.audioStart({ sampleRate: action.sampleRate });
-    case "audio.stop":
-      return client.audioStop();
-    case "audio.chunk":
-      return client.audioChunk({ base64: action.base64 });
     case "generate.commit":
       return client.commit();
     case "session.reset":

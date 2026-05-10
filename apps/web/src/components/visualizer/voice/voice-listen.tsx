@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useRef } from "react";
 import type { SessionSend } from "@/lib/session-actions";
-import { useAudioCapture } from "@/hooks/use-audio-capture";
 import { useVoiceRecognition } from "@/hooks/use-voice-recognition";
 import { useVisualizerStore } from "@/stores/visualizer-store";
 import { cn } from "@/lib/utils";
@@ -11,30 +10,155 @@ interface VoiceListenProps {
   send: SessionSend;
 }
 
-// Voice toggle button. Picks the STT path based on what the server reports
-// at handshake (state.sttProvider):
+// Voice toggle. Uses the browser's Web Speech API — no server-side STT
+// (Deepgram was removed; Web Speech is good enough for short scene-control
+// phrases in Chrome/Edge/Safari, and the only path we still ship).
 //
-//   "web-speech"  → browser-native SpeechRecognition; partials sent through
-//                   voice.partial procedure, finals through voice.phrase.
-//   "deepgram"    → AudioWorklet captures mic at 16k PCM16, base64-encoded
-//                   chunks streamed via audio.chunk; server relays to
-//                   Deepgram Flux (listen v2) and emits voice.partial events
-//                   back. Flux's EndOfTurn events flush the voice debounce
-//                   server-side for low-latency commits.
-//
-// Either way the trail UI sees the same store updates because both paths
-// converge on the unified VoiceController on the server.
-//
-// Voice mode (stored in voiceMode) gates when audio actually reaches the STT:
-//   "live" — always forwarding (once the button is on).
-//   "ptt"  — hold SPACE to forward; release to flush + commit.
+// Two modes, both purely client-side:
+//   "live" — recognition runs continuously while toggled on. Browser emits
+//            finals on natural pause; we forward them as voice.phrase.
+//   "ptt"  — recognition starts on SPACE keydown, stops on keyup. The browser
+//            emits a final on stop; same forwarding path. Holds the mic gate
+//            tightly so ambient speech in multi-person rooms never reaches
+//            the LLM.
 export function VoiceListen({ send }: VoiceListenProps) {
-  const sttProvider = useVisualizerStore((s) => s.sttProvider);
-  if (sttProvider === "deepgram") return <DeepgramListen send={send} />;
-  return <WebSpeechListen send={send} />;
+  const onPhrase = useCallback(
+    (text: string) => send({ type: "voice.phrase", text }),
+    [send],
+  );
+  const onPartial = useCallback(
+    (opts: { text: string; isFinal: boolean; confidence?: number }) =>
+      send({
+        type: "voice.partial",
+        text: opts.text,
+        isFinal: opts.isFinal,
+        provider: "web-speech",
+        ...(typeof opts.confidence === "number"
+          ? { confidence: opts.confidence }
+          : {}),
+      }),
+    [send],
+  );
+  const { supported, listening, error, start, stop } = useVoiceRecognition({
+    onPhrase,
+    onPartial,
+  });
+
+  const voiceMode = useVisualizerStore((s) => s.voiceMode);
+  const setVoiceMode = useVisualizerStore((s) => s.setVoiceMode);
+  const voicePtt = useVisualizerStore((s) => s.voicePtt);
+  const setVoicePtt = useVisualizerStore((s) => s.setVoicePtt);
+
+  // In Live mode the user toggles the mic with the button. In PTT mode the
+  // button arms the path (so SPACE is wired up) but actual recognition only
+  // runs while space is held — `armed` reflects the user's intent, `listening`
+  // reflects whether the recogniser is currently active.
+  const armed = voiceMode === "live" ? listening : listening || voicePtt;
+
+  const onMicToggle = () => {
+    if (!supported) return;
+    if (listening) stop();
+    else void start();
+  };
+
+  // PTT: when armed, SPACE keydown/keyup drive recognition.start/stop directly.
+  // When unsupported recognition keeps "listening=false" so this is dormant.
+  const pttArmed = voiceMode === "ptt" && (listening || voicePtt);
+  usePushToTalk(
+    pttArmed,
+    () => {
+      setVoicePtt(true);
+      void start();
+    },
+    () => {
+      setVoicePtt(false);
+      stop();
+    },
+  );
+
+  // Switching from live → ptt while listening drops the mic so the user has
+  // to press space to resume. Switching ptt → live arms continuous listening.
+  const cycleMode = () => {
+    const next: "live" | "ptt" = voiceMode === "live" ? "ptt" : "live";
+    if (listening) stop();
+    setVoicePtt(false);
+    setVoiceMode(next);
+  };
+
+  const disabled = !supported;
+
+  return (
+    <div className="flex flex-col gap-1 font-sans">
+      <div className="flex items-baseline gap-3">
+        <button
+          type="button"
+          onClick={onMicToggle}
+          disabled={disabled}
+          title={
+            disabled
+              ? "Speech recognition isn't supported in this browser (Chrome/Edge/Safari)."
+              : listening
+                ? "Stop listening"
+                : "Start listening"
+          }
+          className={cn(
+            "group flex items-baseline gap-2 rounded-sm px-2 py-1 transition-colors",
+            disabled
+              ? "text-[color:var(--stone)]/40 cursor-not-allowed"
+              : armed
+                ? "text-[color:var(--paper)]"
+                : "text-[color:var(--stone)] hover:text-[color:var(--paper)]",
+            voicePtt &&
+              "outline outline-1 outline-[color:var(--signal)]/70 animate-pulse",
+          )}
+        >
+          <span className="font-serif text-[13px] leading-none">
+            {armed ? "●" : "○"}
+          </span>
+          <span className="font-serif text-[13px]">voice</span>
+          {armed && (
+            <span className="font-mono text-[9px] uppercase tracking-[0.22em] text-[color:var(--stone)]">
+              {voiceMode === "ptt"
+                ? voicePtt
+                  ? "held"
+                  : "armed"
+                : "listening"}
+            </span>
+          )}
+        </button>
+
+        <button
+          type="button"
+          onClick={cycleMode}
+          title={
+            voiceMode === "live"
+              ? "Switch to push-to-talk (hold SPACE)"
+              : "Switch to live listening"
+          }
+          className={cn(
+            "font-mono text-[9px] uppercase tracking-[0.22em] transition-colors",
+            "text-[color:var(--stone)] hover:text-[color:var(--paper)]",
+          )}
+        >
+          mode · {voiceMode}
+        </button>
+      </div>
+
+      {voiceMode === "ptt" && armed && !voicePtt && (
+        <div className="font-mono text-[9px] uppercase tracking-[0.2em] text-[color:var(--stone)]/70">
+          hold space to speak
+        </div>
+      )}
+      {error && (
+        <div className="font-mono text-[9px] uppercase tracking-[0.2em] text-[color:var(--stone)]">
+          {error === "unsupported" ? "not supported" : `error · ${error}`}
+        </div>
+      )}
+    </div>
+  );
 }
 
-// Push-to-talk keyboard handler. SPACE keydown → armed; keyup → release.
+// Push-to-talk keyboard handler. SPACE keydown → fire onStart; keyup → onEnd.
 // Guarded against input/textarea/contenteditable focus so the prompt input
 // still takes spaces. `repeat` events from held keys are ignored. A safety
 // timer forces release after MAX_PTT_MS in case keyup is lost (blur, focus
@@ -100,242 +224,4 @@ function usePushToTalk(
       if (timerRef.current) clearTimeout(timerRef.current);
     };
   }, [enabled, onStart, release]);
-}
-
-function WebSpeechListen({ send }: VoiceListenProps) {
-  const onPhrase = useCallback(
-    (text: string) => send({ type: "voice.phrase", text }),
-    [send],
-  );
-  const onPartial = useCallback(
-    (opts: { text: string; isFinal: boolean; confidence?: number }) =>
-      send({
-        type: "voice.partial",
-        text: opts.text,
-        isFinal: opts.isFinal,
-        provider: "web-speech",
-        ...(typeof opts.confidence === "number"
-          ? { confidence: opts.confidence }
-          : {}),
-      }),
-    [send],
-  );
-  const { supported, listening, error, start, stop } = useVoiceRecognition({
-    onPhrase,
-    onPartial,
-  });
-
-  return (
-    <ModeAwareListen
-      providerBadge={null}
-      supported={supported}
-      listening={listening}
-      error={error}
-      send={send}
-      start={() => {
-        if (!supported) return;
-        console.info("[voice] start requested (web-speech)");
-        void start();
-      }}
-      stop={() => {
-        console.info("[voice] stop requested (web-speech)");
-        stop();
-      }}
-    />
-  );
-}
-
-function DeepgramListen({ send }: VoiceListenProps) {
-  const onChunk = useCallback(
-    (base64: string) => send({ type: "audio.chunk", base64 }),
-    [send],
-  );
-  const onStart = useCallback(
-    (opts: { targetSampleRate: 16000 }) =>
-      send({ type: "audio.start", sampleRate: opts.targetSampleRate }),
-    [send],
-  );
-  const onStop = useCallback(() => send({ type: "audio.stop" }), [send]);
-  const { active, error, chunkCount, level, start, stop } = useAudioCapture({
-    onChunk,
-    onStart,
-    onStop,
-  });
-
-  return (
-    <ModeAwareListen
-      providerBadge="dg"
-      supported={true}
-      listening={active}
-      error={error}
-      send={send}
-      start={() => {
-        console.info("[voice] start requested (deepgram)");
-        void start();
-      }}
-      stop={() => {
-        console.info("[voice] stop requested (deepgram)");
-        stop();
-      }}
-      chunkCount={chunkCount}
-      level={level}
-    />
-  );
-}
-
-interface ModeAwareListenProps {
-  providerBadge: string | null;
-  supported: boolean;
-  listening: boolean;
-  error: string | null;
-  send: SessionSend;
-  start: () => void;
-  stop: () => void;
-  // Deepgram-only diagnostics. Web Speech path doesn't surface these because
-  // recognition runs entirely in the browser and we never see raw audio.
-  chunkCount?: number;
-  level?: number;
-}
-
-// Renders the mic toggle + Live/PTT mode switch, and owns the PTT keyboard
-// hotkey. Shared between WebSpeech and Deepgram paths so mode selection is
-// provider-agnostic.
-function ModeAwareListen({
-  providerBadge,
-  supported,
-  listening,
-  error,
-  send,
-  start,
-  stop,
-  chunkCount,
-  level,
-}: ModeAwareListenProps) {
-  const voiceMode = useVisualizerStore((s) => s.voiceMode);
-  const setVoiceMode = useVisualizerStore((s) => s.setVoiceMode);
-  const voicePtt = useVisualizerStore((s) => s.voicePtt);
-  const setVoicePtt = useVisualizerStore((s) => s.setVoicePtt);
-
-  // Notify the server of the current mode on mount and on change. The server
-  // adjusts its audio-forward gate to match.
-  useEffect(() => {
-    send({ type: "voice.mode", mode: voiceMode });
-  }, [send, voiceMode]);
-
-  const pttEnabled = voiceMode === "ptt" && listening;
-  const pttStart = useCallback(() => {
-    setVoicePtt(true);
-    send({ type: "voice.ptt.start" });
-  }, [send, setVoicePtt]);
-  const pttEnd = useCallback(() => {
-    setVoicePtt(false);
-    send({ type: "voice.ptt.end" });
-  }, [send, setVoicePtt]);
-  usePushToTalk(pttEnabled, pttStart, pttEnd);
-
-  const cycleMode = () => setVoiceMode(voiceMode === "live" ? "ptt" : "live");
-
-  const disabled = !supported;
-  const armed = voiceMode === "live" ? listening : voicePtt;
-
-  return (
-    <div className="flex flex-col gap-1 font-sans">
-      <div className="flex items-baseline gap-3">
-        <button
-          type="button"
-          onClick={() => {
-            if (!supported) return;
-            if (listening) stop();
-            else start();
-          }}
-          disabled={disabled}
-          title={
-            disabled
-              ? "Speech recognition isn't supported in this browser (Chrome/Safari only)."
-              : listening
-                ? "Stop listening"
-                : "Start listening"
-          }
-          className={cn(
-            "group flex items-baseline gap-2 rounded-sm px-2 py-1 transition-colors",
-            disabled
-              ? "text-[color:var(--stone)]/40 cursor-not-allowed"
-              : armed
-                ? "text-[color:var(--paper)]"
-                : "text-[color:var(--stone)] hover:text-[color:var(--paper)]",
-            // PTT-held: pulsing accent outline so the user can't miss that the
-            // mic is actively forwarding audio to Flux right now.
-            voicePtt &&
-              "outline outline-1 outline-[color:var(--signal)]/70 animate-pulse",
-          )}
-        >
-          <span className="font-serif text-[13px] leading-none">
-            {armed ? "●" : "○"}
-          </span>
-          <span className="font-serif text-[13px]">voice</span>
-          {providerBadge && (
-            <span className="font-mono text-[8px] uppercase tracking-[0.22em] text-[color:var(--stone)]/60">
-              {providerBadge}
-            </span>
-          )}
-          {armed && (
-            <span className="font-mono text-[9px] uppercase tracking-[0.22em] text-[color:var(--stone)]">
-              {voiceMode === "ptt" ? "held" : "listening"}
-            </span>
-          )}
-        </button>
-
-        <button
-          type="button"
-          onClick={cycleMode}
-          title={
-            voiceMode === "live"
-              ? "Switch to push-to-talk (hold SPACE)"
-              : "Switch to live listening"
-          }
-          className={cn(
-            "font-mono text-[9px] uppercase tracking-[0.22em] transition-colors",
-            "text-[color:var(--stone)] hover:text-[color:var(--paper)]",
-          )}
-        >
-          mode · {voiceMode}
-        </button>
-      </div>
-
-      {voiceMode === "ptt" && listening && !voicePtt && (
-        <div className="font-mono text-[9px] uppercase tracking-[0.2em] text-[color:var(--stone)]/70">
-          hold space to speak
-        </div>
-      )}
-      {listening && typeof chunkCount === "number" && (
-        <MicReadout chunkCount={chunkCount} level={level ?? 0} />
-      )}
-      {error && (
-        <div className="font-mono text-[9px] uppercase tracking-[0.2em] text-[color:var(--stone)]">
-          {error === "unsupported" ? "not supported" : `error · ${error}`}
-        </div>
-      )}
-    </div>
-  );
-}
-
-// Mic readout: chunk counter proves capture is running; peak-level bar proves
-// the mic is actually hearing sound. Together they distinguish "mic stuck",
-// "mic muted", "audio flowing but no transcripts" at a glance.
-function MicReadout({ chunkCount, level }: { chunkCount: number; level: number }) {
-  const pct = Math.min(1, level * 4); // amplify so normal speech fills the bar
-  return (
-    <div className="flex items-center gap-2 font-mono text-[9px] uppercase tracking-[0.2em] text-[color:var(--stone)]/70">
-      <span className="nums tabular-nums">{chunkCount}</span>
-      <span
-        aria-hidden
-        className="relative inline-block h-[3px] w-16 overflow-hidden bg-[color:var(--stone)]/25"
-      >
-        <span
-          className="absolute inset-y-0 left-0 bg-[color:var(--paper)]/70 transition-[width] duration-75"
-          style={{ width: `${pct * 100}%` }}
-        />
-      </span>
-    </div>
-  );
 }

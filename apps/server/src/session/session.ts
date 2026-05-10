@@ -23,7 +23,6 @@ import {
   synthesizeFromTrack,
   type SongMusePatch,
 } from "../generation/song-muse";
-import { SttService } from "../recognition/stt/stt-service";
 import { mergeNowPlayingIntoScene } from "./now-playing-merge";
 import { semanticDiff } from "./semantic-diff";
 import { VoiceController } from "./voice-controller";
@@ -142,19 +141,12 @@ export class Session {
   private sessionStartAt = Date.now();
   private lastCreditDenialAt = 0;
 
-  // Voice input mode. "live" = always-on VAD (Flux decides end-of-turn);
-  // "ptt" = mic only forwards to Flux while the client holds SPACE (see
-  // `pttStart`/`pttEnd`). Defaults to PTT — safer in multi-person rooms
-  // where ambient speech otherwise triggers false commits.
-  private voiceMode: "live" | "ptt" = "ptt";
-
   // Stateful per-keyframe drift sequence. Reseeded whenever the resolver
   // returns fresh LLM-generated drift_candidates (i.e., scene-hash changed).
   // Falls back to the curated static pool until the first LLM cache fill.
   private readonly driftTrajectory = new DriftTrajectory();
 
   private readonly voice: VoiceController;
-  private readonly stt: SttService;
 
   constructor(opts: SessionOpts) {
     this.id = opts.id;
@@ -183,24 +175,6 @@ export class Session {
       applyPatch: (patch, origin) => this.applyPatch(patch, origin),
       commit: () => this.commit(),
       getActiveVersion: () => this.activeVersion,
-    });
-    this.stt = new SttService({
-      logger: this.logger,
-      // STT partials/finals route through the same VoiceController surface
-      // as Web Speech client-pushed partials, so the trail UI sees the
-      // same voice.partial → voice.parsed → voice.applied chain regardless
-      // of provider.
-      onPartial: (opts) => this.voice.applyPartial(opts),
-      // Flux emits EndOfTurn when it's highly confident the speaker is done.
-      // Flush the VoiceController debounce so the LLM intent dispatches
-      // immediately (Live mode); PTT mode reaches commitNow via ptt.end.
-      onEndOfTurn: ({ transcript, confidence }) => {
-        this.logger.debug(
-          { transcript, confidence },
-          "stt: end-of-turn, flushing voice debounce",
-        );
-        this.voice.commitNow();
-      },
     });
     this.startPeriodic();
   }
@@ -419,78 +393,21 @@ export class Session {
     this.voice.applyVoice(text);
   }
 
-  // Live transcript ingress from a client-side STT (Web Speech) or the
-  // server-side Deepgram Flux relay. Emits voice.partial back to the client
-  // and — when isFinal — schedules the LLM intent dispatch via applyVoice.
+  // Live transcript ingress from the browser's Web Speech recognition. Emits
+  // voice.partial back to the client and — when isFinal — schedules the LLM
+  // intent dispatch via applyVoice (1.5s debounce inside VoiceController).
   applyVoicePartial(opts: {
     text: string;
     isFinal: boolean;
     confidence?: number;
-    provider: "web-speech" | "deepgram";
+    provider: "web-speech";
   }): void {
     this.voice.applyPartial(opts);
-  }
-
-  // ===== Server-side STT relay (Deepgram Flux path) =====
-  // No-ops when DEEPGRAM_API_KEY isn't set — the client falls back to
-  // browser Web Speech and pushes finals via voicePhrase / partials via
-  // voicePartial. With a key, audioStart opens the Flux WS, audioChunk pumps
-  // PCM16 frames, audioStop closes. Flux emits EndOfTurn events which flush
-  // the voice debounce (see SttService.onEndOfTurn wiring in constructor).
-  audioStart(opts: { sampleRate: number }): void {
-    // Forwarding gate defaults to the current voice mode: Live forwards
-    // immediately, PTT starts closed and opens on voice.ptt.start.
-    this.stt.start(opts);
-    this.stt.setForwardAudio(this.voiceMode === "live");
-  }
-  audioStop(): void {
-    this.stt.stop();
-  }
-  audioChunk(base64: string): void {
-    this.stt.push(base64);
-  }
-  // Surface to the client (via session.router.state) which STT path to
-  // activate. Mirrors SttService.isEnabled — never exposes the actual key.
-  sttProvider(): "deepgram" | "web-speech" {
-    return this.stt.isEnabled() ? "deepgram" : "web-speech";
-  }
-
-  // ===== Voice mode + PTT =====
-  // Live mode: always forward audio → Flux commits on its own EndOfTurn.
-  // PTT  mode: forward only while ptt is held; on release flush the voice
-  // debounce so the current utterance dispatches immediately regardless of
-  // whether Flux has reached its EOT threshold yet.
-  setVoiceMode(mode: "live" | "ptt"): void {
-    if (this.voiceMode === mode) return;
-    this.voiceMode = mode;
-    this.logger.info({ mode }, "voice mode changed");
-    // When flipping to Live, audio flows immediately. When flipping to PTT,
-    // close the gate until the next ptt.start — any in-flight utterance is
-    // left to finish naturally (Flux will send EndOfTurn or time out).
-    this.stt.setForwardAudio(mode === "live");
-  }
-
-  pttStart(): void {
-    if (this.voiceMode !== "ptt") return;
-    this.logger.debug("voice ptt start");
-    this.stt.setForwardAudio(true);
-  }
-
-  pttEnd(): void {
-    if (this.voiceMode !== "ptt") return;
-    this.logger.debug("voice ptt end");
-    // Dispatch the LLM intent immediately. Done before the gate closes so
-    // `commitNow` can still read the freshest partial transcript — and so
-    // trailing audio still in flight from the client reaches Flux, letting
-    // it emit a real EndOfTurn for the trail UI afterwards.
-    this.voice.commitNow();
-    setTimeout(() => this.stt.setForwardAudio(false), 250);
   }
 
   reset(): void {
     this.activeJob?.abort();
     this.voice.reset();
-    this.stt.stop();
     if (this.pauseTimer) {
       clearTimeout(this.pauseTimer);
       this.pauseTimer = undefined;
@@ -518,7 +435,6 @@ export class Session {
   close(): void {
     this.activeJob?.abort();
     this.voice.close();
-    this.stt.stop();
     if (this.pauseTimer) clearTimeout(this.pauseTimer);
     if (this.periodicTimer) clearInterval(this.periodicTimer);
   }

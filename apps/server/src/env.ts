@@ -24,17 +24,6 @@ const envSchema = z.object({
   FAL_EDIT_MODEL: z.string().default("fal-ai/flux-2/klein/9b/edit"),
   FAL_COMMIT_TEXT_MODEL: z.string().default("fal-ai/flux-2-pro"),
   FAL_COMMIT_EDIT_MODEL: z.string().default("fal-ai/flux-2-pro/edit"),
-
-  // Optional — Deepgram Flux (listen v2) conversational STT. When unset, the
-  // client falls back to the browser-native Web Speech API and the audio-
-  // relay path is disabled. Server-only secret; never exposed to the client.
-  // Flux ships a model-integrated end-of-turn detector; the threshold knob
-  // tunes how eagerly it commits turns (lower = faster, may cut hesitant
-  // speakers; higher = slower, safer against mid-thought commits).
-  DEEPGRAM_API_KEY: z.string().min(1).optional(),
-  DEEPGRAM_STT_MODEL: z.string().default("flux-general-en"),
-  DEEPGRAM_EOT_THRESHOLD: z.coerce.number().min(0).max(1).default(0.7),
-  DEEPGRAM_EOT_TIMEOUT_MS: z.coerce.number().int().nonnegative().default(5000),
 });
 
 export const env = envSchema.parse(Bun.env);

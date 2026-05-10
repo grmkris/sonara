@@ -6,10 +6,9 @@ import { cn } from "@/lib/utils";
 
 // Three-stage in-flight voice trail:
 //
-//   ▸ Heard      — live transcript (interim → final). Shows confidence as
-//                  underline opacity for Deepgram; Web Speech rarely
-//                  supplies confidence so it falls back to a dotted
-//                  underline marker only when isFinal is true.
+//   ▸ Heard      — live transcript (interim → final). Web Speech rarely
+//                  supplies confidence, so the underline collapses to a
+//                  simple dotted marker when isFinal is true.
 //   ▸ Understood — LLM intent JSON. Compact chip row with a latency badge.
 //   ▸ Applied    — what changed (diff chips) and whether a generation was
 //                  queued, with the version number when triggered.
@@ -143,11 +142,6 @@ function HeardPill({
         >
           {trail.text || "—"}
         </span>
-        {trail.provider === "deepgram" && (
-          <span className="font-mono shrink-0 text-[8px] uppercase tracking-[0.22em] text-[color:var(--stone)]/60">
-            dg
-          </span>
-        )}
       </div>
     </PillShell>
   );
