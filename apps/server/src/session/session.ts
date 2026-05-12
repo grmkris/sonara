@@ -13,10 +13,11 @@ import { serializeResolvedScene } from "../generation/prompt-compiler";
 import { DriftTrajectory } from "../generation/prompt-drift";
 import { resolveScene } from "../generation/scene-resolver";
 import {
-  debitFrame,
-  refundFrame,
-  tryConsumeFreeTier,
-} from "../credits/credits.service";
+  COST_ANCHOR,
+  COST_FLOW,
+  refundOnError,
+  tryDebitCredit,
+} from "../credits/credit-gate";
 import { recognizeClip } from "../recognition/recognition.service";
 import {
   synthesizeFromTrack,
@@ -31,12 +32,22 @@ export interface SessionOpts {
   logger: Logger;
 }
 
-type TriggerReason =
-  | "pause"
-  | "semantic"
-  | "periodic"
-  | "section"
-  | "voice";
+// `source` is the granular reason a trigger fired — used only for logging and
+// for the wire field that drives the trigger-log UI. Dispatch logic (cooldown
+// suppression, credit-gate) keys off `kind` instead, which collapses the five
+// reasons into the only distinction that actually matters: auto-fired vs
+// user-driven. Pre-collapse the surface had 6 reasons → 5; this turns the
+// remaining downstream conditional into a type-level enum.
+type TriggerSource = "pause" | "semantic" | "periodic" | "section" | "voice";
+type TriggerKind = "auto" | "user";
+
+const USER_INITIATED_SOURCES: ReadonlySet<TriggerSource> = new Set([
+  "voice",
+  "semantic",
+  "pause",
+]);
+const kindFromSource = (source: TriggerSource): TriggerKind =>
+  USER_INITIATED_SOURCES.has(source) ? "user" : "auto";
 
 // Full-arc length. sessionProgress = min(1, (now - sessionStartAt) / SESSION_ARC_MS).
 // Drives: drift-pool act bias (intro/build/dissolve weights in prompt-drift).
@@ -50,16 +61,6 @@ const SESSION_ARC_MS = 20 * 60_000;
 // and per-trigger cost is felt more.
 const SEMANTIC_THRESHOLD = 0.4;
 
-// After the first "out of credits" error on an auto-trigger (periodic /
-// section), suppress further errors for this long before re-emitting.
-// User-initiated triggers (voice / semantic / pause) always emit.
-const CREDIT_DENIAL_COOLDOWN_MS = 60_000;
-
-// Per-frame cost in the single `balance_frames` ledger. Anchor (the first
-// frame of a session, runs on flux-2-pro/edit) is load-bearing for identity;
-// flow frames edit that anchor on klein/9b.
-const COST_ANCHOR = 2;
-const COST_FLOW = 1;
 // When a patch arrives via voice, drop the trigger threshold so mood /
 // palette-only changes still fire immediately.
 const SEMANTIC_THRESHOLD_VOICE = 0.1;
@@ -428,7 +429,11 @@ export class Session {
     }, 1000);
   }
 
-  private async trigger(reason: TriggerReason): Promise<void> {
+  private async trigger(source: TriggerSource): Promise<void> {
+    const kind = kindFromSource(source);
+    // Keep `reason` for log + event compatibility — it goes on the wire as
+    // part of `job.status` / `generation.requested`.
+    const reason = source;
     // Empty-subject fast-exit. `serializeResolvedScene` also returns "" when
     // subjects[0] is blank, but short-circuiting here saves the resolver and
     // credit-gate work when there's nothing to generate.
@@ -449,63 +454,40 @@ export class Session {
     const mode: "anchor" | "flow" = isAnchor ? "anchor" : "flow";
     const cost = isAnchor ? COST_ANCHOR : COST_FLOW;
 
-    // Credit gate. BYOK sessions skip it entirely (user pays fal).
-    //
-    // Error-spam rule: periodic / section triggers fire on a timer and would
-    // flood the client with duplicate "Out of credits" toasts. Emit the
-    // job.status error only on user-initiated reasons, or on the first
-    // denial of an auto-trigger reason once per CREDIT_DENIAL_COOLDOWN_MS.
-    const USER_INITIATED: TriggerReason[] = ["voice", "semantic", "pause"];
-    const isUserInitiated = USER_INITIATED.includes(reason);
+    // Credit gate (BYOK / paid / free-tier / cooldown all live in
+    // credits/credit-gate.ts). Session writes back denial timestamp + the
+    // refund cost; the gate makes the emit-or-suppress decision.
+    const gate = await tryDebitCredit({
+      userId: this.userId,
+      byokFalKey: this.byokFalKey,
+      isAnchor,
+      isUserInitiated: kind === "user",
+      lastCreditDenialAt: this.lastCreditDenialAt,
+      now: Date.now(),
+      logger: this.logger,
+    });
+    this.lastCreditDenialAt = gate.nextLastDenialAt;
 
-    // Tracks the cost to refund if the fal call fails after we paid.
-    let paidCost: number | null = null;
-
-    if (!this.byokFalKey) {
-      try {
-        const remaining = await debitFrame(this.userId, cost, this.logger);
-        if (remaining === null) {
-          // Free-tier fallback only for flow (anchor is too expensive to gift).
-          const freeOk =
-            !isAnchor &&
-            (await tryConsumeFreeTier(this.userId, 3, this.logger));
-          if (!freeOk) {
-            this.logger.info({ reason, mode, cost }, "trigger denied: no credits");
-            const now = Date.now();
-            const shouldEmit =
-              isUserInitiated ||
-              now - this.lastCreditDenialAt > CREDIT_DENIAL_COOLDOWN_MS;
-            if (shouldEmit) {
-              this.lastCreditDenialAt = now;
-              this.send({
-                type: "job.status",
-                status: "error",
-                reason,
-                message: "Out of credits — top up or enable BYOK",
-              });
-            }
-            return;
-          }
-          this.logger.debug({ reason }, "free-tier slot consumed");
-        } else {
-          this.lastCreditDenialAt = 0;
-          paidCost = cost;
-          this.logger.debug({ reason, mode, cost, remaining }, "credit debited");
-        }
-      } catch (err) {
-        this.logger.error(
-          { err, reason },
-          "credit gate errored; aborting trigger",
-        );
+    if (!gate.ok) {
+      this.logger.info(
+        { reason, mode, cost, gateReason: gate.reason },
+        "trigger denied",
+      );
+      if (gate.shouldEmit) {
         this.send({
           type: "job.status",
           status: "error",
           reason,
-          message: "Payment system unavailable",
+          message:
+            gate.reason === "system_error"
+              ? "Payment system unavailable"
+              : "Out of credits — top up or enable BYOK",
         });
-        return;
       }
+      return;
     }
+
+    const paidCost = gate.paidCost;
 
     // Drift modifier. Trajectory is LLM-seeded when scene-llm-expander has
     // filled drift_candidates; otherwise it walks the curated static pool.
@@ -640,14 +622,7 @@ export class Session {
         // generations through onError too, and the user should get the
         // credit back since no frame was delivered. Free-tier / BYOK paths
         // set paidCost=null so this is a no-op for them.
-        if (paidCost !== null) {
-          refundFrame(this.userId, paidCost, this.logger).catch((e) => {
-            this.logger.error(
-              { err: e, version, cost: paidCost },
-              "refundFrame after fal error failed",
-            );
-          });
-        }
+        refundOnError(this.userId, paidCost, this.logger);
         // Aborts are expected (newer trigger superseded this one). Don't
         // log noisily or surface to the client.
         if (controller.signal.aborted) return;

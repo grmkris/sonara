@@ -11,6 +11,17 @@ import { CanvasOscilloscope } from "@/components/visualizer/audio/canvas-oscillo
 // WebGL2-only renderer. The previous CSS fallback path drifted from the WebGL
 // pipeline (missed reveal, presets, RD, glitch-peek) and was deleted.
 // prefers-reduced-motion is honoured downstream via intensity damping.
+//
+// Why DOM overlays coexist with shader uniforms of similar names:
+//   - <CanvasGrain/>: SVG fractalNoise tile, mix-blend-overlay. Adds DOM-level
+//     paper tooth that the shader's procedural `uGrain` can't replicate.
+//   - <InkDrops/>: 2d-canvas peak-hold sumi blobs, audio-reactive in DOM space.
+//     Shader has no equivalent — distinct effect.
+//   - <CanvasOscilloscope/>: waveform overlay drawn on a 2d canvas. Pure DOM.
+//   - .vignette-mask div: CSS radial mask. Shader's `uVignette` darkens
+//     compositing within the texture; this mask sits over the entire stack
+//     including overlays, so it's not redundant.
+// Audit pass concluded each is load-bearing in its own way. Keep all four.
 export function DreamCanvas() {
   const [hasWebgl2, setHasWebgl2] = useState<boolean | null>(null);
 

@@ -1,0 +1,258 @@
+import {
+  afterAll,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  test,
+} from "bun:test";
+import pino from "pino";
+import {
+  createPgLite,
+  pgliteAsPool,
+  type TestPg,
+} from "@music-visualizer/test-utils";
+import {
+  CREDIT_DENIAL_COOLDOWN_MS,
+  COST_ANCHOR,
+  COST_FLOW,
+  tryDebitCredit,
+} from "./credit-gate";
+import { __setPoolForTests } from "./credits.service";
+
+const SCHEMA_SQL = `
+CREATE TABLE credits (
+  id uuid PRIMARY KEY NOT NULL,
+  user_id uuid NOT NULL,
+  balance_frames integer DEFAULT 0 NOT NULL,
+  created_at timestamp with time zone DEFAULT now() NOT NULL,
+  updated_at timestamp with time zone DEFAULT now() NOT NULL
+);
+CREATE UNIQUE INDEX credits_user_id_idx ON credits (user_id);
+
+CREATE TABLE usage_ledger (
+  id uuid PRIMARY KEY NOT NULL,
+  user_id uuid NOT NULL,
+  kind text NOT NULL,
+  delta integer NOT NULL,
+  amount_usd text,
+  tx_hash text,
+  chain_id text,
+  created_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+CREATE TABLE free_tier_ledger (
+  user_id uuid NOT NULL,
+  window_start timestamp with time zone NOT NULL,
+  usage_count integer DEFAULT 0 NOT NULL,
+  PRIMARY KEY (user_id, window_start)
+);
+`;
+
+const USER = "00000000-0000-0000-0000-000000000001";
+const NOW = 1_700_000_000_000;
+const logger = pino({ level: "silent" });
+
+let pg: TestPg;
+
+beforeAll(async () => {
+  pg = createPgLite();
+  await pg.exec(SCHEMA_SQL);
+  __setPoolForTests(pgliteAsPool(pg));
+});
+
+afterAll(async () => {
+  __setPoolForTests(null);
+  await pg.close();
+});
+
+beforeEach(async () => {
+  await pg.exec(
+    `DELETE FROM usage_ledger; DELETE FROM credits; DELETE FROM free_tier_ledger;`,
+  );
+});
+
+async function seedCredits(userId: string, frames: number): Promise<void> {
+  await pg.query(
+    `INSERT INTO credits (id, user_id, balance_frames)
+     VALUES (gen_random_uuid(), $1, $2)`,
+    [userId, frames],
+  );
+}
+
+describe("BYOK bypass", () => {
+  test("byokFalKey set → ok with paidCost=null, no DB read", async () => {
+    const r = await tryDebitCredit({
+      userId: USER,
+      byokFalKey: "fal_key_abc",
+      isAnchor: true,
+      isUserInitiated: false,
+      lastCreditDenialAt: 0,
+      now: NOW,
+      logger,
+    });
+    expect(r.ok).toBe(true);
+    if (r.ok) {
+      expect(r.paidCost).toBeNull();
+      expect(r.nextLastDenialAt).toBe(0);
+    }
+  });
+});
+
+describe("paid debit", () => {
+  test("anchor: deducts COST_ANCHOR and returns paidCost for refund", async () => {
+    await seedCredits(USER, 5);
+    const r = await tryDebitCredit({
+      userId: USER,
+      byokFalKey: null,
+      isAnchor: true,
+      isUserInitiated: true,
+      lastCreditDenialAt: 0,
+      now: NOW,
+      logger,
+    });
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.paidCost).toBe(COST_ANCHOR);
+  });
+
+  test("flow: deducts COST_FLOW", async () => {
+    await seedCredits(USER, 5);
+    const r = await tryDebitCredit({
+      userId: USER,
+      byokFalKey: null,
+      isAnchor: false,
+      isUserInitiated: false,
+      lastCreditDenialAt: 0,
+      now: NOW,
+      logger,
+    });
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.paidCost).toBe(COST_FLOW);
+  });
+
+  test("paid success resets nextLastDenialAt to 0", async () => {
+    await seedCredits(USER, 5);
+    const r = await tryDebitCredit({
+      userId: USER,
+      byokFalKey: null,
+      isAnchor: false,
+      isUserInitiated: false,
+      lastCreditDenialAt: NOW - 1000,
+      now: NOW,
+      logger,
+    });
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.nextLastDenialAt).toBe(0);
+  });
+});
+
+describe("free-tier fallback", () => {
+  test("flow with zero balance falls through to free tier", async () => {
+    await seedCredits(USER, 0);
+    const r = await tryDebitCredit({
+      userId: USER,
+      byokFalKey: null,
+      isAnchor: false,
+      isUserInitiated: false,
+      lastCreditDenialAt: 0,
+      now: NOW,
+      logger,
+    });
+    expect(r.ok).toBe(true);
+    if (r.ok) {
+      expect(r.paidCost).toBeNull();
+      expect(r.nextLastDenialAt).toBe(0);
+    }
+  });
+
+  test("anchor with zero balance does NOT use free tier — denied", async () => {
+    await seedCredits(USER, 0);
+    const r = await tryDebitCredit({
+      userId: USER,
+      byokFalKey: null,
+      isAnchor: true,
+      isUserInitiated: true,
+      lastCreditDenialAt: 0,
+      now: NOW,
+      logger,
+    });
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.reason).toBe("out_of_credits");
+  });
+});
+
+describe("cooldown rule", () => {
+  test("first auto-trigger denial emits and stamps the denial timestamp", async () => {
+    await seedCredits(USER, 0);
+    // First denial — never denied before
+    const r = await tryDebitCredit({
+      userId: USER,
+      byokFalKey: null,
+      isAnchor: true, // anchor + no balance = no free-tier fallback = guaranteed deny
+      isUserInitiated: false, // auto trigger
+      lastCreditDenialAt: 0,
+      now: NOW,
+      logger,
+    });
+    expect(r.ok).toBe(false);
+    if (!r.ok) {
+      expect(r.shouldEmit).toBe(true);
+      expect(r.nextLastDenialAt).toBe(NOW);
+    }
+  });
+
+  test("second auto-trigger denial inside cooldown window suppresses emit", async () => {
+    await seedCredits(USER, 0);
+    const r = await tryDebitCredit({
+      userId: USER,
+      byokFalKey: null,
+      isAnchor: true,
+      isUserInitiated: false,
+      lastCreditDenialAt: NOW - 1000, // 1s ago, well inside cooldown
+      now: NOW,
+      logger,
+    });
+    expect(r.ok).toBe(false);
+    if (!r.ok) {
+      expect(r.shouldEmit).toBe(false);
+      // Doesn't update the timestamp when suppressed
+      expect(r.nextLastDenialAt).toBe(NOW - 1000);
+    }
+  });
+
+  test("auto-trigger denial AFTER cooldown elapses re-emits", async () => {
+    await seedCredits(USER, 0);
+    const r = await tryDebitCredit({
+      userId: USER,
+      byokFalKey: null,
+      isAnchor: true,
+      isUserInitiated: false,
+      lastCreditDenialAt: NOW - CREDIT_DENIAL_COOLDOWN_MS - 1000,
+      now: NOW,
+      logger,
+    });
+    expect(r.ok).toBe(false);
+    if (!r.ok) {
+      expect(r.shouldEmit).toBe(true);
+      expect(r.nextLastDenialAt).toBe(NOW);
+    }
+  });
+
+  test("user-initiated denial always emits, ignores cooldown", async () => {
+    await seedCredits(USER, 0);
+    const r = await tryDebitCredit({
+      userId: USER,
+      byokFalKey: null,
+      isAnchor: true,
+      isUserInitiated: true,
+      lastCreditDenialAt: NOW - 1000, // would suppress an auto trigger
+      now: NOW,
+      logger,
+    });
+    expect(r.ok).toBe(false);
+    if (!r.ok) {
+      expect(r.shouldEmit).toBe(true);
+      expect(r.nextLastDenialAt).toBe(NOW);
+    }
+  });
+});

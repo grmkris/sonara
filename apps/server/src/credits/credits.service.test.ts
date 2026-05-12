@@ -17,7 +17,7 @@ import {
   getBalance,
   refundFrame,
   tryConsumeFreeTier,
-} from "./credits-service";
+} from "./credits.service";
 
 const SCHEMA_SQL = `
 CREATE TABLE credits (

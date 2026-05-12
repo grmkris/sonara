@@ -84,30 +84,6 @@ export function sampleDrift(sessionProgress?: number): string | null {
   return weighted[weighted.length - 1]?.phrase ?? null;
 }
 
-// Priority chain for drift selection:
-//   1. Fresh LLM-synthesized drift (preferred when available)
-//   2. Most recent voice phrase (raw, if user spoke recently)
-//   3. The session's drift trajectory (LLM-seeded sequence; falls back to
-//      the weighted static pool if no candidates are seeded yet)
-//   4. Sampled static atmospheric pool (final fallback when no trajectory
-//      is supplied — kept for callers that don't hold one, e.g. the voice
-//      intent fallback path)
-//
-// This makes voice visible immediately (layer 2) while letting the LLM take
-// over the moment it finishes synthesizing (layer 1). Never returns null
-// unless every layer is empty, which the static pool prevents in practice.
-export function sampleDriftLayered(opts: {
-  llmDrift: string | null;
-  latestVoice: string | null;
-  trajectory?: DriftTrajectory;
-  sessionProgress?: number;
-}): string | null {
-  if (opts.llmDrift && opts.llmDrift.trim().length > 0) return opts.llmDrift;
-  if (opts.latestVoice && opts.latestVoice.trim().length > 0) return opts.latestVoice;
-  if (opts.trajectory) return opts.trajectory.next();
-  return sampleDrift(opts.sessionProgress);
-}
-
 // Stateful drift sequence held by each Session. Pre-samples a fixed-length
 // trajectory of modifiers and advances one slot per keyframe; the slot order
 // gives the session a quasi-thematic cadence instead of the previous random
