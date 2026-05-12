@@ -1,10 +1,10 @@
-import { customType, timestamp } from "drizzle-orm/pg-core";
 import {
   type IdTypePrefixNames,
   type TypeIdString,
   typeIdFromUuid,
   typeIdToUuid,
-} from "@/lib/typeid";
+} from "@music-visualizer/shared/typeid";
+import { customType, timestamp } from "drizzle-orm/pg-core";
 
 // Postgres `uuid` storage; app-side typeid string. Driver translates on read
 // and write, so queries compare uuids natively while callers work in typeid

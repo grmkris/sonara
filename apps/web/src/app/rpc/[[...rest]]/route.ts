@@ -2,7 +2,7 @@ import { buildContext, RPCHandler } from "@music-visualizer/api/server";
 import type { UserId } from "@music-visualizer/shared/typeid";
 import { env } from "@/env";
 import { getAuth } from "@/server/auth";
-import { createDb } from "@/server/db";
+import { createDb } from "@music-visualizer/db";
 import { appRouter } from "@/server/rpc/app-router";
 
 const handler = new RPCHandler(appRouter);

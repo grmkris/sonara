@@ -1,129 +1,169 @@
-# Deploy — Railway (two services, one project)
+# Deploy — Railway (three services, one project)
 
-Everything runs on Railway via Docker. No Fly, no Vercel.
+Everything runs on Railway via Docker.
 
-| Service | Dockerfile | Railway config |
+| Service | Source | Notes |
 |---|---|---|
-| `server` (Bun + Hono + WS) | `apps/server/Dockerfile` | `apps/server/railway.toml` |
-| `web` (Next.js standalone) | `apps/web/Dockerfile` | `apps/web/railway.toml` |
-
-Postgres lives externally on Neon (Railway's Postgres addon works too — pick one).
+| `server` (Bun + Hono + WS) | `apps/server/Dockerfile` | Runs `packages/db` migrator on boot, then binds. Healthcheck `/health`. |
+| `web` (Next.js standalone) | `apps/web/Dockerfile` | Build args inline `NEXT_PUBLIC_*` into the bundle. |
+| `Postgres` | Railway Postgres template | Exposed to siblings as `${{Postgres.DATABASE_URL}}`. |
 
 ```
 ┌─────────────────────────────────────┐
-│   Railway project: music-visualizer │
+│   Railway project: fearless-…       │
 │                                     │
 │   ┌─────────┐      ┌──────────┐     │
 │   │   web   │─────▶│  server  │     │
 │   │ (Next)  │  WS  │ (Bun/WS) │     │
-│   └─────────┘      └─────┬────┘     │
-└────────────────────────── │ ────────┘
-                            ▼
-                    Neon Postgres
-                    fal.ai / AudD
+│   └────┬────┘      └────┬─────┘     │
+│        │                │           │
+│        └──────┬─────────┘           │
+│               ▼                     │
+│         ┌──────────┐                │
+│         │ Postgres │                │
+│         └──────────┘                │
+└─────────────────────────────────────┘
+                ↕
+        fal.ai / AudD
 ```
 
 ---
 
-## 1. Create the Railway project
+## How migrations apply on deploy
+
+There is **no manual `db:push` step**. Schema is owned by `packages/db` and applied on every server boot:
+
+- `packages/db/src/migrator.ts` — `runMigrations(databaseUrl)` using `drizzle-orm/node-postgres/migrator`.
+- `apps/server/src/server.ts` — calls `runMigrations(env.DATABASE_URL)` before `Bun.serve(...)`. Mirror of ai-stilist, zednabi-v2, invok admin-api.
+- SQL files live at `packages/db/drizzle/` and are bundled into the server Docker image.
+
+To add a migration:
 
 ```bash
-# https://railway.app/new → "Deploy from GitHub repo" → pick this repo
+# 1. Edit schema in packages/db/src/schema/
+# 2. Generate the SQL
+bun run --filter=@music-visualizer/db db:generate
+# 3. Commit both the schema change AND the new file in packages/db/drizzle/
+# 4. Push — server applies it on next deploy
 ```
-
-Create **two services** from the same repo:
-
-### Service: `server`
-- **Settings → Source**: Root Directory `/`, Config-as-code Path `apps/server/railway.toml`
-- **Settings → Networking**: generate a public domain (`*.up.railway.app`)
-- **Healthcheck**: `/health` (already wired in `railway.toml`)
-
-### Service: `web`
-- **Settings → Source**: Root Directory `/`, Config-as-code Path `apps/web/railway.toml`
-- **Settings → Networking**: generate a public domain
-
-The repo root stays the build context for both — Dockerfiles need it for workspace resolution.
 
 ---
 
-## 2. Set variables
+## First-time project setup
 
-### Shared (both services)
+The Railway project already exists at `https://railway.com/project/33e35438-b78d-4cf9-8fe6-d0ba87e3c111`. For a brand-new project:
 
-Create these as **shared variables** in the project and reference them from each service.
+```bash
+# Authenticate + link
+railway login
+railway link --project <id>
+
+# Provision Postgres
+railway add --database postgres
+
+# Create the two services from GitHub
+#   service: server  → config path apps/server/railway.toml
+#   service: web     → config path apps/web/railway.toml
+# (Done via the Railway dashboard; Root Directory = "/" for both.)
+
+# Generate domains
+railway domain --service server
+railway domain --service web
+```
+
+---
+
+## Variables
+
+Generate the auth secret once:
+
+```bash
+openssl rand -base64 32
+```
+
+### Shared (both `server` and `web`)
 
 | Var | Value |
 |---|---|
-| `DATABASE_URL` | Neon pooler URL (`?sslmode=require`) |
-| `BETTER_AUTH_SECRET` | 32+ random bytes — `openssl rand -base64 32` |
+| `DATABASE_URL` | `${{Postgres.DATABASE_URL}}` |
+| `BETTER_AUTH_SECRET` | output of `openssl rand -base64 32` |
 
-### `server` only
+### `server` runtime only
 
 | Var | Value |
 |---|---|
 | `FAL_KEY` | from fal.ai dashboard |
 | `AUDD_API_KEY` | from audd.io |
 | `LOG_LEVEL` | `info` |
-| `PORT` | auto-injected by Railway — **do not set manually** |
 
-### `web` runtime vars
+(`PORT` is auto-injected — never set manually.)
+
+### `web` runtime
 
 | Var | Value |
 |---|---|
-| `APP_URL` | `https://${{RAILWAY_PUBLIC_DOMAIN}}` |
-| `AUTH_DOMAIN` | `${{RAILWAY_PUBLIC_DOMAIN}}` (no protocol) |
-| `PORT` | auto-injected by Railway |
+| `APP_URL` | `https://<web-public-domain>` |
+| `AUTH_DOMAIN` | `<web-public-domain>` (no protocol) |
 
-### `web` build args (Settings → Build → Build Args)
+### `web` build-time (must be set BEFORE the build runs — Next.js inlines `NEXT_PUBLIC_*` into the client bundle)
 
-Next.js inlines `NEXT_PUBLIC_*` vars **at build time**, so these must be build args — not runtime variables.
-
-| Arg | Value |
+| Var | Value |
 |---|---|
-| `NEXT_PUBLIC_WS_URL` | `wss://<server-public-domain>/ws` — fill after first server deploy |
+| `NEXT_PUBLIC_WS_URL` | `wss://<server-public-domain>/ws` |
 | `NEXT_PUBLIC_REOWN_PROJECT_ID` | from https://cloud.reown.com |
-| `NEXT_PUBLIC_PAY_RECIPIENT_BASE` | Base-chain address for USDC top-ups |
+| `NEXT_PUBLIC_PAY_RECIPIENT_BASE` | Base-chain address that receives USDC top-ups |
 
----
-
-## 3. First deploy order
-
-1. Deploy `server` first. Wait for green healthcheck, copy its public domain (`music-visualizer-server-production.up.railway.app` or whatever Railway assigns).
-2. Set `web`'s `NEXT_PUBLIC_WS_URL=wss://<that-domain>/ws` as a build arg.
-3. Deploy `web`. Open its public domain in a browser.
-
-After this, every GitHub push rebuilds both services automatically.
-
----
-
-## 4. Verify
+Set via CLI:
 
 ```bash
-# Server health
+railway variables --service server \
+  --set 'DATABASE_URL=${{Postgres.DATABASE_URL}}' \
+  --set "BETTER_AUTH_SECRET=$(openssl rand -base64 32)" \
+  --set 'FAL_KEY=...' --set 'AUDD_API_KEY=...' --set 'LOG_LEVEL=info'
+
+railway variables --service web \
+  --set 'DATABASE_URL=${{Postgres.DATABASE_URL}}' \
+  --set 'BETTER_AUTH_SECRET=...same...' \
+  --set 'APP_URL=https://<web-domain>' \
+  --set 'AUTH_DOMAIN=<web-domain>' \
+  --set 'NEXT_PUBLIC_WS_URL=wss://<server-domain>/ws' \
+  --set 'NEXT_PUBLIC_REOWN_PROJECT_ID=...' \
+  --set 'NEXT_PUBLIC_PAY_RECIPIENT_BASE=0x...'
+```
+
+---
+
+## First deploy order
+
+1. Deploy `server`. On boot, logs show `running database migrations` → `migrations applied` → `server listening`. Watch with `railway logs --service server`.
+2. Deploy `web`. Standalone Next.js build is wired with the inlined `NEXT_PUBLIC_*` at build time.
+
+After this, every push to `main` rebuilds both services automatically.
+
+---
+
+## Verify
+
+```bash
 curl https://<server-domain>/health
 # → {"ok":true}
 
-# Web
 open https://<web-domain>
 ```
 
-Browser devtools → Network → WS tab should show `wss://<server>/ws` with a 101 status. No mixed-content errors.
+DevTools → Network → WS — confirm `wss://<server>/ws` returns `101`. No mixed-content errors.
 
 ---
 
 ## Local Docker test
 
-Before pushing, smoke-test the images locally:
-
 ```bash
-# From repo root
 docker build -f apps/server/Dockerfile -t mv-server .
 docker build -f apps/web/Dockerfile \
   --build-arg NEXT_PUBLIC_WS_URL=ws://localhost:4471/ws \
   -t mv-web .
 
 docker run --rm -p 4471:4471 --env-file .env mv-server
-# in another terminal:
 docker run --rm -p 4470:3000 --env-file .env mv-web
 ```
 
@@ -132,7 +172,7 @@ docker run --rm -p 4470:3000 --env-file .env mv-web
 ## Rollback
 
 ```bash
-# Railway UI: service → Deployments → click a previous deployment → Redeploy
+# Railway UI: service → Deployments → previous deployment → Redeploy
 # or via CLI:
 railway redeploy --service server --deployment <id>
 ```
@@ -141,6 +181,6 @@ railway redeploy --service server --deployment <id>
 
 ## Cost notes
 
-- Railway: $5/mo hobby plan covers both services with room to spare for this workload. Metered by usage — WebSocket idle is near-free.
+- Railway: $5/mo hobby plan covers all three services with room to spare.
 - fal.ai: pay-per-image. At intensity 1.0 (~20 gens/min/user) on Flux-2/klein (~$0.003/image) → **~$0.36 per active-user-minute**. Add rate limits before sharing publicly.
-- Neon: free tier is plenty for credits ledger + SIWE nonces.
+- Railway Postgres: covered by the hobby plan for this workload.

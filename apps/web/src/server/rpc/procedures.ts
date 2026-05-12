@@ -1,7 +1,7 @@
 import { ORPCError, os } from "@music-visualizer/api/server";
 import type { ApiContext } from "@music-visualizer/api/server";
 import type { UserId } from "@music-visualizer/shared/typeid";
-import type { Database } from "../db";
+import type { Database } from "@music-visualizer/db";
 
 export type WebContext = ApiContext<Database>;
 

@@ -12,7 +12,7 @@ import {
   type UsageLedgerId,
   type UserId,
   typeIdGenerator,
-} from "@/lib/typeid";
+} from "@music-visualizer/shared/typeid";
 import { baseEntityFields, createTimestampField, typeId } from "../utils";
 import { user } from "./auth.db";
 

@@ -4,10 +4,19 @@ import {
   WsRPCHandler,
   type SessionContext,
 } from "@music-visualizer/api/server";
+import { runMigrations } from "@music-visualizer/db/migrator";
 import { verifyTicket } from "@music-visualizer/shared";
 import { env } from "./env";
 import { logger } from "./lib/logger";
 import { SessionManager } from "./session/session-manager";
+
+// Apply pending schema migrations before binding the HTTP port. Matches
+// ai-stilist / zednabi-v2 / invok admin-api — Railway re-runs this on every
+// deploy; identical migrations are no-ops via drizzle's `__drizzle_migrations`
+// bookkeeping table.
+logger.info("running database migrations");
+await runMigrations(env.DATABASE_URL);
+logger.info("migrations applied");
 
 const port = env.PORT;
 

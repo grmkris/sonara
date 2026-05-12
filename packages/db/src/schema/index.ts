@@ -1,5 +1,5 @@
-// Barrel — `import * as SCHEMA from "./db/schema"` in apps/web/src/server/db.ts
-// resolves here. Each domain file is grouped by responsibility:
+// Barrel for `@music-visualizer/db/schema`. Each domain file is grouped by
+// responsibility:
 //
 //   auth.db.ts     Better Auth tables (user, session, account, verification,
 //                  walletAddress). Drizzle adapter reads these.

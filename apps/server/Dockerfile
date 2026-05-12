@@ -26,6 +26,7 @@ COPY package.json bun.lock turbo.json tsconfig.base.json ./
 COPY apps/server/package.json ./apps/server/
 COPY apps/web/package.json ./apps/web/
 COPY packages/api/package.json ./packages/api/
+COPY packages/db/package.json ./packages/db/
 COPY packages/shared/package.json ./packages/shared/
 COPY packages/test-utils/package.json ./packages/test-utils/
 
@@ -33,9 +34,10 @@ RUN bun install --frozen-lockfile
 
 # Source. Only what the server actually needs at runtime — apps/web is a
 # peer workspace but the server never imports it, so we skip it for a
-# smaller image.
+# smaller image. packages/db carries the migrations folder applied on boot.
 COPY apps/server ./apps/server
 COPY packages/api ./packages/api
+COPY packages/db ./packages/db
 COPY packages/shared ./packages/shared
 
 # ---- runtime ---------------------------------------------------------------

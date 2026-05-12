@@ -21,6 +21,7 @@
       "dependencies": {
         "@fal-ai/client": "^1.9.5",
         "@music-visualizer/api": "workspace:*",
+        "@music-visualizer/db": "workspace:*",
         "@music-visualizer/shared": "workspace:*",
         "@orpc/server": "^1.14.0",
         "hono": "^4.12.12",
@@ -41,6 +42,7 @@
       "version": "0.1.0",
       "dependencies": {
         "@music-visualizer/api": "workspace:*",
+        "@music-visualizer/db": "workspace:*",
         "@music-visualizer/shared": "workspace:*",
         "@orpc/client": "^1.14.0",
         "@orpc/server": "^1.13.14",
@@ -55,7 +57,6 @@
         "better-auth": "^1.6.6",
         "class-variance-authority": "^0.7.1",
         "clsx": "^2.1.1",
-        "drizzle-orm": "^0.45.2",
         "framer-motion": "^12.34.2",
         "lucide-react": "^1.8.0",
         "meyda": "^5.6.3",
@@ -63,7 +64,6 @@
         "next": "^16.2.2",
         "next-themes": "^0.4.6",
         "partysocket": "^1.1.18",
-        "pg": "^8.20.0",
         "radix-ui": "^1.4.3",
         "react": "^19.2.4",
         "react-dom": "^19.2.4",
@@ -80,10 +80,8 @@
         "@tailwindcss/postcss": "^4.2.4",
         "@types/bun": "^1.1.14",
         "@types/node": "^25.6.0",
-        "@types/pg": "^8.20.0",
         "@types/react": "^19.2.14",
         "@types/react-dom": "^19.2.3",
-        "drizzle-kit": "^0.31.10",
         "react-grab": "^0.1.31",
         "tailwindcss": "^4.2.4",
         "typescript": "^6.0.3",
@@ -99,6 +97,20 @@
         "zod": "^4.3.6",
       },
       "devDependencies": {
+        "typescript": "^6.0.3",
+      },
+    },
+    "packages/db": {
+      "name": "@music-visualizer/db",
+      "version": "0.1.0",
+      "dependencies": {
+        "@music-visualizer/shared": "workspace:*",
+        "drizzle-orm": "^0.45.2",
+        "pg": "^8.20.0",
+      },
+      "devDependencies": {
+        "@types/pg": "^8.20.0",
+        "drizzle-kit": "^0.31.10",
         "typescript": "^6.0.3",
       },
     },
@@ -380,6 +392,8 @@
     "@mswjs/interceptors": ["@mswjs/interceptors@0.41.4", "", { "dependencies": { "@open-draft/deferred-promise": "^2.2.0", "@open-draft/logger": "^0.3.0", "@open-draft/until": "^2.0.0", "is-node-process": "^1.2.0", "outvariant": "^1.4.3", "strict-event-emitter": "^0.5.1" } }, "sha512-3B9EinUkrdOUGYzHRzRWSXunQ4YFGboJnyLNRwEJWEde+j8fNhPUHvrN1E3g1DU/iS/s8JQrMNVe+S7AHHVs0w=="],
 
     "@music-visualizer/api": ["@music-visualizer/api@workspace:packages/api"],
+
+    "@music-visualizer/db": ["@music-visualizer/db@workspace:packages/db"],
 
     "@music-visualizer/shared": ["@music-visualizer/shared@workspace:packages/shared"],
 

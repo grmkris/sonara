@@ -16,6 +16,7 @@
   "dependencies": {
     "@fal-ai/client": "^1.9.5",
     "@music-visualizer/api": "workspace:*",
+    "@music-visualizer/db": "workspace:*",
     "@music-visualizer/shared": "workspace:*",
     "@orpc/server": "^1.14.0",
     "hono": "^4.12.12",

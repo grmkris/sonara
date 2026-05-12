@@ -12,7 +12,7 @@ import {
   type VerificationId,
   type WalletAddressId,
   typeIdGenerator,
-} from "@/lib/typeid";
+} from "@music-visualizer/shared/typeid";
 import { baseEntityFields, createTimestampField, typeId } from "../utils";
 
 // Better Auth canonical tables, Drizzle-shaped with typeid ids. Columns

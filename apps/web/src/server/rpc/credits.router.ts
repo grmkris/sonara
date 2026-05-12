@@ -6,7 +6,7 @@ import { z } from "zod";
 import { publicEnv } from "@/env";
 import { typeIdGenerator } from "@/lib/typeid";
 import { baseClient } from "@/lib/chain-clients";
-import { SCHEMA } from "../db";
+import { SCHEMA } from "@music-visualizer/db";
 import { protectedProcedure } from "./procedures";
 import { expectedMinForUsd, findUsdcTransfer } from "./topup-verifier";
 

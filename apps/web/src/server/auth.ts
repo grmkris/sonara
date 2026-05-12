@@ -6,7 +6,7 @@ import { verifyMessage } from "viem/actions";
 import { env } from "@/env";
 import { mainnetClient } from "@/lib/chain-clients";
 import { fetchReownIdentity } from "@/lib/reown-identity";
-import { createDb, SCHEMA, type Database } from "./db";
+import { createDb, SCHEMA, type Database } from "@music-visualizer/db";
 
 function ensureHex(value: string): `0x${string}` {
   if (!value.startsWith("0x")) throw new Error(`Invalid hex string: ${value}`);
