@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import { useVisualizerStore } from "@/stores/visualizer-store";
+import { useVisualizerStore } from "@/stores/visualizer";
 
 // Sumi-ink peak-hold overlay. On each RMS peak (detected as a rising local
 // maximum on a short window), spawn a soft radial blob that spreads and fades

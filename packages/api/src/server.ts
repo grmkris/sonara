@@ -9,7 +9,7 @@ export {
   eventIterator,
   os,
 } from "@orpc/server";
-export { appRouter, type AppRouter } from "./routers/app-router";
+export { appRouter, type AppRouter } from "./routers/app.router";
 export {
   sessionRouter,
   type SessionContext,

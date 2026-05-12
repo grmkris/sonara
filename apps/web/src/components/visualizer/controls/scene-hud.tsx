@@ -1,6 +1,6 @@
 "use client";
 
-import { useVisualizerStore } from "@/stores/visualizer-store";
+import { useVisualizerStore } from "@/stores/visualizer";
 import { cn } from "@/lib/utils";
 
 export function SceneHud() {

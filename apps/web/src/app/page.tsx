@@ -29,7 +29,7 @@ import {
   hydratePresetPrefs,
   hydrateUiVisible,
   useVisualizerStore,
-} from "@/stores/visualizer-store";
+} from "@/stores/visualizer";
 import { cn } from "@/lib/utils";
 
 export default function Page() {

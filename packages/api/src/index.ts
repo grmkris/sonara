@@ -4,7 +4,7 @@ export {
   appRouter,
   type AppRouter,
   type AppRouterClient,
-} from "./routers/app-router";
+} from "./routers/app.router";
 export {
   sessionRouter,
   type SessionContext,

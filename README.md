@@ -34,23 +34,22 @@ bun run dev
 
 ## Migrations
 
-Drizzle migrations live in `apps/web/drizzle/`. After editing `apps/web/src/server/db/schema.ts`:
+Drizzle schema and migrations live in `packages/db`. After editing `packages/db/src/schema/*.db.ts`:
 
 ```bash
-cd apps/web
-bun run db:generate    # writes a new migration file alongside the existing baseline
+bun run --filter=@music-visualizer/db db:generate
 ```
 
-Apply with `bun run db:push` (dev) or `bun run db:migrate` (prod) — both are run by hand, never automatically. Always commit the generated SQL alongside the schema change so history stays in lockstep.
+This writes a new SQL file to `packages/db/drizzle/`. Commit it alongside the schema change. The server applies pending migrations on every boot via `runMigrations()` — no manual `db:push` or `db:migrate` step in dev or prod.
 
 ## Architecture
 
-See `ARCHITECTURE.md` for the current code tour — data flow, layer-by-layer map, and the tracked cleanup list. `REFACTOR-PLAN.md` tracks the tiered action list. `AGENTS.md` documents repo conventions for human + AI contributors.
+See `ARCHITECTURE.md` for the current code tour — data flow, layer-by-layer map, and the tracked cleanup list. `INFRASTRUCTURE.md` is the deployment + topology map. `AGENTS.md` documents repo conventions for human + AI contributors.
 
-**In short:** the browser captures audio (file / mic / tab share), extracts ~15 features via Meyda + a hand-rolled analyzer at 60 Hz, upstreams them at 5 Hz over an oRPC WebSocket. The server session runs scene / voice-intent / song-recognition / morph-chain / credits logic and pushes frame URLs + state updates back through an `eventIterator`. The client renders via a WebGL2 displacement shader with feedback FBO, Kuwahara painterly pass, and reveal-from-noise gate.
+**In short:** the browser captures audio (file / mic / tab share), extracts ~15 features via Meyda + a hand-rolled analyzer at 60 Hz, upstreams them at 5 Hz over an oRPC WebSocket. The server session runs scene / voice-intent / song-recognition / credits logic and pushes frame URLs + state updates back through an `eventIterator`. The client renders via a WebGL2 displacement shader with feedback FBO, Kuwahara painterly pass, and reveal-from-noise gate.
 
 ## Scope
 
-**Shipped:** text prompts, browser-speech voice → Gemini intent parser, tab-audio / mic capture, AudD-backed song recognition with Apple Music enrichment, WebGL2 renderer with 21 presets + 13 shader primitives, LFO drift, FBO feedback, preset cross-fade, morph-chain generation, commit/flow tier FLUX.2 routing, BYOK fal key, SIWE wallet auth + credit ledger + USDC top-ups on Base.
+**Shipped:** text prompts, browser-speech voice → Gemini intent parser, tab-audio / mic capture, AudD-backed song recognition with Apple Music enrichment, WebGL2 renderer with 21 presets + 13 shader primitives, LFO drift, FBO feedback, preset cross-fade, single-frame `streamPreview` per trigger, BYOK fal key, SIWE wallet auth + credit ledger + USDC top-ups on Base.
 
-**Deferred:** OpenAI refine pass (original Phase 2 goal; not started). Fluid-sim preset (additive, not cleanup). See `REFACTOR-PLAN.md` Tier 3 for the full deferred list.
+**Deferred:** OpenAI refine pass (original Phase 2 goal; not started). Fluid-sim preset (additive, not cleanup). See `ARCHITECTURE.md` smell list for the open cleanup items.

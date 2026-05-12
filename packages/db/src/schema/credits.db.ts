@@ -20,7 +20,7 @@ import { user } from "./auth.db";
 // Credit ledger. Single `balance_frames` column — anchor frames (first
 // frame of a session, runs on flux-2-pro/edit) cost 2, flow frames
 // (every keyframe after) cost 1. Debited per call in apps/server via
-// direct pg SQL; see apps/server/src/credits/credits-service.ts.
+// direct pg SQL; see apps/server/src/credits/credits.service.ts.
 // =====================================================================
 
 export const credits = pgTable(

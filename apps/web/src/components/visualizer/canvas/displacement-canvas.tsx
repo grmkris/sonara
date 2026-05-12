@@ -4,7 +4,7 @@ import { useEffect, useRef } from "react";
 import {
   markImageLoaded,
   useVisualizerStore,
-} from "@/stores/visualizer-store";
+} from "@/stores/visualizer";
 import {
   intensityCoefficients,
   targetsFromAudio,

@@ -1,6 +1,6 @@
 "use client";
 
-import { useVisualizerStore } from "@/stores/visualizer-store";
+import { useVisualizerStore } from "@/stores/visualizer";
 import { cn } from "@/lib/utils";
 
 // Small chip showing the identified track (with a "refresh" action) OR — when

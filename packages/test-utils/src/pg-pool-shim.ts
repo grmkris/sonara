@@ -1,7 +1,7 @@
 import type { PGlite } from "@electric-sql/pglite";
 
 // Minimal `pg.Pool`-shaped shim around a PGlite instance, matching the subset
-// used by `apps/server/src/credits/credits-service.ts`:
+// used by `apps/server/src/credits/credits.service.ts`:
 //
 //   - `pool.connect()` returning a client with `query()` + `release()`
 //   - `pool.query(sql, params)` for non-transactional queries

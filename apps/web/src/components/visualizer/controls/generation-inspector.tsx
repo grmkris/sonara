@@ -7,7 +7,7 @@ import {
   type TriggerEntry,
   type TriggerReason,
   useVisualizerStore,
-} from "@/stores/visualizer-store";
+} from "@/stores/visualizer";
 
 // Replaces the old TriggerLog with a fuller observability surface for the
 // generation pipeline. Shows the most recent ResolvedScene, drift source,

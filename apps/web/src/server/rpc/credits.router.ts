@@ -4,7 +4,7 @@ import { and, eq, gte, sql, sum } from "drizzle-orm";
 import { getAddress } from "viem";
 import { z } from "zod";
 import { publicEnv } from "@/env";
-import { typeIdGenerator } from "@/lib/typeid";
+import { typeIdGenerator } from "@music-visualizer/shared/typeid";
 import { baseClient } from "@/lib/chain-clients";
 import { SCHEMA } from "@music-visualizer/db";
 import { protectedProcedure } from "./procedures";

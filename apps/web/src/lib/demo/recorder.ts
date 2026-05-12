@@ -1,4 +1,4 @@
-import { useVisualizerStore } from "@/stores/visualizer-store";
+import { useVisualizerStore } from "@/stores/visualizer";
 
 // Browser-side capture state machine. Observes the zustand store's
 // `currentFrame` and appends every new non-null URL (paired with the elapsed

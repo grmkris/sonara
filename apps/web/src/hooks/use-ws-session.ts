@@ -10,7 +10,7 @@ import {
   type SessionAction,
   type SessionSend,
 } from "@/lib/session-actions";
-import { useVisualizerStore } from "@/stores/visualizer-store";
+import { useVisualizerStore } from "@/stores/visualizer";
 import { PRESET_NAMES, type PresetName } from "@/lib/render/presets";
 import { getByokFalKey } from "@/components/settings-panel";
 

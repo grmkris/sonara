@@ -7,13 +7,13 @@ A code tour for refactoring decisions. Read top-down: data flow first, then a la
 > - ✅ Papari–Kuwahara painterly post-pass landed (new `uPainterly` uniform + preset field).
 > - ✅ Three new ink primitives landed (`uSalt`, `uCauliflower`, `uSplatter` — all original code, license-safe).
 > - ✅ `ClientEvent` → oRPC migration complete (new `@music-visualizer/api` package; `SessionSend` + `dispatchSessionAction` in `apps/web/src/lib/session-actions.ts`). Typecheck clean across all 5 packages.
-> - ✅ `VoiceController` extracted from `session.ts` (761 → 618 lines; smell #1 partial).
+> - ⚠️ `VoiceController` extraction was reverted — voice handling is back inline in `session.ts`. Smell #1 reopened; session is now 687 lines.
 > - ✅ `session.state()` bootstrap-pull procedure covers the `EventPublisher` race where `init()` publishes land before the client's `events()` subscribe attaches.
 > - ❌ Lygia refactor dropped (Prosperity + Patron license incompatible with proprietary project).
 > - ✅ Morph chain removed (April 2026) — unified single-frame `streamPreview` path for every trigger. Reveal shader stays.
 > - **Tier 1 + Tier 2 closed.** Remaining work is the deferred smell-list items from §4.
 
-See `REFACTOR-PLAN.md` for the tiered action list and progress.
+Open cleanup items are tracked in §3 (smell list) below. The visual / shader refactor list — which used to live in `REFACTOR-PLAN.md` — closed out and the file has been retired.
 
 ---
 
@@ -153,26 +153,20 @@ See `REFACTOR-PLAN.md` for the tiered action list and progress.
 
 ## 3. Where it smells (ranked, honest)
 
-### 🟠 1. `Session` is still a big object (~620 lines post-voice-extraction)
-~16 instance fields, 6 trigger reasons that all funnel into one 150-line `trigger()`. Voice is out; triggers and recognition orchestration remain.
+### 🟠 1. `Session` is a big object (~687 lines)
+18+ instance fields, 5 trigger reasons funnelling into one 256-line `trigger()`. Voice handling is currently inline (earlier `VoiceController` extraction was reverted).
 
-**Suggestion** (remaining): extract two more modules:
-- `session/triggers.ts` — pause/periodic/semantic scheduling, trigger() body
-- `session/recognition.ts` — song-id dedupe + merge call (recognize method body; cache/enrichment already in `recognition/`)
+**Lowest-risk remaining extraction**: a `credit-gate` module pulled out of `trigger()`'s top — the debit / refund / free-tier / cooldown logic is half of the method and is the most unit-testable. See §4 for ordered cleanup.
 
-~~`session/voice.ts` — done April 2026.~~
+### 🟠 2. Five trigger reasons, four of them indistinguishable downstream
+`pause`, `semantic`, `periodic`, `section`, `voice` (commit was removed April 2026). Downstream of `trigger()`, the only branch on `reason` is membership in `USER_INITIATED = ["voice", "semantic", "pause"]` for the credit-denial cooldown. Everything else is logging.
 
-Session itself becomes the orchestrator (state + send) only.
+**Suggestion**: split into `kind: "auto" | "user"` for dispatch logic and `source: <the five>` for the trigger-log UI. Wire stays the same (event schema keeps the granular value).
 
-### 🟠 2. Six trigger reasons, four of them indistinguishable downstream
-`pause`, `semantic`, `periodic`, `section` differ in *when* they fire but produce identical work in `trigger()`. The reason is only used for logging and the credit-denial cooldown rule.
+### 🟡 3. Drift layering — API shape outlives runtime usage
+`sampleDriftLayered` still accepts `llmDrift` + `latestVoice` parameters, but the only call site (`session.ts:515-520`) passes both as `null` — only `trajectory` + static-pool path is wired. The combinatorics are dead-code; the signature is misleading.
 
-**Suggestion**: collapse to two — `auto` (any timer/audio-driven) and `user` (commit/voice). Keep the trigger source as a separate field for the trigger-log UI.
-
-### 🟠 3. Drift layering is a 3-deep stack
-`currentAtmosphere` (LLM) → `latestVoice` (raw) → `sampleDriftLayered` (static pool) — with a TTL on each layer. The combinatorics make it hard to reason about which clause ends up in the prompt at any given moment.
-
-**Suggestion**: pick one source per trigger by simple priority and emit it. Don't blend.
+**Suggestion**: drop the unused params, rename to `sampleDrift`. Re-add layers if LLM-drift or voice-drift comes back.
 
 ### ✅ 4. ~~The chain step-0 special case~~ — RESOLVED BY DELETION
 Morph chain removed April 2026. Every trigger is a single `streamPreview` call now; no `pendingChain`, no `enqueueChainFrame`, no step-0 branch.
@@ -183,27 +177,18 @@ CSS fallback `CssFrames` deleted. `dream-canvas.tsx` shrunk 309 → 66 lines. No
 ### ✅ 6. ~~`useChainDrain` runs rAF forever~~ — RESOLVED BY DELETION
 Hook file removed; no drain loop remaining.
 
-### 🟡 7. Visualizer store is a junk drawer
-25+ fields, 6 different concerns. Field names start to collide (`commitPulse`, `sweepPulse`, `presetTick`, `identifyTick` are all "monotonic event triggers").
-
-**Suggestion**: split into 3 stores — `useFrameStore` (render output), `useSessionStore` (server-mirrored state), `useUIStore` (local UI). Or namespace within one store: `s.frames.current` instead of `s.currentFrame`. Existing components would need import updates but it's mechanical.
+### ✅ 7. ~~Visualizer store is a junk drawer~~ — RESOLVED VIA SLICES
+Split into 6 zustand slices under `apps/web/src/stores/visualizer/`: `scene-slice`, `playback-slice`, `inspector-slice`, `preset-slice`, `ui-slice`, `voice-slice`. The old `stores/visualizer-store.ts` was a back-compat barrel and has been removed.
 
 ### 🟡 8. Effects-deck monolith
 `displacement-shaders.ts` is one 700-line shader with 30 `if` blocks. Each preset is a config object that flips uniforms. It works, but adding a new effect means: shader edit + uniform binding + `uni` map entry + preset config + audio routing entry.
 
 **Suggestion**: leave it. The monolith is worse than modular shaders only if you're adding effects weekly. The friction is acceptable for what it buys (one shader compile, preset crossfade is just config lerp).
 
-### 🟢 9. Reveal-pass state lives inside a 600-line useEffect
-`revealStartAt`, `lastCrossfadeAt` are local mutable refs in the canvas effect. Works but adds to the cognitive load of an already-huge effect body.
+### 🟠 9. `displacement-canvas.tsx` mega-effect
+The specific `revealStartAt` / `lastCrossfadeAt` refs are gone (crossfade state moved to a module-level `state` object). But the file grew from ~600 → **902 lines** since this list was first written. One `useEffect` (lines 228 → end-of-file) owns shader build, uniform binding, audio-envelope construction, FBO setup, frame loop, palette reduction, droplet seeding, crossfade, RD-layer wiring.
 
-**Suggestion**: extract to a tiny `reveal-controller.ts`:
-```ts
-export function createRevealController(): {
-  armOn(crossfadeAt: number | null): void;
-  sample(now: number, impulses: {kick: number; snare: number}): {active: number; t: number};
-}
-```
-Same closure pattern, but at the top of the file with a clear API.
+**Suggestion**: deliberately deferred. The file is on the AGENTS.md don't-touch list — refactoring it is high-risk for marginal ergonomic gain.
 
 ### 🟢 10. Many small canvas overlays might overlap with shader effects
 `CanvasGrain`, `InkDrops`, `CanvasOscilloscope`, vignette div — and the shader has `uGrain`, `uHalation`, `uVignette`, etc. Possibly historical layering. Worth auditing whether each overlay is still pulling its weight.
@@ -215,9 +200,11 @@ Same closure pattern, but at the top of the file with a clear API.
 Maximum win per hour. Done items struck through.
 
 1. ~~**Delete the CSS fallback path** (#5)~~ — ✅ done.
-2. ~~**Extract `voice.ts` from `session.ts`** (#1)~~ — ✅ done. Now at `apps/server/src/session/voice-controller.ts`. Session ~620 lines. Two more modules to extract (`triggers.ts`, `recognition.ts`) if we want to finish #1.
-3. **Collapse trigger reasons to `auto`/`user`** (#2). Touches event schema and trigger-log UI but mostly find/replace. ~1 hr.
-4. ~~**Replace `useChainDrain` rAF**~~ — ✅ resolved by chain deletion.
-5. **Audit overlays vs shader effects** (#10). Mostly reading; deletes if anything is redundant. ~1 hr.
+2. ~~**Visualizer store split** (#7)~~ — ✅ done via 6-slice composition.
+3. ~~**Replace `useChainDrain` rAF**~~ — ✅ resolved by chain deletion.
+4. **Extract `credit-gate` from `session.trigger()`** (#1). Pull the debit / refund / free-tier / cooldown half of `trigger()` into `apps/server/src/credits/credit-gate.ts`. Cuts ~50 lines from `session.ts` and makes the cooldown rule unit-testable.
+5. **Collapse trigger reasons to `kind: "auto" | "user"`** (#2). Server dispatch logic only; keep `reason` on the wire as `source` for the trigger-log UI.
+6. **Prune drift-layering API** (#3). Drop the unused `llmDrift` / `latestVoice` params from `sampleDriftLayered`; rename to `sampleDrift`.
+7. **Audit canvas overlays vs shader effects** (#10). Mostly reading; deletes if any overlay is redundant with shader uniforms.
 
-**Skip** the shader monolith refactor (#8) and store split (#7) unless you're adding new features that pay for the move.
+**Skip** the shader monolith refactor (#8), the `displacement-canvas.tsx` mega-effect (#9), and further `Session` extraction beyond credit-gate — high risk, low ergonomic win.

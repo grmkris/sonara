@@ -19,7 +19,7 @@
 import { sql } from "drizzle-orm";
 import { typeIdFromUuid, typeIdToUuid } from "@music-visualizer/shared/typeid";
 import { createDb, SCHEMA } from "@music-visualizer/db";
-import { typeIdGenerator } from "@/lib/typeid";
+import { typeIdGenerator } from "@music-visualizer/shared/typeid";
 
 function fail(msg: string): never {
   console.error(`error: ${msg}`);

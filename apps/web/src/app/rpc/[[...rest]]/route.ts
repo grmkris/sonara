@@ -3,7 +3,7 @@ import type { UserId } from "@music-visualizer/shared/typeid";
 import { env } from "@/env";
 import { getAuth } from "@/server/auth";
 import { createDb } from "@music-visualizer/db";
-import { appRouter } from "@/server/rpc/app-router";
+import { appRouter } from "@/server/rpc/app.router";
 
 // oRPC handler is server-only and per-request. Force-dynamic skips
 // Next.js's build-time page-data collection — sidesteps a Bun+Turbopack

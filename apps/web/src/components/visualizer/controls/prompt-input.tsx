@@ -5,7 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import type { DreamSceneState } from "@music-visualizer/shared";
 import type { SessionSend } from "@/lib/session-actions";
 import { Input } from "@/components/ui/input";
-import { useVisualizerStore } from "@/stores/visualizer-store";
+import { useVisualizerStore } from "@/stores/visualizer";
 
 interface PromptInputProps {
   send: SessionSend;

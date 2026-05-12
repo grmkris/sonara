@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useVisualizerStore } from "@/stores/visualizer-store";
+import { useVisualizerStore } from "@/stores/visualizer";
 import { isWebgl2Available } from "@/lib/render/webgl-util";
 import { CanvasGrain } from "@/components/visualizer/audio/canvas-grain";
 import { InkDrops } from "@/components/visualizer/canvas/ink-drops";

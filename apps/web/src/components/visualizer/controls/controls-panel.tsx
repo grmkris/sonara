@@ -13,7 +13,7 @@ import {
 import { IntensityDial } from "@/components/visualizer/controls/intensity-dial";
 import { PresetPicker } from "@/components/visualizer/controls/preset-picker";
 import { SceneTemplatePicker } from "@/components/visualizer/controls/scene-template-picker";
-import { useVisualizerStore } from "@/stores/visualizer-store";
+import { useVisualizerStore } from "@/stores/visualizer";
 import { debounce } from "@/lib/debounce";
 
 interface ControlsPanelProps {

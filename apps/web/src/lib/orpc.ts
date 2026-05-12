@@ -1,5 +1,5 @@
 import { createORPCClient, RPCLink } from "@music-visualizer/api/client";
-import type { AppRouterClient } from "@/server/rpc/app-router";
+import type { AppRouterClient } from "@/server/rpc/app.router";
 
 const link = new RPCLink({
   url:

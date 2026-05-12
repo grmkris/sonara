@@ -1,7 +1,7 @@
 import { ORPCError } from "@music-visualizer/api/server";
 import { signTicket } from "@music-visualizer/shared";
 import { env } from "@/env";
-import { typeIdToUuid } from "@/lib/typeid";
+import { typeIdToUuid } from "@music-visualizer/shared/typeid";
 import { protectedProcedure } from "./procedures";
 
 export const authRouter = {

@@ -74,8 +74,8 @@ export function markImageLoaded(): void {
   useVisualizerStore.setState({ crossfadeStartedAt: performance.now() });
 }
 
-// Re-export slice types so consumers importing from `@/stores/visualizer-store`
-// (via the back-compat barrel) keep getting the same surface.
+// Re-export slice types from one entry so consumers can import everything
+// they need from `@/stores/visualizer`.
 export type {
   InspectorState,
   TriggerEntry,

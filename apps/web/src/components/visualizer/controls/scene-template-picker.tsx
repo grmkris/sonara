@@ -4,7 +4,7 @@ import { useCallback } from "react";
 import type { DreamSceneState } from "@music-visualizer/shared";
 import { SCENE_TEMPLATES } from "@music-visualizer/shared";
 import type { SessionSend } from "@/lib/session-actions";
-import { useVisualizerStore } from "@/stores/visualizer-store";
+import { useVisualizerStore } from "@/stores/visualizer";
 import { cn } from "@/lib/utils";
 
 interface SceneTemplatePickerProps {

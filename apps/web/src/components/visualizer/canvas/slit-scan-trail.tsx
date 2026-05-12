@@ -2,7 +2,7 @@
 
 import { useEffect, useRef } from "react";
 import { getCurrentDisplacementCanvas } from "@/components/visualizer/canvas/displacement-canvas";
-import { useVisualizerStore } from "@/stores/visualizer-store";
+import { useVisualizerStore } from "@/stores/visualizer";
 
 // Time-compressed echo ribbon pinned above the bottom audio strip. Every
 // SAMPLE_MS, grabs the current WebGL canvas frame and draws it into a

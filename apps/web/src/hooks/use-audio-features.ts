@@ -5,7 +5,7 @@ import type { AudioFeatures } from "@music-visualizer/shared";
 import type { SessionSend } from "@/lib/session-actions";
 import { AudioEngine } from "@/lib/audio/analyzer";
 import { createMusicalityGate } from "@/lib/audio/musicality-gate";
-import { useVisualizerStore } from "@/stores/visualizer-store";
+import { useVisualizerStore } from "@/stores/visualizer";
 
 const UPSTREAM_HZ = 5;
 const UPSTREAM_INTERVAL_MS = 1000 / UPSTREAM_HZ;

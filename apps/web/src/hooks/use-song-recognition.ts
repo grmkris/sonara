@@ -4,7 +4,7 @@ import { useEffect, useRef } from "react";
 import { toast } from "sonner";
 import type { SessionSend } from "@/lib/session-actions";
 import { getCurrentAudioEngine } from "@/hooks/use-audio-features";
-import { useVisualizerStore } from "@/stores/visualizer-store";
+import { useVisualizerStore } from "@/stores/visualizer";
 import { blobToBase64 } from "@/lib/audio/recorder";
 
 // Fires a song-recognition request based on the hybrid policy defined in the

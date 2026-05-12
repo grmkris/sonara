@@ -16,8 +16,8 @@ import {
   debitFrame,
   refundFrame,
   tryConsumeFreeTier,
-} from "../credits/credits-service";
-import { recognizeClip } from "../recognition/recognition-service";
+} from "../credits/credits.service";
+import { recognizeClip } from "../recognition/recognition.service";
 import {
   synthesizeFromTrack,
   type SongMusePatch,

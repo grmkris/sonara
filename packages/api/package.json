@@ -18,8 +18,8 @@
   },
   "dependencies": {
     "@music-visualizer/shared": "workspace:*",
-    "@orpc/client": "^1.13.0",
-    "@orpc/server": "^1.13.0",
+    "@orpc/client": "^1.14.0",
+    "@orpc/server": "^1.14.0",
     "zod": "^4.3.6"
   },
   "devDependencies": {

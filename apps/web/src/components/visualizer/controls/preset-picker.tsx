@@ -6,7 +6,7 @@ import {
   PRESET_NAMES,
   type PresetName,
 } from "@/lib/render/presets";
-import { useVisualizerStore, type PresetMode } from "@/stores/visualizer-store";
+import { useVisualizerStore, type PresetMode } from "@/stores/visualizer";
 import { cn } from "@/lib/utils";
 
 const MODES: { id: PresetMode; label: string; title: string }[] = [

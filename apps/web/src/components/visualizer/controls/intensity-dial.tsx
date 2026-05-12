@@ -4,7 +4,7 @@ import { useMemo } from "react";
 import type { DreamSceneState } from "@music-visualizer/shared";
 import type { SessionSend } from "@/lib/session-actions";
 import { Slider } from "@/components/ui/slider";
-import { useVisualizerStore } from "@/stores/visualizer-store";
+import { useVisualizerStore } from "@/stores/visualizer";
 import { debounce } from "@/lib/debounce";
 
 interface IntensityDialProps {

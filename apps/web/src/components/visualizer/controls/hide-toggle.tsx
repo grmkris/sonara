@@ -3,7 +3,7 @@
 import { useCallback } from "react";
 import { Eye, EyeOff } from "lucide-react";
 import { useHotkey } from "@/hooks/use-hotkey";
-import { useVisualizerStore } from "@/stores/visualizer-store";
+import { useVisualizerStore } from "@/stores/visualizer";
 import { cn } from "@/lib/utils";
 
 export function HideToggle() {

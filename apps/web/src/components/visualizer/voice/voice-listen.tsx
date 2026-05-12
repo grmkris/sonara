@@ -4,7 +4,7 @@ import { useCallback, useRef } from "react";
 import type { SessionSend } from "@/lib/session-actions";
 import { useKeyedPushToTalk } from "@/hooks/use-keyed-push-to-talk";
 import { useVoiceRecognition } from "@/hooks/use-voice-recognition";
-import { useVisualizerStore } from "@/stores/visualizer-store";
+import { useVisualizerStore } from "@/stores/visualizer";
 import type { VoiceField } from "@/stores/visualizer/voice-slice";
 import { cn } from "@/lib/utils";
 

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useVisualizerStore } from "@/stores/visualizer-store";
+import { useVisualizerStore } from "@/stores/visualizer";
 
 // Periodic low-opacity overlay of a past "hero" image from the recent-frames
 // ring buffer. Fires every 45-90s when at least 2 entries exist. Reads as a
