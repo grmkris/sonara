@@ -16,7 +16,12 @@
     "fix": "oxlint --fix",
     "test": "bun test || echo 'no tests yet'",
     "db:generate": "drizzle-kit generate",
-    "db:migrate": "drizzle-kit migrate"
+    "db:migrate": "drizzle-kit migrate",
+    "db:start": "docker compose up -d",
+    "db:stop": "docker compose stop",
+    "db:down": "docker compose down",
+    "db:watch": "docker compose up",
+    "db:clean": "docker compose down -v"
   },
   "dependencies": {
     "@music-visualizer/shared": "workspace:*",

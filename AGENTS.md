@@ -13,7 +13,7 @@ Conventions for working in this repo. Read this before making non-trivial change
 
 ## Production
 
-Deployed on **Railway**. Migrated off Neon in May 2026 — any `DATABASE_URL` in `apps/web/.env` / `apps/server/.env` is local-dev only and **not what production runs against**. Railway injects the prod DB URL at runtime via `${{Postgres.DATABASE_URL}}`; the server reads it from `env.DATABASE_URL` and applies `packages/db` migrations on every boot.
+Deployed on **Railway** (Postgres template + two app services). Any `DATABASE_URL` in `apps/web/.env` / `apps/server/.env` is local-dev only — it points at a `bun run db:start` Postgres on `localhost:54324`, **not what production runs against**. Railway injects the prod DB URL at runtime via `${{Postgres.DATABASE_URL}}`; the server reads it from `env.DATABASE_URL` and applies `packages/db` migrations on every boot.
 
 ### Project
 
@@ -74,6 +74,8 @@ Web on `http://localhost:4470`, server on `ws://localhost:4471/ws`.
 ## Database
 
 Schema and migrations live in `packages/db`. The server applies pending migrations on every boot via `runMigrations()` (see `apps/server/src/server.ts`) — there is no manual `db:push` step in dev or prod.
+
+Local Postgres comes from `packages/db/docker-compose.yml` (Postgres 17 on `localhost:54324`). Bring it up with `bun run db:start`; stop it with `bun run db:stop` (volume persists) or `bun run db:down` (containers removed, volume kept). `bun run --filter=@music-visualizer/db db:clean` wipes the volume.
 
 To author a new migration:
 

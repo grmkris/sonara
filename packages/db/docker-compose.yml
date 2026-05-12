@@ -1,0 +1,23 @@
+name: music-visualizer
+
+services:
+  postgres:
+    image: postgres:17
+    container_name: music-visualizer-postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: musicviz
+    ports:
+      - "54324:5432"
+    volumes:
+      - music-visualizer_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d musicviz"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+volumes:
+  music-visualizer_postgres_data:

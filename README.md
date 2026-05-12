@@ -31,6 +31,20 @@ bun run dev
 - `bun run typecheck` — strict TS across the workspace
 - `bun run lint` — oxlint across the workspace
 - `bun run ci:local` — lint + typecheck + test + build serially
+- `bun run db:start` / `db:stop` / `db:down` / `db:watch` — local Postgres via Docker
+
+## Local Postgres
+
+The server's `runMigrations()` and the credits + auth queries need a local Postgres in dev. A Postgres 17 service is defined in `packages/db/docker-compose.yml` (port `54324`, named volume for persistence):
+
+```bash
+bun run db:start    # docker compose up -d
+bun run db:stop     # stop without removing the volume
+bun run db:down     # stop + remove containers (volume kept)
+bun run db:watch    # foreground tail
+```
+
+The default `DATABASE_URL` in `.env.example` points at this instance. Production uses Railway Postgres (see `AGENTS.md` §Production).
 
 ## Migrations
 
