@@ -5,6 +5,11 @@ import { getAuth } from "@/server/auth";
 import { createDb } from "@music-visualizer/db";
 import { appRouter } from "@/server/rpc/app-router";
 
+// oRPC handler is server-only and per-request. Force-dynamic skips
+// Next.js's build-time page-data collection — sidesteps a Bun+Turbopack
+// CJS-loader interop bug that crashes on catch-all server routes.
+export const dynamic = "force-dynamic";
+
 const handler = new RPCHandler(appRouter);
 
 async function handle(request: Request): Promise<Response> {
