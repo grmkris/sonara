@@ -10,7 +10,8 @@
     "lint": "oxlint",
     "fix": "oxlint --fix",
     "test": "bun test || echo 'no tests yet'",
-    "seed-credits": "bun run src/scripts/seed-credits.ts"
+    "seed-credits": "bun run src/scripts/seed-credits.ts",
+    "allow-email": "bun run src/scripts/allow-email.ts"
   },
   "dependencies": {
     "@music-visualizer/api": "workspace:*",

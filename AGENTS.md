@@ -119,9 +119,12 @@ Voice intent is duplicated by design: the `VoiceController` on the server owns d
 
 ## Auth
 
-SIWE via Better Auth (`apps/web/src/server/auth.ts`) → web session cookie → `protectedProcedure` middleware reads it.
+Two methods on the same Better Auth instance (`apps/web/src/server/auth.ts`), one session cookie, read by `protectedProcedure` middleware.
 
-For the WebSocket: the web app mints a 5-min HMAC ticket via `auth.mintWsTicket`; the browser opens `ws://server/ws?token=…`; the server verifies the ticket via `verifyTicket` from `@music-visualizer/shared`. ERC-1271 + ERC-6492 verification happens through the Reown-tuned mainnet client in `apps/web/src/lib/chain-clients.ts`.
+1. **SIWE wallet** (open): Reown AppKit → Better Auth `siwe` plugin. Anonymous mode — any wallet that signs the SIWE message gets a user row with synthetic email `<addr>@wallet.<host>`. ERC-1271 + ERC-6492 verification via the Reown-tuned mainnet client in `apps/web/src/lib/chain-clients.ts`.
+2. **Email + password** (allowlist-gated): Better Auth's built-in `emailAndPassword`. Signup is rejected by `databaseHooks.user.create.before` unless the email exists in the `allowed_email` table. Add an email with `bun run --filter=web allow-email <address> [note]`. UI lives at `/login`.
+
+For the WebSocket: the web app mints a 5-min HMAC ticket via `auth.mintWsTicket`; the browser opens `ws://server/ws?token=…`; the server verifies the ticket via `verifyTicket` from `@music-visualizer/shared`. The ticket path is auth-method-agnostic — both SIWE and email-password users get the same ticket.
 
 ## Credits & money path
 

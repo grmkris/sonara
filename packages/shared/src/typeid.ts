@@ -12,6 +12,7 @@ export const idTypesMapNameToPrefix = {
   walletAddress: "wal",
   credits: "crd",
   usageLedger: "usg",
+  allowedEmail: "alw",
 } as const;
 
 export type IdTypePrefixNames = keyof typeof idTypesMapNameToPrefix;
@@ -66,6 +67,7 @@ export type VerificationId = TypeIdString<"verification">;
 export type WalletAddressId = TypeIdString<"walletAddress">;
 export type CreditsId = TypeIdString<"credits">;
 export type UsageLedgerId = TypeIdString<"usageLedger">;
+export type AllowedEmailId = TypeIdString<"allowedEmail">;
 
 export const UserIdSchema = typeIdValidator("user");
 export const SessionIdSchema = typeIdValidator("session");
@@ -74,3 +76,4 @@ export const VerificationIdSchema = typeIdValidator("verification");
 export const WalletAddressIdSchema = typeIdValidator("walletAddress");
 export const CreditsIdSchema = typeIdValidator("credits");
 export const UsageLedgerIdSchema = typeIdValidator("usageLedger");
+export const AllowedEmailIdSchema = typeIdValidator("allowedEmail");

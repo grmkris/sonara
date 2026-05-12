@@ -15,6 +15,13 @@
       "when": 1778598035240,
       "tag": "0001_mighty_doctor_doom",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1778606785477,
+      "tag": "0002_omniscient_spirit",
+      "breakpoints": true
     }
   ]
 }
