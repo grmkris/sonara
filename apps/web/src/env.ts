@@ -21,13 +21,24 @@ const clientEnvSchema = z.object({
   NEXT_PUBLIC_PAY_RECIPIENT_BASE: z.string().optional(),
 });
 
-// Server-side parsing. Safe to call from any server-only module.
-export const env =
-  typeof window === "undefined"
-    ? serverEnvSchema.parse(process.env)
-    : // On the client, serverEnvSchema fields are undefined — accessing them
-      // would throw. Callers of `env.*` must be in server-only code.
-      (undefined as unknown as z.infer<typeof serverEnvSchema>);
+// Lazy server-side parsing. Validation runs on first property access, not on
+// module load — so `next build`'s "Collecting page data" pass (which loads
+// route modules without Railway's runtime vars present) doesn't crash.
+type ServerEnv = z.infer<typeof serverEnvSchema>;
+let _serverEnv: ServerEnv | null = null;
+function loadServerEnv(): ServerEnv {
+  if (!_serverEnv) _serverEnv = serverEnvSchema.parse(process.env);
+  return _serverEnv;
+}
+export const env = new Proxy({} as ServerEnv, {
+  get(_target, prop) {
+    if (typeof window !== "undefined") {
+      // Callers of `env.*` must be in server-only code.
+      return undefined;
+    }
+    return loadServerEnv()[prop as keyof ServerEnv];
+  },
+});
 
 // Client/server-readable. Uses literal references so Next.js can inline.
 export const publicEnv = clientEnvSchema.parse({
