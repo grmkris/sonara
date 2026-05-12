@@ -14,8 +14,7 @@ import {
 } from "@music-visualizer/test-utils";
 import {
   CREDIT_DENIAL_COOLDOWN_MS,
-  COST_ANCHOR,
-  COST_FLOW,
+  COST_PER_FRAME,
   tryDebitCredit,
 } from "./credit-gate";
 import { __setPoolForTests } from "./credits.service";
@@ -85,7 +84,6 @@ describe("BYOK bypass", () => {
     const r = await tryDebitCredit({
       userId: USER,
       byokFalKey: "fal_key_abc",
-      isAnchor: true,
       isUserInitiated: false,
       lastCreditDenialAt: 0,
       now: NOW,
@@ -100,34 +98,18 @@ describe("BYOK bypass", () => {
 });
 
 describe("paid debit", () => {
-  test("anchor: deducts COST_ANCHOR and returns paidCost for refund", async () => {
+  test("deducts COST_PER_FRAME and returns paidCost for refund", async () => {
     await seedCredits(USER, 5);
     const r = await tryDebitCredit({
       userId: USER,
       byokFalKey: null,
-      isAnchor: true,
       isUserInitiated: true,
       lastCreditDenialAt: 0,
       now: NOW,
       logger,
     });
     expect(r.ok).toBe(true);
-    if (r.ok) expect(r.paidCost).toBe(COST_ANCHOR);
-  });
-
-  test("flow: deducts COST_FLOW", async () => {
-    await seedCredits(USER, 5);
-    const r = await tryDebitCredit({
-      userId: USER,
-      byokFalKey: null,
-      isAnchor: false,
-      isUserInitiated: false,
-      lastCreditDenialAt: 0,
-      now: NOW,
-      logger,
-    });
-    expect(r.ok).toBe(true);
-    if (r.ok) expect(r.paidCost).toBe(COST_FLOW);
+    if (r.ok) expect(r.paidCost).toBe(COST_PER_FRAME);
   });
 
   test("paid success resets nextLastDenialAt to 0", async () => {
@@ -135,7 +117,6 @@ describe("paid debit", () => {
     const r = await tryDebitCredit({
       userId: USER,
       byokFalKey: null,
-      isAnchor: false,
       isUserInitiated: false,
       lastCreditDenialAt: NOW - 1000,
       now: NOW,
@@ -147,12 +128,11 @@ describe("paid debit", () => {
 });
 
 describe("free-tier fallback", () => {
-  test("flow with zero balance falls through to free tier", async () => {
+  test("zero balance falls through to free tier", async () => {
     await seedCredits(USER, 0);
     const r = await tryDebitCredit({
       userId: USER,
       byokFalKey: null,
-      isAnchor: false,
       isUserInitiated: false,
       lastCreditDenialAt: 0,
       now: NOW,
@@ -165,31 +145,61 @@ describe("free-tier fallback", () => {
     }
   });
 
-  test("anchor with zero balance does NOT use free tier — denied", async () => {
+  test("free tier exhausted → denial with shouldEmit on user-initiated", async () => {
+    // Drain the hourly quota first
     await seedCredits(USER, 0);
+    for (let i = 0; i < 3; i++) {
+      await tryDebitCredit({
+        userId: USER,
+        byokFalKey: null,
+        isUserInitiated: false,
+        lastCreditDenialAt: 0,
+        now: NOW,
+        logger,
+      });
+    }
+    // Fourth call exceeds the free quota
     const r = await tryDebitCredit({
       userId: USER,
       byokFalKey: null,
-      isAnchor: true,
       isUserInitiated: true,
       lastCreditDenialAt: 0,
       now: NOW,
       logger,
     });
     expect(r.ok).toBe(false);
-    if (!r.ok) expect(r.reason).toBe("out_of_credits");
+    if (!r.ok) {
+      expect(r.reason).toBe("out_of_credits");
+      expect(r.shouldEmit).toBe(true);
+    }
   });
 });
 
 describe("cooldown rule", () => {
-  test("first auto-trigger denial emits and stamps the denial timestamp", async () => {
+  // To exercise the cooldown we need genuine denials. Bump the user past the
+  // free-tier quota by reusing the row in the same hour window — see test
+  // helper above. Each test seeds fresh state in beforeEach, so we pre-drain
+  // here.
+  async function drainFreeTier(): Promise<void> {
     await seedCredits(USER, 0);
-    // First denial — never denied before
+    for (let i = 0; i < 3; i++) {
+      await tryDebitCredit({
+        userId: USER,
+        byokFalKey: null,
+        isUserInitiated: false,
+        lastCreditDenialAt: 0,
+        now: NOW,
+        logger,
+      });
+    }
+  }
+
+  test("first auto-trigger denial emits and stamps the denial timestamp", async () => {
+    await drainFreeTier();
     const r = await tryDebitCredit({
       userId: USER,
       byokFalKey: null,
-      isAnchor: true, // anchor + no balance = no free-tier fallback = guaranteed deny
-      isUserInitiated: false, // auto trigger
+      isUserInitiated: false,
       lastCreditDenialAt: 0,
       now: NOW,
       logger,
@@ -202,11 +212,10 @@ describe("cooldown rule", () => {
   });
 
   test("second auto-trigger denial inside cooldown window suppresses emit", async () => {
-    await seedCredits(USER, 0);
+    await drainFreeTier();
     const r = await tryDebitCredit({
       userId: USER,
       byokFalKey: null,
-      isAnchor: true,
       isUserInitiated: false,
       lastCreditDenialAt: NOW - 1000, // 1s ago, well inside cooldown
       now: NOW,
@@ -221,11 +230,10 @@ describe("cooldown rule", () => {
   });
 
   test("auto-trigger denial AFTER cooldown elapses re-emits", async () => {
-    await seedCredits(USER, 0);
+    await drainFreeTier();
     const r = await tryDebitCredit({
       userId: USER,
       byokFalKey: null,
-      isAnchor: true,
       isUserInitiated: false,
       lastCreditDenialAt: NOW - CREDIT_DENIAL_COOLDOWN_MS - 1000,
       now: NOW,
@@ -239,11 +247,10 @@ describe("cooldown rule", () => {
   });
 
   test("user-initiated denial always emits, ignores cooldown", async () => {
-    await seedCredits(USER, 0);
+    await drainFreeTier();
     const r = await tryDebitCredit({
       userId: USER,
       byokFalKey: null,
-      isAnchor: true,
       isUserInitiated: true,
       lastCreditDenialAt: NOW - 1000, // would suppress an auto trigger
       now: NOW,

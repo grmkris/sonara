@@ -1,14 +1,15 @@
 import type { Logger } from "../lib/logger";
 import { debitFrame, refundFrame, tryConsumeFreeTier } from "./credits.service";
 
-// Per-frame cost in the single `balance_frames` ledger. Anchor (the first
-// frame of a session, runs on flux-2-pro/edit) is load-bearing for identity;
-// flow frames edit that anchor on klein/9b.
-export const COST_ANCHOR = 2;
-export const COST_FLOW = 1;
+// Single-cost ledger: every keyframe (first or subsequent) costs the same.
+// The first frame of a session is the load-bearing anchor, but it runs on
+// the same klein/9b family as every other frame, so there's no separate
+// price tier to encode.
+export const COST_PER_FRAME = 1;
 
-// Hourly free-tier quota that fires only on flow frames once paid balance
-// runs out. Anchor frames are too expensive to gift.
+// Hourly free-tier quota that fires when paid balance runs out. Applies to
+// every trigger uniformly — there's no longer a "first frame too expensive
+// to gift" exclusion.
 const FREE_TIER_HOURLY = 3;
 
 // After the first "out of credits" denial on an auto-trigger (periodic /
@@ -19,8 +20,6 @@ export const CREDIT_DENIAL_COOLDOWN_MS = 60_000;
 export interface CreditGateInput {
   userId: string;
   byokFalKey: string | null;
-  /** Anchor frames cost more AND aren't free-tier eligible. */
-  isAnchor: boolean;
   /** Voice / semantic / pause triggers. Bypasses the cooldown on the error toast. */
   isUserInitiated: boolean;
   lastCreditDenialAt: number;
@@ -52,8 +51,8 @@ export type CreditGateResult = CreditGateOk | CreditGateDenied;
  *
  * Three branches:
  *   1. BYOK → always ok, paidCost=null (user pays fal directly).
- *   2. Paid debit succeeds → ok, paidCost = anchor|flow cost.
- *   3. Paid debit returns null → fall back to free-tier (flow only).
+ *   2. Paid debit succeeds → ok, paidCost = COST_PER_FRAME.
+ *   3. Paid debit returns null → fall back to free-tier.
  *      If free-tier also denied → returns denial with cooldown-aware
  *      `shouldEmit`.
  *
@@ -66,27 +65,25 @@ export async function tryDebitCredit(
     return { ok: true, paidCost: null, nextLastDenialAt: 0 };
   }
 
-  const cost = input.isAnchor ? COST_ANCHOR : COST_FLOW;
-
   try {
-    const remaining = await debitFrame(input.userId, cost, input.logger);
+    const remaining = await debitFrame(
+      input.userId,
+      COST_PER_FRAME,
+      input.logger,
+    );
     if (remaining !== null) {
-      input.logger.debug({ cost, remaining }, "credit debited");
-      return { ok: true, paidCost: cost, nextLastDenialAt: 0 };
+      input.logger.debug({ remaining }, "credit debited");
+      return { ok: true, paidCost: COST_PER_FRAME, nextLastDenialAt: 0 };
     }
 
-    // Paid balance empty. Flow frames can fall back to the hourly free tier;
-    // anchors cannot (too expensive to gift).
-    if (!input.isAnchor) {
-      const freeOk = await tryConsumeFreeTier(
-        input.userId,
-        FREE_TIER_HOURLY,
-        input.logger,
-      );
-      if (freeOk) {
-        input.logger.debug("free-tier slot consumed");
-        return { ok: true, paidCost: null, nextLastDenialAt: 0 };
-      }
+    const freeOk = await tryConsumeFreeTier(
+      input.userId,
+      FREE_TIER_HOURLY,
+      input.logger,
+    );
+    if (freeOk) {
+      input.logger.debug("free-tier slot consumed");
+      return { ok: true, paidCost: null, nextLastDenialAt: 0 };
     }
 
     const shouldEmit =

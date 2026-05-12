@@ -2,27 +2,21 @@ import { createFalClient } from "@fal-ai/client";
 import { env } from "../env";
 import type { Logger } from "../lib/logger";
 
-// Two-mode generation pipeline.
+// Single-endpoint generation pipeline. Klein/9b for every frame:
+//   - First frame of a session → klein/9b text-to-image (no reference).
+//     Session stores the resulting URL as `heroImageUrl` silently.
+//   - Every subsequent frame → klein/9b/edit with the hero as `image_urls`.
+//     Identity is locked via the reference image.
 //
-//   anchor — runs the very first frame of a session. Uses flux-2-pro (text)
-//            or flux-2-pro/edit (when album art is available as a seed).
-//            The result is stored as heroImageUrl and locks identity for
-//            the rest of the session.
-//   flow   — every subsequent frame. Uses flux-2/klein/9b/edit with the
-//            hero as reference. Klein's edit endpoint rejects num_inference_steps < 4.
-//
-// No text-only fallback. If anchor fails, the next periodic trigger retries
-// while heroImageUrl is still null. If flow fails, the next periodic trigger
-// retries with the same hero — superseded frames are aborted by the caller.
-
-export type Mode = "anchor" | "flow";
+// Album art (when a song is identified) acts as an optional seed for the
+// first frame — passed as `image_urls` so klein/9b/edit runs instead of
+// text-to-image. The model's own first output then replaces it as the hero.
 
 export interface StreamPreviewInput {
   prompt: string;
-  /** Reference image. For anchor: optional album art (acts as a seed). For flow: required hero. */
+  /** Reference image. First frame: optional album art seed. Subsequent: the session hero. */
   referenceImage?: string;
   seed?: number;
-  mode: Mode;
   /** BYOK override — when set, fal calls are billed to the user's account instead of ours. */
   falKey?: string;
   signal: AbortSignal;
@@ -51,14 +45,6 @@ function extractImageUrl(ev: unknown): string | undefined {
   return undefined;
 }
 
-function resolveModel(mode: Mode, hasRef: boolean): string {
-  if (mode === "anchor") {
-    return hasRef ? env.FAL_ANCHOR_EDIT_MODEL : env.FAL_ANCHOR_TEXT_MODEL;
-  }
-  // Flow always edits the hero — there's no flow-text path.
-  return env.FAL_FLOW_EDIT_MODEL;
-}
-
 export async function streamPreview(input: StreamPreviewInput): Promise<void> {
   // Per-call scoped client. BYOK bills the user's fal account; otherwise the
   // platform key is used. No global singleton — avoids cross-session
@@ -70,39 +56,22 @@ export async function streamPreview(input: StreamPreviewInput): Promise<void> {
 
   const ref = input.referenceImage?.trim() || null;
   const hasRef = ref !== null;
+  const model = hasRef ? env.FAL_EDIT_MODEL : env.FAL_TEXT_MODEL;
 
-  // Flow requires a reference (the hero). Calling flow without one is a bug
-  // in the caller — surface it loudly instead of silently degrading.
-  if (input.mode === "flow" && !hasRef) {
-    input.onError(new Error("flow mode requires referenceImage (the session hero)"));
-    return;
-  }
-
-  const model = resolveModel(input.mode, hasRef);
-
-  // Payload schemas differ between tiers:
-  //   anchor (flux-2-pro / flux-2-pro/edit) — "zero-config": rejects
-  //     `num_inference_steps` and `num_images`. Pass only prompt, image_size,
-  //     output_format, safety, seed?, image_urls?.
-  //   flow (flux-2/klein/9b/edit) — accepts the extras; we tune steps for
-  //     snappy keyframes.
+  // Klein/9b accepts num_inference_steps + num_images on both endpoints. 4
+  // steps is klein's documented minimum; tighter than that returns a 422.
   const payload: Record<string, unknown> = {
     prompt: input.prompt,
+    num_images: 1,
+    num_inference_steps: 4,
     image_size: "square_hd",
     output_format: "jpeg",
     enable_safety_checker: false,
   };
-  if (input.mode === "flow") {
-    payload.num_images = 1;
-    payload.num_inference_steps = 4;
-  }
   if (typeof input.seed === "number") payload.seed = input.seed;
   if (hasRef) payload.image_urls = [ref];
 
-  input.logger.info(
-    { model, mode: input.mode, hasRef },
-    "fal subscribe start",
-  );
+  input.logger.info({ model, hasRef }, "fal subscribe start");
 
   try {
     const result = await subscribe(model, {
@@ -119,19 +88,19 @@ export async function streamPreview(input: StreamPreviewInput): Promise<void> {
     }
     const url = extractImageUrl(result?.data);
     if (!url) {
-      input.logger.warn({ model, mode: input.mode }, "fal returned no image");
-      input.onError(new Error(`fal ${input.mode} returned no image`));
+      input.logger.warn({ model }, "fal returned no image");
+      input.onError(new Error(`fal returned no image (model=${model})`));
       return;
     }
     input.onPreview(url);
     input.onFinal(url);
-    input.logger.info({ model, mode: input.mode, url }, "fal subscribe complete");
+    input.logger.info({ model, url }, "fal subscribe complete");
   } catch (err) {
     // Aborts are still routed through onError so the session can refund the
-    // paid credit. The session distinguishes abort vs real error by inspecting
-    // the controller's signal.
+    // paid credit. The session distinguishes abort vs real error by
+    // inspecting the controller's signal.
     if (!input.signal.aborted) {
-      input.logger.warn({ err, model, mode: input.mode }, "fal generation errored");
+      input.logger.warn({ err, model }, "fal generation errored");
     }
     input.onError(err);
   }

@@ -12,12 +12,7 @@ import { streamPreview } from "../generation/fal-provider";
 import { serializeResolvedScene } from "../generation/prompt-compiler";
 import { DriftTrajectory } from "../generation/prompt-drift";
 import { resolveScene } from "../generation/scene-resolver";
-import {
-  COST_ANCHOR,
-  COST_FLOW,
-  refundOnError,
-  tryDebitCredit,
-} from "../credits/credit-gate";
+import { refundOnError, tryDebitCredit } from "../credits/credit-gate";
 import { recognizeClip } from "../recognition/recognition.service";
 import {
   synthesizeFromTrack,
@@ -117,9 +112,6 @@ export class Session {
   private pauseTimer?: ReturnType<typeof setTimeout>;
   private periodicTimer?: ReturnType<typeof setInterval>;
   private lastKeyframeAt = 0;
-  // Slows the periodic cadence after repeated anchor failures so a
-  // misconfigured FAL_ANCHOR_* doesn't error-spam every 8s. Resets on success.
-  private consecutiveAnchorFailures = 0;
   private readonly publisher = new EventPublisher<{ event: ServerEvent }>();
   private readonly logger: Logger;
 
@@ -417,11 +409,7 @@ export class Session {
     this.periodicTimer = setInterval(() => {
       const now = Date.now();
       const { periodicMs } = cadenceFromIntensity(this.scene.intensity);
-      // Anchor-failure backoff: after 3+ failures, multiply the cadence by 4×
-      // so the user has time to notice + fix config instead of paging on
-      // every tick. Resets to 0 on any anchor success.
-      const backoffFactor = this.consecutiveAnchorFailures > 3 ? 4 : 1;
-      if (now - this.lastKeyframeAt < periodicMs * backoffFactor) return;
+      if (now - this.lastKeyframeAt < periodicMs) return;
       const hasAudio = now - this.lastAudioAt < 5000;
       const hasScene = this.scene.subject.trim().length > 0;
       if (!hasAudio && !hasScene) return;
@@ -448,19 +436,13 @@ export class Session {
     // generations and double-debiting credits.
     this.lastKeyframeAt = Date.now();
 
-    // First frame of a session runs on flux-2-pro/edit (anchor); every
-    // subsequent frame edits that anchor on klein/9b (flow).
-    const isAnchor = this.heroImageUrl === null;
-    const mode: "anchor" | "flow" = isAnchor ? "anchor" : "flow";
-    const cost = isAnchor ? COST_ANCHOR : COST_FLOW;
+    // First frame of the session auto-anchors: the resulting URL becomes
+    // heroImageUrl. Every subsequent frame edits the hero.
+    const isFirstFrame = this.heroImageUrl === null;
 
-    // Credit gate (BYOK / paid / free-tier / cooldown all live in
-    // credits/credit-gate.ts). Session writes back denial timestamp + the
-    // refund cost; the gate makes the emit-or-suppress decision.
     const gate = await tryDebitCredit({
       userId: this.userId,
       byokFalKey: this.byokFalKey,
-      isAnchor,
       isUserInitiated: kind === "user",
       lastCreditDenialAt: this.lastCreditDenialAt,
       now: Date.now(),
@@ -470,7 +452,7 @@ export class Session {
 
     if (!gate.ok) {
       this.logger.info(
-        { reason, mode, cost, gateReason: gate.reason },
+        { reason, gateReason: gate.reason },
         "trigger denied",
       );
       if (gate.shouldEmit) {
@@ -505,8 +487,9 @@ export class Session {
     this.activeVersion += 1;
     const version = this.activeVersion;
     // Reference precedence:
-    //   flow → hero (the model's own first frame, set on anchor onFinal).
-    //   anchor → album art if available (seed only), otherwise none.
+    //   hero set (every frame after the first) → klein/9b/edit with hero.
+    //   first frame, song identified → klein/9b/edit with album art as seed.
+    //   first frame, no song → klein/9b text-to-image (no reference).
     const albumArt = this.scene.nowPlaying?.albumArtUrl;
     const referenceImage: string | undefined = this.heroImageUrl
       ? this.heroImageUrl
@@ -566,7 +549,6 @@ export class Session {
         sessionProgress: Number(sessionProgress.toFixed(2)),
         seed: this.seed,
         hasHero: this.heroImageUrl !== null,
-        mode,
       },
       "trigger fire",
     );
@@ -589,7 +571,6 @@ export class Session {
       prompt,
       referenceImage,
       seed: this.seed,
-      mode,
       falKey: this.byokFalKey ?? undefined,
       signal: controller.signal,
       logger: this.logger,
@@ -600,13 +581,12 @@ export class Session {
       onFinal: (url) => {
         if (version !== this.activeVersion) return;
         this.lastGeneratedScene = snapshot;
-        // Anchor frame locks identity for the rest of the session — every
-        // subsequent flow trigger edits this URL.
-        if (isAnchor) {
+        // First frame locks identity for the rest of the session — every
+        // subsequent trigger edits this URL.
+        if (isFirstFrame) {
           this.heroImageUrl = url;
           this.scene = { ...this.scene, references: [url] };
           this.send({ type: "scene.state", state: this.scene });
-          this.consecutiveAnchorFailures = 0;
         }
         this.send({ type: "frame.final", imageUrl: url, version });
         this.send({ type: "job.status", status: "idle" });
@@ -626,15 +606,7 @@ export class Session {
         // Aborts are expected (newer trigger superseded this one). Don't
         // log noisily or surface to the client.
         if (controller.signal.aborted) return;
-        if (isAnchor) {
-          this.consecutiveAnchorFailures += 1;
-          this.logger.error(
-            { err, failures: this.consecutiveAnchorFailures },
-            "anchor generation failed",
-          );
-        } else {
-          this.logger.error({ err }, "flow generation failed");
-        }
+        this.logger.error({ err }, "generation failed");
         const message = err instanceof Error ? err.message : String(err);
         this.send({
           type: "job.status",
