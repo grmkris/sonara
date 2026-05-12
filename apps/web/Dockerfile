@@ -19,7 +19,7 @@
 # runtime stage to keep the image small.
 
 # ---- builder ----------------------------------------------------------------
-FROM oven/bun:1.3.5 AS builder
+FROM oven/bun:1.3.13 AS builder
 WORKDIR /app
 
 # NEXT_PUBLIC_* vars are inlined into the client bundle at build time, so
@@ -55,7 +55,7 @@ COPY packages/shared ./packages/shared
 RUN cd apps/web && bun run build
 
 # ---- runtime ---------------------------------------------------------------
-FROM oven/bun:1.3.5-slim AS runtime
+FROM oven/bun:1.3.13-slim AS runtime
 WORKDIR /app
 
 ENV NODE_ENV=production
