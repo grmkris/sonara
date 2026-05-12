@@ -17,10 +17,10 @@ import { baseEntityFields, createTimestampField, typeId } from "../utils";
 import { user } from "./auth.db";
 
 // =====================================================================
-// Credit ledger (Phase E). Atomic balance + append-only usage history.
-// Frame cost model: `balance_frames` = flow-tier (every ~3s trigger).
-// `balance_commits` = pro-tier (user-initiated). Debited per call in
-// apps/server via direct pg SQL; see apps/server/src/credits/credits-service.ts.
+// Credit ledger. Single `balance_frames` column — anchor frames (first
+// frame of a session, runs on flux-2-pro/edit) cost 2, flow frames
+// (every keyframe after) cost 1. Debited per call in apps/server via
+// direct pg SQL; see apps/server/src/credits/credits-service.ts.
 // =====================================================================
 
 export const credits = pgTable(
@@ -35,7 +35,6 @@ export const credits = pgTable(
       .references(() => user.id, { onDelete: "cascade" })
       .$type<UserId>(),
     balanceFrames: integer("balance_frames").notNull().default(0),
-    balanceCommits: integer("balance_commits").notNull().default(0),
     ...baseEntityFields,
   },
   (table) => [uniqueIndex("credits_user_id_idx").on(table.userId)],
@@ -55,7 +54,7 @@ export const usageLedger = pgTable(
       .references(() => user.id, { onDelete: "cascade" })
       .$type<UserId>(),
     kind: text("kind", {
-      enum: ["topup", "frame", "commit", "refund", "free"],
+      enum: ["topup", "frame", "refund", "free"],
     }).notNull(),
     delta: integer("delta").notNull(),
     amountUsd: text("amount_usd"),

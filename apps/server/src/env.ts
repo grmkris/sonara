@@ -19,11 +19,16 @@ const envSchema = z.object({
   AUDD_API_KEY: z.string().min(1), // song recognition
 
   // Optional — FAL model overrides ship with defaults.
+  // Anchor runs the session's first frame; every subsequent frame is a flow
+  // edit on top of that anchor. No text-only fallback — flow always has the
+  // hero to edit, and anchor failures retry on the next periodic tick.
+  FAL_ANCHOR_TEXT_MODEL: z.string().default("fal-ai/flux-2-pro"),
+  FAL_ANCHOR_EDIT_MODEL: z.string().default("fal-ai/flux-2-pro/edit"),
+  FAL_FLOW_EDIT_MODEL: z.string().default("fal-ai/flux-2/klein/9b/edit"),
+  // LLM endpoint used by scene-llm-expander (drift candidate generation) and
+  // song-muse (track → subject synthesis). Not used by voice — voice is
+  // direct field-keyed PTT with no LLM round-trip.
   FAL_LLM_MODEL: z.string().optional(),
-  FAL_TEXT_MODEL: z.string().default("fal-ai/flux-2/klein/9b"),
-  FAL_EDIT_MODEL: z.string().default("fal-ai/flux-2/klein/9b/edit"),
-  FAL_COMMIT_TEXT_MODEL: z.string().default("fal-ai/flux-2-pro"),
-  FAL_COMMIT_EDIT_MODEL: z.string().default("fal-ai/flux-2-pro/edit"),
 });
 
 export const env = envSchema.parse(Bun.env);

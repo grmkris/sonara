@@ -21,15 +21,12 @@ export const creditsRouter = {
     const { db, userId } = context;
 
     const balanceRow = await db
-      .select({
-        frames: SCHEMA.credits.balanceFrames,
-        commits: SCHEMA.credits.balanceCommits,
-      })
+      .select({ frames: SCHEMA.credits.balanceFrames })
       .from(SCHEMA.credits)
       .where(eq(SCHEMA.credits.userId, userId))
       .limit(1);
 
-    const balance = balanceRow[0] ?? { frames: 0, commits: 0 };
+    const balance = balanceRow[0] ?? { frames: 0 };
 
     const monthStart = new Date();
     monthStart.setUTCDate(1);
@@ -58,7 +55,6 @@ export const creditsRouter = {
 
     return {
       frames: balance.frames,
-      commits: balance.commits,
       monthFrames: Math.abs(Number(monthFramesRow?.total ?? 0)),
       totalSpentUsd: Number(spendRow?.total ?? 0),
       lowBalance: balance.frames < 30,
@@ -129,7 +125,7 @@ export const creditsRouter = {
             id: typeIdGenerator("usageLedger"),
             userId,
             kind: "topup",
-            delta: pack.frames + pack.commits,
+            delta: pack.frames,
             amountUsd: pack.usd.toString(),
             txHash: input.txHash,
             chainId: "8453",
@@ -140,13 +136,11 @@ export const creditsRouter = {
               id: typeIdGenerator("credits"),
               userId,
               balanceFrames: pack.frames,
-              balanceCommits: pack.commits,
             })
             .onConflictDoUpdate({
               target: SCHEMA.credits.userId,
               set: {
                 balanceFrames: sql`${SCHEMA.credits.balanceFrames} + ${pack.frames}`,
-                balanceCommits: sql`${SCHEMA.credits.balanceCommits} + ${pack.commits}`,
                 updatedAt: new Date(),
               },
             });
@@ -166,7 +160,7 @@ export const creditsRouter = {
 
       return {
         ok: true,
-        pack: { id: pack.id, frames: pack.frames, commits: pack.commits },
+        pack: { id: pack.id, frames: pack.frames },
         txHash: input.txHash,
         paidFrom,
         paidValue: paidValue.toString(),

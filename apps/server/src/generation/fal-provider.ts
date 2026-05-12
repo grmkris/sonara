@@ -2,28 +2,28 @@ import { createFalClient } from "@fal-ai/client";
 import { env } from "../env";
 import type { Logger } from "../lib/logger";
 
-// FLUX.2 tier routing.
+// Two-mode generation pipeline.
 //
-// Flow tier — runs on every periodic / semantic / section keyframe.
-//   Default: klein 9B (measurably better preserve-most-of-input than 4B).
-//   Edit variant for img2img continuity.
-// Commit tier — runs only when the user explicitly commits (Enter / 印 button).
-//   Default: flux-2-pro/edit (state-of-the-art multi-reference editor).
-//   The commit frame becomes the hero that all subsequent flow frames edit on top of.
-// Fallback — text-only last resort when both above 404/error.
-const FLOW_TEXT_MODEL = env.FAL_TEXT_MODEL;
-const FLOW_EDIT_MODEL = env.FAL_EDIT_MODEL;
-const COMMIT_TEXT_MODEL = env.FAL_COMMIT_TEXT_MODEL;
-const COMMIT_EDIT_MODEL = env.FAL_COMMIT_EDIT_MODEL;
-const FALLBACK_TEXT_MODEL = "fal-ai/flux/schnell";
+//   anchor — runs the very first frame of a session. Uses flux-2-pro (text)
+//            or flux-2-pro/edit (when album art is available as a seed).
+//            The result is stored as heroImageUrl and locks identity for
+//            the rest of the session.
+//   flow   — every subsequent frame. Uses flux-2/klein/9b/edit with the
+//            hero as reference. Klein's edit endpoint rejects num_inference_steps < 4.
+//
+// No text-only fallback. If anchor fails, the next periodic trigger retries
+// while heroImageUrl is still null. If flow fails, the next periodic trigger
+// retries with the same hero — superseded frames are aborted by the caller.
+
+export type Mode = "anchor" | "flow";
 
 export interface StreamPreviewInput {
   prompt: string;
-  referenceImages?: string[];
+  /** Reference image. For anchor: optional album art (acts as a seed). For flow: required hero. */
+  referenceImage?: string;
   seed?: number;
-  forCommit?: boolean;
-  // BYOK override — when set, fal calls are billed to the user's account
-  // instead of ours.
+  mode: Mode;
+  /** BYOK override — when set, fal calls are billed to the user's account instead of ours. */
   falKey?: string;
   signal: AbortSignal;
   logger: Logger;
@@ -51,135 +51,86 @@ function extractImageUrl(ev: unknown): string | undefined {
   return undefined;
 }
 
-interface SubscribeArgs {
-  model: string;
-  input: Record<string, unknown>;
-  signal: AbortSignal;
-  logger: Logger;
-  onPreview: (url: string) => void;
-  onFinal: (url: string) => void;
-  tier: "flow" | "commit" | "fallback";
-  subscribe: FalSubscriber;
+function resolveModel(mode: Mode, hasRef: boolean): string {
+  if (mode === "anchor") {
+    return hasRef ? env.FAL_ANCHOR_EDIT_MODEL : env.FAL_ANCHOR_TEXT_MODEL;
+  }
+  // Flow always edits the hero — there's no flow-text path.
+  return env.FAL_FLOW_EDIT_MODEL;
 }
 
-async function subscribeOnce(args: SubscribeArgs): Promise<boolean> {
-  args.logger.info(
-    { model: args.model, tier: args.tier, hasRef: Boolean(args.input.image_urls) },
-    "fal subscribe start",
-  );
-
-  const result = await args.subscribe(args.model, {
-    input: args.input,
-    logs: false,
-    abortSignal: args.signal,
-    onQueueUpdate: (u) => {
-      args.logger.debug({ model: args.model, status: u.status }, "fal queue update");
-    },
-  });
-
-  if (args.signal.aborted) return true;
-  const url = extractImageUrl(result?.data);
-  if (!url) return false;
-  args.onPreview(url);
-  args.onFinal(url);
-  args.logger.info({ model: args.model, tier: args.tier, url }, "fal subscribe complete");
-  return true;
+function resolveSteps(mode: Mode, hasRef: boolean): number {
+  // Anchor pays for extra detail (load-bearing for identity). Flow stays at
+  // klein's 4-step minimum for snappy keyframes.
+  if (mode === "anchor") return hasRef ? 8 : 6;
+  return 4;
 }
 
 export async function streamPreview(input: StreamPreviewInput): Promise<void> {
   // Per-call scoped client. BYOK bills the user's fal account; otherwise the
-  // platform key (env.FAL_KEY, required at startup) is used. No global
-  // singleton — avoids cross-session credential races under hot reload/test.
+  // platform key is used. No global singleton — avoids cross-session
+  // credential races under hot reload/test.
   const scoped = createFalClient({
     credentials: input.falKey ?? env.FAL_KEY,
   });
-  const subscribe = scoped.subscribe.bind(scoped);
+  const subscribe: FalSubscriber = scoped.subscribe.bind(scoped);
 
-  const refs = (input.referenceImages ?? []).filter(Boolean);
-  const hasRef = refs.length > 0;
+  const ref = input.referenceImage?.trim() || null;
+  const hasRef = ref !== null;
 
-  // Inference-step budget. Flow-tier (default) is tuned for snappy keyframes
-  // — 3 text-only / 4 with a hero reference. Commit-tier (user-initiated)
-  // pays for the extra detail with 4 / 6 since those frames are anchors the
-  // user explicitly asked for. Trade-off on flow-tier: ~25% faster generation
-  // for slight loss of fine detail on hair / fabric / textures, which the
-  // shader's painterly post-pass largely papers over.
-  const stepsTextOnly = input.forCommit ? 4 : 3;
-  const stepsWithRef = input.forCommit ? 6 : 4;
-  const commonInput: Record<string, unknown> = {
+  // Flow requires a reference (the hero). Calling flow without one is a bug
+  // in the caller — surface it loudly instead of silently degrading.
+  if (input.mode === "flow" && !hasRef) {
+    input.onError(new Error("flow mode requires referenceImage (the session hero)"));
+    return;
+  }
+
+  const model = resolveModel(input.mode, hasRef);
+  const payload: Record<string, unknown> = {
     prompt: input.prompt,
     num_images: 1,
-    num_inference_steps: hasRef ? stepsWithRef : stepsTextOnly,
+    num_inference_steps: resolveSteps(input.mode, hasRef),
     image_size: "square_hd",
     output_format: "jpeg",
     enable_safety_checker: false,
   };
-  if (typeof input.seed === "number") commonInput.seed = input.seed;
+  if (typeof input.seed === "number") payload.seed = input.seed;
+  if (hasRef) payload.image_urls = [ref];
 
-  const [primaryEditModel, primaryTextModel]: [string, string] = input.forCommit
-    ? [COMMIT_EDIT_MODEL, COMMIT_TEXT_MODEL]
-    : [FLOW_EDIT_MODEL, FLOW_TEXT_MODEL];
-
-  const primaryModel = hasRef ? primaryEditModel : primaryTextModel;
-  const primaryInput = hasRef
-    ? { ...commonInput, image_urls: refs }
-    : commonInput;
-  const tier: "flow" | "commit" = input.forCommit ? "commit" : "flow";
+  input.logger.info(
+    { model, mode: input.mode, hasRef },
+    "fal subscribe start",
+  );
 
   try {
-    const ok = await subscribeOnce({
-      model: primaryModel,
-      input: primaryInput,
-      signal: input.signal,
-      logger: input.logger,
-      onPreview: input.onPreview,
-      onFinal: input.onFinal,
-      tier,
-      subscribe,
+    const result = await subscribe(model, {
+      input: payload,
+      logs: false,
+      abortSignal: input.signal,
+      onQueueUpdate: (u) => {
+        input.logger.debug({ model, status: u.status }, "fal queue update");
+      },
     });
-    if (ok || input.signal.aborted) return;
-    input.logger.warn({ model: primaryModel, tier }, "primary returned no image");
-  } catch (err) {
-    if (input.signal.aborted) return;
-    input.logger.warn({ err, model: primaryModel, tier }, "primary fal model errored");
-    // Commit tier is the identity anchor — a schnell text-only stand-in would
-    // replace the hero with a drifted frame every subsequent flow edit
-    // compounds against. Better to surface the error than silently poison
-    // the scene. Flow tier may still try the fallback.
-    if (input.forCommit) {
-      input.onError(err);
+    if (input.signal.aborted) {
+      input.onError(new DOMException("aborted", "AbortError"));
       return;
     }
-  }
-
-  // Commit-tier failures never fall through to the text-only path.
-  if (input.forCommit) {
-    input.onError(
-      new Error("commit-tier primary model failed and fallback is disabled for commits"),
-    );
-    return;
-  }
-
-  // Flow-tier text-only fallback sheds identity (no image_urls). Logged loudly.
-  if (hasRef) {
-    input.logger.warn(
-      { model: FALLBACK_TEXT_MODEL },
-      "fallback is text-only; dropping reference image (identity will drift)",
-    );
-  }
-  try {
-    await subscribeOnce({
-      model: FALLBACK_TEXT_MODEL,
-      input: commonInput,
-      signal: input.signal,
-      logger: input.logger,
-      onPreview: input.onPreview,
-      onFinal: input.onFinal,
-      tier: "fallback",
-      subscribe,
-    });
-  } catch (err2) {
-    if (!input.signal.aborted) input.onError(err2);
+    const url = extractImageUrl(result?.data);
+    if (!url) {
+      input.logger.warn({ model, mode: input.mode }, "fal returned no image");
+      input.onError(new Error(`fal ${input.mode} returned no image`));
+      return;
+    }
+    input.onPreview(url);
+    input.onFinal(url);
+    input.logger.info({ model, mode: input.mode, url }, "fal subscribe complete");
+  } catch (err) {
+    // Aborts are still routed through onError so the session can refund the
+    // paid credit. The session distinguishes abort vs real error by inspecting
+    // the controller's signal.
+    if (!input.signal.aborted) {
+      input.logger.warn({ err, model, mode: input.mode }, "fal generation errored");
+    }
+    input.onError(err);
   }
 }
-

@@ -10,16 +10,8 @@ import type { SessionRouterClient } from "@music-visualizer/api";
 export type SessionAction =
   | { type: "hello"; falKey?: string }
   | { type: "scene.patch"; patch: ClientScenePatch }
+  | { type: "voice.patch"; patch: ClientScenePatch }
   | { type: "audio.features"; features: AudioFeatures }
-  | { type: "voice.phrase"; text: string }
-  | {
-      type: "voice.partial";
-      text: string;
-      isFinal: boolean;
-      confidence?: number;
-      provider: "web-speech";
-    }
-  | { type: "generate.commit" }
   | { type: "session.reset" }
   | {
       type: "audio.recognize";
@@ -40,21 +32,10 @@ export function dispatchSessionAction(
       return client.hello(action.falKey ? { falKey: action.falKey } : {});
     case "scene.patch":
       return client.scenePatch({ patch: action.patch });
+    case "voice.patch":
+      return client.voicePatch({ patch: action.patch });
     case "audio.features":
       return client.audioFeatures({ features: action.features });
-    case "voice.phrase":
-      return client.voicePhrase({ text: action.text });
-    case "voice.partial":
-      return client.voicePartial({
-        text: action.text,
-        isFinal: action.isFinal,
-        provider: action.provider,
-        ...(typeof action.confidence === "number"
-          ? { confidence: action.confidence }
-          : {}),
-      });
-    case "generate.commit":
-      return client.commit();
     case "session.reset":
       return client.reset();
     case "audio.recognize":

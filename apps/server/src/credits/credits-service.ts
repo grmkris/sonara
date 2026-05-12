@@ -49,31 +49,31 @@ export function __setPoolForTests(p: PoolLike | null): void {
   pool = p;
 }
 
-export type FrameKind = "frame" | "commit";
-
 /**
- * Atomic decrement of either `balance_frames` or `balance_commits`. Returns
- * the new balance if the row had at least 1 to spend, or `null` if
- * insufficient. A ledger row is written in the same tx for audit.
+ * Atomic decrement of `balance_frames` by `cost`. Returns the new balance if
+ * the user had at least `cost` to spend, or `null` if insufficient. A ledger
+ * row is written in the same tx for audit.
  *
- * Race-safe: single UPDATE with a WHERE clause; concurrent callers see either
- * the decrement or a 0-row result, never a double-spend.
+ * Cost model: flow keyframes cost 1; the session's anchor frame (first frame
+ * on flux-2-pro/edit) costs 2.
+ *
+ * Race-safe: single UPDATE with a WHERE clause; concurrent callers see
+ * either the decrement or a 0-row result, never a double-spend.
  */
 export async function debitFrame(
   userId: string,
-  kind: FrameKind,
+  cost: number,
   logger?: Logger,
 ): Promise<number | null> {
   const client = await getPool().connect();
   try {
     await client.query("BEGIN");
-    const col = kind === "frame" ? "balance_frames" : "balance_commits";
     const upd = await client.query<{ balance: number }>(
       `UPDATE credits
-         SET ${col} = ${col} - 1, updated_at = now()
-         WHERE user_id = $1 AND ${col} >= 1
-         RETURNING ${col} AS balance`,
-      [userId],
+         SET balance_frames = balance_frames - $2, updated_at = now()
+         WHERE user_id = $1 AND balance_frames >= $2
+         RETURNING balance_frames AS balance`,
+      [userId, cost],
     );
     if (upd.rowCount === 0) {
       await client.query("ROLLBACK");
@@ -81,14 +81,14 @@ export async function debitFrame(
     }
     await client.query(
       `INSERT INTO usage_ledger (id, user_id, kind, delta, created_at)
-       VALUES ($1, $2, $3, -1, now())`,
-      [newLedgerId(), userId, kind],
+       VALUES ($1, $2, 'frame', $3, now())`,
+      [newLedgerId(), userId, -cost],
     );
     await client.query("COMMIT");
     return upd.rows[0]?.balance ?? 0;
   } catch (err) {
     await client.query("ROLLBACK").catch(() => {});
-    logger?.error({ err, userId, kind }, "debitFrame failed");
+    logger?.error({ err, userId, cost }, "debitFrame failed");
     throw err;
   } finally {
     client.release();
@@ -96,49 +96,42 @@ export async function debitFrame(
 }
 
 /**
- * Inverse of `debitFrame`. Increments the matching balance and appends a
- * `kind: "refund"` ledger row with delta=+1 in the same transaction. Returns
- * the new balance, or `null` when the user has no `credits` row at all
- * (which means there was no prior debit to refund — caller should treat as
- * a no-op rather than an error).
+ * Inverse of `debitFrame`. Increments `balance_frames` by `cost` and appends
+ * a `kind: "refund"` ledger row with delta=+cost in the same transaction.
+ * Returns the new balance, or `null` when the user has no `credits` row at
+ * all (caller should treat as a no-op).
  *
  * Use case: a fal generation fails after the credit was already debited.
- * The trigger version that paid is the version that gets refunded — callers
- * must capture `kind` at the debit site so the refund hits the right column.
  */
 export async function refundFrame(
   userId: string,
-  kind: FrameKind,
+  cost: number,
   logger?: Logger,
 ): Promise<number | null> {
   const client = await getPool().connect();
   try {
     await client.query("BEGIN");
-    const col = kind === "frame" ? "balance_frames" : "balance_commits";
     const upd = await client.query<{ balance: number }>(
       `UPDATE credits
-         SET ${col} = ${col} + 1, updated_at = now()
+         SET balance_frames = balance_frames + $2, updated_at = now()
          WHERE user_id = $1
-         RETURNING ${col} AS balance`,
-      [userId],
+         RETURNING balance_frames AS balance`,
+      [userId, cost],
     );
     if (upd.rowCount === 0) {
-      // No row to refund into. Most likely the user was BYOK or never had a
-      // credits row — caller should never have called us. Roll back and
-      // return null so the trigger logs and moves on.
       await client.query("ROLLBACK");
       return null;
     }
     await client.query(
       `INSERT INTO usage_ledger (id, user_id, kind, delta, created_at)
-       VALUES ($1, $2, 'refund', 1, now())`,
-      [newLedgerId(), userId],
+       VALUES ($1, $2, 'refund', $3, now())`,
+      [newLedgerId(), userId, cost],
     );
     await client.query("COMMIT");
     return upd.rows[0]?.balance ?? 0;
   } catch (err) {
     await client.query("ROLLBACK").catch(() => {});
-    logger?.error({ err, userId, kind }, "refundFrame failed");
+    logger?.error({ err, userId, cost }, "refundFrame failed");
     throw err;
   } finally {
     client.release();
@@ -186,19 +179,13 @@ export async function tryConsumeFreeTier(
   return true;
 }
 
-export async function getBalance(
-  userId: string,
-): Promise<{ frames: number; commits: number }> {
-  const res = await getPool().query<{
-    balance_frames: number;
-    balance_commits: number;
-  }>(
-    `SELECT balance_frames, balance_commits FROM credits WHERE user_id = $1`,
+export async function getBalance(userId: string): Promise<{ frames: number }> {
+  const res = await getPool().query<{ balance_frames: number }>(
+    `SELECT balance_frames FROM credits WHERE user_id = $1`,
     [userId],
   );
-  if (res.rowCount === 0) return { frames: 0, commits: 0 };
-  const row = res.rows[0]!;
-  return { frames: row.balance_frames, commits: row.balance_commits };
+  if (res.rowCount === 0) return { frames: 0 };
+  return { frames: res.rows[0]!.balance_frames };
 }
 
 export async function closePool(): Promise<void> {

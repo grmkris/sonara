@@ -8,7 +8,6 @@ import { rpcClient } from "@/lib/orpc";
 
 interface BalanceResponse {
   frames: number;
-  commits: number;
   monthFrames: number;
   totalSpentUsd: number;
   lowBalance: boolean;
@@ -57,7 +56,6 @@ export function UsagePanel({ onClose }: { onClose?: () => void }) {
       ) : (
         <div className="flex flex-col gap-2">
           <Row label="frames" value={data.frames.toLocaleString()} />
-          <Row label="commits" value={data.commits.toLocaleString()} />
           <Row label="frames / month" value={data.monthFrames.toLocaleString()} />
           <Row label="spent" value={`$${data.totalSpentUsd.toFixed(2)}`} />
           {data.lowBalance ? (

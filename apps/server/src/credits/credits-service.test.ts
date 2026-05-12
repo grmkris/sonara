@@ -19,15 +19,11 @@ import {
   tryConsumeFreeTier,
 } from "./credits-service";
 
-// Subset of apps/web/drizzle/0000_*.sql — only the credits / ledger tables
-// the service touches. FKs to "user" are dropped because we never insert a
-// user row in these tests; user_id is just a uuid placeholder.
 const SCHEMA_SQL = `
 CREATE TABLE credits (
   id uuid PRIMARY KEY NOT NULL,
   user_id uuid NOT NULL,
   balance_frames integer DEFAULT 0 NOT NULL,
-  balance_commits integer DEFAULT 0 NOT NULL,
   created_at timestamp with time zone DEFAULT now() NOT NULL,
   updated_at timestamp with time zone DEFAULT now() NOT NULL
 );
@@ -74,15 +70,11 @@ beforeEach(async () => {
   );
 });
 
-async function seedCredits(
-  userId: string,
-  frames: number,
-  commits = 0,
-): Promise<void> {
+async function seedCredits(userId: string, frames: number): Promise<void> {
   await pg.query(
-    `INSERT INTO credits (id, user_id, balance_frames, balance_commits)
-     VALUES (gen_random_uuid(), $1, $2, $3)`,
-    [userId, frames, commits],
+    `INSERT INTO credits (id, user_id, balance_frames)
+     VALUES (gen_random_uuid(), $1, $2)`,
+    [userId, frames],
   );
 }
 
@@ -94,49 +86,35 @@ async function ledgerCount(): Promise<number> {
 }
 
 describe("debitFrame", () => {
-  test("decrements balance_frames when balance >= 1", async () => {
-    await seedCredits(USER, 5, 0);
-    const remaining = await debitFrame(USER, "frame");
-    expect(remaining).toBe(4);
+  test("decrements balance_frames by cost when sufficient", async () => {
+    await seedCredits(USER, 5);
+    expect(await debitFrame(USER, 1)).toBe(4);
     expect(await ledgerCount()).toBe(1);
   });
 
-  test("decrements balance_commits when kind=commit", async () => {
-    await seedCredits(USER, 0, 3);
-    const remaining = await debitFrame(USER, "commit");
-    expect(remaining).toBe(2);
+  test("anchor cost (2) decrements by 2", async () => {
+    await seedCredits(USER, 5);
+    expect(await debitFrame(USER, 2)).toBe(3);
   });
 
-  test("returns null and writes no ledger row when balance is 0", async () => {
-    await seedCredits(USER, 0, 0);
-    const remaining = await debitFrame(USER, "frame");
-    expect(remaining).toBeNull();
+  test("returns null when balance < cost", async () => {
+    await seedCredits(USER, 1);
+    expect(await debitFrame(USER, 2)).toBeNull();
+    expect(await ledgerCount()).toBe(0);
+  });
+
+  test("returns null when balance is 0", async () => {
+    await seedCredits(USER, 0);
+    expect(await debitFrame(USER, 1)).toBeNull();
     expect(await ledgerCount()).toBe(0);
   });
 
   test("returns null when no credits row exists for the user", async () => {
-    const remaining = await debitFrame(USER, "frame");
-    expect(remaining).toBeNull();
+    expect(await debitFrame(USER, 1)).toBeNull();
     expect(await ledgerCount()).toBe(0);
   });
 
-  // True parallel-debit race-safety needs a real pg.Pool with multiple
-  // connections — pglite is single-connection and serializes transactions,
-  // so two concurrent BEGIN/UPDATE/COMMIT sequences interleave incorrectly
-  // and don't reproduce the production behavior. Sequential safety is
-  // covered by "returns null when balance is 0" plus the WHERE-clause
-  // semantics; concurrent safety is asserted by inspection of the SQL
-  // (single UPDATE with WHERE balance >= 1; row-level lock by Postgres).
   test.skip("two parallel debits on a 1-frame balance — exactly one succeeds", () => {});
-
-  test("commit kind cannot debit from balance_frames", async () => {
-    await seedCredits(USER, 5, 0);
-    const remaining = await debitFrame(USER, "commit");
-    expect(remaining).toBeNull();
-    // Frames untouched.
-    const balance = await getBalance(USER);
-    expect(balance.frames).toBe(5);
-  });
 });
 
 describe("tryConsumeFreeTier", () => {
@@ -160,8 +138,6 @@ describe("tryConsumeFreeTier", () => {
   test("rolls over on a new hour window", async () => {
     expect(await tryConsumeFreeTier(USER, 1)).toBe(true);
     expect(await tryConsumeFreeTier(USER, 1)).toBe(false);
-    // Manually backdate the existing row so date_trunc('hour', now()) lands
-    // on a fresh window — simulates an hour passing.
     await pg.query(
       `UPDATE free_tier_ledger
          SET window_start = window_start - interval '1 hour'
@@ -184,10 +160,9 @@ describe("tryConsumeFreeTier", () => {
 });
 
 describe("refundFrame", () => {
-  test("increments balance_frames + writes a refund ledger row", async () => {
-    await seedCredits(USER, 4, 0);
-    const newBalance = await refundFrame(USER, "frame");
-    expect(newBalance).toBe(5);
+  test("increments balance_frames by cost + writes a refund ledger row", async () => {
+    await seedCredits(USER, 4);
+    expect(await refundFrame(USER, 1)).toBe(5);
     const res = await pg.query<{ kind: string; delta: number }>(
       `SELECT kind, delta FROM usage_ledger WHERE user_id = $1`,
       [USER],
@@ -197,21 +172,20 @@ describe("refundFrame", () => {
     expect(res.rows[0]?.delta).toBe(1);
   });
 
-  test("increments balance_commits when kind=commit", async () => {
-    await seedCredits(USER, 0, 2);
-    expect(await refundFrame(USER, "commit")).toBe(3);
+  test("anchor refund (cost=2) increments by 2", async () => {
+    await seedCredits(USER, 4);
+    expect(await refundFrame(USER, 2)).toBe(6);
   });
 
   test("returns null when user has no credits row", async () => {
-    expect(await refundFrame(USER, "frame")).toBeNull();
+    expect(await refundFrame(USER, 1)).toBeNull();
     expect(await ledgerCount()).toBe(0);
   });
 
   test("debit followed by refund leaves balance unchanged", async () => {
-    await seedCredits(USER, 10, 0);
-    expect(await debitFrame(USER, "frame")).toBe(9);
-    expect(await refundFrame(USER, "frame")).toBe(10);
-    // 1 debit row (delta=-1) + 1 refund row (delta=+1) = net 0.
+    await seedCredits(USER, 10);
+    expect(await debitFrame(USER, 1)).toBe(9);
+    expect(await refundFrame(USER, 1)).toBe(10);
     const res = await pg.query<{ sum: string }>(
       `SELECT COALESCE(SUM(delta), 0)::text AS sum FROM usage_ledger WHERE user_id = $1`,
       [USER],
@@ -221,20 +195,18 @@ describe("refundFrame", () => {
 });
 
 describe("getBalance", () => {
-  test("returns {0, 0} for users without a credits row", async () => {
-    const balance = await getBalance(USER);
-    expect(balance).toEqual({ frames: 0, commits: 0 });
+  test("returns {frames: 0} for users without a credits row", async () => {
+    expect(await getBalance(USER)).toEqual({ frames: 0 });
   });
 
   test("returns the current balance after seeding", async () => {
-    await seedCredits(USER, 42, 7);
-    expect(await getBalance(USER)).toEqual({ frames: 42, commits: 7 });
+    await seedCredits(USER, 42);
+    expect(await getBalance(USER)).toEqual({ frames: 42 });
   });
 
   test("reflects the post-debit balance", async () => {
-    await seedCredits(USER, 10, 5);
-    await debitFrame(USER, "frame");
-    await debitFrame(USER, "commit");
-    expect(await getBalance(USER)).toEqual({ frames: 9, commits: 4 });
+    await seedCredits(USER, 10);
+    await debitFrame(USER, 2);
+    expect(await getBalance(USER)).toEqual({ frames: 8 });
   });
 });

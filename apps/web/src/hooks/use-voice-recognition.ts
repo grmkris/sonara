@@ -2,9 +2,8 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
-// Minimal types for the Web Speech API — not in lib.dom.d.ts by default, and
-// the Chrome/Safari implementation is exposed as `webkitSpeechRecognition`.
-// We only touch the handful of fields this hook uses.
+// Minimal Web Speech types — not in lib.dom.d.ts by default. Chrome / Safari
+// expose the implementation as `webkitSpeechRecognition`.
 interface SRAlternative {
   readonly transcript: string;
   readonly confidence?: number;
@@ -50,117 +49,101 @@ function getSR(): SRConstructor | null {
   return w.SpeechRecognition ?? w.webkitSpeechRecognition ?? null;
 }
 
+export interface UseVoiceRecognitionOpts {
+  /**
+   * Fires for every result (interim + final) with the accumulated transcript
+   * for the current recognition session. Reset between start() calls — i.e.
+   * each PTT burst starts at "". `confidence` is wildly unreliable on Web
+   * Speech (often 0 for interim) and treated as advisory.
+   */
+  onResult: (text: string, isFinal: boolean, confidence?: number) => void;
+  lang?: string;
+}
+
 export interface VoiceRecognitionState {
   supported: boolean;
   listening: boolean;
-  lastPhrase: string | null;
   error: string | null;
   start: () => void;
   stop: () => void;
 }
 
-export interface UseVoiceRecognitionOpts {
-  onPhrase: (text: string) => void;
-  // Optional interim hook. Fires for every result (final or not) with the
-  // current best-guess transcript, so the trail UI can show what's being
-  // heard live. Web Speech confidence is wildly unreliable and frequently
-  // 0 for interim results — treated as "unknown" downstream.
-  onPartial?: (opts: {
-    text: string;
-    isFinal: boolean;
-    confidence?: number;
-  }) => void;
-  lang?: string;
-}
-
-// Continuous SpeechRecognition. Chrome drops the recognizer every ~60s on its
-// own, so we auto-restart in `onend` while still enabled. Only final results
-// are propagated upward — interim results are ignored to keep downstream
-// processing simple.
+/**
+ * Web Speech wrapper for short push-to-talk bursts (≤ ~15s). No auto-restart
+ * loop — caller invokes start() on keydown, stop() on keyup. `stop()` flushes
+ * the pending final; the hook concatenates each `isFinal` chunk into a
+ * session buffer so multi-utterance holds don't lose earlier chunks.
+ */
 export function useVoiceRecognition(
   opts: UseVoiceRecognitionOpts,
 ): VoiceRecognitionState {
   const [supported, setSupported] = useState(false);
   const [listening, setListening] = useState(false);
-  const [lastPhrase, setLastPhrase] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const recRef = useRef<SpeechRecognitionLike | null>(null);
-  const wantsListenRef = useRef(false);
-  const onPhraseRef = useRef(opts.onPhrase);
-  const onPartialRef = useRef(opts.onPartial);
+  const onResultRef = useRef(opts.onResult);
+  const bufferRef = useRef<string>("");
   useEffect(() => {
-    onPhraseRef.current = opts.onPhrase;
-  }, [opts.onPhrase]);
-  useEffect(() => {
-    onPartialRef.current = opts.onPartial;
-  }, [opts.onPartial]);
+    onResultRef.current = opts.onResult;
+  }, [opts.onResult]);
 
-  // Lazy-init recognition object on first use (requires window).
   const ensureRecognizer = useCallback((): SpeechRecognitionLike | null => {
     if (recRef.current) return recRef.current;
     const Ctor = getSR();
     if (!Ctor) return null;
     const rec = new Ctor();
     rec.continuous = true;
-    // Interim results power the live transcript in the trail UI. The hook
-    // still only fires onPhrase for FINAL results so server-side dispatch
-    // semantics are unchanged; interim text is delivered via onPartial only.
     rec.interimResults = true;
     rec.maxAlternatives = 1;
     rec.lang = opts.lang ?? "en-US";
+
     rec.onstart = () => {
-      console.info("[voice] web-speech recognition started");
+      bufferRef.current = "";
       setListening(true);
     };
     rec.onend = () => {
       setListening(false);
-      // Auto-restart if still wanted (Chrome drops recognition ~60s).
-      if (wantsListenRef.current) {
-        try {
-          rec.start();
-        } catch {
-          // start() may throw if called too quickly — schedule next tick.
-          setTimeout(() => {
-            if (wantsListenRef.current) {
-              try {
-                rec.start();
-              } catch {
-                /* noop */
-              }
-            }
-          }, 250);
-        }
-      }
     };
     rec.onerror = (ev: unknown) => {
       const code =
         typeof ev === "object" && ev && "error" in ev
           ? String((ev as { error: unknown }).error)
           : "error";
-      console.warn(`[voice] web-speech error: ${code}`);
-      // `no-speech` and `aborted` are routine — don't surface.
+      // `no-speech` / `aborted` are routine PTT outcomes — don't surface.
       if (code !== "no-speech" && code !== "aborted") setError(code);
     };
     rec.onresult = (ev: SREvent) => {
+      // Concatenate every result-list entry from the current event. Finalized
+      // entries are flushed into the session buffer; the interim tail is
+      // appended for display. Web Speech delivers cumulative results across
+      // events, so this stays accurate across long bursts.
+      let interim = "";
       for (let i = ev.resultIndex; i < ev.results.length; i++) {
         const r = ev.results.item(i);
         const alt = r.item(0);
         const text = alt?.transcript?.trim();
         if (!text) continue;
-        const confidence =
-          typeof alt?.confidence === "number" ? alt.confidence : undefined;
-        // Always fire the partial callback (covers both interim + final).
-        onPartialRef.current?.({
-          text,
-          isFinal: r.isFinal,
-          ...(typeof confidence === "number" ? { confidence } : {}),
-        });
-        if (!r.isFinal) continue;
-        setLastPhrase(text);
-        setError(null);
-        onPhraseRef.current(text);
+        if (r.isFinal) {
+          bufferRef.current = bufferRef.current
+            ? `${bufferRef.current} ${text}`
+            : text;
+        } else {
+          interim = interim ? `${interim} ${text}` : text;
+        }
       }
+      const merged = [bufferRef.current, interim].filter(Boolean).join(" ");
+      // Confidence comes from the last result entry — usually the final one
+      // when present. Optional and only useful for the latest chunk.
+      const last = ev.results.item(ev.results.length - 1);
+      const lastAlt = last?.item(0);
+      const confidence =
+        typeof lastAlt?.confidence === "number" ? lastAlt.confidence : undefined;
+      onResultRef.current(
+        merged,
+        last?.isFinal ?? false,
+        ...(typeof confidence === "number" ? ([confidence] as const) : []),
+      );
     };
     recRef.current = rec;
     return rec;
@@ -169,7 +152,6 @@ export function useVoiceRecognition(
   useEffect(() => {
     setSupported(getSR() !== null);
     return () => {
-      wantsListenRef.current = false;
       const rec = recRef.current;
       if (rec) {
         try {
@@ -187,26 +169,25 @@ export function useVoiceRecognition(
       setError("unsupported");
       return;
     }
-    wantsListenRef.current = true;
+    setError(null);
     try {
       rec.start();
     } catch {
-      // Already running — treat as listening.
+      // Already running — treat as listening. Can happen on rapid hold-
+      // release-hold within ~100ms before the previous session fully ends.
       setListening(true);
     }
   }, [ensureRecognizer]);
 
   const stop = useCallback(() => {
-    wantsListenRef.current = false;
     const rec = recRef.current;
     if (!rec) return;
     try {
-      rec.stop();
+      rec.stop(); // flushes pending final; `abort()` would discard it
     } catch {
       /* noop */
     }
-    setListening(false);
   }, []);
 
-  return { supported, listening, lastPhrase, error, start, stop };
+  return { supported, listening, error, start, stop };
 }

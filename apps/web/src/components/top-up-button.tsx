@@ -13,7 +13,7 @@ const RECIPIENT = publicEnv.NEXT_PUBLIC_PAY_RECIPIENT_BASE;
 const BASE_CHAIN_ID = 8453;
 
 interface TopUpButtonProps {
-  onCredited?: (result: { frames: number; commits: number }) => void;
+  onCredited?: (result: { frames: number }) => void;
 }
 
 /**
@@ -45,9 +45,9 @@ export function TopUpButton({ onCredited }: TopUpButtonProps) {
         toast.success(
           "idempotent" in json && json.idempotent
             ? "already credited"
-            : `+${pack.frames} frames, +${pack.commits} commits`,
+            : `+${pack.frames} frames`,
         );
-        onCredited?.({ frames: pack.frames, commits: pack.commits });
+        onCredited?.({ frames: pack.frames });
       } catch (err) {
         toast.error(err instanceof Error ? err.message : "confirm failed", {
           duration: 6000,
@@ -108,7 +108,7 @@ export function TopUpButton({ onCredited }: TopUpButtonProps) {
           >
             <span className="uppercase">{pack.id}</span>
             <span className="text-[color:var(--stone)]">
-              {pack.frames.toLocaleString()}f · {pack.commits}c
+              {pack.frames.toLocaleString()}f
             </span>
             <span className="nums">${pack.usd}</span>
           </button>

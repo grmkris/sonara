@@ -8,7 +8,6 @@ export function SceneHud() {
   const statusMessage = useVisualizerStore((s) => s.statusMessage);
   const connected = useVisualizerStore((s) => s.connected);
   const version = useVisualizerStore((s) => s.latestVersion);
-  const commitPulse = useVisualizerStore((s) => s.commitPulse);
 
   const label = statusLabel(status);
 
@@ -32,12 +31,6 @@ export function SceneHud() {
         <span className="nums text-[color:var(--paper)]">
           {version.toString().padStart(2, "0")}
         </span>
-        {commitPulse > 0 && (
-          <span
-            key={commitPulse}
-            className="commit-tick ml-1 inline-block size-1.5 bg-[color:var(--signal)]"
-          />
-        )}
       </span>
 
       <span className="flex items-baseline gap-1.5">
@@ -52,10 +45,6 @@ export function SceneHud() {
       </span>
 
       <span className="ml-auto flex items-center gap-4 tracking-[0.18em]">
-        <span className="flex items-baseline gap-1">
-          <span className="text-[color:var(--paper)]">⏎</span>
-          <span>commit</span>
-        </span>
         <span className="flex items-baseline gap-1">
           <span className="text-[color:var(--paper)]">⌫</span>
           <span>reset</span>

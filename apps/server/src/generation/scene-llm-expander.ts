@@ -12,9 +12,8 @@ import type { Logger } from "../lib/logger";
 // composition, drift candidates). One LLM call per scene-hash; the resolver
 // caches the result and reuses it across keyframes.
 //
-// Same FAL `any-llm` endpoint already used by voice-intent.ts — keeps the
-// dependency surface flat (no new SDK, no new env key). Override model with
-// FAL_LLM_MODEL.
+// Uses FAL's `any-llm` endpoint via the shared FAL key (no extra SDK / env).
+// Override model with FAL_LLM_MODEL.
 
 const DEFAULT_MODEL = "google/gemini-2.5-flash-lite";
 const MAX_OUTPUT_TOKENS = 600;

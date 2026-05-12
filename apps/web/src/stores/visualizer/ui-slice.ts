@@ -5,19 +5,16 @@ export const UI_VISIBLE_KEY = "dream.uiVisible";
 
 export interface UiSlice {
   uiVisible: boolean;
-  commitPulse: number;
   sweepPulse: number;
 
   toggleUi: () => void;
   setUiVisible: (v: boolean) => void;
-  pulseCommit: () => void;
 }
 
 export const createUiSlice: StateCreator<VisualizerState, [], [], UiSlice> = (
   set,
 ) => ({
   uiVisible: true,
-  commitPulse: 0,
   sweepPulse: 0,
 
   toggleUi: () =>
@@ -34,5 +31,4 @@ export const createUiSlice: StateCreator<VisualizerState, [], [], UiSlice> = (
     }
     set({ uiVisible: v });
   },
-  pulseCommit: () => set((s) => ({ commitPulse: s.commitPulse + 1 })),
 });

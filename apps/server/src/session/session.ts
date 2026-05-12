@@ -10,13 +10,12 @@ import { EventPublisher } from "@orpc/server";
 import type { Logger } from "../lib/logger";
 import { streamPreview } from "../generation/fal-provider";
 import { serializeResolvedScene } from "../generation/prompt-compiler";
-import { DriftTrajectory, sampleDriftLayered } from "../generation/prompt-drift";
+import { DriftTrajectory } from "../generation/prompt-drift";
 import { resolveScene } from "../generation/scene-resolver";
 import {
   debitFrame,
   refundFrame,
   tryConsumeFreeTier,
-  type FrameKind,
 } from "../credits/credits-service";
 import { recognizeClip } from "../recognition/recognition-service";
 import {
@@ -25,7 +24,6 @@ import {
 } from "../generation/song-muse";
 import { mergeNowPlayingIntoScene } from "./now-playing-merge";
 import { semanticDiff } from "./semantic-diff";
-import { VoiceController } from "./voice-controller";
 
 export interface SessionOpts {
   id: string;
@@ -38,7 +36,6 @@ type TriggerReason =
   | "semantic"
   | "periodic"
   | "section"
-  | "commit"
   | "voice";
 
 // Full-arc length. sessionProgress = min(1, (now - sessionStartAt) / SESSION_ARC_MS).
@@ -55,8 +52,14 @@ const SEMANTIC_THRESHOLD = 0.4;
 
 // After the first "out of credits" error on an auto-trigger (periodic /
 // section), suppress further errors for this long before re-emitting.
-// User-initiated triggers (commit / voice / semantic / pause) always emit.
+// User-initiated triggers (voice / semantic / pause) always emit.
 const CREDIT_DENIAL_COOLDOWN_MS = 60_000;
+
+// Per-frame cost in the single `balance_frames` ledger. Anchor (the first
+// frame of a session, runs on flux-2-pro/edit) is load-bearing for identity;
+// flow frames edit that anchor on klein/9b.
+const COST_ANCHOR = 2;
+const COST_FLOW = 1;
 // When a patch arrives via voice, drop the trigger threshold so mood /
 // palette-only changes still fire immediately.
 const SEMANTIC_THRESHOLD_VOICE = 0.1;
@@ -113,6 +116,9 @@ export class Session {
   private pauseTimer?: ReturnType<typeof setTimeout>;
   private periodicTimer?: ReturnType<typeof setInterval>;
   private lastKeyframeAt = 0;
+  // Slows the periodic cadence after repeated anchor failures so a
+  // misconfigured FAL_ANCHOR_* doesn't error-spam every 8s. Resets on success.
+  private consecutiveAnchorFailures = 0;
   private readonly publisher = new EventPublisher<{ event: ServerEvent }>();
   private readonly logger: Logger;
 
@@ -146,8 +152,6 @@ export class Session {
   // Falls back to the curated static pool until the first LLM cache fill.
   private readonly driftTrajectory = new DriftTrajectory();
 
-  private readonly voice: VoiceController;
-
   constructor(opts: SessionOpts) {
     this.id = opts.id;
     this.userId = opts.userId;
@@ -157,25 +161,6 @@ export class Session {
     });
     this.scene = { ...defaultScene };
     this.lastGeneratedScene = { ...defaultScene };
-    this.voice = new VoiceController({
-      logger: this.logger,
-      send: (event) => this.send(event),
-      getSceneForIntent: () => ({
-        subject: this.scene.subject,
-        environment: this.scene.environment,
-        mood: this.scene.mood,
-        palette: this.scene.palette,
-        intensity: this.scene.intensity,
-      }),
-      getLiveMood: () => ({
-        valence: this.lastValence,
-        arousal: this.lastArousal,
-      }),
-      getNowPlaying: () => this.scene.nowPlaying ?? null,
-      applyPatch: (patch, origin) => this.applyPatch(patch, origin),
-      commit: () => this.commit(),
-      getActiveVersion: () => this.activeVersion,
-    });
     this.startPeriodic();
   }
 
@@ -385,29 +370,8 @@ export class Session {
     return track;
   }
 
-  commit(): void {
-    this.trigger("commit");
-  }
-
-  applyVoice(text: string): void {
-    this.voice.applyVoice(text);
-  }
-
-  // Live transcript ingress from the browser's Web Speech recognition. Emits
-  // voice.partial back to the client and — when isFinal — schedules the LLM
-  // intent dispatch via applyVoice (1.5s debounce inside VoiceController).
-  applyVoicePartial(opts: {
-    text: string;
-    isFinal: boolean;
-    confidence?: number;
-    provider: "web-speech";
-  }): void {
-    this.voice.applyPartial(opts);
-  }
-
   reset(): void {
     this.activeJob?.abort();
-    this.voice.reset();
     if (this.pauseTimer) {
       clearTimeout(this.pauseTimer);
       this.pauseTimer = undefined;
@@ -434,7 +398,6 @@ export class Session {
 
   close(): void {
     this.activeJob?.abort();
-    this.voice.close();
     if (this.pauseTimer) clearTimeout(this.pauseTimer);
     if (this.periodicTimer) clearInterval(this.periodicTimer);
   }
@@ -453,7 +416,11 @@ export class Session {
     this.periodicTimer = setInterval(() => {
       const now = Date.now();
       const { periodicMs } = cadenceFromIntensity(this.scene.intensity);
-      if (now - this.lastKeyframeAt < periodicMs) return;
+      // Anchor-failure backoff: after 3+ failures, multiply the cadence by 4×
+      // so the user has time to notice + fix config instead of paging on
+      // every tick. Resets to 0 on any anchor success.
+      const backoffFactor = this.consecutiveAnchorFailures > 3 ? 4 : 1;
+      if (now - this.lastKeyframeAt < periodicMs * backoffFactor) return;
       const hasAudio = now - this.lastAudioAt < 5000;
       const hasScene = this.scene.subject.trim().length > 0;
       if (!hasAudio && !hasScene) return;
@@ -470,38 +437,40 @@ export class Session {
       return;
     }
 
-    const forCommit = reason === "commit";
+    // Close the periodic-gate window IMMEDIATELY. The credit debit + fal
+    // setup below are async; without this, every 1s periodic tick fires
+    // another trigger before lastKeyframeAt was updated, stacking parallel
+    // generations and double-debiting credits.
+    this.lastKeyframeAt = Date.now();
 
-    // Credit gate. BYOK-key sessions skip it entirely (user pays fal).
-    // Paid debit tries first; flow-tier also has a small free-tier fallback
-    // (commits always cost credits).
+    // First frame of a session runs on flux-2-pro/edit (anchor); every
+    // subsequent frame edits that anchor on klein/9b (flow).
+    const isAnchor = this.heroImageUrl === null;
+    const mode: "anchor" | "flow" = isAnchor ? "anchor" : "flow";
+    const cost = isAnchor ? COST_ANCHOR : COST_FLOW;
+
+    // Credit gate. BYOK sessions skip it entirely (user pays fal).
     //
-    // Error-spam rule: periodic / section triggers fire on a 3–5s timer and
-    // would flood the client with duplicate "Out of credits" toasts. Emit
-    // the job.status error only on user-initiated reasons, or on the first
+    // Error-spam rule: periodic / section triggers fire on a timer and would
+    // flood the client with duplicate "Out of credits" toasts. Emit the
+    // job.status error only on user-initiated reasons, or on the first
     // denial of an auto-trigger reason once per CREDIT_DENIAL_COOLDOWN_MS.
-    const USER_INITIATED: TriggerReason[] = [
-      "commit",
-      "voice",
-      "semantic",
-      "pause",
-    ];
+    const USER_INITIATED: TriggerReason[] = ["voice", "semantic", "pause"];
     const isUserInitiated = USER_INITIATED.includes(reason);
 
-    // Tracks the column to refund into if the fal call fails after we paid.
-    // Stays null on BYOK and free-tier paths (which we never refund).
-    let paidKind: FrameKind | null = null;
+    // Tracks the cost to refund if the fal call fails after we paid.
+    let paidCost: number | null = null;
 
     if (!this.byokFalKey) {
       try {
-        const kind: FrameKind = forCommit ? "commit" : "frame";
-        const remaining = await debitFrame(this.userId, kind, this.logger);
+        const remaining = await debitFrame(this.userId, cost, this.logger);
         if (remaining === null) {
+          // Free-tier fallback only for flow (anchor is too expensive to gift).
           const freeOk =
-            !forCommit &&
+            !isAnchor &&
             (await tryConsumeFreeTier(this.userId, 3, this.logger));
           if (!freeOk) {
-            this.logger.info({ reason, kind }, "trigger denied: no credits");
+            this.logger.info({ reason, mode, cost }, "trigger denied: no credits");
             const now = Date.now();
             const shouldEmit =
               isUserInitiated ||
@@ -512,20 +481,16 @@ export class Session {
                 type: "job.status",
                 status: "error",
                 reason,
-                message: forCommit
-                  ? "Out of commit credits — top up to continue"
-                  : "Out of credits — top up or enable BYOK",
+                message: "Out of credits — top up or enable BYOK",
               });
             }
             return;
           }
           this.logger.debug({ reason }, "free-tier slot consumed");
         } else {
-          // Successful debit clears the denial window — fresh errors surface
-          // again if credits run out later in the same session.
           this.lastCreditDenialAt = 0;
-          paidKind = kind;
-          this.logger.debug({ reason, kind, remaining }, "credit debited");
+          paidCost = cost;
+          this.logger.debug({ reason, mode, cost, remaining }, "credit debited");
         }
       } catch (err) {
         this.logger.error(
@@ -542,27 +507,14 @@ export class Session {
       }
     }
 
-    // Drift layering: current atmosphere (from voice-intent) →
-    // most-recent voice phrase raw → static pool.
-    const latestVoice = this.voice.getLatestVoice();
-    const atmosphere = this.voice.getAtmosphere();
+    // Drift modifier. Trajectory is LLM-seeded when scene-llm-expander has
+    // filled drift_candidates; otherwise it walks the curated static pool.
     const sessionProgress = Math.min(
       1,
       (Date.now() - this.sessionStartAt) / SESSION_ARC_MS,
     );
-    const drift = sampleDriftLayered({
-      llmDrift: atmosphere,
-      latestVoice,
-      trajectory: this.driftTrajectory,
-      sessionProgress,
-    });
-    const driftSource: "llm" | "voice" | "pool" | "none" = atmosphere
-      ? "llm"
-      : latestVoice
-        ? "voice"
-        : drift
-          ? "pool"
-          : "none";
+    const drift = this.driftTrajectory.next();
+    const driftSource: "pool" | "none" = drift ? "pool" : "none";
 
     this.activeJob?.abort();
     const controller = new AbortController();
@@ -570,16 +522,14 @@ export class Session {
 
     this.activeVersion += 1;
     const version = this.activeVersion;
-    // Reference-image precedence: committed hero image > album art from the
-    // identified song > nothing. User voice/text commits produce a hero and
-    // that always wins; album art is a zero-effort visual anchor for the
-    // very first frames of a newly-identified song.
+    // Reference precedence:
+    //   flow → hero (the model's own first frame, set on anchor onFinal).
+    //   anchor → album art if available (seed only), otherwise none.
     const albumArt = this.scene.nowPlaying?.albumArtUrl;
-    const nextReferences = this.heroImageUrl
-      ? [this.heroImageUrl]
-      : albumArt
-        ? [albumArt]
-        : [];
+    const referenceImage: string | undefined = this.heroImageUrl
+      ? this.heroImageUrl
+      : albumArt ?? undefined;
+    const nextReferences = referenceImage ? [referenceImage] : [];
     this.scene = { ...this.scene, version, references: nextReferences };
     const snapshot: DreamSceneState = this.scene;
 
@@ -634,12 +584,11 @@ export class Session {
         sessionProgress: Number(sessionProgress.toFixed(2)),
         seed: this.seed,
         hasHero: this.heroImageUrl !== null,
-        tier: forCommit ? "commit" : "flow",
+        mode,
       },
       "trigger fire",
     );
     this.send({ type: "job.status", status: "running", reason });
-    this.lastKeyframeAt = Date.now();
 
     const requestedAt = Date.now();
     const { periodicMs } = cadenceFromIntensity(this.scene.intensity);
@@ -656,9 +605,9 @@ export class Session {
 
     streamPreview({
       prompt,
-      referenceImages: nextReferences,
+      referenceImage,
       seed: this.seed,
-      forCommit,
+      mode,
       falKey: this.byokFalKey ?? undefined,
       signal: controller.signal,
       logger: this.logger,
@@ -669,11 +618,13 @@ export class Session {
       onFinal: (url) => {
         if (version !== this.activeVersion) return;
         this.lastGeneratedScene = snapshot;
-        if (forCommit) {
+        // Anchor frame locks identity for the rest of the session — every
+        // subsequent flow trigger edits this URL.
+        if (isAnchor) {
           this.heroImageUrl = url;
           this.scene = { ...this.scene, references: [url] };
           this.send({ type: "scene.state", state: this.scene });
-          this.logger.info({ url }, "hero image updated (commit-tier)");
+          this.consecutiveAnchorFailures = 0;
         }
         this.send({ type: "frame.final", imageUrl: url, version });
         this.send({ type: "job.status", status: "idle" });
@@ -685,20 +636,30 @@ export class Session {
         });
       },
       onError: (err) => {
-        // Refund the paid credit before surfacing the error. Free-tier and
-        // BYOK paths set paidKind=null so this is a no-op for them. Aborts
-        // refund too — a superseded trigger never delivered a frame, so
-        // the user should get the credit back regardless of the cause.
-        if (paidKind) {
-          refundFrame(this.userId, paidKind, this.logger).catch((e) => {
+        // Refund regardless of abort — fal-provider routes superseded
+        // generations through onError too, and the user should get the
+        // credit back since no frame was delivered. Free-tier / BYOK paths
+        // set paidCost=null so this is a no-op for them.
+        if (paidCost !== null) {
+          refundFrame(this.userId, paidCost, this.logger).catch((e) => {
             this.logger.error(
-              { err: e, version, kind: paidKind },
+              { err: e, version, cost: paidCost },
               "refundFrame after fal error failed",
             );
           });
         }
+        // Aborts are expected (newer trigger superseded this one). Don't
+        // log noisily or surface to the client.
         if (controller.signal.aborted) return;
-        this.logger.error({ err }, "fal stream error");
+        if (isAnchor) {
+          this.consecutiveAnchorFailures += 1;
+          this.logger.error(
+            { err, failures: this.consecutiveAnchorFailures },
+            "anchor generation failed",
+          );
+        } else {
+          this.logger.error({ err }, "flow generation failed");
+        }
         const message = err instanceof Error ? err.message : String(err);
         this.send({
           type: "job.status",

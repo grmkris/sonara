@@ -1,7 +1,5 @@
-// Hand-curated scene templates. One click loads the full set of text fields;
-// voice can also load them via "preset <key>" / "try the <key> one" parsed
-// on the server by voice-intent.ts. Templates only set the four text fields
-// (subject / environment / mood / palette); intensity + image-feel sliders
+// Hand-curated scene templates. One click loads the full set of text fields
+// (subject / environment / mood / palette). intensity + image-feel sliders
 // + render presets persist so a template change doesn't re-tune reactivity.
 //
 // Named `SCENE_TEMPLATES` (not `PRESETS`) to avoid collision with the

@@ -57,19 +57,6 @@ export function useWsSession(): SessionSend {
             });
           }
           break;
-        case "confirm.reset":
-          // Voice said "start over" / "reset". Show a toast with a Confirm
-          // action; user click fires session.reset. Mishears are a real
-          // risk, so never auto-reset.
-          toast("Reset the scene?", {
-            description: event.reason,
-            duration: event.ttlMs,
-            action: {
-              label: "Reset",
-              onClick: () => sendRef.current({ type: "session.reset" }),
-            },
-          });
-          break;
         case "preset.suggest":
           // Server (LLM) suggests a visual preset. Only apply when the user
           // has opted into LLM mode — otherwise respect manual / cycle /
@@ -109,49 +96,6 @@ export function useWsSession(): SessionSend {
             event.success,
           );
           break;
-        case "voice.partial":
-          console.debug(
-            `[voice] partial#${event.phraseId} ${event.isFinal ? "final" : "interim"} (${event.provider}): ${event.text}`,
-          );
-          s.voicePartial({
-            phraseId: event.phraseId,
-            text: event.text,
-            isFinal: event.isFinal,
-            ...(typeof event.confidence === "number"
-              ? { confidence: event.confidence }
-              : {}),
-            provider: event.provider,
-          });
-          break;
-        case "voice.parsed":
-          console.debug(
-            `[voice] parsed#${event.phraseId} in ${event.latencyMs}ms`,
-            event.intent,
-          );
-          s.voiceParsed({
-            phraseId: event.phraseId,
-            intent: event.intent,
-            latencyMs: event.latencyMs,
-          });
-          break;
-        case "voice.applied":
-          console.debug(
-            `[voice] applied#${event.phraseId} triggered=${event.triggered}${
-              typeof event.triggeredVersion === "number"
-                ? ` v${event.triggeredVersion}`
-                : ""
-            }`,
-            event.patch,
-          );
-          s.voiceApplied({
-            phraseId: event.phraseId,
-            patch: event.patch,
-            triggered: event.triggered,
-            ...(typeof event.triggeredVersion === "number"
-              ? { triggeredVersion: event.triggeredVersion }
-              : {}),
-          });
-          break;
       }
     };
 
@@ -176,9 +120,6 @@ export function useWsSession(): SessionSend {
         dispatchSessionAction(client, action).catch((err) => {
           console.warn("[ws] dispatch failed", err);
         });
-        if (action.type === "generate.commit") {
-          useVisualizerStore.getState().pulseCommit();
-        }
       };
 
       socket.addEventListener("open", () => {

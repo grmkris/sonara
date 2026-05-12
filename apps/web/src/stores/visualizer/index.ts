@@ -10,7 +10,7 @@ import {
 } from "./preset-slice";
 import { createSceneSlice } from "./scene-slice";
 import { UI_VISIBLE_KEY, createUiSlice } from "./ui-slice";
-import { VOICE_MODE_KEY, createVoiceSlice } from "./voice-slice";
+import { createVoiceSlice } from "./voice-slice";
 import type { VisualizerState } from "./types";
 import type { PresetConfig, PresetName } from "@/lib/render/presets";
 
@@ -65,15 +65,6 @@ export function hydratePresetPrefs(): void {
   if (Object.keys(update).length > 0) useVisualizerStore.setState(update);
 }
 
-// Pulls the voice input mode from localStorage post-mount. SSR + first client
-// render use the default ("ptt") so hydration matches.
-export function hydrateVoiceMode(): void {
-  if (typeof window === "undefined") return;
-  const raw = window.localStorage.getItem(VOICE_MODE_KEY);
-  if (raw !== "live" && raw !== "ptt") return;
-  useVisualizerStore.setState({ voiceMode: raw });
-}
-
 /**
  * Crossfade timing is driven by the `<img>.onLoad` event rather than the
  * moment a URL arrives. This avoids the black flash when a large fal image
@@ -93,9 +84,5 @@ export type {
 } from "./inspector-slice";
 export type { JobStatus } from "./scene-slice";
 export type { PresetMode } from "./preset-slice";
-export type {
-  VoiceTrailIntent,
-  VoiceTrailStage,
-  VoiceTrailState,
-} from "./voice-slice";
+export type { VoiceField } from "./voice-slice";
 export type { VisualizerState } from "./types";

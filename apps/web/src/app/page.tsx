@@ -15,9 +15,7 @@ import { UserControls } from "@/components/user-controls";
 import { DemoRecorder } from "@/components/visualizer/controls/demo-recorder";
 import { GenerationInspector } from "@/components/visualizer/controls/generation-inspector";
 import { ScanSweep } from "@/components/visualizer/canvas/scan-sweep";
-import { Stamp } from "@/components/visualizer/canvas/stamp";
 import { VoiceListen } from "@/components/visualizer/voice/voice-listen";
-import { VoiceTrail } from "@/components/visualizer/voice/voice-trail";
 import { NowPlaying } from "@/components/visualizer/controls/now-playing";
 import { Button } from "@/components/ui/button";
 import { useWsSession } from "@/hooks/use-ws-session";
@@ -30,7 +28,6 @@ import { useHotkey } from "@/hooks/use-hotkey";
 import {
   hydratePresetPrefs,
   hydrateUiVisible,
-  hydrateVoiceMode,
   useVisualizerStore,
 } from "@/stores/visualizer-store";
 import { cn } from "@/lib/utils";
@@ -72,13 +69,8 @@ export default function Page() {
   useEffect(() => {
     hydrateUiVisible();
     hydratePresetPrefs();
-    hydrateVoiceMode();
   }, []);
 
-  useHotkey(
-    "Enter",
-    useCallback(() => send({ type: "generate.commit" }), [send]),
-  );
   useHotkey(
     "Backspace",
     useCallback(() => {
@@ -152,36 +144,22 @@ export default function Page() {
           {/* Row 1: merged waveform-over-spectrum ribbon. */}
           <AudioRibbon height={48} />
 
-          {/* Row 1.5: voice transparency trail. Renders nothing when idle. */}
-          <div className="mt-3">
-            <VoiceTrail />
-          </div>
-
           {/* Row 2: sources + actions. */}
           <div className="mt-3 flex items-center justify-between gap-6">
             <div className="flex items-start gap-8">
               <MusicSource source={audioSource} setSource={setAudioSource} />
               <VoiceListen send={send} />
             </div>
-            <div className="flex items-center gap-3">
-              <Button
-                variant="signal"
-                size="sm"
-                onClick={() => send({ type: "generate.commit" })}
-              >
-                commit
-              </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => {
-                  setAudioSource({ type: "none" });
-                  send({ type: "session.reset" });
-                }}
-              >
-                reset
-              </Button>
-            </div>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                setAudioSource({ type: "none" });
+                send({ type: "session.reset" });
+              }}
+            >
+              reset
+            </Button>
           </div>
           <div className="mt-3 border-t border-[color:var(--hairline)]/30 pt-2">
             <SceneHud />
@@ -189,7 +167,6 @@ export default function Page() {
         </section>
       </div>
 
-      <Stamp />
       {/* DemoRecorder reads `?record=` via useSearchParams, which Next 16
           requires inside a Suspense boundary so the rest of the page can
           prerender. */}

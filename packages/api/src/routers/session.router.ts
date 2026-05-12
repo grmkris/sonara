@@ -16,19 +16,11 @@ export interface SessionLike {
   init(opts?: { falKey?: string }): void;
   applyPatch(patch: ClientScenePatch, origin?: "client" | "voice"): void;
   applyAudio(features: AudioFeatures): void;
-  applyVoice(text: string): void;
-  applyVoicePartial(opts: {
-    text: string;
-    isFinal: boolean;
-    confidence?: number;
-    provider: "web-speech";
-  }): void;
   recognize(
     clipBase64: string,
     mimeType: string,
     trigger: "auto" | "manual",
   ): Promise<NowPlaying | null>;
-  commit(): void;
   reset(): void;
   subscribe(signal?: AbortSignal): AsyncGenerator<ServerEvent>;
   getSnapshot(): DreamSceneState;
@@ -52,15 +44,8 @@ const AudioFeaturesInput = z.object({
   features: AudioFeatures,
 });
 
-const VoicePhraseInput = z.object({
-  text: z.string().min(1).max(200),
-});
-
-const VoicePartialInput = z.object({
-  text: z.string().min(1).max(400),
-  isFinal: z.boolean(),
-  confidence: z.number().min(0).max(1).optional(),
-  provider: z.enum(["web-speech"]).default("web-speech"),
+const VoicePatchInput = z.object({
+  patch: ClientScenePatch,
 });
 
 const RecognizeInput = z.object({
@@ -76,8 +61,8 @@ const StateOutput = z.object({
 
 export const sessionRouter = {
   // Long-lived event stream. The client subscribes once per connection and
-  // receives every server-initiated event (frame previews/finals, scene
-  // patches, now.playing, job.status, confirm.reset, preset.suggest).
+  // receives every server-initiated event (scene.state, frame.preview /
+  // frame.final, job.status, now.playing, preset.suggest, generation.*).
   events: sessionOs
     .output(eventIterator(ServerEvent))
     .handler(async function* ({ context, signal }) {
@@ -102,23 +87,15 @@ export const sessionRouter = {
       context.session.applyAudio(input.features);
     }),
 
-  voicePhrase: sessionOs
-    .input(VoicePhraseInput)
+  // Direct field-keyed PTT patch. The client routes each push-to-talk
+  // transcript to a specific scene field (subject/environment/mood/palette),
+  // so the patch is unambiguous — no LLM disambiguation. origin="voice"
+  // gives the lower SEMANTIC_THRESHOLD so single-field changes fire
+  // immediately.
+  voicePatch: sessionOs
+    .input(VoicePatchInput)
     .handler(({ context, input }) => {
-      context.session.applyVoice(input.text);
-    }),
-
-  voicePartial: sessionOs
-    .input(VoicePartialInput)
-    .handler(({ context, input }) => {
-      context.session.applyVoicePartial({
-        text: input.text,
-        isFinal: input.isFinal,
-        provider: input.provider,
-        ...(typeof input.confidence === "number"
-          ? { confidence: input.confidence }
-          : {}),
-      });
+      context.session.applyPatch(input.patch, "voice");
     }),
 
   recognize: sessionOs
@@ -131,10 +108,6 @@ export const sessionRouter = {
         input.trigger,
       ),
     ),
-
-  commit: sessionOs.handler(({ context }) => {
-    context.session.commit();
-  }),
 
   reset: sessionOs.handler(({ context }) => {
     context.session.reset();

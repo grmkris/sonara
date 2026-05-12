@@ -1,26 +1,23 @@
 // Top-up pack catalogue. One source of truth for both client (<TopUpButton>
 // shows the prices) and server (/api/credits/confirm validates amounts).
 //
-// Flat ~24% margin across the tier against estimated fal.ai costs
-// (~$0.021/flow frame, ~$0.063/commit). Tune `frames` / `commits` counts
-// post-launch based on real invoices; keep `usd` values fixed since Reown
-// Pay commits to the USD amount shown to the user.
+// Cost model: anchor frame (first frame of session, runs on flux-2-pro/edit)
+// costs 2 credits; every subsequent flow keyframe costs 1. So a 320-credit
+// starter pack yields ~1 anchor + ~318 flow keyframes per session.
 
 export interface Pack {
   /** Stable id used by both UI and server. Must be url-safe. */
   id: string;
   /** USD amount the user is asked to send. Maps to `amount` in AppKit Pay. */
   usd: number;
-  /** Flow-tier frames credited on success. */
+  /** Frames credited on success (anchor=2, flow=1). */
   frames: number;
-  /** Commit-tier (pro) frames credited on success. */
-  commits: number;
 }
 
 export const PACKS: readonly Pack[] = [
-  { id: "starter", usd: 10, frames: 300, commits: 20 },
-  { id: "pro", usd: 30, frames: 900, commits: 60 },
-  { id: "max", usd: 100, frames: 3000, commits: 200 },
+  { id: "starter", usd: 10, frames: 320 },
+  { id: "pro", usd: 30, frames: 960 },
+  { id: "max", usd: 100, frames: 3200 },
 ] as const;
 
 export function findPack(id: string): Pack | undefined {
