@@ -1,5 +1,7 @@
 # Deploy — Railway (three services, one project)
 
+> For day-to-day CLI commands, project + service IDs, and migration workflow, see **AGENTS.md §Production**. This doc covers from-scratch deploy wiring (provisioning, variable layout, build-args vs runtime env).
+
 Everything runs on Railway via Docker.
 
 | Service | Source | Notes |

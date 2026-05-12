@@ -11,6 +11,51 @@ Conventions for working in this repo. Read this before making non-trivial change
 - `packages/shared` — zod schemas, types, `typeid`, `ws-ticket` HMAC, pricing.
 - `packages/test-utils` — pglite helper.
 
+## Production
+
+Deployed on **Railway**. Migrated off Neon in May 2026 — any `DATABASE_URL` in `apps/web/.env` / `apps/server/.env` is local-dev only and **not what production runs against**. Railway injects the prod DB URL at runtime via `${{Postgres.DATABASE_URL}}`; the server reads it from `env.DATABASE_URL` and applies `packages/db` migrations on every boot.
+
+### Project
+
+- **Name**: `fearless-nourishment`
+- **ID**: `33e35438-b78d-4cf9-8fe6-d0ba87e3c111`
+- **Dashboard**: https://railway.com/project/33e35438-b78d-4cf9-8fe6-d0ba87e3c111
+
+### Services
+
+| Service | Public domain | Service ID | Role |
+|---|---|---|---|
+| `web` | https://web-production-53719.up.railway.app | `235aa1d4-8c1b-4b7a-989a-099e61807e8c` | Next.js standalone; HTTP `/`, `/rpc/*`, `/api/auth/*` |
+| `server` | https://server-production-2f7a.up.railway.app | `12262832-9534-4230-b032-c675d87f29b8` | Bun + Hono; HTTP `/health`, `/rpc/*`, WS `/ws` |
+| `Postgres` | `postgres.railway.internal:5432` (private) | n/a (Railway template) | auth + credits ledger |
+
+### CLI (already installed + authenticated locally)
+
+```bash
+railway status                           # current project + service health
+railway logs --service server -n 100     # pino structured logs (server or web)
+railway variables --service server --kv  # env vars set on a service
+railway redeploy --service server --yes  # redeploy latest deployment, no rebuild
+railway run --service web -- <cmd>       # run a local command with Railway env vars injected
+railway service Postgres && railway connect  # psql tunnel to the prod DB
+```
+
+Bash invocations of `railway status:*`, `railway logs:*`, `railway variables:*`, `railway whoami`, `railway list`, `railway link:*`, `railway service` are pre-approved in `.claude/settings.local.json` — they don't need per-session permission. Destructive commands (`redeploy`, `down`, `delete`, `run -- …`) still gate on user approval.
+
+Railway local MCP is registered in `.mcp.json` (gitignored). Future agents pick up `mcp__railway__*` tools automatically; falls back to CLI if MCP isn't initialized.
+
+### Schema migrations
+
+Migrations live in `packages/db/drizzle/` (not `apps/web/drizzle/` — that path is stale-doc). After editing `packages/db/src/schema/*.db.ts`:
+
+```bash
+bun run --filter=@music-visualizer/db db:generate
+```
+
+Commit the new SQL file. The next deploy applies it automatically via `runMigrations()` called at `apps/server/src/server.ts` startup. **Never run `db:push` against prod.** No production `db:push` script exists.
+
+See `DEPLOY.md` for the from-scratch wiring procedure (project create, service create, variable wiring, build-args vs runtime env). See `INFRASTRUCTURE.md` for topology diagrams and external-integration cheat-sheet.
+
 ## Build & run
 
 ```bash
