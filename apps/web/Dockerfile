@@ -50,10 +50,12 @@ COPY packages/shared ./packages/shared
 
 # Build. next.config.ts sets output: "standalone" so this emits a
 # self-contained server bundle at apps/web/.next/standalone.
-# Run `next build` directly (not `bun run build`) to skip --turbopack —
-# Bun's CJS loader can't load Turbopack-emitted server chunks during the
-# "Collecting page data" pass. Webpack production build is fine.
-RUN cd apps/web && bunx next build
+# Force webpack (not Turbopack) for the production build — Bun's CJS
+# loader can't load Turbopack-emitted server chunks during Next.js's
+# "Collecting page data" pass (TypeError: Expected CommonJS module to
+# have a function wrapper). Next 16 defaults to Turbopack; --webpack
+# opts out.
+RUN cd apps/web && bunx next build --webpack
 
 # ---- runtime ---------------------------------------------------------------
 FROM oven/bun:1.3.5-slim AS runtime
