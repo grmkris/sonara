@@ -59,13 +59,6 @@ function resolveModel(mode: Mode, hasRef: boolean): string {
   return env.FAL_FLOW_EDIT_MODEL;
 }
 
-function resolveSteps(mode: Mode, hasRef: boolean): number {
-  // Anchor pays for extra detail (load-bearing for identity). Flow stays at
-  // klein's 4-step minimum for snappy keyframes.
-  if (mode === "anchor") return hasRef ? 8 : 6;
-  return 4;
-}
-
 export async function streamPreview(input: StreamPreviewInput): Promise<void> {
   // Per-call scoped client. BYOK bills the user's fal account; otherwise the
   // platform key is used. No global singleton — avoids cross-session
@@ -86,14 +79,23 @@ export async function streamPreview(input: StreamPreviewInput): Promise<void> {
   }
 
   const model = resolveModel(input.mode, hasRef);
+
+  // Payload schemas differ between tiers:
+  //   anchor (flux-2-pro / flux-2-pro/edit) — "zero-config": rejects
+  //     `num_inference_steps` and `num_images`. Pass only prompt, image_size,
+  //     output_format, safety, seed?, image_urls?.
+  //   flow (flux-2/klein/9b/edit) — accepts the extras; we tune steps for
+  //     snappy keyframes.
   const payload: Record<string, unknown> = {
     prompt: input.prompt,
-    num_images: 1,
-    num_inference_steps: resolveSteps(input.mode, hasRef),
     image_size: "square_hd",
     output_format: "jpeg",
     enable_safety_checker: false,
   };
+  if (input.mode === "flow") {
+    payload.num_images = 1;
+    payload.num_inference_steps = 4;
+  }
   if (typeof input.seed === "number") payload.seed = input.seed;
   if (hasRef) payload.image_urls = [ref];
 
