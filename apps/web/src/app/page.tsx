@@ -11,6 +11,7 @@ import { SlitScanTrail } from "@/components/visualizer/canvas/slit-scan-trail";
 import { ControlsPanel } from "@/components/visualizer/controls/controls-panel";
 import { SceneHud } from "@/components/visualizer/controls/scene-hud";
 import { HideToggle } from "@/components/visualizer/controls/hide-toggle";
+import { FullscreenToggle } from "@/components/visualizer/controls/fullscreen-toggle";
 import { UserControls } from "@/components/user-controls";
 import { DemoRecorder } from "@/components/visualizer/controls/demo-recorder";
 import { GenerationInspector } from "@/components/visualizer/controls/generation-inspector";
@@ -106,6 +107,7 @@ export default function Page() {
           <NowPlaying />
           <Timestamp />
           <UserControls />
+          <FullscreenToggle />
           <HideToggle />
         </div>
       </div>
