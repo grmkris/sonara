@@ -7,6 +7,18 @@ builder = "DOCKERFILE"
 dockerfilePath = "apps/server/Dockerfile"
 # Build context must be the repo root so workspace:* deps resolve.
 # Railway respects this when the root service directory is "/".
+# Trigger rebuilds when any of the server's actual inputs change — not just
+# apps/server source, but also the workspace packages it ships (packages/db
+# carries migrations applied by runMigrations() on boot, so a schema change
+# in packages/db MUST trigger a server redeploy or migrations stall).
+watchPatterns = [
+  "apps/server/**",
+  "packages/db/**",
+  "packages/api/**",
+  "packages/shared/**",
+  "bun.lock",
+  "package.json",
+]
 
 [deploy]
 startCommand = "bun run src/server.ts"
