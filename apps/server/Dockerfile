@@ -16,7 +16,7 @@
 # injects $PORT at runtime; Bun.serve picks it up via env.PORT.
 
 # ---- builder ----------------------------------------------------------------
-FROM oven/bun:1.3.13 AS builder
+FROM oven/bun:1.3.14 AS builder
 WORKDIR /app
 
 # Copy all workspace manifests + the shared lockfile so `bun install` can
@@ -41,7 +41,7 @@ COPY packages/db ./packages/db
 COPY packages/shared ./packages/shared
 
 # ---- runtime ---------------------------------------------------------------
-FROM oven/bun:1.3.13-slim AS runtime
+FROM oven/bun:1.3.14-slim AS runtime
 WORKDIR /app
 
 ENV NODE_ENV=production

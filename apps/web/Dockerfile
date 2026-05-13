@@ -5,13 +5,15 @@
 # Build from the repo root (workspace deps need the full context):
 #   docker build -f apps/web/Dockerfile \
 #     --build-arg NEXT_PUBLIC_WS_URL=wss://your-server.up.railway.app/ws \
-#     --build-arg NEXT_PUBLIC_REOWN_PROJECT_ID=... \
 #     -t mv-web .
 #
 # Run:
 #   docker run --rm -p 4470:3000 \
 #     -e BETTER_AUTH_SECRET=... -e DATABASE_URL=... \
 #     -e APP_URL=http://localhost:4470 -e AUTH_DOMAIN=localhost:4470 \
+#     -e DODO_PAYMENTS_API_KEY=... -e DODO_PAYMENTS_WEBHOOK_SECRET=... \
+#     -e DODO_PAYMENTS_MODE=test_mode \
+#     -e DODO_PRODUCT_STARTER=... -e DODO_PRODUCT_PRO=... -e DODO_PRODUCT_MAX=... \
 #     mv-web
 #
 # Next.js standalone mode emits a self-contained server at
@@ -19,17 +21,13 @@
 # runtime stage to keep the image small.
 
 # ---- builder ----------------------------------------------------------------
-FROM oven/bun:1.3.13 AS builder
+FROM oven/bun:1.3.14 AS builder
 WORKDIR /app
 
 # NEXT_PUBLIC_* vars are inlined into the client bundle at build time, so
 # they must be present here. Railway passes them via service build args.
 ARG NEXT_PUBLIC_WS_URL=ws://localhost:4471/ws
-ARG NEXT_PUBLIC_REOWN_PROJECT_ID=
-ARG NEXT_PUBLIC_PAY_RECIPIENT_BASE=
 ENV NEXT_PUBLIC_WS_URL=${NEXT_PUBLIC_WS_URL}
-ENV NEXT_PUBLIC_REOWN_PROJECT_ID=${NEXT_PUBLIC_REOWN_PROJECT_ID}
-ENV NEXT_PUBLIC_PAY_RECIPIENT_BASE=${NEXT_PUBLIC_PAY_RECIPIENT_BASE}
 
 # Workspace manifests + lockfile → install once. Cacheable across source
 # edits.
@@ -55,7 +53,7 @@ COPY packages/shared ./packages/shared
 RUN cd apps/web && bun run build
 
 # ---- runtime ---------------------------------------------------------------
-FROM oven/bun:1.3.13-slim AS runtime
+FROM oven/bun:1.3.14-slim AS runtime
 WORKDIR /app
 
 ENV NODE_ENV=production
