@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import type { DreamSceneState } from "@music-visualizer/shared";
 import type { SessionSend } from "@/lib/session-actions";
 import { Input } from "@/components/ui/input";
+import { FieldChips } from "@/components/visualizer/controls/field-chips";
 import { useVisualizerStore } from "@/stores/visualizer";
 
 interface PromptInputProps {
@@ -13,9 +14,9 @@ interface PromptInputProps {
 
 type FieldKey = "subject" | "environment" | "mood" | "palette";
 
-// Per-field example pools. When the field is empty, the placeholder rotates
-// through these every ~8 s — educational for both typing and voice users.
-const PLACEHOLDERS: Record<FieldKey, readonly string[]> = {
+// Per-field suggestion pools. Surfaced as both the static placeholder text
+// (first entry) and as clickable chips beneath each input via `FieldChips`.
+const FIELD_SUGGESTIONS: Record<FieldKey, readonly string[]> = {
   subject: [
     "a heron over grey water",
     "two lanterns drifting above a pond",
@@ -58,8 +59,6 @@ const PLACEHOLDERS: Record<FieldKey, readonly string[]> = {
   ],
 };
 
-const PLACEHOLDER_INTERVAL_MS = 8000;
-
 const FIELDS: {
   key: FieldKey;
   index: string;
@@ -70,25 +69,6 @@ const FIELDS: {
   { key: "mood",        index: "3", label: "MOOD"     },
   { key: "palette",     index: "4", label: "PALETTE"  },
 ];
-
-// One random seed per field, set post-mount so each session opens with a
-// different example — avoids an identical first-load every time. SSR + first
-// client-hydrate render use `0` (stable, matching) so React doesn't flag a
-// hydration mismatch on the `placeholder` attribute.
-const ZERO_SEEDS: Record<FieldKey, number> = {
-  subject: 0,
-  environment: 0,
-  mood: 0,
-  palette: 0,
-};
-function randomSeeds(): Record<FieldKey, number> {
-  return {
-    subject: Math.floor(Math.random() * PLACEHOLDERS.subject.length),
-    environment: Math.floor(Math.random() * PLACEHOLDERS.environment.length),
-    mood: Math.floor(Math.random() * PLACEHOLDERS.mood.length),
-    palette: Math.floor(Math.random() * PLACEHOLDERS.palette.length),
-  };
-}
 
 export function PromptInput({ send }: PromptInputProps) {
   const scene = useVisualizerStore((s) => s.scene);
@@ -111,14 +91,11 @@ export function PromptInput({ send }: PromptInputProps) {
     mood: null,
     palette: null,
   });
-
-  const [seeds, setSeeds] = useState<Record<FieldKey, number>>(ZERO_SEEDS);
-  useEffect(() => setSeeds(randomSeeds()), []);
-  const [tick, setTick] = useState(0);
-  useEffect(() => {
-    const id = setInterval(() => setTick((t) => t + 1), PLACEHOLDER_INTERVAL_MS);
-    return () => clearInterval(id);
-  }, []);
+  // Tracks the value most recently sent over WS for each field, used to
+  // suppress duplicate sends (e.g. chip-click then immediate input blur).
+  // Cleared by the reconcile effect below once the server echoes the value
+  // back into `scene[key]`.
+  const lastSentRef = useRef<Partial<Record<FieldKey, string>>>({});
 
   // Drop the in-flight indicator the moment the server settles. "running" is
   // the only state where we want the chip visible; idle / cancelled / error
@@ -127,20 +104,44 @@ export function PromptInput({ send }: PromptInputProps) {
     if (status !== "running") setLastCommittedKey(null);
   }, [status]);
 
-  const commit = (key: FieldKey) => {
-    const value = draft[key];
-    if (value === undefined) return;
+  // When the server echoes a committed value back into `scene[key]`, clear
+  // the matching optimistic draft + `lastSentRef` so future identical sends
+  // aren't suppressed and the input reads from `scene[key]` again.
+  useEffect(() => {
+    setDraft((d) => {
+      let next = d;
+      let changed = false;
+      for (const f of FIELDS) {
+        if (next[f.key] !== undefined && next[f.key] === scene[f.key]) {
+          if (lastSentRef.current[f.key] === scene[f.key]) {
+            lastSentRef.current[f.key] = undefined;
+          }
+          const { [f.key]: _drop, ...rest } = next;
+          next = rest;
+          changed = true;
+        }
+      }
+      return changed ? next : d;
+    });
+  }, [scene]);
+
+  const commitValue = (key: FieldKey, value: string) => {
     if (value === scene[key]) return;
+    if (lastSentRef.current[key] === value) return;
+    lastSentRef.current[key] = value;
     send({
       type: "scene.patch",
       patch: { [key]: value } as Partial<DreamSceneState>,
     });
-    setDraft((d) => {
-      const { [key]: _removed, ...rest } = d;
-      return rest;
-    });
+    setDraft((d) => ({ ...d, [key]: value }));
     setSweepKey((s) => ({ ...s, [key]: s[key] + 1 }));
     setLastCommittedKey(key);
+  };
+
+  const commit = (key: FieldKey) => {
+    const v = draft[key];
+    if (v === undefined) return;
+    commitValue(key, v);
   };
 
   return (
@@ -148,8 +149,8 @@ export function PromptInput({ send }: PromptInputProps) {
       {FIELDS.map((f) => {
         const value = draft[f.key] ?? scene[f.key];
         const sweep = sweepKey[f.key];
-        const pool = PLACEHOLDERS[f.key];
-        const placeholder = pool[(seeds[f.key] + tick) % pool.length] ?? pool[0];
+        const pool = FIELD_SUGGESTIONS[f.key];
+        const placeholder = pool[0];
         return (
           <div key={f.key} className="group relative flex flex-col gap-1.5">
             <div className="flex items-baseline gap-3">
@@ -206,6 +207,11 @@ export function PromptInput({ send }: PromptInputProps) {
                 ⟲ regenerating…
               </div>
             )}
+            <FieldChips
+              chips={pool}
+              active={value}
+              onPick={(chip) => commitValue(f.key, chip)}
+            />
           </div>
         );
       })}
