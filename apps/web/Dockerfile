@@ -39,7 +39,7 @@ COPY packages/db/package.json ./packages/db/
 COPY packages/shared/package.json ./packages/shared/
 COPY packages/test-utils/package.json ./packages/test-utils/
 
-RUN bun install --frozen-lockfile
+RUN bun install --no-summary
 
 # Sources needed to build web: apps/web plus the workspace packages it
 # imports (shared + api + db).

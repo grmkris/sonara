@@ -30,7 +30,7 @@ COPY packages/db/package.json ./packages/db/
 COPY packages/shared/package.json ./packages/shared/
 COPY packages/test-utils/package.json ./packages/test-utils/
 
-RUN bun install --frozen-lockfile
+RUN bun install --no-summary
 
 # Source. Only what the server actually needs at runtime — apps/web is a
 # peer workspace but the server never imports it, so we skip it for a
