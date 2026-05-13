@@ -54,8 +54,9 @@ export function __setPoolForTests(p: PoolLike | null): void {
  * the user had at least `cost` to spend, or `null` if insufficient. A ledger
  * row is written in the same tx for audit.
  *
- * Cost model: flow keyframes cost 1; the session's anchor frame (first frame
- * on flux-2-pro/edit) costs 2.
+ * Cost model: every keyframe costs 1 (see COST_PER_FRAME in credit-gate.ts).
+ * The `cost` parameter exists so callers can still pass an explicit number;
+ * production always passes 1.
  *
  * Race-safe: single UPDATE with a WHERE clause; concurrent callers see
  * either the decrement or a 0-row result, never a double-spend.

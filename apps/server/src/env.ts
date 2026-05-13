@@ -19,9 +19,9 @@ const envSchema = z.object({
   AUDD_API_KEY: z.string().min(1), // song recognition
 
   // Optional — FAL model overrides ship with defaults. Same klein/9b
-  // endpoint family for every frame: the first uses text-to-image, every
-  // subsequent uses /edit with the hero (auto-anchored on the first frame's
-  // own output) as the reference image.
+  // endpoint family for every frame: the first frame uses text-to-image;
+  // every subsequent frame uses /edit with the hero (the first frame's own
+  // output) as the reference image.
   FAL_TEXT_MODEL: z.string().default("fal-ai/flux-2/klein/9b"),
   FAL_EDIT_MODEL: z.string().default("fal-ai/flux-2/klein/9b/edit"),
   // LLM endpoint used by scene-llm-expander (drift candidate generation) and

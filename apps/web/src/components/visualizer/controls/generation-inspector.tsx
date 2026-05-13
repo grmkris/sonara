@@ -27,10 +27,8 @@ const REASON_META: Record<TriggerReason, { code: string; label: string }> = {
 };
 
 const DRIFT_META: Record<DriftSource, { label: string; tone: string }> = {
-  llm:   { label: "llm",     tone: "text-[color:var(--paper)]"  },
-  voice: { label: "voice",   tone: "text-[color:var(--paper)]"  },
-  pool:  { label: "pool",    tone: "text-[color:var(--stone)]" },
-  none:  { label: "none",    tone: "text-[color:var(--stone)]/60" },
+  pool: { label: "pool", tone: "text-[color:var(--stone)]" },
+  none: { label: "none", tone: "text-[color:var(--stone)]/60" },
 };
 
 const VISIBLE_LOG = 4;

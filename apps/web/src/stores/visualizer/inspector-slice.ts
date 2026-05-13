@@ -10,7 +10,7 @@ export type TriggerReason =
   | "commit"
   | "voice";
 
-export type DriftSource = "llm" | "voice" | "pool" | "none";
+export type DriftSource = "pool" | "none";
 
 export interface TriggerEntry {
   id: number;

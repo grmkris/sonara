@@ -92,7 +92,7 @@ describe("debitFrame", () => {
     expect(await ledgerCount()).toBe(1);
   });
 
-  test("anchor cost (2) decrements by 2", async () => {
+  test("decrements by an arbitrary cost", async () => {
     await seedCredits(USER, 5);
     expect(await debitFrame(USER, 2)).toBe(3);
   });
@@ -172,7 +172,7 @@ describe("refundFrame", () => {
     expect(res.rows[0]?.delta).toBe(1);
   });
 
-  test("anchor refund (cost=2) increments by 2", async () => {
+  test("refund increments by an arbitrary cost", async () => {
     await seedCredits(USER, 4);
     expect(await refundFrame(USER, 2)).toBe(6);
   });

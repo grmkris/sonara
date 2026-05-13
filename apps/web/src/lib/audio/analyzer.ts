@@ -521,7 +521,6 @@ export class AudioEngine {
       centroid,
       flatness: this.flatnessFromMeyda,
       rolloff: this.rolloffFromMeyda,
-      flux,
       onset,
       sectionEnergy,
       valence: Math.max(0, Math.min(1, this.valenceSmoothed)),

@@ -128,7 +128,7 @@ For the WebSocket: the web app mints a 5-min HMAC ticket via `auth.mintWsTicket`
 
 ## Credits & money path
 
-- `apps/server/src/credits/credits-service.ts` — atomic `debitFrame` / `tryConsumeFreeTier` / `refundFrame` / `getBalance`. Direct `pg` queries; no Drizzle dependency in apps/server.
+- `apps/server/src/credits/credits.service.ts` — atomic `debitFrame` / `tryConsumeFreeTier` / `refundFrame` / `getBalance`. Direct `pg` queries; no Drizzle dependency in apps/server.
 - `apps/web/src/server/rpc/credits.router.ts` — `getBalance` + `confirmTopUp` (viem-verified USDC receipt on Base, idempotent via `tx_hash` unique index).
 - `apps/server/src/session/session.ts` — credit gate at the trigger site. BYOK fal key bypasses the gate entirely.
 
