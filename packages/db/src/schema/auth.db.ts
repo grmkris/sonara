@@ -3,14 +3,12 @@ import {
   index,
   pgTable,
   text,
-  uniqueIndex,
 } from "drizzle-orm/pg-core";
 import {
   type AccountId,
   type SessionId,
   type UserId,
   type VerificationId,
-  type WalletAddressId,
   typeIdGenerator,
 } from "@music-visualizer/shared/typeid";
 import { baseEntityFields, createTimestampField, typeId } from "../utils";
@@ -31,6 +29,8 @@ export const user = pgTable("user", {
     .$defaultFn(() => false)
     .notNull(),
   image: text("image"),
+  // Dodo Payments customer id. Lazily populated on first checkout.
+  dodoCustomerId: text("dodo_customer_id"),
   ...baseEntityFields,
 });
 
@@ -79,8 +79,6 @@ export const account = pgTable(
   (table) => [index("account_user_id_idx").on(table.userId)],
 );
 
-// verification uses $defaultFn(() => new Date()) instead of defaultNow() —
-// matches groundtruth's production shape for Better Auth's SIWE nonce rows.
 export const verification = pgTable(
   "verification",
   {
@@ -95,28 +93,4 @@ export const verification = pgTable(
     updatedAt: createTimestampField("updated_at").$defaultFn(() => new Date()),
   },
   (table) => [index("verification_identifier_idx").on(table.identifier)],
-);
-
-export const walletAddress = pgTable(
-  "wallet_address",
-  {
-    id: typeId("walletAddress", "id")
-      .primaryKey()
-      .$defaultFn(() => typeIdGenerator("walletAddress"))
-      .$type<WalletAddressId>(),
-    userId: typeId("user", "user_id")
-      .notNull()
-      .references(() => user.id, { onDelete: "cascade" })
-      .$type<UserId>(),
-    address: text("address").notNull(),
-    chainId: text("chain_id").notNull(),
-    isPrimary: boolean("is_primary")
-      .$defaultFn(() => false)
-      .notNull(),
-    ...baseEntityFields,
-  },
-  (table) => [
-    index("wallet_address_user_id_idx").on(table.userId),
-    uniqueIndex("wallet_address_address_idx").on(table.address),
-  ],
 );

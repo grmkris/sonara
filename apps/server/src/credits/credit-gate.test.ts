@@ -79,30 +79,11 @@ async function seedCredits(userId: string, frames: number): Promise<void> {
   );
 }
 
-describe("BYOK bypass", () => {
-  test("byokFalKey set → ok with paidCost=null, no DB read", async () => {
-    const r = await tryDebitCredit({
-      userId: USER,
-      byokFalKey: "fal_key_abc",
-      isUserInitiated: false,
-      lastCreditDenialAt: 0,
-      now: NOW,
-      logger,
-    });
-    expect(r.ok).toBe(true);
-    if (r.ok) {
-      expect(r.paidCost).toBeNull();
-      expect(r.nextLastDenialAt).toBe(0);
-    }
-  });
-});
-
 describe("paid debit", () => {
   test("deducts COST_PER_FRAME and returns paidCost for refund", async () => {
     await seedCredits(USER, 5);
     const r = await tryDebitCredit({
       userId: USER,
-      byokFalKey: null,
       isUserInitiated: true,
       lastCreditDenialAt: 0,
       now: NOW,
@@ -116,7 +97,6 @@ describe("paid debit", () => {
     await seedCredits(USER, 5);
     const r = await tryDebitCredit({
       userId: USER,
-      byokFalKey: null,
       isUserInitiated: false,
       lastCreditDenialAt: NOW - 1000,
       now: NOW,
@@ -132,7 +112,6 @@ describe("free-tier fallback", () => {
     await seedCredits(USER, 0);
     const r = await tryDebitCredit({
       userId: USER,
-      byokFalKey: null,
       isUserInitiated: false,
       lastCreditDenialAt: 0,
       now: NOW,
@@ -151,7 +130,6 @@ describe("free-tier fallback", () => {
     for (let i = 0; i < 3; i++) {
       await tryDebitCredit({
         userId: USER,
-        byokFalKey: null,
         isUserInitiated: false,
         lastCreditDenialAt: 0,
         now: NOW,
@@ -161,7 +139,6 @@ describe("free-tier fallback", () => {
     // Fourth call exceeds the free quota
     const r = await tryDebitCredit({
       userId: USER,
-      byokFalKey: null,
       isUserInitiated: true,
       lastCreditDenialAt: 0,
       now: NOW,
@@ -185,7 +162,6 @@ describe("cooldown rule", () => {
     for (let i = 0; i < 3; i++) {
       await tryDebitCredit({
         userId: USER,
-        byokFalKey: null,
         isUserInitiated: false,
         lastCreditDenialAt: 0,
         now: NOW,
@@ -198,7 +174,6 @@ describe("cooldown rule", () => {
     await drainFreeTier();
     const r = await tryDebitCredit({
       userId: USER,
-      byokFalKey: null,
       isUserInitiated: false,
       lastCreditDenialAt: 0,
       now: NOW,
@@ -215,7 +190,6 @@ describe("cooldown rule", () => {
     await drainFreeTier();
     const r = await tryDebitCredit({
       userId: USER,
-      byokFalKey: null,
       isUserInitiated: false,
       lastCreditDenialAt: NOW - 1000, // 1s ago, well inside cooldown
       now: NOW,
@@ -233,7 +207,6 @@ describe("cooldown rule", () => {
     await drainFreeTier();
     const r = await tryDebitCredit({
       userId: USER,
-      byokFalKey: null,
       isUserInitiated: false,
       lastCreditDenialAt: NOW - CREDIT_DENIAL_COOLDOWN_MS - 1000,
       now: NOW,
@@ -250,7 +223,6 @@ describe("cooldown rule", () => {
     await drainFreeTier();
     const r = await tryDebitCredit({
       userId: USER,
-      byokFalKey: null,
       isUserInitiated: true,
       lastCreditDenialAt: NOW - 1000, // would suppress an auto trigger
       now: NOW,

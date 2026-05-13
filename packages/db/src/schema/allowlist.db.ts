@@ -9,8 +9,8 @@ import { user } from "./auth.db";
 
 // Email allowlist for emailAndPassword signup. A row here means the given
 // email address is permitted to register an account via Better Auth's
-// emailAndPassword flow. Wallet (SIWE) signups bypass this check entirely —
-// see `databaseHooks.user.create.before` in apps/web/src/server/auth.ts.
+// emailAndPassword flow. See `databaseHooks.user.create.before` in
+// apps/web/src/server/auth.ts.
 //
 // Add with: `bun run --filter=web allow-email <address> [note]`.
 export const allowedEmail = pgTable(

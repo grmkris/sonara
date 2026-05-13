@@ -4,16 +4,18 @@ import { z } from "zod";
 import {
   AudioFeatures,
   ClientScenePatch,
+  DeckKeySchema,
   DreamSceneState,
   NowPlaying,
   ServerEvent,
+  type DeckKey,
 } from "@music-visualizer/shared";
 
 // Structural interface for a live session. apps/server's Session class
 // implements this; the router never imports from apps/server so the package
 // stays framework-agnostic and buildable on its own.
 export interface SessionLike {
-  init(opts?: { falKey?: string }): void;
+  init(): void;
   applyPatch(patch: ClientScenePatch, origin?: "client" | "voice"): void;
   applyAudio(features: AudioFeatures): void;
   recognize(
@@ -21,6 +23,7 @@ export interface SessionLike {
     mimeType: string,
     trigger: "auto" | "manual",
   ): Promise<NowPlaying | null>;
+  setDemoMode(on: boolean, deck: DeckKey | null): void;
   reset(): void;
   subscribe(signal?: AbortSignal): AsyncGenerator<ServerEvent>;
   getSnapshot(): DreamSceneState;
@@ -32,9 +35,7 @@ export interface SessionContext {
 
 const sessionOs = os.$context<SessionContext>();
 
-const HelloInput = z.object({
-  falKey: z.string().min(1).optional(),
-});
+const HelloInput = z.object({}).optional();
 
 const ScenePatchInput = z.object({
   patch: ClientScenePatch,
@@ -46,6 +47,11 @@ const AudioFeaturesInput = z.object({
 
 const VoicePatchInput = z.object({
   patch: ClientScenePatch,
+});
+
+const DemoModeInput = z.object({
+  on: z.boolean(),
+  deck: DeckKeySchema.nullable(),
 });
 
 const RecognizeInput = z.object({
@@ -71,8 +77,8 @@ export const sessionRouter = {
       }
     }),
 
-  hello: sessionOs.input(HelloInput).handler(({ context, input }) => {
-    context.session.init(input.falKey ? { falKey: input.falKey } : undefined);
+  hello: sessionOs.input(HelloInput).handler(({ context }) => {
+    context.session.init();
   }),
 
   scenePatch: sessionOs
@@ -96,6 +102,15 @@ export const sessionRouter = {
     .input(VoicePatchInput)
     .handler(({ context, input }) => {
       context.session.applyPatch(input.patch, "voice");
+    }),
+
+  // DEMO mode switch. When on with a deck selected, the session pulls
+  // pre-generated images from image_library instead of calling fal. Toggling
+  // off resumes the standard fal path on the next trigger.
+  setDemoMode: sessionOs
+    .input(DemoModeInput)
+    .handler(({ context, input }) => {
+      context.session.setDemoMode(input.on, input.deck);
     }),
 
   recognize: sessionOs

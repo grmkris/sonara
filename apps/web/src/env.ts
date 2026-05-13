@@ -10,6 +10,12 @@ const serverEnvSchema = z.object({
   BETTER_AUTH_SECRET: z.string().min(1),
   AUTH_DOMAIN: z.string().default("localhost:4470"),
   APP_URL: z.string().url().default("http://localhost:4470"),
+  DODO_PAYMENTS_API_KEY: z.string().min(1),
+  DODO_PAYMENTS_WEBHOOK_SECRET: z.string().min(1),
+  DODO_PAYMENTS_MODE: z.enum(["test_mode", "live_mode"]).default("test_mode"),
+  DODO_PRODUCT_STARTER: z.string().min(1),
+  DODO_PRODUCT_PRO: z.string().min(1),
+  DODO_PRODUCT_MAX: z.string().min(1),
 });
 
 // Client-readable vars. Next.js inlines `NEXT_PUBLIC_*` references at build
@@ -17,8 +23,6 @@ const serverEnvSchema = z.object({
 // server-render and client-hydrate access via the same module.
 const clientEnvSchema = z.object({
   NEXT_PUBLIC_WS_URL: z.string().default("ws://localhost:4471/ws"),
-  NEXT_PUBLIC_REOWN_PROJECT_ID: z.string().default(""),
-  NEXT_PUBLIC_PAY_RECIPIENT_BASE: z.string().optional(),
 });
 
 // Lazy server-side parsing. Validation runs on first property access, not on
@@ -43,8 +47,6 @@ export const env = new Proxy({} as ServerEnv, {
 // Client/server-readable. Uses literal references so Next.js can inline.
 export const publicEnv = clientEnvSchema.parse({
   NEXT_PUBLIC_WS_URL: process.env.NEXT_PUBLIC_WS_URL,
-  NEXT_PUBLIC_REOWN_PROJECT_ID: process.env.NEXT_PUBLIC_REOWN_PROJECT_ID,
-  NEXT_PUBLIC_PAY_RECIPIENT_BASE: process.env.NEXT_PUBLIC_PAY_RECIPIENT_BASE,
 });
 
 export type Env = typeof env;

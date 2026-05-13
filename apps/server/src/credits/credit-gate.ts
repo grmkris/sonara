@@ -19,7 +19,6 @@ export const CREDIT_DENIAL_COOLDOWN_MS = 60_000;
 
 export interface CreditGateInput {
   userId: string;
-  byokFalKey: string | null;
   /** Voice / semantic / pause triggers. Bypasses the cooldown on the error toast. */
   isUserInitiated: boolean;
   lastCreditDenialAt: number;
@@ -29,7 +28,7 @@ export interface CreditGateInput {
 
 interface CreditGateOk {
   ok: true;
-  /** Cost to refund on fal failure; null = no refund (free-tier or BYOK). */
+  /** Cost to refund on fal failure; null = no refund (free-tier consumed). */
   paidCost: number | null;
   /** Updated denial-timestamp; on success always 0 (denial state resets). */
   nextLastDenialAt: number;
@@ -49,10 +48,9 @@ export type CreditGateResult = CreditGateOk | CreditGateDenied;
  * result the caller writes back to its own state. Doesn't emit events or
  * mutate the Session.
  *
- * Three branches:
- *   1. BYOK → always ok, paidCost=null (user pays fal directly).
- *   2. Paid debit succeeds → ok, paidCost = COST_PER_FRAME.
- *   3. Paid debit returns null → fall back to free-tier.
+ * Two branches:
+ *   1. Paid debit succeeds → ok, paidCost = COST_PER_FRAME.
+ *   2. Paid debit returns null → fall back to free-tier.
  *      If free-tier also denied → returns denial with cooldown-aware
  *      `shouldEmit`.
  *
@@ -61,10 +59,6 @@ export type CreditGateResult = CreditGateOk | CreditGateDenied;
 export async function tryDebitCredit(
   input: CreditGateInput,
 ): Promise<CreditGateResult> {
-  if (input.byokFalKey) {
-    return { ok: true, paidCost: null, nextLastDenialAt: 0 };
-  }
-
   try {
     const remaining = await debitFrame(
       input.userId,
@@ -107,10 +101,10 @@ export async function tryDebitCredit(
 }
 
 /**
- * Fire-and-forget refund after a fal generation fails. Free-tier and BYOK
- * paths pass `paidCost = null`; this function is a no-op for them. Errors
- * are logged but never propagated — refund failures shouldn't poison the
- * outer error path.
+ * Fire-and-forget refund after a fal generation fails. Free-tier paths pass
+ * `paidCost = null`; this function is a no-op for them. Errors are logged
+ * but never propagated — refund failures shouldn't poison the outer error
+ * path.
  */
 export function refundOnError(
   userId: string,

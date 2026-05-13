@@ -1,14 +1,17 @@
 import {
   type AudioFeatures,
   type ClientScenePatch,
+  type DeckKey,
   type DreamSceneState,
   type NowPlaying,
   type ServerEvent,
   defaultScene,
 } from "@music-visualizer/shared";
+import type { ImageLibraryId } from "@music-visualizer/shared/typeid";
 import { EventPublisher } from "@orpc/server";
 import type { Logger } from "../lib/logger";
 import { streamPreview } from "../generation/fal-provider";
+import { pickLibraryFrame } from "../generation/library-provider";
 import { serializeResolvedScene } from "../generation/prompt-compiler";
 import { DriftTrajectory } from "../generation/prompt-drift";
 import { resolveScene } from "../generation/scene-resolver";
@@ -103,8 +106,6 @@ function cadenceFromIntensity(i: number): { periodicMs: number; pauseMs: number 
 export class Session {
   readonly id: string;
   readonly userId: string;
-  /** BYOK fal.ai key — if set, fal calls are billed to user, credit gate skipped. */
-  private byokFalKey: string | null = null;
   private scene: DreamSceneState;
   private lastGeneratedScene: DreamSceneState;
   private activeJob?: AbortController;
@@ -140,6 +141,14 @@ export class Session {
   private sessionStartAt = Date.now();
   private lastCreditDenialAt = 0;
 
+  // DEMO mode — when on, trigger() pulls a row from image_library instead of
+  // calling fal. `recentLibraryPicks` is a small LRU so back-to-back triggers
+  // don't repeat the same image.
+  private demoMode = false;
+  private demoDeck: DeckKey | null = null;
+  private recentLibraryPicks: ImageLibraryId[] = [];
+  private static readonly LIBRARY_LRU = 10;
+
   // Stateful per-keyframe drift sequence. Reseeded whenever the resolver
   // returns fresh LLM-generated drift_candidates (i.e., scene-hash changed).
   // Falls back to the curated static pool until the first LLM cache fill.
@@ -157,11 +166,7 @@ export class Session {
     this.startPeriodic();
   }
 
-  init(opts?: { falKey?: string }): void {
-    if (opts?.falKey) {
-      this.byokFalKey = opts.falKey;
-      this.logger.info("BYOK fal key active for this session");
-    }
+  init(): void {
     this.send({ type: "scene.state", state: this.scene });
     this.send({ type: "job.status", status: "idle" });
   }
@@ -363,6 +368,13 @@ export class Session {
     return track;
   }
 
+  setDemoMode(on: boolean, deck: DeckKey | null): void {
+    this.demoMode = on;
+    this.demoDeck = on ? deck : null;
+    if (!on) this.recentLibraryPicks = [];
+    this.logger.info({ demoMode: on, demoDeck: this.demoDeck }, "demo mode set");
+  }
+
   reset(): void {
     this.activeJob?.abort();
     if (this.pauseTimer) {
@@ -381,6 +393,7 @@ export class Session {
     this.heroImageUrl = null;
     this.sessionStartAt = Date.now();
     this.silentSinceAt = null;
+    this.recentLibraryPicks = [];
     this.recognitionInFlight?.abort();
     this.recognitionInFlight = null;
     this.startPeriodic();
@@ -422,6 +435,17 @@ export class Session {
     // Keep `reason` for log + event compatibility — it goes on the wire as
     // part of `job.status` / `generation.requested`.
     const reason = source;
+
+    // DEMO mode short-circuit. Library frames bypass the empty-subject
+    // guard (the user may not have typed anything), the credit gate, the
+    // prompt resolver, and fal entirely. The library_provider returns null
+    // when the deck is empty → fall through to the normal fal path.
+    if (this.demoMode && this.demoDeck) {
+      this.lastKeyframeAt = Date.now();
+      await this.triggerLibrary(reason);
+      return;
+    }
+
     // Empty-subject fast-exit. `serializeResolvedScene` also returns "" when
     // subjects[0] is blank, but short-circuiting here saves the resolver and
     // credit-gate work when there's nothing to generate.
@@ -442,7 +466,6 @@ export class Session {
 
     const gate = await tryDebitCredit({
       userId: this.userId,
-      byokFalKey: this.byokFalKey,
       isUserInitiated: kind === "user",
       lastCreditDenialAt: this.lastCreditDenialAt,
       now: Date.now(),
@@ -463,7 +486,7 @@ export class Session {
           message:
             gate.reason === "system_error"
               ? "Payment system unavailable"
-              : "Out of credits — top up or enable BYOK",
+              : "Out of credits — top up to keep generating",
         });
       }
       return;
@@ -571,7 +594,6 @@ export class Session {
       prompt,
       referenceImage,
       seed: this.seed,
-      falKey: this.byokFalKey ?? undefined,
       signal: controller.signal,
       logger: this.logger,
       onPreview: (url) => {
@@ -600,8 +622,8 @@ export class Session {
       onError: (err) => {
         // Refund regardless of abort — fal-provider routes superseded
         // generations through onError too, and the user should get the
-        // credit back since no frame was delivered. Free-tier / BYOK paths
-        // set paidCost=null so this is a no-op for them.
+        // credit back since no frame was delivered. Free-tier paths set
+        // paidCost=null so this is a no-op for them.
         refundOnError(this.userId, paidCost, this.logger);
         // Aborts are expected (newer trigger superseded this one). Don't
         // log noisily or surface to the client.
@@ -625,6 +647,83 @@ export class Session {
       if (!controller.signal.aborted) {
         this.logger.error({ err }, "streamPreview unhandled");
       }
+    });
+  }
+
+  // Library-mode trigger. Picks one row from image_library, emits the same
+  // frame.final / job.status / generation.completed sequence the fal path
+  // emits — the client crossfade is identical. No credit debit, no fal call,
+  // no prompt resolver. Empty deck falls through to the standard fal path
+  // so demo sessions stay usable while a deck is still seeding.
+  private async triggerLibrary(
+    reason: TriggerSource,
+  ): Promise<void> {
+    if (!this.demoDeck) return;
+
+    this.activeJob?.abort();
+    const controller = new AbortController();
+    this.activeJob = controller;
+    this.activeVersion += 1;
+    const version = this.activeVersion;
+    const requestedAt = Date.now();
+
+    const pick = await pickLibraryFrame(
+      this.demoDeck,
+      this.recentLibraryPicks,
+      this.logger,
+    );
+
+    if (controller.signal.aborted) return;
+    if (version !== this.activeVersion) return;
+
+    if (!pick) {
+      this.logger.warn(
+        { deck: this.demoDeck },
+        "library deck empty — falling back to fal path",
+      );
+      // Drop the version we just bumped so the fal trigger increments
+      // cleanly on the next attempt. (activeVersion is monotonic in the
+      // fal path; here we never emitted anything for this version.)
+      this.activeVersion -= 1;
+      // Schedule a normal trigger so the user still gets a frame. Skip if
+      // subject is empty (matches the standard guard).
+      if (this.scene.subject.trim()) {
+        // Temporarily disable demo so the recursive call takes the fal
+        // branch. Restore immediately after — this is purely a per-trigger
+        // fallback; the session stays in demo mode otherwise.
+        const wasDemo = this.demoMode;
+        this.demoMode = false;
+        try {
+          await this.trigger(reason);
+        } finally {
+          this.demoMode = wasDemo;
+        }
+      }
+      return;
+    }
+
+    this.recentLibraryPicks = [pick.id, ...this.recentLibraryPicks].slice(
+      0,
+      Session.LIBRARY_LRU,
+    );
+
+    const isFirstFrame = this.heroImageUrl === null;
+    // Bump scene.version for the wire so the client renders the new image
+    // through the same path as a fal frame. References mirror the fal flow
+    // so the rest of the UI (inspector, hero crossfade) sees the same state.
+    this.scene = { ...this.scene, version, references: [pick.url] };
+    this.lastGeneratedScene = this.scene;
+    if (isFirstFrame) this.heroImageUrl = pick.url;
+    this.send({ type: "scene.state", state: this.scene });
+
+    this.send({ type: "job.status", status: "running", reason });
+    this.send({ type: "frame.final", imageUrl: pick.url, version });
+    this.send({ type: "job.status", status: "idle" });
+    this.send({
+      type: "generation.completed",
+      version,
+      durationMs: Date.now() - requestedAt,
+      success: true,
     });
   }
 }

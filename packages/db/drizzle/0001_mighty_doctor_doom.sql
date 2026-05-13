@@ -1,1 +1,0 @@
-ALTER TABLE "credits" DROP COLUMN "balance_commits";

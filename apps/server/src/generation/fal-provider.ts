@@ -17,8 +17,6 @@ export interface StreamPreviewInput {
   /** Reference image. First frame: optional album art seed. Subsequent: the session hero. */
   referenceImage?: string;
   seed?: number;
-  /** BYOK override — when set, fal calls are billed to the user's account instead of ours. */
-  falKey?: string;
   signal: AbortSignal;
   logger: Logger;
   onPreview: (url: string) => void;
@@ -46,11 +44,10 @@ function extractImageUrl(ev: unknown): string | undefined {
 }
 
 export async function streamPreview(input: StreamPreviewInput): Promise<void> {
-  // Per-call scoped client. BYOK bills the user's fal account; otherwise the
-  // platform key is used. No global singleton — avoids cross-session
+  // Per-call scoped client. No global singleton — avoids cross-session
   // credential races under hot reload/test.
   const scoped = createFalClient({
-    credentials: input.falKey ?? env.FAL_KEY,
+    credentials: env.FAL_KEY,
   });
   const subscribe: FalSubscriber = scoped.subscribe.bind(scoped);
 

@@ -45,7 +45,7 @@ const server = Bun.serve<WsData, never>({
   async fetch(req, srv) {
     const url = new URL(req.url);
     if (url.pathname === "/ws") {
-      // Require a short-lived HMAC ticket minted by apps/web after SIWE.
+      // Require a short-lived HMAC ticket minted by apps/web after sign-in.
       // No ticket → no connection, even if the user guesses the URL.
       const token = url.searchParams.get("token");
       if (!token) {

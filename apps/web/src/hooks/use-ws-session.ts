@@ -12,7 +12,6 @@ import {
 } from "@/lib/session-actions";
 import { useVisualizerStore } from "@/stores/visualizer";
 import { PRESET_NAMES, type PresetName } from "@/lib/render/presets";
-import { getByokFalKey } from "@/components/settings-panel";
 
 function isKnownPreset(name: string): name is PresetName {
   return (PRESET_NAMES as readonly string[]).includes(name);
@@ -124,13 +123,16 @@ export function useWsSession(): SessionSend {
 
       socket.addEventListener("open", () => {
         store.getState().setConnected(true);
-        // Fire hello on every (re)connect so BYOK propagates after settings
-        // changes + the server can re-init its side idempotently.
-        const falKey = getByokFalKey();
-        sendRef.current({
-          type: "hello",
-          ...(falKey ? { falKey } : {}),
-        });
+        // Fire hello on every (re)connect so the server can re-init its
+        // side idempotently.
+        sendRef.current({ type: "hello" });
+        // Server sessions reset to demoMode=false on construction. Push the
+        // client's last-known preference (from localStorage via the demo
+        // slice) so a refresh keeps the demo running.
+        const { demoMode, demoDeck } = store.getState();
+        if (demoMode && demoDeck) {
+          sendRef.current({ type: "demo.set", on: true, deck: demoDeck });
+        }
       });
       socket.addEventListener("close", () => {
         store.getState().setConnected(false);

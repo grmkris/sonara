@@ -1,20 +1,21 @@
 import { ORPCError } from "@music-visualizer/api/server";
 import { findPack } from "@music-visualizer/shared";
-import { and, eq, gte, sql, sum } from "drizzle-orm";
-import { getAddress } from "viem";
+import { and, eq, gte, sum } from "drizzle-orm";
+import DodoPayments from "dodopayments";
 import { z } from "zod";
-import { publicEnv } from "@/env";
-import { typeIdGenerator } from "@music-visualizer/shared/typeid";
-import { baseClient } from "@/lib/chain-clients";
+import { env } from "@/env";
 import { SCHEMA } from "@music-visualizer/db";
 import { protectedProcedure } from "./procedures";
-import { expectedMinForUsd, findUsdcTransfer } from "./topup-verifier";
 
-const ConfirmInput = z.object({
-  txHash: z.string().regex(/^0x[0-9a-fA-F]{64}$/, "invalid txHash"),
-  chainId: z.union([z.string(), z.number()]).transform((v) => Number(v)),
-  packId: z.string().min(1),
-});
+let _dodo: DodoPayments | null = null;
+function getDodoClient(): DodoPayments {
+  if (_dodo) return _dodo;
+  _dodo = new DodoPayments({
+    bearerToken: env.DODO_PAYMENTS_API_KEY,
+    environment: env.DODO_PAYMENTS_MODE,
+  });
+  return _dodo;
+}
 
 export const creditsRouter = {
   getBalance: protectedProcedure.handler(async ({ context }) => {
@@ -61,109 +62,68 @@ export const creditsRouter = {
     };
   }),
 
-  confirmTopUp: protectedProcedure
-    .input(ConfirmInput)
+  /**
+   * Create a Dodo Payments checkout session for the given pack and return
+   * the hosted checkout URL. Client redirects to it; the user pays on
+   * Dodo's page; on `payment.succeeded` the webhook handler credits frames
+   * (see apps/web/src/server/dodo-webhook.ts).
+   */
+  createCheckout: protectedProcedure
+    .input(z.object({ packId: z.string() }))
     .handler(async ({ input, context }) => {
       const { db, userId } = context;
-
-      if (input.chainId !== 8453) {
-        throw new ORPCError("BAD_REQUEST", {
-          message: "only Base (chainId 8453) is supported",
-        });
-      }
-
       const pack = findPack(input.packId);
       if (!pack) {
         throw new ORPCError("BAD_REQUEST", { message: "unknown pack" });
       }
+      const productId = env[pack.productIdEnv];
 
-      const recipientRaw = publicEnv.NEXT_PUBLIC_PAY_RECIPIENT_BASE;
-      if (!recipientRaw) {
+      const [u] = await db
+        .select({
+          email: SCHEMA.user.email,
+          name: SCHEMA.user.name,
+          dodoCustomerId: SCHEMA.user.dodoCustomerId,
+        })
+        .from(SCHEMA.user)
+        .where(eq(SCHEMA.user.id, userId))
+        .limit(1);
+      if (!u) throw new ORPCError("UNAUTHORIZED");
+
+      const dodo = getDodoClient();
+
+      // Lazy customer provisioning. New signups already have dodoCustomerId
+      // (better-auth dodo plugin's createCustomerOnSignUp:true); this covers
+      // pre-existing email/password users from before the plugin landed.
+      let customerId = u.dodoCustomerId;
+      if (!customerId) {
+        const customer = await dodo.customers.create({
+          email: u.email,
+          name: u.name,
+        });
+        customerId = customer.customer_id;
+        await db
+          .update(SCHEMA.user)
+          .set({ dodoCustomerId: customerId })
+          .where(eq(SCHEMA.user.id, userId));
+      }
+
+      const session = await dodo.checkoutSessions.create({
+        product_cart: [{ product_id: productId, quantity: 1 }],
+        customer: { customer_id: customerId },
+        metadata: {
+          type: "credit_pack",
+          userId,
+          packId: pack.id,
+        },
+        return_url: `${env.APP_URL}/credits/success`,
+      });
+
+      if (!session.checkout_url) {
         throw new ORPCError("INTERNAL_SERVER_ERROR", {
-          message: "NEXT_PUBLIC_PAY_RECIPIENT_BASE not set",
-        });
-      }
-      let recipient: `0x${string}`;
-      try {
-        recipient = getAddress(recipientRaw);
-      } catch {
-        throw new ORPCError("INTERNAL_SERVER_ERROR", {
-          message: "recipient env var is not a valid address",
+          message: "Dodo returned no checkout URL",
         });
       }
 
-      let receipt;
-      try {
-        receipt = await baseClient.getTransactionReceipt({
-          hash: input.txHash as `0x${string}`,
-        });
-      } catch {
-        throw new ORPCError("BAD_REQUEST", {
-          message: "transaction not found or not yet mined",
-        });
-      }
-      if (receipt.status !== "success") {
-        throw new ORPCError("BAD_REQUEST", { message: "transaction reverted" });
-      }
-
-      const match = findUsdcTransfer(
-        receipt.logs,
-        recipient,
-        expectedMinForUsd(pack.usd),
-      );
-      if (!match) {
-        throw new ORPCError("BAD_REQUEST", {
-          message:
-            "no matching USDC Transfer found in this transaction (check recipient, amount, and chain)",
-        });
-      }
-      const { paidFrom, paidValue } = match;
-
-      try {
-        await db.transaction(async (tx) => {
-          await tx.insert(SCHEMA.usageLedger).values({
-            id: typeIdGenerator("usageLedger"),
-            userId,
-            kind: "topup",
-            delta: pack.frames,
-            amountUsd: pack.usd.toString(),
-            txHash: input.txHash,
-            chainId: "8453",
-          });
-          await tx
-            .insert(SCHEMA.credits)
-            .values({
-              id: typeIdGenerator("credits"),
-              userId,
-              balanceFrames: pack.frames,
-            })
-            .onConflictDoUpdate({
-              target: SCHEMA.credits.userId,
-              set: {
-                balanceFrames: sql`${SCHEMA.credits.balanceFrames} + ${pack.frames}`,
-                updatedAt: new Date(),
-              },
-            });
-        });
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
-        if (
-          msg.includes("usage_ledger_tx_hash_idx") ||
-          msg.includes("duplicate key")
-        ) {
-          return { ok: true, idempotent: true } as const;
-        }
-        throw new ORPCError("INTERNAL_SERVER_ERROR", {
-          message: "db write failed",
-        });
-      }
-
-      return {
-        ok: true,
-        pack: { id: pack.id, frames: pack.frames },
-        txHash: input.txHash,
-        paidFrom,
-        paidValue: paidValue.toString(),
-      };
+      return { checkoutUrl: session.checkout_url };
     }),
 };

@@ -39,8 +39,8 @@ export const credits = pgTable(
   (table) => [uniqueIndex("credits_user_id_idx").on(table.userId)],
 );
 
-// Append-only. `tx_hash` unique-where index is the idempotency guard against
-// double-credit if Reown Pay fires onSuccess twice.
+// Append-only. `tx_hash` unique-where index doubles as the idempotency guard
+// for Dodo Payments webhook deliveries (storing `payment_id` in `tx_hash`).
 export const usageLedger = pgTable(
   "usage_ledger",
   {

@@ -1,41 +1,17 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
-import { useAppKit } from "@reown/appkit/react";
-import { useAccount } from "wagmi";
-import { WalletIcon, LogOutIcon } from "lucide-react";
+import { LogInIcon, LogOutIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { signOut, useSession } from "@/lib/auth-client";
-import { fetchReownIdentity } from "@/lib/reown-identity";
 import { UsagePanel } from "@/components/usage-panel";
-
-function shortAddress(addr: string): string {
-  return `${addr.slice(0, 6)}…${addr.slice(-4)}`;
-}
 
 export function UserControls() {
   const { data: sessionData } = useSession();
   const isSignedIn = !!sessionData?.session;
-  const { address } = useAccount();
-  const { open } = useAppKit();
-  const [identity, setIdentity] = useState<string | null>(null);
   const [panelOpen, setPanelOpen] = useState(false);
   const popoverRef = useRef<HTMLDivElement | null>(null);
-
-  // Resolve ENS / Reown profile name for the active wallet.
-  useEffect(() => {
-    if (!address) {
-      setIdentity(null);
-      return;
-    }
-    let cancelled = false;
-    void fetchReownIdentity(address).then((id) => {
-      if (!cancelled) setIdentity(id.name);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [address]);
 
   // Close popover on outside click.
   useEffect(() => {
@@ -51,19 +27,21 @@ export function UserControls() {
   if (!isSignedIn) {
     return (
       <Button
+        asChild
         variant="ghost"
         size="sm"
-        onClick={() => open()}
-        aria-label="connect wallet"
+        aria-label="sign in"
         className="pointer-events-auto"
       >
-        <WalletIcon size={12} />
-        connect
+        <Link href="/login">
+          <LogInIcon size={12} />
+          sign in
+        </Link>
       </Button>
     );
   }
 
-  const label = identity ?? (address ? shortAddress(address) : "signed in");
+  const label = sessionData?.user?.email ?? "signed in";
 
   return (
     <div className="pointer-events-auto relative flex items-center gap-2">

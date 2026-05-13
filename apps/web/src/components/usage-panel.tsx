@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { SettingsPanel } from "@/components/settings-panel";
 import { TopUpButton } from "@/components/top-up-button";
 import { Button } from "@/components/ui/button";
 import { rpcClient } from "@/lib/orpc";
@@ -16,7 +15,6 @@ interface BalanceResponse {
 export function UsagePanel({ onClose }: { onClose?: () => void }) {
   const [data, setData] = useState<BalanceResponse | null>(null);
   const [loading, setLoading] = useState(true);
-  const [showSettings, setShowSettings] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -32,10 +30,6 @@ export function UsagePanel({ onClose }: { onClose?: () => void }) {
   useEffect(() => {
     void load();
   }, [load]);
-
-  if (showSettings) {
-    return <SettingsPanel onClose={() => setShowSettings(false)} />;
-  }
 
   return (
     <div className="pointer-events-auto flex w-[300px] flex-col gap-3 border border-[color:var(--hairline)]/50 bg-[color:var(--ink)]/95 p-4">
@@ -70,20 +64,13 @@ export function UsagePanel({ onClose }: { onClose?: () => void }) {
         <TopUpButton onCredited={() => void load()} />
       </div>
 
-      <div className="mt-1 flex items-center gap-2">
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() => setShowSettings(true)}
-        >
-          byok
-        </Button>
-        {onClose ? (
+      {onClose ? (
+        <div className="mt-1 flex items-center gap-2">
           <Button variant="ghost" size="sm" onClick={onClose}>
             close
           </Button>
-        ) : null}
-      </div>
+        </div>
+      ) : null}
     </div>
   );
 }

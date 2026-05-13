@@ -19,22 +19,6 @@ const nextConfig: NextConfig = {
       { protocol: "https", hostname: "storage.googleapis.com" },
     ],
   },
-  async headers() {
-    return [
-      {
-        // Required so Reown AppKit's social-login flow can poll the OAuth
-        // popup's `window.closed` from the opener. `same-origin-allow-popups`
-        // is the MDN-documented value for this exact pattern.
-        source: "/:path*",
-        headers: [
-          {
-            key: "Cross-Origin-Opener-Policy",
-            value: "same-origin-allow-popups",
-          },
-        ],
-      },
-    ];
-  },
 };
 
 export default nextConfig;

@@ -1,6 +1,7 @@
 import type {
   AudioFeatures,
   ClientScenePatch,
+  DeckKey,
 } from "@music-visualizer/shared";
 import type { SessionRouterClient } from "@music-visualizer/api";
 
@@ -8,11 +9,12 @@ import type { SessionRouterClient } from "@music-visualizer/api";
 // wire protocol is orpc per-procedure schemas; this is just a thin dispatch
 // helper so callers don't have to hold the raw client.
 export type SessionAction =
-  | { type: "hello"; falKey?: string }
+  | { type: "hello" }
   | { type: "scene.patch"; patch: ClientScenePatch }
   | { type: "voice.patch"; patch: ClientScenePatch }
   | { type: "audio.features"; features: AudioFeatures }
   | { type: "session.reset" }
+  | { type: "demo.set"; on: boolean; deck: DeckKey | null }
   | {
       type: "audio.recognize";
       clipBase64: string;
@@ -29,7 +31,7 @@ export function dispatchSessionAction(
 ): Promise<unknown> {
   switch (action.type) {
     case "hello":
-      return client.hello(action.falKey ? { falKey: action.falKey } : {});
+      return client.hello();
     case "scene.patch":
       return client.scenePatch({ patch: action.patch });
     case "voice.patch":
@@ -38,6 +40,8 @@ export function dispatchSessionAction(
       return client.audioFeatures({ features: action.features });
     case "session.reset":
       return client.reset();
+    case "demo.set":
+      return client.setDemoMode({ on: action.on, deck: action.deck });
     case "audio.recognize":
       return client.recognize({
         clipBase64: action.clipBase64,

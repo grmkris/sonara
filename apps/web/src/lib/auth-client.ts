@@ -1,8 +1,7 @@
 "use client";
 
 import { createAuthClient } from "better-auth/react";
-import type { BetterAuthClientPlugin } from "better-auth/client";
-import type { siwe } from "better-auth/plugins";
+import { dodopaymentsClient } from "@dodopayments/better-auth";
 
 export interface SessionUser {
   id: string;
@@ -11,24 +10,10 @@ export interface SessionUser {
   image: string | null;
 }
 
-// SIWE client plugin with an $sessionSignal atomListener so useSession()
-// reactively updates after siwe.verify completes.
-const siweClientWithRefresh = () =>
-  ({
-    id: "siwe",
-    $InferServerPlugin: {} as ReturnType<typeof siwe>,
-    atomListeners: [
-      {
-        matcher: (path: string) => path === "/siwe/verify",
-        signal: "$sessionSignal",
-      },
-    ],
-  }) satisfies BetterAuthClientPlugin;
-
 export const authClient = createAuthClient({
   baseURL:
     typeof window !== "undefined" ? window.location.origin : undefined,
-  plugins: [siweClientWithRefresh()],
+  plugins: [dodopaymentsClient()],
 });
 
 const { useSession: _useSession, signOut } = authClient;

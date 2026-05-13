@@ -14,8 +14,8 @@ const envSchema = z.object({
 
   // Required — without any of these the server cannot do its job.
   BETTER_AUTH_SECRET: z.string().min(1), // HMAC key for WS ticket verification
-  DATABASE_URL: z.string().url(), // credits ledger + SIWE nonces
-  FAL_KEY: z.string().min(1), // image generation (BYOK is an override, not a mode)
+  DATABASE_URL: z.string().url(), // credits ledger + auth tables
+  FAL_KEY: z.string().min(1), // image generation
   AUDD_API_KEY: z.string().min(1), // song recognition
 
   // Optional — FAL model overrides ship with defaults. Same klein/9b
