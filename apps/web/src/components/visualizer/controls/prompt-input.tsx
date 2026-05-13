@@ -1,12 +1,12 @@
 "use client";
 
-import { ArrowRight } from "lucide-react";
+import { ArrowRight, ChevronDown } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import type { DreamSceneState } from "@music-visualizer/shared";
 import type { SessionSend } from "@/lib/session-actions";
 import { Input } from "@/components/ui/input";
-import { FieldChips } from "@/components/visualizer/controls/field-chips";
 import { useVisualizerStore } from "@/stores/visualizer";
+import { cn } from "@/lib/utils";
 
 interface PromptInputProps {
   send: SessionSend;
@@ -85,6 +85,9 @@ export function PromptInput({ send }: PromptInputProps) {
   // received even though the fal generation takes a few seconds. Cleared
   // when status returns to idle.
   const [lastCommittedKey, setLastCommittedKey] = useState<FieldKey | null>(null);
+  // Which field's chip pool is expanded. At most one row is open at a time so
+  // the panel stays quiet by default; opens on focus or chevron-tap.
+  const [expandedKey, setExpandedKey] = useState<FieldKey | null>(null);
   const inputRefs = useRef<Record<FieldKey, HTMLInputElement | null>>({
     subject: null,
     environment: null,
@@ -171,15 +174,39 @@ export function PromptInput({ send }: PromptInputProps) {
                 onChange={(e) =>
                   setDraft((d) => ({ ...d, [f.key]: e.target.value }))
                 }
+                onFocus={() => setExpandedKey(f.key)}
                 onBlur={() => commit(f.key)}
                 onKeyDown={(e) => {
                   if (e.key === "Enter") {
                     e.preventDefault();
                     commit(f.key);
                     inputRefs.current[f.key]?.blur();
+                    setExpandedKey(null);
+                  } else if (e.key === "Escape") {
+                    setExpandedKey(null);
+                    inputRefs.current[f.key]?.blur();
                   }
                 }}
               />
+              <button
+                type="button"
+                aria-label={
+                  expandedKey === f.key
+                    ? `Hide ${f.label} suggestions`
+                    : `Show ${f.label} suggestions`
+                }
+                aria-expanded={expandedKey === f.key}
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() =>
+                  setExpandedKey((cur) => (cur === f.key ? null : f.key))
+                }
+                className={cn(
+                  "shrink-0 text-[color:var(--stone)] transition-all hover:text-[color:var(--paper)]",
+                  expandedKey === f.key && "text-[color:var(--paper)] rotate-180",
+                )}
+              >
+                <ChevronDown className="size-3.5" strokeWidth={1.5} />
+              </button>
               <button
                 type="button"
                 aria-label={`Commit ${f.label}`}
@@ -207,11 +234,35 @@ export function PromptInput({ send }: PromptInputProps) {
                 ⟲ regenerating…
               </div>
             )}
-            <FieldChips
-              chips={pool}
-              active={value}
-              onPick={(chip) => commitValue(f.key, chip)}
-            />
+            {expandedKey === f.key && (
+              <div
+                className="chips-reveal flex flex-wrap gap-1.5"
+                onMouseDown={(e) => e.preventDefault()}
+              >
+                {pool.map((chip) => {
+                  const isActive = chip === value;
+                  return (
+                    <button
+                      key={chip}
+                      type="button"
+                      title={chip}
+                      onClick={() => {
+                        commitValue(f.key, chip);
+                        setExpandedKey(null);
+                      }}
+                      className={cn(
+                        "font-sans text-[10px] uppercase tracking-[0.14em] transition-colors border-b px-1.5 py-0.5",
+                        isActive
+                          ? "text-[color:var(--paper)] border-[color:var(--paper)]"
+                          : "text-[color:var(--stone)] border-[color:var(--hairline)]/30 hover:text-[color:var(--paper)] hover:border-[color:var(--paper)]/60",
+                      )}
+                    >
+                      {chip}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
           </div>
         );
       })}

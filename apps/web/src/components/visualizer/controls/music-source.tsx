@@ -4,6 +4,11 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { FileAudio, Mic, MicOff, MonitorSpeaker } from "lucide-react";
 import type { AudioSource } from "@/hooks/use-audio-features";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 
 interface MusicSourceProps {
@@ -19,7 +24,6 @@ function isSafariLike(): boolean {
   return /^((?!chrome|android|edg|crios|fxios).)*safari/i.test(ua);
 }
 
-// getDisplayMedia exists at all (older Firefox / some webviews lack it).
 function displayMediaSupported(): boolean {
   if (typeof navigator === "undefined") return false;
   return typeof navigator.mediaDevices?.getDisplayMedia === "function";
@@ -33,9 +37,7 @@ export function MusicSource({ source, setSource }: MusicSourceProps) {
   const objectUrlRef = useRef<string | null>(null);
   const [fileName, setFileName] = useState<string | null>(null);
   // Display-audio support detection lives in state so SSR renders the
-  // optimistic "enabled" path and we correct it post-mount. Running the
-  // feature probes during SSR would return `false` (navigator is undefined)
-  // and freeze the button in a disabled state in the hydrated DOM.
+  // optimistic "enabled" path and we correct it post-mount.
   const [displaySupported, setDisplaySupported] = useState(true);
   const [displayDisabledReason, setDisplayDisabledReason] = useState<
     string | null
@@ -92,8 +94,6 @@ export function MusicSource({ source, setSource }: MusicSourceProps) {
       setSource({ type: "none" });
       return;
     }
-    // First-time hint: explain the picker flow once. Chrome's share dialog
-    // looks intimidating if you've never used it.
     try {
       if (window.localStorage.getItem(COMPUTER_AUDIO_HINT_KEY) !== "1") {
         toast("pick a browser tab and tick 'share tab audio'", {
@@ -109,67 +109,37 @@ export function MusicSource({ source, setSource }: MusicSourceProps) {
     setSource({ type: "display" });
   };
 
-  const fileLabel = fileName ? truncate(fileName, 22) : "select file";
   const micOn = source.type === "mic";
   const displayOn = source.type === "display";
 
   return (
-    <div className="flex flex-col gap-2 font-sans">
-      <div className="flex items-center gap-5 text-[11px] tracking-[0.1em]">
-        <button
-          type="button"
-          onClick={pickFile}
-          className={cn(
-            "group flex items-center gap-2 transition-colors",
-            fileName
-              ? "text-[color:var(--paper)]"
-              : "text-[color:var(--stone)] hover:text-[color:var(--paper)]",
-          )}
-        >
-          <FileAudio className="size-3.5" strokeWidth={1.5} />
-          <span className="font-serif text-[13px] italic">{fileLabel}</span>
-        </button>
-
-        <button
-          type="button"
-          onClick={toggleMic}
-          className={cn(
-            "group flex items-center gap-2 transition-colors",
-            micOn
-              ? "text-[color:var(--paper)]"
-              : "text-[color:var(--stone)] hover:text-[color:var(--paper)]",
-          )}
-        >
-          {micOn ? (
+    <div className="flex items-center gap-4">
+      <IconButton
+        active={!!fileName}
+        label={fileName ? truncate(fileName, 18) : "file"}
+        onClick={pickFile}
+        icon={<FileAudio className="size-3.5" strokeWidth={1.5} />}
+      />
+      <IconButton
+        active={micOn}
+        label="mic"
+        onClick={toggleMic}
+        icon={
+          micOn ? (
             <Mic className="size-3.5" strokeWidth={1.5} />
           ) : (
             <MicOff className="size-3.5" strokeWidth={1.5} />
-          )}
-          <span className="font-sans text-[10px] uppercase tracking-[0.24em]">
-            mic
-          </span>
-        </button>
-
-        <button
-          type="button"
-          onClick={toggleDisplay}
-          disabled={!displaySupported}
-          title={displayDisabledReason ?? "share a browser tab's audio"}
-          className={cn(
-            "group flex items-center gap-2 transition-colors",
-            !displaySupported
-              ? "cursor-not-allowed text-[color:var(--stone)]/40"
-              : displayOn
-                ? "text-[color:var(--paper)]"
-                : "text-[color:var(--stone)] hover:text-[color:var(--paper)]",
-          )}
-        >
-          <MonitorSpeaker className="size-3.5" strokeWidth={1.5} />
-          <span className="font-sans text-[10px] uppercase tracking-[0.24em]">
-            computer audio
-          </span>
-        </button>
-      </div>
+          )
+        }
+      />
+      <IconButton
+        active={displayOn}
+        disabled={!displaySupported}
+        title={displayDisabledReason ?? undefined}
+        label="tab audio"
+        onClick={toggleDisplay}
+        icon={<MonitorSpeaker className="size-3.5" strokeWidth={1.5} />}
+      />
       <input
         ref={fileRef}
         type="file"
@@ -181,11 +151,64 @@ export function MusicSource({ source, setSource }: MusicSourceProps) {
         ref={audioRef}
         controls
         className={cn(
-          "h-6 w-full max-w-[280px] opacity-60",
+          "h-6 w-full max-w-[220px] opacity-60",
           fileName ? "block" : "hidden",
         )}
       />
     </div>
+  );
+}
+
+interface IconButtonProps {
+  active: boolean;
+  disabled?: boolean;
+  label: string;
+  title?: string;
+  onClick: () => void;
+  icon: React.ReactNode;
+}
+
+function IconButton({ active, disabled, label, title, onClick, icon }: IconButtonProps) {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <button
+          type="button"
+          onClick={onClick}
+          disabled={disabled}
+          aria-label={label}
+          className={cn(
+            "group flex items-center gap-1.5 transition-colors",
+            disabled
+              ? "cursor-not-allowed text-[color:var(--stone)]/40"
+              : active
+                ? "text-[color:var(--paper)]"
+                : "text-[color:var(--stone)] hover:text-[color:var(--paper)]",
+          )}
+        >
+          {icon}
+          {/* Compact label, shown when the control is active or hovered.
+             Reserves vertical rhythm without screaming when at rest. */}
+          <span
+            className={cn(
+              "font-sans text-[10px] uppercase tracking-[0.22em] transition-opacity",
+              active
+                ? "opacity-100"
+                : "opacity-0 group-hover:opacity-80",
+            )}
+          >
+            {label}
+          </span>
+        </button>
+      </TooltipTrigger>
+      <TooltipContent
+        side="top"
+        sideOffset={6}
+        className="font-mono bg-[color:var(--ink)] text-[color:var(--paper)] border border-[color:var(--hairline)]/40 px-2 py-0.5 text-[10px] uppercase tracking-[0.18em]"
+      >
+        {title ?? label}
+      </TooltipContent>
+    </Tooltip>
   );
 }
 

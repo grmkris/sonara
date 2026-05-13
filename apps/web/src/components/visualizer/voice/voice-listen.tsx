@@ -94,44 +94,57 @@ export function VoiceListen({ send }: VoiceListenProps) {
   const armed = activeField !== null || listening;
 
   return (
-    <div className="flex flex-col gap-1 font-sans">
-      <div className="flex items-baseline gap-3">
+    <div className="group relative flex items-center gap-3 font-sans">
+      <span
+        className={cn(
+          "flex items-baseline gap-1.5",
+          !supported && "text-[color:var(--stone)]/40",
+          supported && armed && "text-[color:var(--paper)]",
+          supported && !armed && "text-[color:var(--stone)]",
+        )}
+      >
+        <span className="font-serif text-[13px] leading-none">
+          {armed ? "●" : "○"}
+        </span>
+        <span className="font-sans text-[10px] uppercase tracking-[0.22em]">
+          voice
+        </span>
+      </span>
+
+      {/* Keymap legend — hidden at rest, fades in on hover or while armed.
+         Anchored absolutely so it doesn't shove neighbours when it appears. */}
+      {supported && (
         <span
           className={cn(
-            "flex items-baseline gap-2",
-            !supported && "text-[color:var(--stone)]/40",
-            supported && armed && "text-[color:var(--paper)]",
-            supported && !armed && "text-[color:var(--stone)]",
+            "font-mono pointer-events-none flex gap-x-2 text-[9px] uppercase tracking-[0.22em] text-[color:var(--stone)]/80 transition-opacity",
+            armed
+              ? "opacity-100"
+              : "opacity-0 group-hover:opacity-90",
           )}
         >
-          <span className="font-serif text-[13px] leading-none">
-            {armed ? "●" : "○"}
-          </span>
-          <span className="font-serif text-[13px]">voice</span>
-        </span>
-      </div>
-
-      {supported ? (
-        <div className="font-mono flex flex-wrap gap-x-2 gap-y-1 text-[9px] uppercase tracking-[0.22em] text-[color:var(--stone)]/80">
           {LEGEND.map((item) => (
             <span key={item.key}>
               <span className="text-[color:var(--paper)]">{item.key}</span>{" "}
               {item.label}
             </span>
           ))}
-        </div>
-      ) : (
-        <div className="font-mono text-[9px] uppercase tracking-[0.2em] text-[color:var(--stone)]">
-          not supported
-        </div>
+        </span>
       )}
 
+      {!supported && (
+        <span className="font-mono text-[9px] uppercase tracking-[0.2em] text-[color:var(--stone)]/50">
+          n/a
+        </span>
+      )}
+
+      {/* In-flight transcript bubble — only when a key is held. Floats above
+         the strip so it doesn't push other rows when it appears. */}
       {activeField && (
         <div
           className={cn(
-            "font-mono text-[10px] tracking-[0.04em]",
-            "rounded-sm border border-[color:var(--signal)]/70 px-2 py-1",
-            "animate-pulse text-[color:var(--paper)]",
+            "font-mono pointer-events-none absolute -top-9 left-0 text-[10px] tracking-[0.04em]",
+            "rounded-sm border border-[color:var(--signal)]/70 bg-[color:var(--ink)]/85 px-2 py-1 backdrop-blur-sm",
+            "animate-pulse text-[color:var(--paper)] whitespace-nowrap",
           )}
         >
           <span className="uppercase text-[color:var(--signal)]">
@@ -142,9 +155,9 @@ export function VoiceListen({ send }: VoiceListenProps) {
       )}
 
       {error && supported && (
-        <div className="font-mono text-[9px] uppercase tracking-[0.2em] text-[color:var(--signal)]">
-          error · {error}
-        </div>
+        <span className="font-mono text-[9px] uppercase tracking-[0.2em] text-[color:var(--signal)]">
+          err · {error}
+        </span>
       )}
     </div>
   );

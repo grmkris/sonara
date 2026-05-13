@@ -9,7 +9,12 @@ import {
   createPresetSlice,
 } from "./preset-slice";
 import { createSceneSlice } from "./scene-slice";
-import { UI_VISIBLE_KEY, createUiSlice } from "./ui-slice";
+import {
+  CONSOLE_TAB_KEY,
+  UI_VISIBLE_KEY,
+  createUiSlice,
+  type ConsoleTab,
+} from "./ui-slice";
 import { createVoiceSlice } from "./voice-slice";
 import type { VisualizerState } from "./types";
 import type { PresetConfig, PresetName } from "@/lib/render/presets";
@@ -35,6 +40,14 @@ export function hydrateUiVisible(): void {
   const raw = window.localStorage.getItem(UI_VISIBLE_KEY);
   if (raw === null) return;
   useVisualizerStore.setState({ uiVisible: raw !== "0" });
+}
+
+export function hydrateConsoleTab(): void {
+  if (typeof window === "undefined") return;
+  const raw = window.localStorage.getItem(CONSOLE_TAB_KEY);
+  if (raw === "scene" || raw === "style" || raw === "inspector") {
+    useVisualizerStore.setState({ consoleTab: raw as ConsoleTab });
+  }
 }
 
 // Pulls the last-used preset + mode from localStorage. Matches the
@@ -85,4 +98,5 @@ export type {
 export type { JobStatus } from "./scene-slice";
 export type { PresetMode } from "./preset-slice";
 export type { VoiceField } from "./voice-slice";
+export type { ConsoleTab } from "./ui-slice";
 export type { VisualizerState } from "./types";

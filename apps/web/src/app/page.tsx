@@ -7,7 +7,6 @@ import { GhostOverlay } from "@/components/visualizer/canvas/ghost-overlay";
 import { PromptInput } from "@/components/visualizer/controls/prompt-input";
 import { MusicSource } from "@/components/visualizer/controls/music-source";
 import { AudioRibbon } from "@/components/visualizer/audio/audio-ribbon";
-import { SlitScanTrail } from "@/components/visualizer/canvas/slit-scan-trail";
 import { ControlsPanel } from "@/components/visualizer/controls/controls-panel";
 import { SceneHud } from "@/components/visualizer/controls/scene-hud";
 import { HideToggle } from "@/components/visualizer/controls/hide-toggle";
@@ -15,7 +14,6 @@ import { FullscreenToggle } from "@/components/visualizer/controls/fullscreen-to
 import { RecordToggle } from "@/components/visualizer/controls/record-toggle";
 import { UserControls } from "@/components/user-controls";
 import { DemoRecorder } from "@/components/visualizer/controls/demo-recorder";
-import { GenerationInspector } from "@/components/visualizer/controls/generation-inspector";
 import { ScanSweep } from "@/components/visualizer/canvas/scan-sweep";
 import { VoiceListen } from "@/components/visualizer/voice/voice-listen";
 import { NowPlaying } from "@/components/visualizer/controls/now-playing";
@@ -28,6 +26,7 @@ import {
 import { useSongRecognition } from "@/hooks/use-song-recognition";
 import { useHotkey } from "@/hooks/use-hotkey";
 import {
+  hydrateConsoleTab,
   hydratePresetPrefs,
   hydrateUiVisible,
   useVisualizerStore,
@@ -71,6 +70,7 @@ export default function Page() {
   useEffect(() => {
     hydrateUiVisible();
     hydratePresetPrefs();
+    hydrateConsoleTab();
   }, []);
 
   useHotkey(
@@ -81,19 +81,6 @@ export default function Page() {
     }, [send]),
   );
 
-  // Reveal UI when pointer enters viewport top-right corner (where the toggle
-  // lives) while UI is hidden, to give an escape hatch without exposing the
-  // whole chrome.
-  useEffect(() => {
-    if (uiVisible) return;
-    const onMove = (ev: MouseEvent) => {
-      if (ev.clientY < 48 && ev.clientX > window.innerWidth - 200) {
-        setUiVisible(true);
-      }
-    };
-    window.addEventListener("mousemove", onMove);
-    return () => window.removeEventListener("mousemove", onMove);
-  }, [uiVisible, setUiVisible]);
 
   return (
     <main className="fixed inset-0 overflow-hidden">
@@ -101,12 +88,26 @@ export default function Page() {
       <GhostOverlay />
       <ScanSweep />
 
-      {/* Always-visible corner: wordmark + hide toggle. */}
+      {/* Corner-reveal trigger: an invisible 200×48 div anchored top-right.
+         While the UI is hidden, mousing into it brings the chrome back —
+         cheaper than a global mousemove listener. */}
+      {!uiVisible && (
+        <div
+          aria-hidden
+          className="pointer-events-auto absolute right-0 top-0 z-40 h-12 w-[200px]"
+          onMouseEnter={() => setUiVisible(true)}
+        />
+      )}
+
+      {/* Always-visible corner: wordmark (with micro-hud beneath) +
+         tight right-side control cluster. */}
       <div className="pointer-events-none absolute inset-x-0 top-0 z-30 flex items-start justify-between px-10 pt-8">
-        <Logotype />
-        <div className="flex items-center gap-6 pt-2">
+        <div className="pointer-events-auto flex flex-col gap-3">
+          <Logotype />
+          <SceneHud />
+        </div>
+        <div className="pointer-events-auto flex items-center gap-5 pt-2">
           <NowPlaying />
-          <Timestamp />
           <UserControls />
           <RecordToggle />
           <FullscreenToggle />
@@ -134,24 +135,19 @@ export default function Page() {
           <div className="relative flex w-[260px] shrink-0 flex-col gap-10">
             <div aria-hidden className="paper-scrim absolute -inset-6 -z-10" />
             <ControlsPanel send={send} />
-            <GenerationInspector />
           </div>
         </section>
 
-        {/* Bottom strip — audio meters + HUD + commit/reset. */}
+        {/* Bottom strip — single audio ribbon + one tight control row. */}
         <section className="pointer-events-auto relative mb-6 px-10 pt-2">
           <div aria-hidden className="paper-scrim absolute -inset-x-4 -inset-y-2 -z-10" />
 
-          {/* Row 0: time-compressed echo ribbon of the last ~8 seconds. */}
-          <SlitScanTrail height={24} />
+          <AudioRibbon height={40} />
 
-          {/* Row 1: merged waveform-over-spectrum ribbon. */}
-          <AudioRibbon height={48} />
-
-          {/* Row 2: sources + actions. */}
           <div className="mt-3 flex items-center justify-between gap-6">
-            <div className="flex items-start gap-8">
+            <div className="flex items-center gap-6">
               <MusicSource source={audioSource} setSource={setAudioSource} />
+              <span aria-hidden className="hairline h-3 w-px opacity-30" />
               <VoiceListen send={send} />
             </div>
             <Button
@@ -161,12 +157,10 @@ export default function Page() {
                 setAudioSource({ type: "none" });
                 send({ type: "session.reset" });
               }}
+              className="font-sans text-[10px] uppercase tracking-[0.24em] text-[color:var(--stone)] hover:text-[color:var(--paper)]"
             >
-              reset
+              reset · ⌫
             </Button>
-          </div>
-          <div className="mt-3 border-t border-[color:var(--hairline)]/30 pt-2">
-            <SceneHud />
           </div>
         </section>
       </div>
@@ -183,35 +177,12 @@ export default function Page() {
 
 function Logotype() {
   return (
-    <div className="pointer-events-auto flex flex-col leading-none">
-      <span
-        className="font-serif text-[color:var(--paper)]/85 select-none italic tracking-tight"
-        style={{ fontSize: "34px", fontWeight: 500, lineHeight: 0.9 }}
-      >
-        dream
-      </span>
-      <span className="font-sans mt-2 text-[9px] uppercase tracking-[0.32em] text-[color:var(--stone)]">
-        visualizer
-      </span>
-    </div>
-  );
-}
-
-function Timestamp() {
-  const [now, setNow] = useState<string>(() => formatNow());
-  useEffect(() => {
-    const t = setInterval(() => setNow(formatNow()), 30_000);
-    return () => clearInterval(t);
-  }, []);
-  return (
-    <span className="font-mono nums text-[10px] uppercase tracking-[0.22em] text-[color:var(--stone)]">
-      {now}
+    <span
+      className="font-serif pointer-events-auto block select-none italic tracking-tight text-[color:var(--paper)]/85"
+      style={{ fontSize: "34px", fontWeight: 500, lineHeight: 0.9 }}
+    >
+      dream
     </span>
   );
 }
 
-function formatNow(): string {
-  const d = new Date();
-  const pad = (n: number) => n.toString().padStart(2, "0");
-  return `${pad(d.getMonth() + 1)}/${pad(d.getDate())} · ${pad(d.getHours())}:${pad(d.getMinutes())}`;
-}

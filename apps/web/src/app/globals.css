@@ -139,6 +139,23 @@ input::placeholder {
 .ui-fade-in  { transition: opacity 240ms ease; opacity: 1; }
 .ui-fade-out { transition: opacity 240ms ease; opacity: 0; pointer-events: none; }
 
+/* Suggestion chips reveal — slide-down + fade, in keeping with the
+   editorial ink-bloom feel. */
+@keyframes chips-reveal {
+  0%   { opacity: 0; transform: translateY(-3px); }
+  100% { opacity: 1; transform: translateY(0);    }
+}
+.chips-reveal {
+  animation: chips-reveal 220ms cubic-bezier(0.2, 0.7, 0.2, 1) both;
+}
+
+/* Console panel tab-content reveal. */
+@keyframes panel-reveal {
+  0%   { opacity: 0; }
+  100% { opacity: 1; }
+}
+.panel-reveal { animation: panel-reveal 200ms ease both; }
+
 /* Tabular numerals for anything telemetric. */
 .nums { font-variant-numeric: tabular-nums; font-feature-settings: "tnum" on; }
 
@@ -169,6 +186,8 @@ input::placeholder {
   .breath,
   .ink-sweep,
   .stamp-press,
-  .field-sweep { animation: none !important; }
+  .field-sweep,
+  .chips-reveal,
+  .panel-reveal { animation: none !important; }
   .commit-tick { animation-duration: 1ms !important; }
 }

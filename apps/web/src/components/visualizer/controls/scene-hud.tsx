@@ -44,12 +44,6 @@ export function SceneHud() {
         )}
       </span>
 
-      <span className="ml-auto flex items-center gap-4 tracking-[0.18em]">
-        <span className="flex items-baseline gap-1">
-          <span className="text-[color:var(--paper)]">⌫</span>
-          <span>reset</span>
-        </span>
-      </span>
     </div>
   );
 }

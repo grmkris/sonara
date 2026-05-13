@@ -4,7 +4,6 @@ import { useMemo, useState } from "react";
 import type { DreamSceneState } from "@music-visualizer/shared";
 import type { SessionSend } from "@/lib/session-actions";
 import { Slider } from "@/components/ui/slider";
-import { Separator } from "@/components/ui/separator";
 import {
   Tooltip,
   TooltipContent,
@@ -13,8 +12,10 @@ import {
 import { IntensityDial } from "@/components/visualizer/controls/intensity-dial";
 import { PresetPicker } from "@/components/visualizer/controls/preset-picker";
 import { SceneTemplatePicker } from "@/components/visualizer/controls/scene-template-picker";
-import { useVisualizerStore } from "@/stores/visualizer";
+import { GenerationInspector } from "@/components/visualizer/controls/generation-inspector";
+import { useVisualizerStore, type ConsoleTab } from "@/stores/visualizer";
 import { debounce } from "@/lib/debounce";
+import { cn } from "@/lib/utils";
 
 interface ControlsPanelProps {
   send: SessionSend;
@@ -29,8 +30,16 @@ const SLIDERS: { key: SliderKey; label: string }[] = [
   { key: "stability",   label: "stable"   },
 ];
 
+const TABS: { id: ConsoleTab; label: string }[] = [
+  { id: "scene",     label: "scene"     },
+  { id: "style",     label: "style"     },
+  { id: "inspector", label: "inspector" },
+];
+
 export function ControlsPanel({ send }: ControlsPanelProps) {
   const scene = useVisualizerStore((s) => s.scene);
+  const tab = useVisualizerStore((s) => s.consoleTab);
+  const pickTab = useVisualizerStore((s) => s.setConsoleTab);
 
   const patchSlider = (key: SliderKey, value: number) =>
     send({
@@ -39,28 +48,58 @@ export function ControlsPanel({ send }: ControlsPanelProps) {
     });
 
   return (
-    <div className="flex flex-col gap-6">
-      <SceneTemplatePicker send={send} />
+    <div className="flex flex-col gap-5">
+      {/* Tab strip — serif italics, underline on active. */}
+      <nav
+        role="tablist"
+        aria-label="console"
+        className="flex items-baseline gap-5"
+      >
+        {TABS.map((t) => {
+          const active = tab === t.id;
+          return (
+            <button
+              key={t.id}
+              role="tab"
+              type="button"
+              aria-selected={active}
+              onClick={() => pickTab(t.id)}
+              className={cn(
+                "font-serif text-[13px] italic tracking-normal transition-colors",
+                "border-b pb-1",
+                active
+                  ? "border-[color:var(--paper)] text-[color:var(--paper)]"
+                  : "border-transparent text-[color:var(--stone)] hover:text-[color:var(--paper)]/85 hover:border-[color:var(--hairline)]/30",
+              )}
+            >
+              {t.label}
+            </button>
+          );
+        })}
+      </nav>
 
-      <Separator className="bg-[color:var(--hairline)]/30" />
+      {/* Active tab panel. */}
+      <div key={tab} role="tabpanel" className="panel-reveal flex flex-col gap-5">
+        {tab === "scene" && <SceneTemplatePicker send={send} />}
 
-      <PresetPicker />
+        {tab === "style" && (
+          <>
+            <PresetPicker />
+            <IntensityDial send={send} />
+            <div className="flex flex-col gap-3">
+              {SLIDERS.map((s) => (
+                <SliderRow
+                  key={s.key}
+                  label={s.label}
+                  value={scene[s.key]}
+                  onChange={(v) => patchSlider(s.key, v)}
+                />
+              ))}
+            </div>
+          </>
+        )}
 
-      <Separator className="bg-[color:var(--hairline)]/30" />
-
-      <IntensityDial send={send} />
-
-      <Separator className="bg-[color:var(--hairline)]/30" />
-
-      <div className="flex flex-col gap-4">
-        {SLIDERS.map((s) => (
-          <SliderRow
-            key={s.key}
-            label={s.label}
-            value={scene[s.key]}
-            onChange={(v) => patchSlider(s.key, v)}
-          />
-        ))}
+        {tab === "inspector" && <GenerationInspector />}
       </div>
     </div>
   );
