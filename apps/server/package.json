@@ -11,7 +11,8 @@
     "lint": "oxlint",
     "fix": "oxlint --fix",
     "test": "bun test || echo 'no tests yet'",
-    "ingest-demo": "bun run src/scripts/ingest-demo.ts"
+    "ingest-demo": "bun run src/scripts/ingest-demo.ts",
+    "seed:library": "bun run scripts/seed-library.ts"
   },
   "dependencies": {
     "@fal-ai/client": "^1.9.5",
@@ -19,10 +20,12 @@
     "@music-visualizer/db": "workspace:*",
     "@music-visualizer/shared": "workspace:*",
     "@orpc/server": "^1.14.0",
+    "drizzle-orm": "^0.45.2",
     "hono": "^4.12.12",
     "pg": "^8.20.0",
     "pino": "^10.3.1",
     "pino-pretty": "^13.0.0",
+    "sharp": "^0.34.2",
     "zod": "^4.3.6"
   },
   "devDependencies": {

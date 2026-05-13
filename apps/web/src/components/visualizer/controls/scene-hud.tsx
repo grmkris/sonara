@@ -8,6 +8,8 @@ export function SceneHud() {
   const statusMessage = useVisualizerStore((s) => s.statusMessage);
   const connected = useVisualizerStore((s) => s.connected);
   const version = useVisualizerStore((s) => s.latestVersion);
+  const demoMode = useVisualizerStore((s) => s.demoMode);
+  const demoDeck = useVisualizerStore((s) => s.demoDeck);
 
   const label = statusLabel(status);
 
@@ -25,6 +27,17 @@ export function SceneHud() {
         />
         <span>ws</span>
       </span>
+
+      {demoMode && (
+        <span className="flex items-baseline gap-1.5">
+          <span className="bg-[color:var(--paper)] text-[color:var(--ink)] px-1 tracking-[0.14em]">
+            demo
+          </span>
+          {demoDeck && (
+            <span className="text-[color:var(--paper)]">{demoDeck}</span>
+          )}
+        </span>
+      )}
 
       <span className="flex items-baseline gap-1.5">
         <span className="tracking-[0.18em]">ver</span>

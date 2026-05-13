@@ -1,3 +1,4 @@
+import type { DemoSlice } from "./demo-slice";
 import type { InspectorSlice } from "./inspector-slice";
 import type { PlaybackSlice } from "./playback-slice";
 import type { PresetSlice } from "./preset-slice";
@@ -13,4 +14,5 @@ export type VisualizerState = SceneSlice &
   UiSlice &
   InspectorSlice &
   VoiceSlice &
-  PresetSlice;
+  PresetSlice &
+  DemoSlice;

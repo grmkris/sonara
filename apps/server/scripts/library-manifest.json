@@ -1,0 +1,122 @@
+[
+  {
+    "deck": "wild",
+    "prompts": [
+      "a snow leopard staring through falling snow, cinematic, painterly",
+      "a grey wolf at the edge of a pine forest at dusk, fog drifting",
+      "a great horned owl perched on a moss-covered branch, moonlight",
+      "a red fox crossing a frosted meadow at dawn",
+      "a black panther on a stone ledge, jungle behind, shafts of light",
+      "a snowy owl in flight, low golden light over tundra",
+      "a stag at the edge of a clearing, antlers crowned with mist",
+      "a bald eagle banking against a stormy sky, dramatic clouds",
+      "a tiger emerging from tall grass, eyes catching the sun",
+      "an arctic fox curled in fresh snow, soft blue light"
+    ]
+  },
+  {
+    "deck": "cute",
+    "prompts": [
+      "a giant panda eating bamboo in soft morning light, dewy leaves",
+      "a capybara floating in a hot spring, steam rising, snowfall",
+      "a red panda peeking through autumn leaves, golden hour",
+      "two otters holding hands while sleeping in calm water",
+      "a quokka smiling on a sunlit path, soft bokeh",
+      "a golden retriever puppy in a field of daisies, gentle wind",
+      "a hedgehog sniffing a wildflower at dusk, warm rim light",
+      "a baby elephant splashing through a puddle, joyful motion blur",
+      "a litter of kittens piled in a wicker basket, cozy lighting",
+      "a sea otter floating on its back holding a small shell"
+    ]
+  },
+  {
+    "deck": "sky",
+    "prompts": [
+      "aurora borealis over a frozen lake, long exposure, deep greens",
+      "the orion nebula in deep ultraviolet, swirling dust clouds",
+      "a thunderstorm at night, single lightning bolt across the sky",
+      "the milky way arching over a desert canyon, no light pollution",
+      "noctilucent clouds glowing electric blue over a still ocean",
+      "an aurora pillar over a pine ridge, stars piercing the green",
+      "a galactic core rising behind silhouetted mountains",
+      "a meteor shower streaking above a dark forest, time-lapse",
+      "twin moons over an alien ocean, surreal pastel sky",
+      "high-altitude lightning sprites against deep black space"
+    ]
+  },
+  {
+    "deck": "liquid",
+    "prompts": [
+      "black ink dispersing in clear water, macro, frozen motion",
+      "fire embers floating against black, slow shutter trails",
+      "a milk drop splash crown, ultra macro, soft studio light",
+      "neon paint splatters mid-air, vivid magenta and cyan",
+      "smoke curling through a beam of sunlight, dark room",
+      "oil and water swirling under a microscope, iridescent",
+      "molten gold pouring against a black background, glowing edges",
+      "rainbow soap bubble surface, iridescent micro detail",
+      "ink billowing into water like a sea of nebulae",
+      "splash of red wine in mid-air, glass catching the light"
+    ]
+  },
+  {
+    "deck": "deep",
+    "prompts": [
+      "moon jellyfish drifting through dark blue water, bioluminescent",
+      "an octopus across coral, chromatophores firing in patterns",
+      "a humpback whale silhouetted by sunlight from below",
+      "a deep-sea anglerfish in pitch black, its lure glowing",
+      "a bloom of bioluminescent plankton on a moonless shore",
+      "a school of silvery fish curling around a coral pillar",
+      "a manta ray gliding through a shaft of sunlight underwater",
+      "a coral reef in twilight, soft pinks and purples, slow current",
+      "a giant pacific octopus unfurling near a kelp forest",
+      "deep ocean trench at black smoker vents, tube worms"
+    ]
+  },
+  {
+    "deck": "bloom",
+    "prompts": [
+      "cherry blossom branch against an overcast sky, petals falling",
+      "a lavender field at golden hour, gentle wind through stalks",
+      "autumn forest path covered in red maple leaves, soft light",
+      "a single white lotus on still black water, dawn mist",
+      "a meadow of poppies under a wide blue sky",
+      "tiny mushrooms after rain, glistening on a mossy log",
+      "wisteria curtain over a stone walkway, dappled sunlight",
+      "a sunflower field at sunset, faces turned toward the light",
+      "a single dewdrop on a spider's web, macro, dawn",
+      "a wildflower meadow at first light, gentle haze"
+    ]
+  },
+  {
+    "deck": "sacred",
+    "prompts": [
+      "sunlight through cathedral stained glass on a stone floor",
+      "a zen rock garden after rain, raked sand, single maple",
+      "a mandala painted in colored sand, overhead view, intricate",
+      "a candlelit shrine in a forest at dusk, soft glow",
+      "ancient temple steps disappearing into morning mist",
+      "a quiet monastery courtyard at sunrise, stone arches",
+      "a single bronze bell hanging in a wooden temple",
+      "tibetan prayer flags strung across a mountain pass, wind",
+      "a still pond in a temple garden, koi beneath the surface",
+      "an illuminated manuscript page with gold leaf, candlelight"
+    ]
+  },
+  {
+    "deck": "neon",
+    "prompts": [
+      "a neon-lit alley in rain, signs reflecting in puddles, tokyo",
+      "a holographic foil surface catching shifting rainbow light",
+      "vaporwave palm trees against a magenta sunset grid",
+      "a retro arcade interior glowing in cyan and pink",
+      "a cyberpunk skyline at night, drone shot, layered neon",
+      "rainy crosswalk under cyberpunk signage, umbrellas",
+      "a neon ramen shop alley, lanterns, steam, midnight",
+      "chrome geometric shapes on a magenta-cyan gradient",
+      "synthwave car driving toward a setting digital sun",
+      "purple and teal neon reflections on wet pavement, slow shutter"
+    ]
+  }
+]

@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { createDemoSlice, readDemoPrefs } from "./demo-slice";
 import { createInspectorSlice } from "./inspector-slice";
 import { createPlaybackSlice } from "./playback-slice";
 import {
@@ -26,6 +27,7 @@ export const useVisualizerStore = create<VisualizerState>()((...a) => ({
   ...createInspectorSlice(...a),
   ...createVoiceSlice(...a),
   ...createPresetSlice(...a),
+  ...createDemoSlice(...a),
 }));
 
 // ---------------------------------------------------------------------
@@ -76,6 +78,14 @@ export function hydratePresetPrefs(): void {
     }
   }
   if (Object.keys(update).length > 0) useVisualizerStore.setState(update);
+}
+
+// Same hydration pattern as preset prefs — apply localStorage values
+// post-mount so SSR + first client render stay consistent.
+export function hydrateDemoPrefs(): void {
+  if (typeof window === "undefined") return;
+  const { demoMode, demoDeck } = readDemoPrefs();
+  useVisualizerStore.setState({ demoMode, demoDeck });
 }
 
 /**

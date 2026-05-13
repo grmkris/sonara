@@ -1,7 +1,11 @@
 import { typeIdGenerator, typeIdToUuid } from "@music-visualizer/shared/typeid";
-import pg from "pg";
-import { env } from "../env";
+import { closePool as closeSharedPool, getPool } from "../db/pool";
 import type { Logger } from "../lib/logger";
+
+// Re-export the test-only pool setter so existing tests
+// (credits.service.test.ts, credit-gate.test.ts) keep importing from this
+// module. PoolLike type re-exported for the same reason.
+export { __setPoolForTests, type PoolLike } from "../db/pool";
 
 // Generate a fresh `usage_ledger` row id as a UUID. The DB column is `uuid`
 // but the application layer thinks in typeid-prefixed strings — use the
@@ -10,43 +14,6 @@ import type { Logger } from "../lib/logger";
 // written via the web router.
 function newLedgerId(): string {
   return typeIdToUuid(typeIdGenerator("usageLedger")).uuid;
-}
-
-// Direct pg access — avoids pulling drizzle + schema types into apps/server
-// just to run three atomic queries. Uses the same DATABASE_URL that apps/web
-// uses for Better Auth.
-
-// Subset of `pg.Pool` used by this module. Defined as an interface so tests
-// can substitute a pglite-backed shim without dragging the full pg surface
-// into test-utils.
-export interface PoolLike {
-  connect(): Promise<{
-    query<T = unknown>(
-      sql: string,
-      params?: readonly unknown[],
-    ): Promise<{ rows: T[]; rowCount: number | null }>;
-    release(): void;
-  }>;
-  query<T = unknown>(
-    sql: string,
-    params?: readonly unknown[],
-  ): Promise<{ rows: T[]; rowCount: number | null }>;
-  end?(): Promise<void>;
-}
-
-let pool: PoolLike | null = null;
-function getPool(): PoolLike {
-  if (!pool) {
-    pool = new pg.Pool({ connectionString: env.DATABASE_URL });
-  }
-  return pool;
-}
-
-// Test-only override. Tests inject a pglite-backed shim; pass `null` to clear
-// and force getPool() to rebuild from env on the next call. Not part of the
-// production surface — never call from app code.
-export function __setPoolForTests(p: PoolLike | null): void {
-  pool = p;
 }
 
 /**
@@ -190,8 +157,5 @@ export async function getBalance(userId: string): Promise<{ frames: number }> {
 }
 
 export async function closePool(): Promise<void> {
-  if (pool) {
-    await pool.end?.();
-    pool = null;
-  }
+  await closeSharedPool();
 }

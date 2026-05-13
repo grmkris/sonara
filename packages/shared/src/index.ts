@@ -6,5 +6,6 @@ export * from "./events";
 export * from "./scene-templates";
 export * from "./visual-presets";
 export * from "./demo";
+export * from "./decks";
 export * from "./pricing";
 export * from "./ws-ticket";

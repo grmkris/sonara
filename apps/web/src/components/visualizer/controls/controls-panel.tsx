@@ -9,6 +9,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { DemoModeToggle } from "@/components/visualizer/controls/demo-mode-toggle";
 import { IntensityDial } from "@/components/visualizer/controls/intensity-dial";
 import { PresetPicker } from "@/components/visualizer/controls/preset-picker";
 import { SceneTemplatePicker } from "@/components/visualizer/controls/scene-template-picker";
@@ -49,6 +50,8 @@ export function ControlsPanel({ send }: ControlsPanelProps) {
 
   return (
     <div className="flex flex-col gap-5">
+      <DemoModeToggle send={send} />
+
       {/* Tab strip — serif italics, underline on active. */}
       <nav
         role="tablist"
