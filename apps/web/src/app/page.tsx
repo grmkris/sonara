@@ -12,6 +12,7 @@ import { ControlsPanel } from "@/components/visualizer/controls/controls-panel";
 import { SceneHud } from "@/components/visualizer/controls/scene-hud";
 import { HideToggle } from "@/components/visualizer/controls/hide-toggle";
 import { FullscreenToggle } from "@/components/visualizer/controls/fullscreen-toggle";
+import { RecordToggle } from "@/components/visualizer/controls/record-toggle";
 import { UserControls } from "@/components/user-controls";
 import { DemoRecorder } from "@/components/visualizer/controls/demo-recorder";
 import { GenerationInspector } from "@/components/visualizer/controls/generation-inspector";
@@ -107,6 +108,7 @@ export default function Page() {
           <NowPlaying />
           <Timestamp />
           <UserControls />
+          <RecordToggle />
           <FullscreenToggle />
           <HideToggle />
         </div>

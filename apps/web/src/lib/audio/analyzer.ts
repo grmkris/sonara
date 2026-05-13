@@ -237,6 +237,27 @@ export class AudioEngine {
     return this.clipRecorder !== null;
   }
 
+  // Tap a dedicated MediaStream off the compressor for full-length video
+  // recording. Independent of the ClipRecorder ring buffer. Returns null
+  // when no source is attached. Caller invokes dispose() to release.
+  createRecordingStream(): { stream: MediaStream; dispose: () => void } | null {
+    if (!this.ctx || !this.compressor || !this.source) return null;
+    const compressor = this.compressor;
+    const dest = this.ctx.createMediaStreamDestination();
+    compressor.connect(dest);
+    return {
+      stream: dest.stream,
+      dispose: () => {
+        try {
+          compressor.disconnect(dest);
+        } catch {
+          // noop
+        }
+        for (const t of dest.stream.getTracks()) t.stop();
+      },
+    };
+  }
+
   stop(): void {
     if (this.rafId !== null) cancelAnimationFrame(this.rafId);
     this.rafId = null;

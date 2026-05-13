@@ -14,6 +14,7 @@
     "allow-email": "bun run src/scripts/allow-email.ts"
   },
   "dependencies": {
+    "@ffmpeg/ffmpeg": "^0.12.15",
     "@music-visualizer/api": "workspace:*",
     "@music-visualizer/db": "workspace:*",
     "@music-visualizer/shared": "workspace:*",
