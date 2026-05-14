@@ -6,6 +6,7 @@ import {
 } from "@sonara/api/server";
 import { runMigrations } from "@sonara/db/migrator";
 import { verifyTicket } from "@sonara/shared";
+import { seedLibraryOnBoot } from "./db/library-boot-seed";
 import { env } from "./env";
 import { logger } from "./lib/logger";
 import { SessionManager } from "./session/session-manager";
@@ -17,6 +18,11 @@ import { SessionManager } from "./session/session-manager";
 logger.info("running database migrations");
 await runMigrations(env.DATABASE_URL);
 logger.info("migrations applied");
+
+// Sync the committed demo library into image_library. Idempotent — short-
+// circuits when the row count already covers the seed. Keeps prod (and any
+// fresh local DB) usable for DEMO mode with no manual railway-run.
+await seedLibraryOnBoot(logger);
 
 const port = env.PORT;
 
