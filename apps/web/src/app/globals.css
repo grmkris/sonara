@@ -156,6 +156,16 @@ input::placeholder {
 }
 .panel-reveal { animation: panel-reveal 200ms ease both; }
 
+/* Polaroid-develop: page-wide softness when a scene field commits. The
+   whole document dims to 92% and brightens back over 320ms, giving the
+   visualiser a single coherent "thing happened" gesture. Triggered by
+   `flashCommit()` (lib/commit-flash.ts). */
+@keyframes polaroid-develop {
+  0%, 100% { opacity: 1; filter: brightness(1); }
+  35%      { opacity: 0.92; filter: brightness(0.94); }
+}
+.commit-flash { animation: polaroid-develop 320ms ease-out; }
+
 /* Tabular numerals for anything telemetric. */
 .nums { font-variant-numeric: tabular-nums; font-feature-settings: "tnum" on; }
 
@@ -231,6 +241,7 @@ input::placeholder {
   .chips-reveal,
   .panel-reveal { animation: none !important; }
   .commit-tick { animation-duration: 1ms !important; }
+  .commit-flash { animation: none !important; }
   .grain-overlay { display: none; }
   .wordmark::after { transition: none; }
 }
