@@ -32,7 +32,7 @@ export function HideToggle() {
       )}
     >
       <Icon className="size-3" strokeWidth={1.5} />
-      <span>{uiVisible ? "hide · h" : "show · h"}</span>
+      <span className="hidden sm:inline">{uiVisible ? "hide · h" : "show · h"}</span>
     </button>
   );
 }

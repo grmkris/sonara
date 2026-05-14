@@ -1,6 +1,7 @@
 "use client";
 
 import { Suspense, useCallback, useEffect, useState } from "react";
+import { SlidersHorizontal } from "lucide-react";
 import { toast } from "sonner";
 import { SonaraCanvas } from "@/components/visualizer/canvas/sonara-canvas";
 import { GhostOverlay } from "@/components/visualizer/canvas/ghost-overlay";
@@ -18,6 +19,12 @@ import { ScanSweep } from "@/components/visualizer/canvas/scan-sweep";
 import { VoiceListen } from "@/components/visualizer/voice/voice-listen";
 import { NowPlaying } from "@/components/visualizer/controls/now-playing";
 import { Button } from "@/components/ui/button";
+import {
+  Sheet,
+  SheetContent,
+  SheetTitle,
+  SheetTrigger,
+} from "@/components/ui/sheet";
 import { useSession } from "@/lib/auth-client";
 import { useWsSession } from "@/hooks/use-ws-session";
 import Link from "next/link";
@@ -107,17 +114,41 @@ export default function Page() {
 
       {/* Always-visible corner: wordmark (with micro-hud beneath) +
          tight right-side control cluster. */}
-      <div className="pointer-events-none absolute inset-x-0 top-0 z-30 flex items-start justify-between px-10 pt-8">
+      <div className="pointer-events-none absolute inset-x-0 top-0 z-30 flex items-start justify-between gap-3 px-4 pt-6 md:px-10 md:pt-8">
         <div className="pointer-events-auto flex flex-col gap-3">
           <Logotype />
           <SceneHud />
         </div>
-        <div className="pointer-events-auto flex items-center gap-5 pt-2">
+        <div className="pointer-events-auto flex items-center gap-3 pt-2 sm:gap-5">
           <NowPlaying />
           <UserControls />
           <RecordToggle />
           <FullscreenToggle />
           <HideToggle />
+          {isSignedIn && (
+            <Sheet>
+              <SheetTrigger asChild>
+                <button
+                  type="button"
+                  aria-label="open controls"
+                  className="flex items-center text-[color:var(--stone)] transition-colors hover:text-[color:var(--paper)] md:hidden"
+                >
+                  <SlidersHorizontal className="size-4" strokeWidth={1.5} />
+                </button>
+              </SheetTrigger>
+              <SheetContent
+                side="right"
+                className="w-[min(360px,90vw)] border-l border-[color:var(--hairline)]/30 bg-[color:var(--ink)]/95 p-5 backdrop-blur-md"
+              >
+                <SheetTitle className="font-mono text-[10px] uppercase tracking-[0.22em] text-[color:var(--stone)]">
+                  controls
+                </SheetTitle>
+                <div className="mt-4 overflow-y-auto pr-1">
+                  <ControlsPanel send={send} />
+                </div>
+              </SheetContent>
+            </Sheet>
+          )}
         </div>
       </div>
 
@@ -162,29 +193,30 @@ export default function Page() {
         )}
       >
         {/* Scene rail — left-anchored, top third. */}
-        <section className="pointer-events-auto mt-28 flex flex-1 gap-10 px-10">
-          <div className="relative w-[360px] shrink-0">
+        <section className="pointer-events-auto mt-24 flex flex-1 gap-6 px-4 md:mt-28 md:gap-10 md:px-10">
+          <div className="relative w-full md:w-[360px] md:shrink-0">
             <div aria-hidden className="paper-scrim absolute -inset-6 -z-10" />
             <PromptInput send={send} />
           </div>
 
-          <div className="flex-1" />
+          <div className="hidden flex-1 md:block" />
 
-          {/* Controls rail — right-anchored. */}
-          <div className="relative flex w-[260px] shrink-0 flex-col gap-10">
+          {/* Controls rail — right-anchored on md+; folds into the mobile
+             Sheet (see header) at narrower widths. */}
+          <div className="relative hidden w-[260px] shrink-0 flex-col gap-10 md:flex">
             <div aria-hidden className="paper-scrim absolute -inset-6 -z-10" />
             <ControlsPanel send={send} />
           </div>
         </section>
 
         {/* Bottom strip — single audio ribbon + one tight control row. */}
-        <section className="pointer-events-auto relative mb-6 px-10 pt-2">
+        <section className="pointer-events-auto relative mb-4 px-4 pt-2 md:mb-6 md:px-10">
           <div aria-hidden className="paper-scrim absolute -inset-x-4 -inset-y-2 -z-10" />
 
           <AudioRibbon height={40} />
 
-          <div className="mt-3 flex items-center justify-between gap-6">
-            <div className="flex items-center gap-6">
+          <div className="mt-3 flex items-center justify-between gap-3 sm:gap-6">
+            <div className="flex items-center gap-3 sm:gap-6">
               <MusicSource source={audioSource} setSource={setAudioSource} />
               <span aria-hidden className="hairline h-3 w-px opacity-30" />
               <VoiceListen send={send} />

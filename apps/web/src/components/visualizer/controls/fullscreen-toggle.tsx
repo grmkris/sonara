@@ -37,7 +37,7 @@ export function FullscreenToggle() {
       )}
     >
       <Icon className="size-3" strokeWidth={1.5} />
-      <span>{isFs ? "exit · f" : "full · f"}</span>
+      <span className="hidden sm:inline">{isFs ? "exit · f" : "full · f"}</span>
     </button>
   );
 }

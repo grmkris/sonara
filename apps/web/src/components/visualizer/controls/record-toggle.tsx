@@ -187,7 +187,13 @@ export function RecordToggle() {
           strokeWidth={1.5}
           fill={isRecording ? "currentColor" : "none"}
         />
-        <span>
+        <span
+          className={cn(
+            // Always show the saving / elapsed counter; hide the resting
+            // "rec · r" label on narrow screens to keep the top bar tight.
+            (!isExporting && !isRecording) && "hidden sm:inline",
+          )}
+        >
           {isExporting
             ? `saving ${exportPct}%`
             : isRecording

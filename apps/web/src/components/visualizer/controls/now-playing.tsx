@@ -36,7 +36,9 @@ export function NowPlaying() {
         ) : (
           <RefreshIcon />
         )}
-        <span>{recognizing ? "listening…" : "identify"}</span>
+        <span className="hidden sm:inline">
+          {recognizing ? "listening…" : "identify"}
+        </span>
       </button>
     );
   }
@@ -53,7 +55,7 @@ export function NowPlaying() {
       ) : (
         <div className="h-7 w-7 rounded-sm bg-[color:var(--stone)]/10" />
       )}
-      <div className="flex min-w-0 max-w-[160px] flex-col leading-tight">
+      <div className="hidden min-w-0 max-w-[160px] flex-col leading-tight sm:flex">
         <span
           className={cn(
             "truncate font-serif text-[11px] italic",

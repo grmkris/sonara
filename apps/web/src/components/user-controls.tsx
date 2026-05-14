@@ -48,7 +48,7 @@ export function UserControls() {
       <button
         type="button"
         onClick={() => setPanelOpen((v) => !v)}
-        className="font-mono text-[10px] uppercase tracking-[0.18em] text-[color:var(--paper)]/80 transition-colors hover:text-[color:var(--paper)]"
+        className="hidden font-mono text-[10px] uppercase tracking-[0.18em] text-[color:var(--paper)]/80 transition-colors hover:text-[color:var(--paper)] sm:inline"
         aria-label="open usage panel"
       >
         {label}
