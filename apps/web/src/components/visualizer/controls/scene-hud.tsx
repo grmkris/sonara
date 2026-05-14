@@ -6,7 +6,6 @@ import { cn } from "@/lib/utils";
 export function SceneHud() {
   const status = useVisualizerStore((s) => s.status);
   const statusMessage = useVisualizerStore((s) => s.statusMessage);
-  const connected = useVisualizerStore((s) => s.connected);
   const version = useVisualizerStore((s) => s.latestVersion);
   const demoMode = useVisualizerStore((s) => s.demoMode);
   const demoDeck = useVisualizerStore((s) => s.demoDeck);
@@ -15,19 +14,6 @@ export function SceneHud() {
 
   return (
     <div className="font-mono flex items-center gap-4 text-[10px] uppercase tracking-[0.22em] text-[color:var(--stone)]">
-      <span className="flex items-center gap-1.5">
-        <span
-          aria-hidden
-          className={cn(
-            "inline-block size-1.5 rounded-full",
-            connected
-              ? "bg-[color:var(--paper)]"
-              : "bg-[color:var(--stone)]",
-          )}
-        />
-        <span>ws</span>
-      </span>
-
       {demoMode && (
         <span className="flex items-baseline gap-1.5">
           <span className="bg-[color:var(--paper)] text-[color:var(--ink)] px-1 tracking-[0.14em]">

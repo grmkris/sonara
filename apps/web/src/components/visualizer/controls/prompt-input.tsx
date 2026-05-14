@@ -5,6 +5,20 @@ import { useEffect, useRef, useState } from "react";
 import type { SonaraSceneState } from "@sonara/shared";
 import type { SessionSend } from "@/lib/session-actions";
 import { Input } from "@/components/ui/input";
+import { Kbd } from "@/components/ui/kbd";
+import {
+  Command,
+  CommandEmpty,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import { PTT_LABEL } from "@/lib/keymap";
 import { useVisualizerStore } from "@/stores/visualizer";
 import { cn } from "@/lib/utils";
 
@@ -15,7 +29,7 @@ interface PromptInputProps {
 type FieldKey = "subject" | "environment" | "mood" | "palette";
 
 // Per-field suggestion pools. Surfaced as both the static placeholder text
-// (first entry) and as clickable chips beneath each input via `FieldChips`.
+// (first entry) and as the popover-command palette behind the chevron.
 const FIELD_SUGGESTIONS: Record<FieldKey, readonly string[]> = {
   subject: [
     "a heron over grey water",
@@ -85,9 +99,8 @@ export function PromptInput({ send }: PromptInputProps) {
   // received even though the fal generation takes a few seconds. Cleared
   // when status returns to idle.
   const [lastCommittedKey, setLastCommittedKey] = useState<FieldKey | null>(null);
-  // Which field's chip pool is expanded. At most one row is open at a time so
-  // the panel stays quiet by default; opens on focus or chevron-tap.
-  const [expandedKey, setExpandedKey] = useState<FieldKey | null>(null);
+  // Which field's popover is open. At most one is open at a time.
+  const [openKey, setOpenKey] = useState<FieldKey | null>(null);
   const inputRefs = useRef<Record<FieldKey, HTMLInputElement | null>>({
     subject: null,
     environment: null,
@@ -95,21 +108,15 @@ export function PromptInput({ send }: PromptInputProps) {
     palette: null,
   });
   // Tracks the value most recently sent over WS for each field, used to
-  // suppress duplicate sends (e.g. chip-click then immediate input blur).
+  // suppress duplicate sends (e.g. popover-pick then immediate input blur).
   // Cleared by the reconcile effect below once the server echoes the value
   // back into `scene[key]`.
   const lastSentRef = useRef<Partial<Record<FieldKey, string>>>({});
 
-  // Drop the in-flight indicator the moment the server settles. "running" is
-  // the only state where we want the chip visible; idle / cancelled / error
-  // all imply the wait is over.
   useEffect(() => {
     if (status !== "running") setLastCommittedKey(null);
   }, [status]);
 
-  // When the server echoes a committed value back into `scene[key]`, clear
-  // the matching optimistic draft + `lastSentRef` so future identical sends
-  // aren't suppressed and the input reads from `scene[key]` again.
   useEffect(() => {
     setDraft((d) => {
       let next = d;
@@ -154,6 +161,7 @@ export function PromptInput({ send }: PromptInputProps) {
         const sweep = sweepKey[f.key];
         const pool = FIELD_SUGGESTIONS[f.key];
         const placeholder = pool[0];
+        const isOpen = openKey === f.key;
         return (
           <div key={f.key} className="group relative flex flex-col gap-1.5">
             <div className="flex items-baseline gap-3">
@@ -163,6 +171,7 @@ export function PromptInput({ send }: PromptInputProps) {
               <span className="font-sans text-[10px] uppercase tracking-[0.28em] text-[color:var(--stone)]">
                 {f.label}
               </span>
+              <Kbd className="ml-auto">{PTT_LABEL[f.key]}</Kbd>
             </div>
             <div className="relative flex items-center gap-2">
               <Input
@@ -174,39 +183,88 @@ export function PromptInput({ send }: PromptInputProps) {
                 onChange={(e) =>
                   setDraft((d) => ({ ...d, [f.key]: e.target.value }))
                 }
-                onFocus={() => setExpandedKey(f.key)}
                 onBlur={() => commit(f.key)}
                 onKeyDown={(e) => {
                   if (e.key === "Enter") {
                     e.preventDefault();
                     commit(f.key);
                     inputRefs.current[f.key]?.blur();
-                    setExpandedKey(null);
                   } else if (e.key === "Escape") {
-                    setExpandedKey(null);
                     inputRefs.current[f.key]?.blur();
                   }
                 }}
               />
-              <button
-                type="button"
-                aria-label={
-                  expandedKey === f.key
-                    ? `Hide ${f.label} suggestions`
-                    : `Show ${f.label} suggestions`
-                }
-                aria-expanded={expandedKey === f.key}
-                onMouseDown={(e) => e.preventDefault()}
-                onClick={() =>
-                  setExpandedKey((cur) => (cur === f.key ? null : f.key))
-                }
-                className={cn(
-                  "shrink-0 text-[color:var(--stone)] transition-all hover:text-[color:var(--paper)]",
-                  expandedKey === f.key && "text-[color:var(--paper)] rotate-180",
-                )}
+              <Popover
+                open={isOpen}
+                onOpenChange={(o) => setOpenKey(o ? f.key : null)}
               >
-                <ChevronDown className="size-3.5" strokeWidth={1.5} />
-              </button>
+                <PopoverTrigger asChild>
+                  <button
+                    type="button"
+                    aria-label={`Pick ${f.label} from suggestions`}
+                    aria-expanded={isOpen}
+                    onMouseDown={(e) => e.preventDefault()}
+                    className={cn(
+                      "shrink-0 text-[color:var(--stone)] transition-all hover:text-[color:var(--paper)]",
+                      isOpen && "text-[color:var(--paper)] rotate-180",
+                    )}
+                  >
+                    <ChevronDown className="size-3.5" strokeWidth={1.5} />
+                  </button>
+                </PopoverTrigger>
+                <PopoverContent
+                  align="end"
+                  sideOffset={8}
+                  className="w-[300px] border-[color:var(--hairline)]/40 bg-[color:var(--ink)]/95 p-0 text-[color:var(--paper)] shadow-none backdrop-blur-md"
+                  onCloseAutoFocus={(e) => {
+                    e.preventDefault();
+                    inputRefs.current[f.key]?.focus();
+                  }}
+                >
+                  <Command
+                    className="bg-transparent text-[color:var(--paper)]"
+                    filter={(item, search) =>
+                      item.toLowerCase().includes(search.toLowerCase()) ? 1 : 0
+                    }
+                  >
+                    <CommandInput
+                      placeholder={`filter ${f.label.toLowerCase()}…`}
+                      className="font-mono text-[11px] tracking-[0.04em] placeholder:text-[color:var(--stone)]/60"
+                    />
+                    <CommandList className="max-h-[240px]">
+                      <CommandEmpty className="font-sans py-4 text-center text-[10px] uppercase tracking-[0.18em] text-[color:var(--stone)]">
+                        no match
+                      </CommandEmpty>
+                      {pool.map((chip) => {
+                        const isActive = chip === value;
+                        return (
+                          <CommandItem
+                            key={chip}
+                            value={chip}
+                            onSelect={() => {
+                              commitValue(f.key, chip);
+                              setOpenKey(null);
+                            }}
+                            className={cn(
+                              "font-sans cursor-pointer rounded-none border-b border-[color:var(--hairline)]/15 px-3 py-2 text-[11px] tracking-[0.04em] last:border-b-0 aria-selected:bg-[color:var(--paper)]/8 aria-selected:text-[color:var(--paper)] data-[selected=true]:bg-[color:var(--paper)]/8 data-[selected=true]:text-[color:var(--paper)]",
+                              isActive
+                                ? "text-[color:var(--paper)]"
+                                : "text-[color:var(--paper)]/75",
+                            )}
+                          >
+                            {chip}
+                            {isActive && (
+                              <span className="font-mono ml-auto text-[9px] uppercase tracking-[0.18em] text-[color:var(--stone)]">
+                                current
+                              </span>
+                            )}
+                          </CommandItem>
+                        );
+                      })}
+                    </CommandList>
+                  </Command>
+                </PopoverContent>
+              </Popover>
               <button
                 type="button"
                 aria-label={`Commit ${f.label}`}
@@ -232,35 +290,6 @@ export function PromptInput({ send }: PromptInputProps) {
                 className="font-sans text-[10px] italic tracking-[0.04em] text-[color:var(--stone)]/80"
               >
                 ⟲ regenerating…
-              </div>
-            )}
-            {expandedKey === f.key && (
-              <div
-                className="chips-reveal flex flex-wrap gap-1.5"
-                onMouseDown={(e) => e.preventDefault()}
-              >
-                {pool.map((chip) => {
-                  const isActive = chip === value;
-                  return (
-                    <button
-                      key={chip}
-                      type="button"
-                      title={chip}
-                      onClick={() => {
-                        commitValue(f.key, chip);
-                        setExpandedKey(null);
-                      }}
-                      className={cn(
-                        "font-sans text-[10px] uppercase tracking-[0.14em] transition-colors border-b px-1.5 py-0.5",
-                        isActive
-                          ? "text-[color:var(--paper)] border-[color:var(--paper)]"
-                          : "text-[color:var(--stone)] border-[color:var(--hairline)]/30 hover:text-[color:var(--paper)] hover:border-[color:var(--paper)]/60",
-                      )}
-                    >
-                      {chip}
-                    </button>
-                  );
-                })}
               </div>
             )}
           </div>

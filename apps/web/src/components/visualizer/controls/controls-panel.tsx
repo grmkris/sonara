@@ -5,6 +5,12 @@ import type { SonaraSceneState } from "@sonara/shared";
 import type { SessionSend } from "@/lib/session-actions";
 import { Slider } from "@/components/ui/slider";
 import {
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+} from "@/components/ui/tabs";
+import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
@@ -49,61 +55,66 @@ export function ControlsPanel({ send }: ControlsPanelProps) {
     });
 
   return (
-    <div className="flex flex-col gap-5">
+    <div className="relative flex flex-col gap-5 rounded-sm border border-[color:var(--hairline)]/25 p-4">
       <DemoModeToggle send={send} />
 
-      {/* Tab strip — serif italics, underline on active. */}
-      <nav
-        role="tablist"
-        aria-label="console"
-        className="flex items-baseline gap-5"
+      <div
+        aria-hidden
+        className="h-px w-full bg-[color:var(--hairline)]/20"
+      />
+
+      <Tabs
+        value={tab}
+        onValueChange={(v) => pickTab(v as ConsoleTab)}
+        className="gap-4"
       >
-        {TABS.map((t) => {
-          const active = tab === t.id;
-          return (
-            <button
+        <TabsList
+          variant="line"
+          className="h-auto justify-start gap-5 bg-transparent p-0"
+        >
+          {TABS.map((t) => (
+            <TabsTrigger
               key={t.id}
-              role="tab"
-              type="button"
-              aria-selected={active}
-              onClick={() => pickTab(t.id)}
+              value={t.id}
               className={cn(
-                "font-serif text-[13px] italic tracking-normal transition-colors",
-                "border-b pb-1",
-                active
-                  ? "border-[color:var(--paper)] text-[color:var(--paper)]"
-                  : "border-transparent text-[color:var(--stone)] hover:text-[color:var(--paper)]/85 hover:border-[color:var(--hairline)]/30",
+                "font-serif h-auto flex-none rounded-none px-0 py-1 text-[13px] italic",
+                "border-b border-transparent text-[color:var(--stone)] shadow-none",
+                "hover:text-[color:var(--paper)]/85",
+                "data-[state=active]:border-[color:var(--paper)] data-[state=active]:bg-transparent data-[state=active]:text-[color:var(--paper)] data-[state=active]:shadow-none",
+                "after:hidden",
               )}
             >
               {t.label}
-            </button>
-          );
-        })}
-      </nav>
+            </TabsTrigger>
+          ))}
+        </TabsList>
 
-      {/* Active tab panel. */}
-      <div key={tab} role="tabpanel" className="panel-reveal flex flex-col gap-5">
-        {tab === "scene" && <SceneTemplatePicker send={send} />}
+        <TabsContent value="scene" className="panel-reveal flex flex-col gap-5">
+          <SceneTemplatePicker send={send} />
+        </TabsContent>
 
-        {tab === "style" && (
-          <>
-            <PresetPicker />
-            <IntensityDial send={send} />
-            <div className="flex flex-col gap-3">
-              {SLIDERS.map((s) => (
-                <SliderRow
-                  key={s.key}
-                  label={s.label}
-                  value={scene[s.key]}
-                  onChange={(v) => patchSlider(s.key, v)}
-                />
-              ))}
-            </div>
-          </>
-        )}
+        <TabsContent value="style" className="panel-reveal flex flex-col gap-5">
+          <PresetPicker />
+          <IntensityDial send={send} />
+          <div className="flex flex-col gap-3">
+            {SLIDERS.map((s) => (
+              <SliderRow
+                key={s.key}
+                label={s.label}
+                value={scene[s.key]}
+                onChange={(v) => patchSlider(s.key, v)}
+              />
+            ))}
+          </div>
+        </TabsContent>
 
-        {tab === "inspector" && <GenerationInspector />}
-      </div>
+        <TabsContent
+          value="inspector"
+          className="panel-reveal flex flex-col gap-5"
+        >
+          <GenerationInspector />
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }
