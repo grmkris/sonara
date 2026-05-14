@@ -134,6 +134,19 @@ For the WebSocket: the web app mints a 5-min HMAC ticket via `auth.mintWsTicket`
 
 Pricing in `packages/shared/src/pricing.ts` — single source of truth for both UI and server.
 
+## Demo image library
+
+Pre-generated, deck-organised images that bypass fal during client demos. Zero per-frame cost, zero latency, no credit debit. Bound by an explicit DEMO toggle in the controls panel — never auto-engaged.
+
+- **Schema**: `packages/db/src/schema/image-library.db.ts`. Indexes: `(deck, status)` btree + `prompt_hash` unique. `status` is `"active" | "rejected"` — curation is manual SQL today (`UPDATE image_library SET status='rejected' WHERE id = …`); no `/dev` page.
+- **Deck registry**: `packages/shared/src/decks.ts` is the single source of deck keys + display labels. Adding a deck is one entry + a manifest section.
+- **Server pick path**: `apps/server/src/generation/library-provider.ts → pickLibraryFrame(deck, excludeIds, logger)`. Raw `pg` via `apps/server/src/db/pool.ts` (also used by `credits.service.ts`). LRU is 10 typeids tracked on `Session`.
+- **Trigger bypass**: `Session.trigger()` short-circuits to `triggerLibrary()` at the very top when `demoMode && demoDeck`. Bypasses the empty-subject guard, credit gate, resolver, and fal entirely. Empty deck → emits a `job.status` `error` with a friendly toast message; **does not** silently fall back to fal.
+- **Toggle plumbing**: oRPC `session.setDemoMode` (`packages/api/src/routers/session.router.ts`). Client store: `apps/web/src/stores/visualizer/demo-slice.ts` (localStorage-persisted). On every `socket.open`, `useWsSession` re-pushes `{demoMode, demoDeck}` so a refresh keeps the demo running. `setDemoMode` clears `heroImageUrl` + the LRU on every toggle, and fires an instant first frame on demo-on.
+- **Assets**: WebPs live under `apps/web/public/library/<deck>/<typeid>.webp` and ship with the Next build. Database `url` column stores the relative path — same on dev and prod.
+- **Seeding fresh prompts** (calls fal): `cd apps/server && bun run seed:library` (optionally `--deck <key> --limit <n> --model <id> --dry-run`). Re-runs are idempotent via `sha256(deck::prompt)` in `prompt_hash`.
+- **Seeding from the committed export** (no fal, replay-safe): `bun run export:library` after a fal seed dumps `apps/server/scripts/library-seed.json` (commit it). `bun run seed:library -- --from-export` replays it. Production fill-up: `railway run --service server -- bun run scripts/seed-library.ts -- --from-export`.
+
 ## Don't touch
 
 - `apps/web/src/components/visualizer/canvas/displacement-canvas.tsx` (~900 LOC) — tightly-coupled WebGL2 state.

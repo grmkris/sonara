@@ -46,6 +46,21 @@ interface Args {
   limit: number | null;
   model: string;
   dryRun: boolean;
+  fromExport: boolean;
+}
+
+interface ExportRow {
+  id: ImageLibraryId;
+  deck: string;
+  prompt: string;
+  promptHash: string;
+  model: string;
+  seed: number | null;
+  url: string;
+  width: number;
+  height: number;
+  palette: string[] | null;
+  status: "active" | "rejected";
 }
 
 function fail(msg: string): never {
@@ -59,6 +74,7 @@ function parseArgs(): Args {
   let limit: number | null = null;
   let model = env.FAL_TEXT_MODEL;
   let dryRun = false;
+  let fromExport = false;
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === "--deck") {
@@ -77,11 +93,13 @@ function parseArgs(): Args {
       model = v;
     } else if (a === "--dry-run") {
       dryRun = true;
+    } else if (a === "--from-export") {
+      fromExport = true;
     } else {
       fail(`unknown arg: ${a}`);
     }
   }
-  return { deck, limit, model, dryRun };
+  return { deck, limit, model, dryRun, fromExport };
 }
 
 function promptHash(deck: string, prompt: string): string {
@@ -140,8 +158,68 @@ async function downloadAndEncode(url: string): Promise<{
   };
 }
 
+async function importFromExport(args: Args): Promise<void> {
+  const databaseUrl = env.DATABASE_URL;
+  if (!databaseUrl) fail("DATABASE_URL not set");
+
+  const exportPath = resolve(
+    dirname(fileURLToPath(import.meta.url)),
+    "library-seed.json",
+  );
+  const raw = await Bun.file(exportPath).text();
+  const rows = JSON.parse(raw) as ExportRow[];
+  const filtered = args.deck ? rows.filter((r) => r.deck === args.deck) : rows;
+
+  const db = createDb(databaseUrl);
+  let imported = 0;
+  let skipped = 0;
+  let failed = 0;
+
+  for (const row of filtered) {
+    const existing = await db
+      .select({ id: SCHEMA.imageLibrary.id })
+      .from(SCHEMA.imageLibrary)
+      .where(eq(SCHEMA.imageLibrary.promptHash, row.promptHash))
+      .limit(1);
+    if (existing.length > 0) {
+      skipped++;
+      continue;
+    }
+    try {
+      await db.insert(SCHEMA.imageLibrary).values({
+        id: row.id,
+        deck: row.deck,
+        prompt: row.prompt,
+        promptHash: row.promptHash,
+        model: row.model,
+        seed: row.seed,
+        url: row.url,
+        width: row.width,
+        height: row.height,
+        palette: row.palette,
+        status: row.status,
+      });
+      imported++;
+      console.log(`  + ${row.deck}/${row.id}.webp  "${row.prompt.slice(0, 60)}"`);
+    } catch (err) {
+      console.error(`[fail] ${row.deck} "${row.prompt}":`, err);
+      failed++;
+    }
+  }
+
+  console.log(
+    `\nfrom-export: ${imported} imported, ${skipped} skipped, ${failed} failed (out of ${filtered.length})`,
+  );
+  process.exit(failed > 0 ? 1 : 0);
+}
+
 async function main() {
   const args = parseArgs();
+
+  if (args.fromExport) {
+    await importFromExport(args);
+    return;
+  }
 
   const databaseUrl = env.DATABASE_URL;
   if (!databaseUrl) fail("DATABASE_URL not set");

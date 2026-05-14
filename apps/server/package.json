@@ -12,7 +12,8 @@
     "fix": "oxlint --fix",
     "test": "bun test || echo 'no tests yet'",
     "ingest-demo": "bun run src/scripts/ingest-demo.ts",
-    "seed:library": "bun run scripts/seed-library.ts"
+    "seed:library": "bun run scripts/seed-library.ts",
+    "export:library": "bun run scripts/export-library.ts"
   },
   "dependencies": {
     "@fal-ai/client": "^1.9.5",

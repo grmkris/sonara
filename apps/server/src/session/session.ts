@@ -371,8 +371,20 @@ export class Session {
   setDemoMode(on: boolean, deck: DeckKey | null): void {
     this.demoMode = on;
     this.demoDeck = on ? deck : null;
-    if (!on) this.recentLibraryPicks = [];
+    // Always reset on every toggle. (a) Deck may have changed, so the LRU's
+    // exclude-set is stale. (b) heroImageUrl may be a /library/... relative
+    // path — fal-edit can't fetch that, so a later demo→off transition would
+    // crash the next fal trigger. Clearing here means the next trigger acts
+    // as "first frame" regardless of mode.
+    this.recentLibraryPicks = [];
+    this.heroImageUrl = null;
     this.logger.info({ demoMode: on, demoDeck: this.demoDeck }, "demo mode set");
+    // Kill the up-to-16s wait between toggling DEMO on and seeing the first
+    // library frame. trigger() short-circuits into triggerLibrary() at the
+    // top, so this is one library pick without any fal involvement.
+    if (on && deck) {
+      void this.trigger("semantic");
+    }
   }
 
   reset(): void {
@@ -654,8 +666,9 @@ export class Session {
   // Library-mode trigger. Picks one row from image_library, emits the same
   // frame.final / job.status / generation.completed sequence the fal path
   // emits — the client crossfade is identical. No credit debit, no fal call,
-  // no prompt resolver. Empty deck falls through to the standard fal path
-  // so demo sessions stay usable while a deck is still seeding.
+  // no prompt resolver. Empty deck emits a friendly error and stops; we do
+  // NOT silently fall back to fal — the user explicitly opted out of fal by
+  // entering DEMO mode, and falling back would burn credits unexpectedly.
   private async triggerLibrary(
     reason: TriggerSource,
   ): Promise<void> {
@@ -680,26 +693,14 @@ export class Session {
     if (!pick) {
       this.logger.warn(
         { deck: this.demoDeck },
-        "library deck empty — falling back to fal path",
+        "library deck empty — emitting error, not falling back to fal",
       );
-      // Drop the version we just bumped so the fal trigger increments
-      // cleanly on the next attempt. (activeVersion is monotonic in the
-      // fal path; here we never emitted anything for this version.)
       this.activeVersion -= 1;
-      // Schedule a normal trigger so the user still gets a frame. Skip if
-      // subject is empty (matches the standard guard).
-      if (this.scene.subject.trim()) {
-        // Temporarily disable demo so the recursive call takes the fal
-        // branch. Restore immediately after — this is purely a per-trigger
-        // fallback; the session stays in demo mode otherwise.
-        const wasDemo = this.demoMode;
-        this.demoMode = false;
-        try {
-          await this.trigger(reason);
-        } finally {
-          this.demoMode = wasDemo;
-        }
-      }
+      this.send({
+        type: "job.status",
+        status: "error",
+        message: `Demo deck "${this.demoDeck}" is empty — pick another deck or turn DEMO off.`,
+      });
       return;
     }
 
