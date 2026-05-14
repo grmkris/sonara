@@ -34,6 +34,7 @@ import {
 } from "@/hooks/use-audio-features";
 import { useSongRecognition } from "@/hooks/use-song-recognition";
 import { useHotkey } from "@/hooks/use-hotkey";
+import { HOTKEYS } from "@/lib/hotkeys";
 import {
   hydrateConsoleTab,
   hydrateDemoPrefs,
@@ -87,7 +88,7 @@ export default function Page() {
   }, []);
 
   useHotkey(
-    "Backspace",
+    HOTKEYS.reset,
     useCallback(() => {
       setAudioSource({ type: "none" });
       send({ type: "session.reset" });
@@ -131,7 +132,7 @@ export default function Page() {
                 <button
                   type="button"
                   aria-label="open controls"
-                  className="flex items-center text-[color:var(--stone)] transition-colors hover:text-[color:var(--paper)] md:hidden"
+                  className="focus-ring flex items-center text-[color:var(--stone)] transition-colors hover:text-[color:var(--paper)] md:hidden"
                 >
                   <SlidersHorizontal className="size-4" strokeWidth={1.5} />
                 </button>

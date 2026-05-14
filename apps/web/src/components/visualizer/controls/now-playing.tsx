@@ -24,7 +24,7 @@ export function NowPlaying() {
         onClick={requestIdentify}
         disabled={recognizing}
         className={cn(
-          "pointer-events-auto flex items-center gap-2 rounded-sm border border-[color:var(--hairline)]/40 bg-black/20 px-2 py-1 backdrop-blur-sm",
+          "focus-ring pointer-events-auto flex items-center gap-2 rounded-sm border border-[color:var(--hairline)]/40 bg-black/20 px-2 py-1 backdrop-blur-sm",
           "font-mono text-[10px] uppercase tracking-[0.2em] text-[color:var(--stone)] transition",
           "hover:text-[color:var(--paper)] disabled:opacity-60",
         )}
@@ -73,7 +73,7 @@ export function NowPlaying() {
         type="button"
         onClick={requestIdentify}
         disabled={recognizing}
-        className="rounded-sm p-1 text-[color:var(--stone)] transition hover:text-[color:var(--paper)] disabled:opacity-60"
+        className="focus-ring rounded-sm p-1 text-[color:var(--stone)] transition hover:text-[color:var(--paper)] disabled:opacity-60"
         title={recognizing ? "recognising…" : "identify again"}
         aria-label={recognizing ? "recognising" : "identify again"}
       >

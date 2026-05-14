@@ -6,7 +6,7 @@ import { useKeyedPushToTalk } from "@/hooks/use-keyed-push-to-talk";
 import { useVoiceRecognition } from "@/hooks/use-voice-recognition";
 import { useVisualizerStore } from "@/stores/visualizer";
 import type { VoiceField } from "@/stores/visualizer/voice-slice";
-import { PTT_KEYMAP } from "@/lib/keymap";
+import { PTT_KEYMAP } from "@/lib/scene-fields";
 import { cn } from "@/lib/utils";
 
 interface VoiceListenProps {

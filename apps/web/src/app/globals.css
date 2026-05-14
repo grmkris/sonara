@@ -159,6 +159,14 @@ input::placeholder {
 /* Tabular numerals for anything telemetric. */
 .nums { font-variant-numeric: tabular-nums; font-feature-settings: "tnum" on; }
 
+/* Consistent focus ring for custom <button> elements that don't go through
+   the shadcn Button variant (which currently sets only `outline-none`). */
+.focus-ring:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 1px color-mix(in oklab, var(--paper) 70%, transparent);
+  border-radius: 2px;
+}
+
 /* Trigger-log line fade-in. */
 @keyframes log-fade {
   0%   { opacity: 0; transform: translateY(4px); }

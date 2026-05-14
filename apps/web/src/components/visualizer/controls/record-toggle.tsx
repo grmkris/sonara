@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Circle, Volume2, VolumeX } from "lucide-react";
 import { toast } from "sonner";
 import { useHotkey } from "@/hooks/use-hotkey";
+import { HOTKEYS } from "@/lib/hotkeys";
 import { cn } from "@/lib/utils";
 import {
   buildFilename,
@@ -142,7 +143,7 @@ export function RecordToggle() {
     else if (phase === "recording") void stop();
   }, [phase, start, stop]);
 
-  useHotkey("r", toggle);
+  useHotkey(HOTKEYS.record, toggle);
 
   if (!supported) return null;
 
