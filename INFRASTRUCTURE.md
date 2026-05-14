@@ -21,9 +21,11 @@ and external API the app touches in production.
 flowchart LR
     User([User<br/>Browser])
 
-    subgraph Railway["Railway project: fearless-nourishment"]
-        Web["web<br/>Next.js 16 standalone<br/>(Docker)"]
-        Server["server<br/>Bun + Hono + Bun.serve WS<br/>(Docker)"]
+    CF["Cloudflare DNS<br/>sonara.fm zone<br/>(DNS + TLS edge)"]
+
+    subgraph Railway["Railway project: sonara"]
+        Web["web<br/>Next.js 16 standalone<br/>https://sonara.fm"]
+        Server["server<br/>Bun + Hono + Bun.serve WS<br/>https://api.sonara.fm"]
         PG[("Postgres<br/>(Railway template)")]
     end
 
@@ -33,12 +35,12 @@ flowchart LR
         Apple["Apple Music<br/>track enrichment"]
         Gemini["Google Gemini<br/>(via fal any-llm)<br/>voice-intent parser"]
         Base["Base chain<br/>USDC top-ups (Reown Pay)"]
-        Reown["Reown / WalletConnect<br/>SIWE auth"]
+        Dodo["Dodo Payments<br/>(webhook on web)"]
     end
 
-    User -- "HTTPS<br/>(Next.js SSR + RSC)" --> Web
-    User -- "WSS /ws<br/>oRPC over partysocket" --> Server
-    Web -- "HTTPS /rpc<br/>credits, auth, ticket mint" --> Server
+    User --> CF
+    CF -- "sonara.fm<br/>(SSR + /api/auth)" --> Web
+    CF -- "api.sonara.fm<br/>WSS /ws" --> Server
     Server --> PG
     Web --> PG
 
@@ -47,14 +49,16 @@ flowchart LR
     Server -. "track metadata" .-> Apple
     Server -. "intent parse" .-> Gemini
 
-    User -. "SIWE login" .-> Reown
     User -. "USDC pay" .-> Base
+    Web -. "webhook in" .-> Dodo
     Web -. "credit ledger sync" .-> PG
 
     classDef railway fill:#0b0d12,stroke:#7d5fff,color:#fff
     classDef ext fill:#1a1a2e,stroke:#ffa07a,color:#fff
+    classDef cf fill:#2b1a0a,stroke:#ffaf5f,color:#fff
     class Web,Server,PG railway
-    class Fal,AudD,Apple,Gemini,Base,Reown ext
+    class Fal,AudD,Apple,Gemini,Base,Dodo ext
+    class CF cf
 ```
 
 > **Note.** Everything ships from one git repo (Turborepo monorepo). Two Docker images.
@@ -276,11 +280,12 @@ sequenceDiagram
 
 | Channel | Protocol | URL | Auth | Direction |
 |---|---|---|---|---|
-| Web SSR | HTTPS | `https://<web>/` | none (public) | Browser ⇄ web |
-| RPC (credits, auth, ticket mint) | HTTPS | `https://<web>/rpc/*` | better-auth cookie | Browser ⇄ web |
-| Server RPC | HTTPS | `https://<server>/rpc/*` | better-auth cookie | Web ⇄ server (internal callable) |
-| Healthcheck | HTTPS | `https://<server>/health` | none | Railway / curl |
-| **Realtime session** | **WSS** | `wss://<server>/ws` | **HMAC ticket** (single-use, minted via RPC) | Browser ⇄ server |
+| Web SSR | HTTPS | `https://sonara.fm/` | none (public) | Browser ⇄ web |
+| Better Auth | HTTPS | `https://sonara.fm/api/auth/*` | better-auth cookie | Browser ⇄ web |
+| oRPC (credits, ticket mint) | HTTPS | `https://sonara.fm/rpc/*` | better-auth cookie | Browser ⇄ web |
+| Dodo webhook (when live) | HTTPS | `https://sonara.fm/api/dodo/*` | Dodo signature | Dodo → web |
+| Healthcheck | HTTPS | `https://api.sonara.fm/health` | none | Railway / curl |
+| **Realtime session** | **WSS** | `wss://api.sonara.fm/ws` | **HMAC ticket** (single-use, minted via RPC on web) | Browser ⇄ server |
 | DB | TCP/TLS | `${{Postgres.DATABASE_URL}}` | password | server, web ⇄ Postgres |
 | fal.ai | HTTPS | `https://fal.run/...` | `FAL_KEY` | server → fal |
 | AudD | HTTPS | `https://api.audd.io/` | `AUDD_API_KEY` | server → AudD |
@@ -291,7 +296,9 @@ sequenceDiagram
 > **Warning.** WS upgrade is the **only** path that uses a single-use HMAC ticket
 > instead of a cookie. The browser RPC-calls `auth.mintWsTicket()` on every reconnect,
 > then includes the ticket as a query param. The server verifies on upgrade and
-> rejects with 401 otherwise.
+> rejects with 401 otherwise. This is also what lets `api.sonara.fm` live on a
+> different origin from `sonara.fm` without CORS or shared cookies — WS is
+> origin-agnostic by construction.
 
 ---
 

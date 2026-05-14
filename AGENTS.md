@@ -13,21 +13,64 @@ Conventions for working in this repo. Read this before making non-trivial change
 
 ## Production
 
-Deployed on **Railway** (Postgres template + two app services). Any `DATABASE_URL` in `apps/web/.env` / `apps/server/.env` is local-dev only — it points at a `bun run db:start` Postgres on `localhost:54324`, **not what production runs against**. Railway injects the prod DB URL at runtime via `${{Postgres.DATABASE_URL}}`; the server reads it from `env.DATABASE_URL` and applies `packages/db` migrations on every boot.
+Deployed on **Railway** behind **Cloudflare DNS** on the `sonara.fm` zone. Postgres template + two app services. Any `DATABASE_URL` in `apps/web/.env` / `apps/server/.env` is local-dev only — it points at a `bun run db:start` Postgres on `localhost:54324`, **not what production runs against**. Railway injects the prod DB URL at runtime via `${{Postgres.DATABASE_URL}}`; the server reads it from `env.DATABASE_URL` and applies `packages/db` migrations on every boot.
 
 ### Project
 
-- **Name**: `fearless-nourishment`
+- **Name**: `sonara`
 - **ID**: `33e35438-b78d-4cf9-8fe6-d0ba87e3c111`
 - **Dashboard**: https://railway.com/project/33e35438-b78d-4cf9-8fe6-d0ba87e3c111
 
 ### Services
 
-| Service | Public domain | Service ID | Role |
-|---|---|---|---|
-| `web` | https://web-production-53719.up.railway.app | `235aa1d4-8c1b-4b7a-989a-099e61807e8c` | Next.js standalone; HTTP `/`, `/rpc/*`, `/api/auth/*` |
-| `server` | https://server-production-2f7a.up.railway.app | `12262832-9534-4230-b032-c675d87f29b8` | Bun + Hono; HTTP `/health`, `/rpc/*`, WS `/ws` |
-| `Postgres` | `postgres.railway.internal:5432` (private) | n/a (Railway template) | auth + credits ledger |
+| Service | Public URL | Railway CNAME target | Service ID | Role |
+|---|---|---|---|---|
+| `web` | https://sonara.fm (+ www → 301 → apex) | `oatvmd0b.up.railway.app` (apex), `sdb5b4d0.up.railway.app` (www) | `235aa1d4-8c1b-4b7a-989a-099e61807e8c` | Next.js standalone; SSR + `/api/auth/*` (Better Auth) + future `/api/dodo/*` |
+| `server` | https://api.sonara.fm | `bgpax7bc.up.railway.app` | `12262832-9534-4230-b032-c675d87f29b8` | Bun + Hono; HTTP `/health`, WSS `/ws` |
+| `Postgres` | `postgres.railway.internal:5432` (private) | n/a | n/a (Railway template) | auth + credits ledger |
+
+The Bun server exposes **no browser-facing HTTP API** beyond `/health`. All HTTP that the browser hits (Better Auth, Dodo webhook) is served by Next.js on the web service. Only the WebSocket crosses the origin boundary, and it auths with an HMAC ticket (not the auth cookie), so cross-origin to `api.sonara.fm` is fine.
+
+Railway's auto-generated `*.up.railway.app` domains remain live as a fallback during the cutover window. Remove after a week of stable traffic on the new URLs.
+
+### Cloudflare
+
+- **Zone**: `sonara.fm` — id `3c4eff43a369f04340f8f83efb4870db`
+- **Account**: `Kristjan.grm1@gmail.com's Account` — id `bceaeae4788dce3493514fde194b4a7e`
+- **Records** (all proxied / orange-cloud):
+  - `CNAME @` → `oatvmd0b.up.railway.app` (Railway web)
+  - `CNAME www` → `sdb5b4d0.up.railway.app` (Railway web)
+  - `CNAME api` → `bgpax7bc.up.railway.app` (Railway server)
+  - `TXT _railway-verify`, `_railway-verify.www`, `_railway-verify.api` — Railway ownership tokens (required because Railway detects the CF proxy and falls back to TXT verification; do **not** delete)
+  - 5x `MX` (email forwarding via Namecheap) + 1x `TXT` SPF — out-of-scope, leave alone
+- **SSL/TLS mode**: Full (strict). Railway issues valid Let's Encrypt certs on custom domains.
+- **Always Use HTTPS**: on. **Automatic HTTPS Rewrites**: on.
+- **www → apex**: **Page Rule** (not Bulk Redirect) — `www.sonara.fm/*` matches → forwarding URL `https://sonara.fm/$1` (301). Rule id `f5cc5fcde50ff7f29c21950d51259774`.
+
+CF runs **DNS + TLS edge only** — no Workers, no rules-engine compute. All compute on Railway.
+
+#### CF MCP — what it is and how to use it
+
+`.mcp.json` registers the Cloudflare MCP (`https://mcp.cloudflare.com/mcp`) via `mcp-remote`, with a bearer API token (gitignored) passed as `--header "Authorization: Bearer ..."`. It exposes exactly **two tools**:
+
+| Tool | Purpose |
+|---|---|
+| `mcp__cloudflare__search` | Search CF's OpenAPI spec for endpoints — call this **first** when you don't know the API path |
+| `mcp__cloudflare__execute` | Execute a JS arrow function against CF's REST API via `cloudflare.request({ method, path, query, body })` |
+
+This is "Code Mode" — there are no typed per-domain tools (no `list_dns_records`, etc.). Search the spec, then write the call.
+
+Current token scope (any other op returns `9109 Unauthorized — request is not authorized`):
+
+- Zone → DNS → Edit
+- Zone → Zone → Read
+- Zone → Zone Settings → Edit
+- Zone → SSL and Certificates → Edit
+- Zone → Page Rules → Edit
+- Zone → Cache Rules → Edit (if added)
+- **NOT** granted: Config Rules / Rulesets, Workers, R2, Tunnel, Account-level. Need a new permission? Edit the token at https://dash.cloudflare.com/profile/api-tokens → token `sonara.fm claude code integration` → Edit → add permission → Save. The token id is the same after edits; the MCP picks it up on the next session (no config change).
+
+`curl` against `https://api.cloudflare.com/client/v4/...` with `Authorization: Bearer <token>` works for ad-hoc debugging when MCP isn't initialised yet.
 
 ### CLI (already installed + authenticated locally)
 
@@ -35,14 +78,15 @@ Deployed on **Railway** (Postgres template + two app services). Any `DATABASE_UR
 railway status                           # current project + service health
 railway logs --service server -n 100     # pino structured logs (server or web)
 railway variables --service server --kv  # env vars set on a service
+railway domain api.sonara.fm --service server  # add a custom domain, prints CNAME target
 railway redeploy --service server --yes  # redeploy latest deployment, no rebuild
 railway run --service web -- <cmd>       # run a local command with Railway env vars injected
 railway service Postgres && railway connect  # psql tunnel to the prod DB
 ```
 
-Bash invocations of `railway status:*`, `railway logs:*`, `railway variables:*`, `railway whoami`, `railway list`, `railway link:*`, `railway service` are pre-approved in `.claude/settings.local.json` — they don't need per-session permission. Destructive commands (`redeploy`, `down`, `delete`, `run -- …`) still gate on user approval.
+Bash invocations of `railway status:*`, `railway logs:*`, `railway variables:*`, `railway whoami`, `railway list`, `railway link:*`, `railway service`, `railway domain:*`, `railway open:*` are pre-approved in `.claude/settings.local.json` — they don't need per-session permission. Destructive commands (`redeploy`, `down`, `delete`, `run -- …`) still gate on user approval.
 
-Railway local MCP is registered in `.mcp.json` (gitignored). Future agents pick up `mcp__railway__*` tools automatically; falls back to CLI if MCP isn't initialized.
+`.mcp.json` (gitignored) registers `railway`, `cloudflare`, and `shadcn` MCP servers. Future agents pick up `mcp__railway__*` / `mcp__cloudflare__*` tools automatically; CLI is the fallback for Railway when MCP isn't initialized.
 
 ### Schema migrations
 
@@ -119,12 +163,14 @@ Voice intent is duplicated by design: the `VoiceController` on the server owns d
 
 ## Auth
 
-Two methods on the same Better Auth instance (`apps/web/src/server/auth.ts`), one session cookie, read by `protectedProcedure` middleware.
+Better Auth instance in `apps/web/src/server/auth.ts`. One session cookie, read by `protectedProcedure` middleware. `trustedOrigins = [baseURL]`, where `baseURL` is derived from `env.APP_URL` — bumping the env var transparently updates origins on the next deploy.
 
-1. **SIWE wallet** (open): Reown AppKit → Better Auth `siwe` plugin. Anonymous mode — any wallet that signs the SIWE message gets a user row with synthetic email `<addr>@wallet.<host>`. ERC-1271 + ERC-6492 verification via the Reown-tuned mainnet client in `apps/web/src/lib/chain-clients.ts`.
-2. **Email + password** (allowlist-gated): Better Auth's built-in `emailAndPassword`. Signup is rejected by `databaseHooks.user.create.before` unless the email exists in the `allowed_email` table. Add an email with `bun run --filter=web allow-email <address> [note]`. UI lives at `/login`.
+- **Email + password** (allowlist-gated): Better Auth's built-in `emailAndPassword`. Signup is rejected by `databaseHooks.user.create.before` unless the email exists in the `allowed_email` table. Add an email with `bun run --filter=web allow-email <address> [note]`. UI lives at `/login`.
+- **Dodo Payments plugin** (optional, currently inactive in prod with placeholder envs): registers when both `DODO_PAYMENTS_API_KEY` and `DODO_PAYMENTS_WEBHOOK_SECRET` are set.
 
-For the WebSocket: the web app mints a 5-min HMAC ticket via `auth.mintWsTicket`; the browser opens `ws://server/ws?token=…`; the server verifies the ticket via `verifyTicket` from `@sonara/shared`. The ticket path is auth-method-agnostic — both SIWE and email-password users get the same ticket.
+For the WebSocket: the web app mints a 5-min HMAC ticket via `auth.mintWsTicket`; the browser opens `wss://api.sonara.fm/ws?token=…`; the server verifies the ticket via `verifyTicket` from `@sonara/shared`. The ticket path is auth-method-agnostic, which is why WS lives on a cross-origin subdomain without needing CORS or shared cookies.
+
+SIWE / Reown wallet auth is not currently wired in `auth.ts` — earlier iterations referenced a Reown AppKit + SIWE plugin path; that code is not present today. The `NEXT_PUBLIC_REOWN_PROJECT_ID` / `NEXT_PUBLIC_PAY_RECIPIENT_BASE` envs feed the USDC top-up flow only.
 
 ## Credits & money path
 

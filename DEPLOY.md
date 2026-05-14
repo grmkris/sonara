@@ -1,32 +1,45 @@
-# Deploy — Railway (three services, one project)
+# Deploy — Cloudflare DNS + Railway (three services, one project)
 
-> For day-to-day CLI commands, project + service IDs, and migration workflow, see **AGENTS.md §Production**. This doc covers from-scratch deploy wiring (provisioning, variable layout, build-args vs runtime env).
+> For day-to-day CLI commands, project + service IDs, and migration workflow, see **AGENTS.md §Production**. This doc covers from-scratch deploy wiring (provisioning, variable layout, build-args vs runtime env, DNS).
 
-Everything runs on Railway via Docker.
+Public traffic enters via Cloudflare DNS on the `sonara.fm` zone (DNS + TLS edge only, no compute). Everything else runs on Railway via Docker.
 
-| Service | Source | Notes |
-|---|---|---|
-| `server` (Bun + Hono + WS) | `apps/server/Dockerfile` | Runs `packages/db` migrator on boot, then binds. Healthcheck `/health`. |
-| `web` (Next.js standalone) | `apps/web/Dockerfile` | Build args inline `NEXT_PUBLIC_*` into the bundle. |
-| `Postgres` | Railway Postgres template | Exposed to siblings as `${{Postgres.DATABASE_URL}}`. |
+| Service | Source | Public URL | Notes |
+|---|---|---|---|
+| `server` (Bun + Hono + WS) | `apps/server/Dockerfile` | `https://api.sonara.fm` | Runs `packages/db` migrator on boot, then binds. Healthcheck `/health`. WSS `/ws`. |
+| `web` (Next.js standalone) | `apps/web/Dockerfile` | `https://sonara.fm` | Build args inline `NEXT_PUBLIC_*` into the bundle. |
+| `Postgres` | Railway Postgres template | `postgres.railway.internal:5432` (private) | Exposed to siblings as `${{Postgres.DATABASE_URL}}`. |
 
 ```
-┌─────────────────────────────────────┐
-│   Railway project: fearless-…       │
-│                                     │
-│   ┌─────────┐      ┌──────────┐     │
-│   │   web   │─────▶│  server  │     │
-│   │ (Next)  │  WS  │ (Bun/WS) │     │
-│   └────┬────┘      └────┬─────┘     │
-│        │                │           │
-│        └──────┬─────────┘           │
-│               ▼                     │
-│         ┌──────────┐                │
-│         │ Postgres │                │
-│         └──────────┘                │
-└─────────────────────────────────────┘
-                ↕
-        fal.ai / AudD
+                       Browser
+                          │
+                          ▼
+           ┌──────────────────────────────┐
+           │  Cloudflare DNS (sonara.fm)  │
+           │  - @, www, api  (proxied)    │
+           │  - SSL Full (strict)         │
+           └──────────────┬───────────────┘
+                          │
+       ┌──────────────────┴──────────────────┐
+       ▼                                     ▼
+ sonara.fm                            api.sonara.fm
+       │                                     │
+┌──────┴──────────────────────────────────────┴──────┐
+│   Railway project: sonara                          │
+│                                                    │
+│   ┌─────────┐                  ┌──────────┐        │
+│   │   web   │                  │  server  │        │
+│   │ (Next)  │                  │ (Bun/WS) │        │
+│   └────┬────┘                  └────┬─────┘        │
+│        │                            │              │
+│        └──────────────┬─────────────┘              │
+│                       ▼                            │
+│                 ┌──────────┐                       │
+│                 │ Postgres │                       │
+│                 └──────────┘                       │
+└────────────────────────────────────────────────────┘
+                         ↕
+                 fal.ai / AudD
 ```
 
 ---
@@ -68,10 +81,31 @@ railway add --database postgres
 #   service: web     → config path apps/web/railway.toml
 # (Done via the Railway dashboard; Root Directory = "/" for both.)
 
-# Generate domains
-railway domain --service server
-railway domain --service web
+# Add custom domains (prints the CNAME target you'll point at from CF)
+railway domain sonara.fm     --service web      # → captures target for apex
+railway domain www.sonara.fm --service web      # → captures target for www
+railway domain api.sonara.fm --service server   # → captures target for server
 ```
+
+### Cloudflare DNS
+
+In the `sonara.fm` zone (id `3c4eff43a369f04340f8f83efb4870db`), add three CNAMEs (all proxied / orange-cloud), pointing at the Railway CNAME targets from the previous step:
+
+| Type | Name | Target | Proxied |
+|---|---|---|---|
+| CNAME | `@` | Railway target for `web` (apex) | ✓ |
+| CNAME | `www` | Railway target for `web` (www) | ✓ |
+| CNAME | `api` | Railway target for `server` | ✓ |
+
+> **TXT verification (required behind CF proxy).** When Railway sees a CF-proxied origin it can't validate ownership via CNAME alone, so each `railway domain ...` command also prints a `verificationDnsHost` + `verificationToken`. Run with `--json` to capture both, then add a `TXT` record per domain (e.g. `_railway-verify` for apex, `_railway-verify.api` for `api.`). Without these, the domain stays in `CERTIFICATE_STATUS_TYPE_VALIDATING_OWNERSHIP` and Railway responds `404` with `x-railway-fallback: true`.
+
+Then in the zone:
+
+- **SSL/TLS** → mode **Full (strict)**
+- **SSL/TLS → Edge Certificates** → **Always Use HTTPS** on, **Automatic HTTPS Rewrites** on
+- **Rules → Page Rules** → create one: pattern `www.sonara.fm/*`, action *Forwarding URL*, status `301`, destination `https://sonara.fm/$1`
+
+Railway issues Let's Encrypt certs against the custom domains automatically once the TXT verification clears — the certificate state moves from `VALIDATING_OWNERSHIP` to `READY` within a minute or two.
 
 ---
 
@@ -104,14 +138,14 @@ openssl rand -base64 32
 
 | Var | Value |
 |---|---|
-| `APP_URL` | `https://<web-public-domain>` |
-| `AUTH_DOMAIN` | `<web-public-domain>` (no protocol) |
+| `APP_URL` | `https://sonara.fm` |
+| `AUTH_DOMAIN` | `sonara.fm` (no protocol) |
 
 ### `web` build-time (must be set BEFORE the build runs — Next.js inlines `NEXT_PUBLIC_*` into the client bundle)
 
 | Var | Value |
 |---|---|
-| `NEXT_PUBLIC_WS_URL` | `wss://<server-public-domain>/ws` |
+| `NEXT_PUBLIC_WS_URL` | `wss://api.sonara.fm/ws` |
 | `NEXT_PUBLIC_REOWN_PROJECT_ID` | from https://cloud.reown.com |
 | `NEXT_PUBLIC_PAY_RECIPIENT_BASE` | Base-chain address that receives USDC top-ups |
 
@@ -126,9 +160,9 @@ railway variables --service server \
 railway variables --service web \
   --set 'DATABASE_URL=${{Postgres.DATABASE_URL}}' \
   --set 'BETTER_AUTH_SECRET=...same...' \
-  --set 'APP_URL=https://<web-domain>' \
-  --set 'AUTH_DOMAIN=<web-domain>' \
-  --set 'NEXT_PUBLIC_WS_URL=wss://<server-domain>/ws' \
+  --set 'APP_URL=https://sonara.fm' \
+  --set 'AUTH_DOMAIN=sonara.fm' \
+  --set 'NEXT_PUBLIC_WS_URL=wss://api.sonara.fm/ws' \
   --set 'NEXT_PUBLIC_REOWN_PROJECT_ID=...' \
   --set 'NEXT_PUBLIC_PAY_RECIPIENT_BASE=0x...'
 ```
@@ -147,13 +181,19 @@ After this, every push to `main` rebuilds both services automatically.
 ## Verify
 
 ```bash
-curl https://<server-domain>/health
+curl https://api.sonara.fm/health
 # → {"ok":true}
 
-open https://<web-domain>
+curl -I https://sonara.fm
+# → 200
+
+curl -I https://www.sonara.fm
+# → 301 → https://sonara.fm
+
+open https://sonara.fm
 ```
 
-DevTools → Network → WS — confirm `wss://<server>/ws` returns `101`. No mixed-content errors.
+DevTools → Network → WS — confirm `wss://api.sonara.fm/ws` returns `101`. No mixed-content errors.
 
 ---
 

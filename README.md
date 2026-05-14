@@ -1,6 +1,6 @@
-# Music Visualizer — Dreamlike Realtime AI
+# Sonara — Music Made Visible
 
-Browser-based visualizer. Text prompt, voice, or playing audio → continuously flowing, dreamlike AI-generated visuals. fal.ai FLUX.2 supplies keyframes; a WebGL2 displacement shader + feedback FBO carries continuity between them at 60 fps, driven by live audio features.
+Browser-based realtime visualizer at [sonara.fm](https://sonara.fm). Text prompt, voice, or playing audio → continuously flowing AI-generated visuals. fal.ai FLUX.2 supplies keyframes; a WebGL2 displacement shader + feedback FBO carries continuity between them at 60 fps, driven by live audio features.
 
 ## Stack
 
@@ -64,6 +64,6 @@ See `ARCHITECTURE.md` for the current code tour — data flow, layer-by-layer ma
 
 ## Scope
 
-**Shipped:** text prompts, browser-speech voice → Gemini intent parser, tab-audio / mic capture, AudD-backed song recognition with Apple Music enrichment, WebGL2 renderer with 21 presets + 13 shader primitives, LFO drift, FBO feedback, preset cross-fade, single-frame `streamPreview` per trigger, BYOK fal key, SIWE wallet auth + credit ledger + USDC top-ups on Base.
+**Shipped:** text prompts, browser-speech voice → Gemini intent parser, tab-audio / mic capture, AudD-backed song recognition with Apple Music enrichment, WebGL2 renderer with 21 presets + 13 shader primitives, LFO drift, FBO feedback, preset cross-fade, single-frame `streamPreview` per trigger, BYOK fal key, email+password auth (Better Auth) + credit ledger + USDC top-ups on Base.
 
 **Deferred:** OpenAI refine pass (original Phase 2 goal; not started). Fluid-sim preset (additive, not cleanup). See `ARCHITECTURE.md` smell list for the open cleanup items.
