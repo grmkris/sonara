@@ -9,6 +9,8 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { getDemoTrack } from "@/lib/demo-audio";
+import { useVisualizerStore } from "@/stores/visualizer";
 import { cn } from "@/lib/utils";
 
 interface MusicSourceProps {
@@ -35,7 +37,13 @@ export function MusicSource({ source, setSource }: MusicSourceProps) {
   const fileRef = useRef<HTMLInputElement | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const objectUrlRef = useRef<string | null>(null);
+  // Tracks whether the current audio source was installed by the demo-mode
+  // effect — so toggling demo off only stops audio we own, never the user's
+  // own file/mic/display selection.
+  const demoOwnsSourceRef = useRef(false);
   const [fileName, setFileName] = useState<string | null>(null);
+  const demoMode = useVisualizerStore((s) => s.demoMode);
+  const demoDeck = useVisualizerStore((s) => s.demoDeck);
   // Display-audio support detection lives in state so SSR renders the
   // optimistic "enabled" path and we correct it post-mount.
   const [displaySupported, setDisplaySupported] = useState(true);
@@ -63,6 +71,36 @@ export function MusicSource({ source, setSource }: MusicSourceProps) {
     };
   }, []);
 
+  useEffect(() => {
+    const el = audioRef.current;
+    if (!el) return;
+    if (demoMode) {
+      const track = getDemoTrack(demoDeck);
+      // Re-assigning src to the same URL reloads the element and restarts
+      // playback. If we already own the source and the track hasn't changed
+      // (e.g., user just picked a different deck), leave the audio alone.
+      if (demoOwnsSourceRef.current && el.src.endsWith(track.url)) return;
+      if (objectUrlRef.current) {
+        URL.revokeObjectURL(objectUrlRef.current);
+        objectUrlRef.current = null;
+      }
+      el.src = track.url;
+      el.loop = true;
+      el.crossOrigin = "anonymous";
+      void el.play().catch(() => undefined);
+      demoOwnsSourceRef.current = true;
+      setFileName(track.title);
+      setSource({ type: "element", element: el });
+    } else if (demoOwnsSourceRef.current) {
+      el.pause();
+      el.removeAttribute("src");
+      el.load();
+      demoOwnsSourceRef.current = false;
+      setFileName(null);
+      setSource({ type: "none" });
+    }
+  }, [demoMode, demoDeck, setSource]);
+
   const pickFile = useCallback(() => {
     fileRef.current?.click();
   }, []);
@@ -81,15 +119,18 @@ export function MusicSource({ source, setSource }: MusicSourceProps) {
     el.loop = true;
     el.crossOrigin = "anonymous";
     void el.play().catch(() => undefined);
+    demoOwnsSourceRef.current = false;
     setSource({ type: "element", element: el });
   };
 
   const toggleMic = () => {
+    demoOwnsSourceRef.current = false;
     if (source.type === "mic") setSource({ type: "none" });
     else setSource({ type: "mic" });
   };
 
   const toggleDisplay = () => {
+    demoOwnsSourceRef.current = false;
     if (source.type === "display") {
       setSource({ type: "none" });
       return;
