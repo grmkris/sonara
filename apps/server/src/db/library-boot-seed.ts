@@ -22,10 +22,12 @@ interface ExportRow {
 // rationale as the migration step: prod (and any fresh local DB) should
 // converge to the committed seed without a manual railway-run.
 //
-// Fast path: when row count already meets the seed length we skip without
-// touching disk. Otherwise we INSERT ... ON CONFLICT (prompt_hash) DO NOTHING
-// per row, so partial states (someone curated half the deck by hand) heal
-// instead of erroring.
+// Fast path: skip only when every seed prompt_hash is already in the DB.
+// A row-count check is unsafe — if the table was populated by an earlier
+// seed shape (different decks/prompts) the count may already exceed the
+// new seed length while still missing rows we want present (e.g. a newly
+// added deck). Otherwise INSERT ... ON CONFLICT (prompt_hash) DO NOTHING
+// per row heals partial states.
 export async function seedLibraryOnBoot(logger: Logger): Promise<void> {
   const seed = seedRows as ExportRow[];
   if (seed.length === 0) {
@@ -34,13 +36,14 @@ export async function seedLibraryOnBoot(logger: Logger): Promise<void> {
   }
 
   const pool = getPool();
-  const existing = await pool.query<{ count: string }>(
-    "SELECT count(*)::text AS count FROM image_library",
+  const hashes = seed.map((r) => r.promptHash);
+  const present = await pool.query<{ prompt_hash: string }>(
+    "SELECT prompt_hash FROM image_library WHERE prompt_hash = ANY($1::text[])",
+    [hashes],
   );
-  const current = Number(existing.rows[0]?.count ?? "0");
-  if (current >= seed.length) {
+  if (present.rows.length === seed.length) {
     logger.info(
-      { rows: current, seedSize: seed.length },
+      { seedSize: seed.length },
       "library already seeded — skipping import",
     );
     return;
