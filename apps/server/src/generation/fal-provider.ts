@@ -2,20 +2,17 @@ import { createFalClient } from "@fal-ai/client";
 import { env } from "../env";
 import type { Logger } from "../lib/logger";
 
-// Single-endpoint generation pipeline. Klein/9b for every frame:
-//   - First frame of a session → klein/9b text-to-image (no reference).
-//     Session stores the resulting URL as `heroImageUrl` silently.
-//   - Every subsequent frame → klein/9b/edit with the hero as `image_urls`.
-//     Identity is locked via the reference image.
-//
-// Album art (when a song is identified) acts as an optional seed for the
-// first frame — passed as `image_urls` so klein/9b/edit runs instead of
-// text-to-image. The model's own first output then replaces it as the hero.
+// Single-endpoint generation pipeline. Every keyframe goes through klein/9b
+// text-to-image at a fixed 768² resolution. We don't use the /edit endpoint
+// because (a) it bills 1 MP in + 1 MP out per frame (~3.7× pricier than
+// text-to-image), and (b) reference-image identity-lock fights against
+// prompt changes — when the user pivots subject mid-session we want the
+// next frame to pivot too, not blend with the previous hero. Visual
+// continuity comes from the client-side displacement shader + 60 fps
+// feedback loop, not from server-side identity lock.
 
 export interface StreamPreviewInput {
   prompt: string;
-  /** Reference image. First frame: optional album art seed. Subsequent: the session hero. */
-  referenceImage?: string;
   seed?: number;
   signal: AbortSignal;
   logger: Logger;
@@ -51,24 +48,22 @@ export async function streamPreview(input: StreamPreviewInput): Promise<void> {
   });
   const subscribe: FalSubscriber = scoped.subscribe.bind(scoped);
 
-  const ref = input.referenceImage?.trim() || null;
-  const hasRef = ref !== null;
-  const model = hasRef ? env.FAL_EDIT_MODEL : env.FAL_TEXT_MODEL;
+  const model = env.FAL_TEXT_MODEL;
 
-  // Klein/9b accepts num_inference_steps + num_images on both endpoints. 4
-  // steps is klein's documented minimum; tighter than that returns a 422.
+  // 768² (0.59 MP) — billed at ~$0.0035/image vs ~$0.006 at square_hd (1 MP).
+  // Klein/9b accepts any 64-aligned dimensions; 4 steps is the documented
+  // minimum (tighter returns a 422).
   const payload: Record<string, unknown> = {
     prompt: input.prompt,
     num_images: 1,
     num_inference_steps: 4,
-    image_size: "square_hd",
+    image_size: { width: 768, height: 768 },
     output_format: "jpeg",
     enable_safety_checker: false,
   };
   if (typeof input.seed === "number") payload.seed = input.seed;
-  if (hasRef) payload.image_urls = [ref];
 
-  input.logger.info({ model, hasRef }, "fal subscribe start");
+  input.logger.info({ model }, "fal subscribe start");
 
   try {
     const result = await subscribe(model, {

@@ -125,7 +125,6 @@ export class Session {
   }
 
   private seed: number = rollSeed();
-  private heroImageUrl: string | null = null;
 
   private lastSectionEnergy = 0;
   private sectionDeltaStartedAt: number | null = null;
@@ -371,13 +370,8 @@ export class Session {
   setDemoMode(on: boolean, deck: DeckKey | null): void {
     this.demoMode = on;
     this.demoDeck = on ? deck : null;
-    // Always reset on every toggle. (a) Deck may have changed, so the LRU's
-    // exclude-set is stale. (b) heroImageUrl may be a /library/... relative
-    // path — fal-edit can't fetch that, so a later demo→off transition would
-    // crash the next fal trigger. Clearing here means the next trigger acts
-    // as "first frame" regardless of mode.
+    // Reset the LRU exclude-set so a deck switch can re-pick from scratch.
     this.recentLibraryPicks = [];
-    this.heroImageUrl = null;
     this.logger.info({ demoMode: on, demoDeck: this.demoDeck }, "demo mode set");
     // Kill the up-to-16s wait between toggling DEMO on and seeing the first
     // library frame. trigger() short-circuits into triggerLibrary() at the
@@ -402,7 +396,6 @@ export class Session {
     this.activeVersion = 0;
     this.lastKeyframeAt = 0;
     this.seed = rollSeed();
-    this.heroImageUrl = null;
     this.sessionStartAt = Date.now();
     this.silentSinceAt = null;
     this.recentLibraryPicks = [];
@@ -473,10 +466,6 @@ export class Session {
     // generations and double-debiting credits.
     this.lastKeyframeAt = Date.now();
 
-    // First frame of the session auto-anchors: the resulting URL becomes
-    // heroImageUrl. Every subsequent frame edits the hero.
-    const isFirstFrame = this.heroImageUrl === null;
-
     const gate = await tryDebitCredit({
       userId: this.userId,
       isUserInitiated: kind === "user",
@@ -522,16 +511,10 @@ export class Session {
 
     this.activeVersion += 1;
     const version = this.activeVersion;
-    // Reference precedence:
-    //   hero set (every frame after the first) → klein/9b/edit with hero.
-    //   first frame, song identified → klein/9b/edit with album art as seed.
-    //   first frame, no song → klein/9b text-to-image (no reference).
-    const albumArt = this.scene.nowPlaying?.albumArtUrl;
-    const referenceImage: string | undefined = this.heroImageUrl
-      ? this.heroImageUrl
-      : albumArt ?? undefined;
-    const nextReferences = referenceImage ? [referenceImage] : [];
-    this.scene = { ...this.scene, version, references: nextReferences };
+    // Every keyframe is a fresh text-to-image generation. No reference
+    // image, no identity lock — prompt changes take effect on the very
+    // next frame.
+    this.scene = { ...this.scene, version, references: [] };
     const snapshot: SonaraSceneState = this.scene;
 
     this.send({ type: "scene.state", state: this.scene });
@@ -584,7 +567,6 @@ export class Session {
         driftSource,
         sessionProgress: Number(sessionProgress.toFixed(2)),
         seed: this.seed,
-        hasHero: this.heroImageUrl !== null,
       },
       "trigger fire",
     );
@@ -605,7 +587,6 @@ export class Session {
 
     streamPreview({
       prompt,
-      referenceImage,
       seed: this.seed,
       signal: controller.signal,
       logger: this.logger,
@@ -616,13 +597,6 @@ export class Session {
       onFinal: (url) => {
         if (version !== this.activeVersion) return;
         this.lastGeneratedScene = snapshot;
-        // First frame locks identity for the rest of the session — every
-        // subsequent trigger edits this URL.
-        if (isFirstFrame) {
-          this.heroImageUrl = url;
-          this.scene = { ...this.scene, references: [url] };
-          this.send({ type: "scene.state", state: this.scene });
-        }
         this.send({ type: "frame.final", imageUrl: url, version });
         this.send({ type: "job.status", status: "idle" });
         this.send({
@@ -709,13 +683,10 @@ export class Session {
       Session.LIBRARY_LRU,
     );
 
-    const isFirstFrame = this.heroImageUrl === null;
     // Bump scene.version for the wire so the client renders the new image
-    // through the same path as a fal frame. References mirror the fal flow
-    // so the rest of the UI (inspector, hero crossfade) sees the same state.
-    this.scene = { ...this.scene, version, references: [pick.url] };
+    // through the same path as a fal frame.
+    this.scene = { ...this.scene, version, references: [] };
     this.lastGeneratedScene = this.scene;
-    if (isFirstFrame) this.heroImageUrl = pick.url;
     this.send({ type: "scene.state", state: this.scene });
 
     this.send({ type: "job.status", status: "running", reason });
