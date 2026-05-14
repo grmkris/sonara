@@ -145,6 +145,10 @@ export default function Page() {
                 side="right"
                 className="w-[min(360px,90vw)] border-l border-[color:var(--hairline)]/30 bg-[color:var(--ink)]/95 p-5 backdrop-blur-md"
               >
+                <span
+                  aria-hidden
+                  className="mx-auto -mt-2 mb-3 block h-1 w-10 rounded-full bg-[color:var(--stone)]/40"
+                />
                 <SheetTitle className="font-mono text-[10px] uppercase tracking-[0.22em] text-[color:var(--stone)]">
                   controls
                 </SheetTitle>
