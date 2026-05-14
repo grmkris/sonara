@@ -56,7 +56,10 @@ export const usageLedger = pgTable(
       enum: ["topup", "frame", "refund", "free"],
     }).notNull(),
     delta: integer("delta").notNull(),
-    amountUsd: text("amount_usd"),
+    // Cents (USD smallest unit). Integer to match Dodo's wire format and
+    // make SUM aggregates native. Nullable for non-money rows (frame
+    // debits, refunds, free-tier writes).
+    amountCents: integer("amount_cents"),
     txHash: text("tx_hash"),
     chainId: text("chain_id"),
     createdAt: createTimestampField("created_at").defaultNow().notNull(),

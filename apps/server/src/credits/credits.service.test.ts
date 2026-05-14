@@ -34,7 +34,7 @@ CREATE TABLE usage_ledger (
   user_id uuid NOT NULL,
   kind text NOT NULL,
   delta integer NOT NULL,
-  amount_usd text,
+  amount_cents integer,
   tx_hash text,
   chain_id text,
   created_at timestamp with time zone DEFAULT now() NOT NULL

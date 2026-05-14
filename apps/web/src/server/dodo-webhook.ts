@@ -56,7 +56,7 @@ export function createDodoWebhookHandlers(props: { db: Database }) {
             userId,
             kind: "topup",
             delta: pack.frames,
-            amountUsd: pack.usd.toString(),
+            amountCents: pack.usd * 100,
             txHash: payload.data.payment_id,
             chainId: null,
           });

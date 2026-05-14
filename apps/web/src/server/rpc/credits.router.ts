@@ -45,7 +45,7 @@ export const creditsRouter = {
       );
 
     const [spendRow] = await db
-      .select({ total: sum(SCHEMA.usageLedger.amountUsd) })
+      .select({ totalCents: sum(SCHEMA.usageLedger.amountCents) })
       .from(SCHEMA.usageLedger)
       .where(
         and(
@@ -57,7 +57,7 @@ export const creditsRouter = {
     return {
       frames: balance.frames,
       monthFrames: Math.abs(Number(monthFramesRow?.total ?? 0)),
-      totalSpentUsd: Number(spendRow?.total ?? 0),
+      totalSpentUsd: Number(spendRow?.totalCents ?? 0) / 100,
       lowBalance: balance.frames < 30,
     };
   }),

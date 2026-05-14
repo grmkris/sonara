@@ -8,6 +8,13 @@
       "when": 1778687124256,
       "tag": "0000_famous_zeigeist",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1778772133333,
+      "tag": "0001_worthless_arachne",
+      "breakpoints": true
     }
   ]
 }

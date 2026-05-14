@@ -61,7 +61,7 @@ async function main() {
       userId: userId as `usr_${string}`,
       kind: "topup",
       delta: frames,
-      amountUsd: "0",
+      amountCents: 0,
       txHash: null,
       chainId: null,
     });
