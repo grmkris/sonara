@@ -3,7 +3,7 @@ import {
   type AudioFeatures,
   type NowPlaying,
   defaultAudio,
-} from "@music-visualizer/shared";
+} from "@sonara/shared";
 import type { VisualizerState } from "./types";
 
 export interface PlaybackSlice {

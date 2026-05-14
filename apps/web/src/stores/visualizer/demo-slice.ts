@@ -2,7 +2,7 @@ import type { StateCreator } from "zustand";
 import {
   DECK_KEYS,
   type DeckKey,
-} from "@music-visualizer/shared";
+} from "@sonara/shared";
 import type { VisualizerState } from "./types";
 
 export const DEMO_MODE_KEY = "viz_demo_mode";

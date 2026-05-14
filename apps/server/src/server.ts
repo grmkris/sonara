@@ -3,9 +3,9 @@ import {
   sessionRouter,
   WsRPCHandler,
   type SessionContext,
-} from "@music-visualizer/api/server";
-import { runMigrations } from "@music-visualizer/db/migrator";
-import { verifyTicket } from "@music-visualizer/shared";
+} from "@sonara/api/server";
+import { runMigrations } from "@sonara/db/migrator";
+import { verifyTicket } from "@sonara/shared";
 import { env } from "./env";
 import { logger } from "./lib/logger";
 import { SessionManager } from "./session/session-manager";
@@ -24,7 +24,7 @@ const app = new Hono();
 
 app.get("/health", (c) => c.json({ ok: true }));
 app.get("/", (c) =>
-  c.text("music-visualizer server — connect to /ws via WebSocket"),
+  c.text("sonara server — connect to /ws via WebSocket"),
 );
 
 const manager = new SessionManager(logger);

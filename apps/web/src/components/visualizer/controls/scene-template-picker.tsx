@@ -1,8 +1,8 @@
 "use client";
 
 import { useCallback } from "react";
-import type { DreamSceneState } from "@music-visualizer/shared";
-import { SCENE_TEMPLATES } from "@music-visualizer/shared";
+import type { SonaraSceneState } from "@sonara/shared";
+import { SCENE_TEMPLATES } from "@sonara/shared";
 import type { SessionSend } from "@/lib/session-actions";
 import { useVisualizerStore } from "@/stores/visualizer";
 import { cn } from "@/lib/utils";
@@ -21,7 +21,7 @@ export function SceneTemplatePicker({ send }: SceneTemplatePickerProps) {
   const scene = useVisualizerStore((s) => s.scene);
 
   const onPick = useCallback(
-    (patch: Partial<DreamSceneState>) => {
+    (patch: Partial<SonaraSceneState>) => {
       send({ type: "scene.patch", patch });
     },
     [send],

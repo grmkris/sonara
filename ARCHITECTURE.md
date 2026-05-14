@@ -6,7 +6,7 @@ A code tour for refactoring decisions. Read top-down: data flow first, then a la
 > - ✅ CSS fallback renderer deleted (was smell #5).
 > - ✅ Papari–Kuwahara painterly post-pass landed (new `uPainterly` uniform + preset field).
 > - ✅ Three new ink primitives landed (`uSalt`, `uCauliflower`, `uSplatter` — all original code, license-safe).
-> - ✅ `ClientEvent` → oRPC migration complete (new `@music-visualizer/api` package; `SessionSend` + `dispatchSessionAction` in `apps/web/src/lib/session-actions.ts`). Typecheck clean across all 5 packages.
+> - ✅ `ClientEvent` → oRPC migration complete (new `@sonara/api` package; `SessionSend` + `dispatchSessionAction` in `apps/web/src/lib/session-actions.ts`). Typecheck clean across all 5 packages.
 > - ⚠️ `VoiceController` extraction was reverted — voice handling is back inline in `session.ts`. Smell #1 reopened; session is now 687 lines.
 > - ✅ `session.state()` bootstrap-pull procedure covers the `EventPublisher` race where `init()` publishes land before the client's `events()` subscribe attaches.
 > - ❌ Lygia refactor dropped (Prosperity + Patron license incompatible with proprietary project).

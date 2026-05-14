@@ -1,7 +1,7 @@
-import { ORPCError } from "@music-visualizer/api/server";
-import { signTicket } from "@music-visualizer/shared";
+import { ORPCError } from "@sonara/api/server";
+import { signTicket } from "@sonara/shared";
 import { env } from "@/env";
-import { typeIdToUuid } from "@music-visualizer/shared/typeid";
+import { typeIdToUuid } from "@sonara/shared/typeid";
 import { protectedProcedure } from "./procedures";
 
 export const authRouter = {

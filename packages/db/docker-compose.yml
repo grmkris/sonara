@@ -1,9 +1,9 @@
-name: music-visualizer
+name: sonara
 
 services:
   postgres:
     image: postgres:17
-    container_name: music-visualizer-postgres
+    container_name: sonara-postgres
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
@@ -11,7 +11,7 @@ services:
     ports:
       - "54324:5432"
     volumes:
-      - music-visualizer_postgres_data:/var/lib/postgresql/data
+      - sonara_postgres_data:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres -d musicviz"]
       interval: 5s
@@ -20,4 +20,4 @@ services:
     restart: unless-stopped
 
 volumes:
-  music-visualizer_postgres_data:
+  sonara_postgres_data:

@@ -1,8 +1,8 @@
 import type { StateCreator } from "zustand";
 import type { VisualizerState } from "./types";
 
-export const UI_VISIBLE_KEY = "dream.uiVisible";
-export const CONSOLE_TAB_KEY = "dream.consoleTab";
+export const UI_VISIBLE_KEY = "sonara.uiVisible";
+export const CONSOLE_TAB_KEY = "sonara.consoleTab";
 
 export type ConsoleTab = "scene" | "style" | "inspector";
 

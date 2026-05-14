@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
-import type { DreamSceneState } from "@music-visualizer/shared";
+import type { SonaraSceneState } from "@sonara/shared";
 import type { SessionSend } from "@/lib/session-actions";
 import { Slider } from "@/components/ui/slider";
 import { useVisualizerStore } from "@/stores/visualizer";
@@ -24,7 +24,7 @@ export function IntensityDial({ send }: IntensityDialProps) {
       debounce((v: number) => {
         send({
           type: "scene.patch",
-          patch: { intensity: v } as Partial<DreamSceneState>,
+          patch: { intensity: v } as Partial<SonaraSceneState>,
         });
       }, 60),
     [send],

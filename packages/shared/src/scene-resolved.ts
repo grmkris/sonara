@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 // ResolvedScene is the structured intermediate the server derives from the
-// flat user-facing DreamSceneState before serialising to a FLUX.2 prompt.
+// flat user-facing SonaraSceneState before serialising to a FLUX.2 prompt.
 // FLUX.2 itself takes a string; the JSON layer exists for (a) richer prompt
 // structure per BFL's prompting guide, (b) hex-palette extraction we can feed
 // back to the renderer, and (c) observability — the inspector HUD shows the

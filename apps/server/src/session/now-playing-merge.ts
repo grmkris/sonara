@@ -1,8 +1,8 @@
-import type { DreamSceneState, NowPlaying } from "@music-visualizer/shared";
-import { defaultScene } from "@music-visualizer/shared";
+import type { SonaraSceneState, NowPlaying } from "@sonara/shared";
+import { defaultScene } from "@sonara/shared";
 
 // Deterministic mapping from a recognized song (plus the live audio mood we
-// already compute in the browser) to DreamScene fields. User-authored fields
+// already compute in the browser) to SonaraScene fields. User-authored fields
 // are NEVER overwritten — we only fill blanks, where "blank" means the field
 // still matches defaultScene. Voice/typed intent always wins over recognition.
 
@@ -16,8 +16,8 @@ export interface LiveAudio {
   flatness: number; // 0..1, spectral flatness — acousticness proxy
 }
 
-function isDefault<K extends keyof DreamSceneState>(
-  scene: DreamSceneState,
+function isDefault<K extends keyof SonaraSceneState>(
+  scene: SonaraSceneState,
   field: K,
 ): boolean {
   return scene[field] === defaultScene[field];
@@ -90,16 +90,16 @@ function cameraFromTempo(bpm: number): string {
 }
 
 export interface MergeResult {
-  patch: Partial<DreamSceneState>;
+  patch: Partial<SonaraSceneState>;
   changed: boolean;
 }
 
 export function mergeNowPlayingIntoScene(
-  scene: DreamSceneState,
+  scene: SonaraSceneState,
   track: NowPlaying,
   audio: LiveAudio,
 ): MergeResult {
-  const patch: Partial<DreamSceneState> = {};
+  const patch: Partial<SonaraSceneState> = {};
 
   // NOTE: `subject` is intentionally NOT filled here. A literal
   // `${artist} — ${title}` reads as quotation inside the FLUX prompt rather

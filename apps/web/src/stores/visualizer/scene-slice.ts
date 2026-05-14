@@ -1,11 +1,11 @@
 import type { StateCreator } from "zustand";
-import { type DreamSceneState, defaultScene } from "@music-visualizer/shared";
+import { type SonaraSceneState, defaultScene } from "@sonara/shared";
 import type { VisualizerState } from "./types";
 
 export type JobStatus = "idle" | "running" | "cancelled" | "error";
 
 export interface SceneSlice {
-  scene: DreamSceneState;
+  scene: SonaraSceneState;
   previousFrame: string | null;
   currentFrame: string | null;
   crossfadeStartedAt: number | null;
@@ -14,7 +14,7 @@ export interface SceneSlice {
   connected: boolean;
   latestVersion: number;
 
-  setScene: (state: DreamSceneState) => void;
+  setScene: (state: SonaraSceneState) => void;
   pushFrame: (url: string, version: number) => void;
   setStatus: (s: JobStatus, msg?: string) => void;
   setConnected: (c: boolean) => void;

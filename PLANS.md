@@ -39,7 +39,7 @@ Re-export from `packages/shared/src/index.ts`.
 
 #### Modify: `apps/web/src/components/visualizer/controls/prompt-input.tsx`
 
-- Delete the local `PLACEHOLDERS` constant; import `FIELD_SUGGESTIONS` from `@music-visualizer/shared`.
+- Delete the local `PLACEHOLDERS` constant; import `FIELD_SUGGESTIONS` from `@sonara/shared`.
 - Beneath each `<Input>` (after the `<button>` with the `ArrowRight` icon, inside the field's `<div className="group relative flex flex-col gap-1.5">`), render a chip row. Cap to ~6 visible chips per field; show all on hover/expand later if needed.
 - Click handler: `setDraft(d => ({ ...d, [key]: chip }))` then `commit(key)` — identical commit semantics to typing + Enter.
 - Active-chip styling: matches `SceneTemplatePicker` — `border-b`, paper-coloured when the current `scene[key]` equals the chip text; stone otherwise.

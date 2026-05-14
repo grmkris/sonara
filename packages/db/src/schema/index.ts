@@ -1,4 +1,4 @@
-// Barrel for `@music-visualizer/db/schema`. Each domain file is grouped by
+// Barrel for `@sonara/db/schema`. Each domain file is grouped by
 // responsibility:
 //
 //   auth.db.ts        Better Auth tables (user, session, account,

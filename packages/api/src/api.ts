@@ -1,5 +1,5 @@
 import { ORPCError, os } from "@orpc/server";
-import type { UserId } from "@music-visualizer/shared/typeid";
+import type { UserId } from "@sonara/shared/typeid";
 import type { ApiContext } from "./context";
 
 // Generic over the DB handle so the api package doesn't import drizzle

@@ -1,5 +1,5 @@
 {
-  "name": "@music-visualizer/db",
+  "name": "@sonara/db",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -24,7 +24,7 @@
     "db:clean": "docker compose down -v"
   },
   "dependencies": {
-    "@music-visualizer/shared": "workspace:*",
+    "@sonara/shared": "workspace:*",
     "drizzle-orm": "^0.45.2",
     "pg": "^8.20.0"
   },

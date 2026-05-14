@@ -2,7 +2,7 @@ import { index, integer, pgTable, text, uniqueIndex } from "drizzle-orm/pg-core"
 import {
   type ImageLibraryId,
   typeIdGenerator,
-} from "@music-visualizer/shared/typeid";
+} from "@sonara/shared/typeid";
 import { baseEntityFields, typeId } from "../utils";
 
 // Pre-generated images served when DEMO mode is on. The server picks one

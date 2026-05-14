@@ -56,4 +56,4 @@ Audio analysis (Meyda) runs in the browser, so the full live pipeline only works
 
 ## Loading flow
 
-The `DemoPlayer` component (Phase B — landing next) reads `manifest.json`, plays `audio.mp3` through the existing audio analyzer, and dispatches each pinned frame's URL into `useVisualizerStore.pushFrame()` as audio `currentTime` crosses each `frame.t`. The `DreamCanvas` and `DisplacementCanvas` don't know or care the frame came from a static file instead of WS.
+The `DemoPlayer` component (Phase B — landing next) reads `manifest.json`, plays `audio.mp3` through the existing audio analyzer, and dispatches each pinned frame's URL into `useVisualizerStore.pushFrame()` as audio `currentTime` crosses each `frame.t`. The `SonaraCanvas` and `DisplacementCanvas` don't know or care the frame came from a static file instead of WS.

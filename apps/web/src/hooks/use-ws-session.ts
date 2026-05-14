@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef } from "react";
 import { toast } from "sonner";
-import type { ServerEvent } from "@music-visualizer/shared";
+import type { ServerEvent } from "@sonara/shared";
 import { rpcClient } from "@/lib/orpc";
 import { createSessionConnection } from "@/lib/orpc-ws";
 import {

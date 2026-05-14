@@ -3,7 +3,7 @@ import {
   type AllowedEmailId,
   type UserId,
   typeIdGenerator,
-} from "@music-visualizer/shared/typeid";
+} from "@sonara/shared/typeid";
 import { baseEntityFields, typeId } from "../utils";
 import { user } from "./auth.db";
 

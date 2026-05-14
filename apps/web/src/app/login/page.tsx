@@ -72,7 +72,7 @@ export default function LoginPage() {
     <main className="min-h-screen flex items-center justify-center bg-[color:var(--ink)] text-[color:var(--paper)] px-4">
       <div className="w-full max-w-sm">
         <header className="mb-8 text-center">
-          <h1 className="font-serif italic text-3xl mb-1">dream</h1>
+          <h1 className="font-serif italic text-3xl mb-1">sonara</h1>
           <p className="text-sm opacity-60">
             {isSignup ? "Create an account" : "Sign in"}
           </p>
@@ -183,9 +183,6 @@ export default function LoginPage() {
           )}
         </div>
 
-        <p className="mt-8 text-center text-xs opacity-40">
-          Or connect a wallet from the visualiser interface.
-        </p>
       </div>
     </main>
   );

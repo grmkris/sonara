@@ -17,9 +17,9 @@
   "dependencies": {
     "@dodopayments/better-auth": "^1.5.0",
     "@ffmpeg/ffmpeg": "^0.12.15",
-    "@music-visualizer/api": "workspace:*",
-    "@music-visualizer/db": "workspace:*",
-    "@music-visualizer/shared": "workspace:*",
+    "@sonara/api": "workspace:*",
+    "@sonara/db": "workspace:*",
+    "@sonara/shared": "workspace:*",
     "@orpc/client": "^1.14.0",
     "@orpc/server": "^1.14.0",
     "@radix-ui/react-slider": "^1.2.4",

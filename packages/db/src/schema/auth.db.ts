@@ -10,7 +10,7 @@ import {
   type UserId,
   type VerificationId,
   typeIdGenerator,
-} from "@music-visualizer/shared/typeid";
+} from "@sonara/shared/typeid";
 import { baseEntityFields, createTimestampField, typeId } from "../utils";
 
 // Better Auth canonical tables, Drizzle-shaped with typeid ids. Columns

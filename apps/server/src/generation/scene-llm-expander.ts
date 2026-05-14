@@ -1,13 +1,13 @@
 import { createFalClient } from "@fal-ai/client";
 import {
-  type DreamSceneState,
+  type SonaraSceneState,
   ResolvedSceneCoreSchema,
   type ResolvedSceneCore,
-} from "@music-visualizer/shared";
+} from "@sonara/shared";
 import { env } from "../env";
 import type { Logger } from "../lib/logger";
 
-// Server-side LLM expander: turns the flat user-facing DreamSceneState into a
+// Server-side LLM expander: turns the flat user-facing SonaraSceneState into a
 // FLUX.2-style structured ResolvedSceneCore (subjects, palette hex, camera,
 // composition, drift candidates). One LLM call per scene-hash; the resolver
 // caches the result and reuses it across keyframes.
@@ -19,7 +19,7 @@ const DEFAULT_MODEL = "google/gemini-2.5-flash-lite";
 const MAX_OUTPUT_TOKENS = 600;
 
 function buildSystemPrompt(): string {
-  return `You expand a flat sumi-e dream-visualizer scene into a structured FLUX.2 prompt object. Given the user's flat scene fields and slider values, emit a SINGLE JSON object — no prose, no markdown fences. The object MUST match this schema exactly:
+  return `You expand a flat sumi-e music-visualizer scene into a structured FLUX.2 prompt object. Given the user's flat scene fields and slider values, emit a SINGLE JSON object — no prose, no markdown fences. The object MUST match this schema exactly:
 
 {
   "scene": string,                          // 2-5 word title for this look
@@ -55,7 +55,7 @@ RULES:
 - Output ONLY the JSON object. No fences. No commentary.`;
 }
 
-function buildUserPrompt(s: DreamSceneState): string {
+function buildUserPrompt(s: SonaraSceneState): string {
   return `Flat scene:
   subject: ${s.subject || "(blank)"}
   environment: ${s.environment || "(blank)"}
@@ -104,7 +104,7 @@ function stripFences(text: string): string {
 // Slider-driven style clauses mirror what the legacy `buildPrompt` used to
 // append inline — moved here so cold-cache prompts carry the same texture
 // signal as the LLM-expanded ones.
-export function deterministicResolve(s: DreamSceneState): ResolvedSceneCore {
+export function deterministicResolve(s: SonaraSceneState): ResolvedSceneCore {
   const subject = s.subject?.trim() || "abstract form";
   const compositionParts: string[] = [];
   if (s.surrealness > 0.7) compositionParts.push("surreal fluid composition");
@@ -147,7 +147,7 @@ export interface ExpandSceneOpts {
 }
 
 export async function expandScene(
-  scene: DreamSceneState,
+  scene: SonaraSceneState,
   opts: ExpandSceneOpts,
 ): Promise<ResolvedSceneCore> {
   const model = env.FAL_LLM_MODEL ?? DEFAULT_MODEL;

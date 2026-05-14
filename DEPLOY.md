@@ -44,7 +44,7 @@ To add a migration:
 ```bash
 # 1. Edit schema in packages/db/src/schema/
 # 2. Generate the SQL
-bun run --filter=@music-visualizer/db db:generate
+bun run --filter=@sonara/db db:generate
 # 3. Commit both the schema change AND the new file in packages/db/drizzle/
 # 4. Push — server applies it on next deploy
 ```

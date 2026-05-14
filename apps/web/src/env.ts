@@ -10,12 +10,17 @@ const serverEnvSchema = z.object({
   BETTER_AUTH_SECRET: z.string().min(1),
   AUTH_DOMAIN: z.string().default("localhost:4470"),
   APP_URL: z.string().url().default("http://localhost:4470"),
-  DODO_PAYMENTS_API_KEY: z.string().min(1),
-  DODO_PAYMENTS_WEBHOOK_SECRET: z.string().min(1),
+  // Optional in dev — empty values disable the dodopayments plugin and the
+  // checkout/webhook flow. Login works without Dodo configured. Required in
+  // production deploys (set both via Railway env).
+  DODO_PAYMENTS_API_KEY: z.string().default(""),
+  DODO_PAYMENTS_WEBHOOK_SECRET: z.string().default(""),
   DODO_PAYMENTS_MODE: z.enum(["test_mode", "live_mode"]).default("test_mode"),
-  DODO_PRODUCT_STARTER: z.string().min(1),
-  DODO_PRODUCT_PRO: z.string().min(1),
-  DODO_PRODUCT_MAX: z.string().min(1),
+  // Optional in dev — same reasoning as the Dodo keys above. Required only
+  // when the credits checkout flow is active.
+  DODO_PRODUCT_STARTER: z.string().default(""),
+  DODO_PRODUCT_PRO: z.string().default(""),
+  DODO_PRODUCT_MAX: z.string().default(""),
 });
 
 // Client-readable vars. Next.js inlines `NEXT_PUBLIC_*` references at build

@@ -5,11 +5,11 @@ import {
   AudioFeatures,
   ClientScenePatch,
   DeckKeySchema,
-  DreamSceneState,
+  SonaraSceneState,
   NowPlaying,
   ServerEvent,
   type DeckKey,
-} from "@music-visualizer/shared";
+} from "@sonara/shared";
 
 // Structural interface for a live session. apps/server's Session class
 // implements this; the router never imports from apps/server so the package
@@ -26,7 +26,7 @@ export interface SessionLike {
   setDemoMode(on: boolean, deck: DeckKey | null): void;
   reset(): void;
   subscribe(signal?: AbortSignal): AsyncGenerator<ServerEvent>;
-  getSnapshot(): DreamSceneState;
+  getSnapshot(): SonaraSceneState;
 }
 
 export interface SessionContext {
@@ -62,7 +62,7 @@ const RecognizeInput = z.object({
 });
 
 const StateOutput = z.object({
-  scene: DreamSceneState,
+  scene: SonaraSceneState,
 });
 
 export const sessionRouter = {

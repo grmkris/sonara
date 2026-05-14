@@ -1,7 +1,7 @@
 "use client";
 
 import Meyda from "meyda";
-import type { AudioFeatures, OnsetType } from "@music-visualizer/shared";
+import type { AudioFeatures, OnsetType } from "@sonara/shared";
 import { classifyOnset } from "./onset-classify";
 import { createClipRecorder, type ClipRecorder } from "./recorder";
 

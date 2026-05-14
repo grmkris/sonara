@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import type { AudioFeatures } from "@music-visualizer/shared";
+import type { AudioFeatures } from "@sonara/shared";
 import type { SessionSend } from "@/lib/session-actions";
 import { AudioEngine } from "@/lib/audio/analyzer";
 import { createMusicalityGate } from "@/lib/audio/musicality-gate";

@@ -1,4 +1,4 @@
-import type { OnsetType } from "@music-visualizer/shared";
+import type { OnsetType } from "@sonara/shared";
 
 // Classify a detected onset using spectral tilt + band energies at the moment
 // of the onset. Zero-dep, zero-allocation, pure function.

@@ -10,7 +10,7 @@ import {
   createPgLite,
   pgliteAsPool,
   type TestPg,
-} from "@music-visualizer/test-utils";
+} from "@sonara/test-utils";
 import {
   __setPoolForTests,
   debitFrame,

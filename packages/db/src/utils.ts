@@ -3,7 +3,7 @@ import {
   type TypeIdString,
   typeIdFromUuid,
   typeIdToUuid,
-} from "@music-visualizer/shared/typeid";
+} from "@sonara/shared/typeid";
 import { customType, timestamp } from "drizzle-orm/pg-core";
 
 // Postgres `uuid` storage; app-side typeid string. Driver translates on read

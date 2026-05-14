@@ -7,8 +7,8 @@ import { Toaster } from "@/components/ui/sonner";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "dream · visualizer",
-  description: "Dreamlike realtime AI visuals driven by music and prompt.",
+  title: "sonara",
+  description: "Music made visible. Realtime AI visuals driven by sound and prompt.",
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {

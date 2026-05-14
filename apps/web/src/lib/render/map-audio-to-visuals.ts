@@ -1,4 +1,4 @@
-import type { AudioFeatures } from "@music-visualizer/shared";
+import type { AudioFeatures } from "@sonara/shared";
 
 // Intensity lerps (see plan D1). `I` ∈ [0..1].
 function lerp(a: number, b: number, t: number): number {

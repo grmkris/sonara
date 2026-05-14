@@ -29,7 +29,7 @@ function displayMediaSupported(): boolean {
   return typeof navigator.mediaDevices?.getDisplayMedia === "function";
 }
 
-const COMPUTER_AUDIO_HINT_KEY = "dream.computerAudioHintSeen";
+const COMPUTER_AUDIO_HINT_KEY = "sonara.computerAudioHintSeen";
 
 export function MusicSource({ source, setSource }: MusicSourceProps) {
   const fileRef = useRef<HTMLInputElement | null>(null);

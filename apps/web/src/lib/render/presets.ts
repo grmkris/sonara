@@ -9,7 +9,7 @@ import {
   VISUAL_PRESET_DESCRIPTIONS,
   VISUAL_PRESET_NAMES,
   type VisualPresetName,
-} from "@music-visualizer/shared";
+} from "@sonara/shared";
 import { randomWalk, sineLfo, type LfoDriver } from "./lfo";
 
 export type PresetName = VisualPresetName;

@@ -2,7 +2,7 @@ import {
   type ImageLibraryId,
   typeIdFromUuid,
   typeIdToUuid,
-} from "@music-visualizer/shared/typeid";
+} from "@sonara/shared/typeid";
 import { getPool } from "../db/pool";
 import type { Logger } from "../lib/logger";
 

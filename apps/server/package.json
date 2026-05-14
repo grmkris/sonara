@@ -16,9 +16,9 @@
   },
   "dependencies": {
     "@fal-ai/client": "^1.9.5",
-    "@music-visualizer/api": "workspace:*",
-    "@music-visualizer/db": "workspace:*",
-    "@music-visualizer/shared": "workspace:*",
+    "@sonara/api": "workspace:*",
+    "@sonara/db": "workspace:*",
+    "@sonara/shared": "workspace:*",
     "@orpc/server": "^1.14.0",
     "drizzle-orm": "^0.45.2",
     "hono": "^4.12.12",
@@ -29,7 +29,7 @@
     "zod": "^4.3.6"
   },
   "devDependencies": {
-    "@music-visualizer/test-utils": "workspace:*",
+    "@sonara/test-utils": "workspace:*",
     "@types/bun": "^1.3.12",
     "@types/pg": "^8.20.0",
     "typescript": "^6.0.3"

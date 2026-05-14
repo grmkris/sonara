@@ -17,9 +17,9 @@
  */
 
 import { sql } from "drizzle-orm";
-import { typeIdFromUuid, typeIdToUuid } from "@music-visualizer/shared/typeid";
-import { createDb, SCHEMA } from "@music-visualizer/db";
-import { typeIdGenerator } from "@music-visualizer/shared/typeid";
+import { typeIdFromUuid, typeIdToUuid } from "@sonara/shared/typeid";
+import { createDb, SCHEMA } from "@sonara/db";
+import { typeIdGenerator } from "@sonara/shared/typeid";
 
 function fail(msg: string): never {
   console.error(`error: ${msg}`);

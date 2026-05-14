@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { toast } from "sonner";
-import { PACKS, type Pack } from "@music-visualizer/shared";
+import { PACKS, type Pack } from "@sonara/shared";
 import { rpcClient } from "@/lib/orpc";
 
 interface TopUpButtonProps {

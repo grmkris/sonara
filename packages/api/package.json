@@ -1,5 +1,5 @@
 {
-  "name": "@music-visualizer/api",
+  "name": "@sonara/api",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -17,7 +17,7 @@
     "test": "bun test || echo 'no tests yet'"
   },
   "dependencies": {
-    "@music-visualizer/shared": "workspace:*",
+    "@sonara/shared": "workspace:*",
     "@orpc/client": "^1.14.0",
     "@orpc/server": "^1.14.0",
     "zod": "^4.3.6"

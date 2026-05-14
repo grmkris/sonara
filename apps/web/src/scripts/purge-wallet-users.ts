@@ -12,7 +12,7 @@
  */
 
 import { eq, like, sql } from "drizzle-orm";
-import { createDb, SCHEMA } from "@music-visualizer/db";
+import { createDb, SCHEMA } from "@sonara/db";
 
 function fail(msg: string): never {
   console.error(`error: ${msg}`);

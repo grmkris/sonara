@@ -2,7 +2,7 @@
 
 import { ArrowRight, ChevronDown } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import type { DreamSceneState } from "@music-visualizer/shared";
+import type { SonaraSceneState } from "@sonara/shared";
 import type { SessionSend } from "@/lib/session-actions";
 import { Input } from "@/components/ui/input";
 import { useVisualizerStore } from "@/stores/visualizer";
@@ -134,7 +134,7 @@ export function PromptInput({ send }: PromptInputProps) {
     lastSentRef.current[key] = value;
     send({
       type: "scene.patch",
-      patch: { [key]: value } as Partial<DreamSceneState>,
+      patch: { [key]: value } as Partial<SonaraSceneState>,
     });
     setDraft((d) => ({ ...d, [key]: value }));
     setSweepKey((s) => ({ ...s, [key]: s[key] + 1 }));

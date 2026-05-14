@@ -1,8 +1,8 @@
-import { buildContext, RPCHandler } from "@music-visualizer/api/server";
-import type { UserId } from "@music-visualizer/shared/typeid";
+import { buildContext, RPCHandler } from "@sonara/api/server";
+import type { UserId } from "@sonara/shared/typeid";
 import { env } from "@/env";
 import { getAuth } from "@/server/auth";
-import { createDb } from "@music-visualizer/db";
+import { createDb } from "@sonara/db";
 import { appRouter } from "@/server/rpc/app.router";
 
 // oRPC handler is server-only and per-request. Force-dynamic skips

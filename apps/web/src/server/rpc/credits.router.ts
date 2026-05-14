@@ -1,10 +1,10 @@
-import { ORPCError } from "@music-visualizer/api/server";
-import { findPack } from "@music-visualizer/shared";
+import { ORPCError } from "@sonara/api/server";
+import { findPack } from "@sonara/shared";
 import { and, eq, gte, sum } from "drizzle-orm";
 import DodoPayments from "dodopayments";
 import { z } from "zod";
 import { env } from "@/env";
-import { SCHEMA } from "@music-visualizer/db";
+import { SCHEMA } from "@sonara/db";
 import { protectedProcedure } from "./procedures";
 
 let _dodo: DodoPayments | null = null;

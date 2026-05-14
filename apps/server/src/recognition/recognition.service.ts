@@ -1,4 +1,4 @@
-import type { NowPlaying } from "@music-visualizer/shared";
+import type { NowPlaying } from "@sonara/shared";
 import type { Logger } from "../lib/logger";
 import { recognizeWithAudd, type AuddMatch } from "./audd-provider";
 

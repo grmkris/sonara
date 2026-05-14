@@ -1,4 +1,4 @@
-import type { UserId } from "@music-visualizer/shared/typeid";
+import type { UserId } from "@sonara/shared/typeid";
 
 // Session shape the API expects. Apps construct this from their own auth
 // system (Better Auth on web) and pass it through createContext. Keeping it

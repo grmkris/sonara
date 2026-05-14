@@ -1,5 +1,5 @@
 {
-  "name": "@music-visualizer/test-utils",
+  "name": "@sonara/test-utils",
   "version": "0.1.0",
   "private": true,
   "type": "module",

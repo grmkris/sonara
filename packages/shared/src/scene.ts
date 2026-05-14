@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { NowPlaying } from "./now-playing";
 
-export const DreamSceneState = z.object({
+export const SonaraSceneState = z.object({
   subject: z.string(),
   action: z.string(),
   environment: z.string(),
@@ -29,12 +29,12 @@ export const DreamSceneState = z.object({
   nowPlaying: NowPlaying.optional(),
 });
 
-export type DreamSceneState = z.infer<typeof DreamSceneState>;
+export type SonaraSceneState = z.infer<typeof SonaraSceneState>;
 
-export const DreamSceneStatePatch = DreamSceneState.partial();
-export type DreamSceneStatePatch = z.infer<typeof DreamSceneStatePatch>;
+export const SonaraSceneStatePatch = SonaraSceneState.partial();
+export type SonaraSceneStatePatch = z.infer<typeof SonaraSceneStatePatch>;
 
-export const defaultScene: DreamSceneState = {
+export const defaultScene: SonaraSceneState = {
   subject: "",
   action: "",
   environment: "",

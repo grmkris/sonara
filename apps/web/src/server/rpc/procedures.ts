@@ -1,7 +1,7 @@
-import { ORPCError, os } from "@music-visualizer/api/server";
-import type { ApiContext } from "@music-visualizer/api/server";
-import type { UserId } from "@music-visualizer/shared/typeid";
-import type { Database } from "@music-visualizer/db";
+import { ORPCError, os } from "@sonara/api/server";
+import type { ApiContext } from "@sonara/api/server";
+import type { UserId } from "@sonara/shared/typeid";
+import type { Database } from "@sonara/db";
 
 export type WebContext = ApiContext<Database>;
 

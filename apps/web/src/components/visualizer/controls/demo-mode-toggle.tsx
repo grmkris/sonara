@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback } from "react";
-import { DECKS, type DeckKey } from "@music-visualizer/shared";
+import { DECKS, type DeckKey } from "@sonara/shared";
 import type { SessionSend } from "@/lib/session-actions";
 import { useVisualizerStore } from "@/stores/visualizer";
 import { cn } from "@/lib/utils";

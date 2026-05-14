@@ -1,5 +1,5 @@
 import type { StateCreator } from "zustand";
-import type { ResolvedScene } from "@music-visualizer/shared";
+import type { ResolvedScene } from "@sonara/shared";
 import type { VisualizerState } from "./types";
 
 export type TriggerReason =

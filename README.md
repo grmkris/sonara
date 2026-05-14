@@ -51,7 +51,7 @@ The default `DATABASE_URL` in `.env.example` points at this instance. Production
 Drizzle schema and migrations live in `packages/db`. After editing `packages/db/src/schema/*.db.ts`:
 
 ```bash
-bun run --filter=@music-visualizer/db db:generate
+bun run --filter=@sonara/db db:generate
 ```
 
 This writes a new SQL file to `packages/db/drizzle/`. Commit it alongside the schema change. The server applies pending migrations on every boot via `runMigrations()` — no manual `db:push` or `db:migrate` step in dev or prod.

@@ -1,7 +1,7 @@
 import ReconnectingWebSocket from "partysocket/ws";
 import { createORPCClient } from "@orpc/client";
 import { RPCLink } from "@orpc/client/websocket";
-import type { SessionRouterClient } from "@music-visualizer/api";
+import type { SessionRouterClient } from "@sonara/api";
 import { rpcClient } from "./orpc";
 
 // One WebSocket per tab, wrapping an oRPC client that speaks the `session`

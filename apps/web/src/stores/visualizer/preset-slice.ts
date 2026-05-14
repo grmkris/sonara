@@ -6,9 +6,9 @@ import {
 } from "@/lib/render/presets";
 import type { VisualizerState } from "./types";
 
-export const PRESET_KEY = "dream.preset";
-export const PRESET_MODE_KEY = "dream.presetMode";
-export const SAVED_PRESETS_KEY = "dream.savedPresets";
+export const PRESET_KEY = "sonara.preset";
+export const PRESET_MODE_KEY = "sonara.presetMode";
+export const SAVED_PRESETS_KEY = "sonara.savedPresets";
 
 export type PresetMode = "manual" | "cycle" | "section" | "llm";
 

@@ -118,5 +118,5 @@ export function buildFilename(extension: "mp4" | "webm"): string {
   const d = new Date();
   const pad = (n: number) => String(n).padStart(2, "0");
   const stamp = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}-${pad(d.getMinutes())}-${pad(d.getSeconds())}`;
-  return `music-visualizer-${stamp}.${extension}`;
+  return `sonara-${stamp}.${extension}`;
 }

@@ -6,7 +6,7 @@ const nextConfig: NextConfig = {
   // runtime stage can copy just that + .next/static + public. Cuts the
   // image to a fraction of the full node_modules tree.
   output: "standalone",
-  transpilePackages: ["@music-visualizer/shared"],
+  transpilePackages: ["@sonara/shared"],
   // Keep pg + drizzle out of the client bundle — pg ships a native addon,
   // drizzle has Node-only APIs.
   serverExternalPackages: ["drizzle-orm", "pg"],

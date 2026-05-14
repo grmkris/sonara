@@ -49,7 +49,7 @@ Railway local MCP is registered in `.mcp.json` (gitignored). Future agents pick 
 Migrations live in `packages/db/drizzle/` (not `apps/web/drizzle/` — that path is stale-doc). After editing `packages/db/src/schema/*.db.ts`:
 
 ```bash
-bun run --filter=@music-visualizer/db db:generate
+bun run --filter=@sonara/db db:generate
 ```
 
 Commit the new SQL file. The next deploy applies it automatically via `runMigrations()` called at `apps/server/src/server.ts` startup. **Never run `db:push` against prod.** No production `db:push` script exists.
@@ -75,13 +75,13 @@ Web on `http://localhost:4470`, server on `ws://localhost:4471/ws`.
 
 Schema and migrations live in `packages/db`. The server applies pending migrations on every boot via `runMigrations()` (see `apps/server/src/server.ts`) — there is no manual `db:push` step in dev or prod.
 
-Local Postgres comes from `packages/db/docker-compose.yml` (Postgres 17 on `localhost:54324`). Bring it up with `bun run db:start`; stop it with `bun run db:stop` (volume persists) or `bun run db:down` (containers removed, volume kept). `bun run --filter=@music-visualizer/db db:clean` wipes the volume.
+Local Postgres comes from `packages/db/docker-compose.yml` (Postgres 17 on `localhost:54324`). Bring it up with `bun run db:start`; stop it with `bun run db:stop` (volume persists) or `bun run db:down` (containers removed, volume kept). `bun run --filter=@sonara/db db:clean` wipes the volume.
 
 To author a new migration:
 
 ```bash
 # After editing packages/db/src/schema/*.db.ts
-bun run --filter=@music-visualizer/db db:generate
+bun run --filter=@sonara/db db:generate
 ```
 
 This produces a new SQL file in `packages/db/drizzle/`. Commit it alongside the schema change so history stays in lockstep. Server boots will apply it automatically on the next deploy.
@@ -124,7 +124,7 @@ Two methods on the same Better Auth instance (`apps/web/src/server/auth.ts`), on
 1. **SIWE wallet** (open): Reown AppKit → Better Auth `siwe` plugin. Anonymous mode — any wallet that signs the SIWE message gets a user row with synthetic email `<addr>@wallet.<host>`. ERC-1271 + ERC-6492 verification via the Reown-tuned mainnet client in `apps/web/src/lib/chain-clients.ts`.
 2. **Email + password** (allowlist-gated): Better Auth's built-in `emailAndPassword`. Signup is rejected by `databaseHooks.user.create.before` unless the email exists in the `allowed_email` table. Add an email with `bun run --filter=web allow-email <address> [note]`. UI lives at `/login`.
 
-For the WebSocket: the web app mints a 5-min HMAC ticket via `auth.mintWsTicket`; the browser opens `ws://server/ws?token=…`; the server verifies the ticket via `verifyTicket` from `@music-visualizer/shared`. The ticket path is auth-method-agnostic — both SIWE and email-password users get the same ticket.
+For the WebSocket: the web app mints a 5-min HMAC ticket via `auth.mintWsTicket`; the browser opens `ws://server/ws?token=…`; the server verifies the ticket via `verifyTicket` from `@sonara/shared`. The ticket path is auth-method-agnostic — both SIWE and email-password users get the same ticket.
 
 ## Credits & money path
 

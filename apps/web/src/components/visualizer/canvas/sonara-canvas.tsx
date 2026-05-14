@@ -22,7 +22,7 @@ import { CanvasOscilloscope } from "@/components/visualizer/audio/canvas-oscillo
 //     compositing within the texture; this mask sits over the entire stack
 //     including overlays, so it's not redundant.
 // Audit pass concluded each is load-bearing in its own way. Keep all four.
-export function DreamCanvas() {
+export function SonaraCanvas() {
   const [hasWebgl2, setHasWebgl2] = useState<boolean | null>(null);
 
   useEffect(() => {
@@ -58,7 +58,7 @@ function EmptyIdeogram() {
         className="font-serif breath text-[color:var(--paper)] select-none italic tracking-tight"
         style={{ fontSize: "16vmin", fontWeight: 500, lineHeight: 1 }}
       >
-        dream
+        sonara
       </span>
     </div>
   );

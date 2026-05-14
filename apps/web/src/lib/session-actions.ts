@@ -2,8 +2,8 @@ import type {
   AudioFeatures,
   ClientScenePatch,
   DeckKey,
-} from "@music-visualizer/shared";
-import type { SessionRouterClient } from "@music-visualizer/api";
+} from "@sonara/shared";
+import type { SessionRouterClient } from "@sonara/api";
 
 // Client-side convenience union for the session surface. Purely local — the
 // wire protocol is orpc per-procedure schemas; this is just a thin dispatch

@@ -19,7 +19,7 @@
 
 import { readFile, writeFile, unlink, access } from "node:fs/promises";
 import { resolve as pathResolve } from "node:path";
-import { DemoManifest, type DemoFrame } from "@music-visualizer/shared";
+import { DemoManifest, type DemoFrame } from "@sonara/shared";
 
 interface CaptureJson {
   slug: string;

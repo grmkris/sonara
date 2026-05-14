@@ -23,15 +23,15 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createFalClient } from "@fal-ai/client";
-import { createDb, SCHEMA } from "@music-visualizer/db";
+import { createDb, SCHEMA } from "@sonara/db";
 import {
   DECK_KEYS,
   type DeckKey,
-} from "@music-visualizer/shared";
+} from "@sonara/shared";
 import {
   type ImageLibraryId,
   typeIdGenerator,
-} from "@music-visualizer/shared/typeid";
+} from "@sonara/shared/typeid";
 import { eq } from "drizzle-orm";
 import sharp from "sharp";
 import { env } from "../src/env";

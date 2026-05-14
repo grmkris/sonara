@@ -1,9 +1,9 @@
 import {
-  type DreamSceneState,
+  type SonaraSceneState,
   type ResolvedScene,
   type ResolvedSceneCore,
   type ResolvedAudioState,
-} from "@music-visualizer/shared";
+} from "@sonara/shared";
 import type { Logger } from "../lib/logger";
 import { expandScene, deterministicResolve } from "./scene-llm-expander";
 
@@ -30,7 +30,7 @@ const cache = new Map<string, CacheEntry>();
 // concurrent triggers fall back to deterministic in the meantime.
 const inFlight = new Map<string, Promise<ResolvedSceneCore>>();
 
-function hashScene(s: DreamSceneState): string {
+function hashScene(s: SonaraSceneState): string {
   // Order matters; matches the LLM expander's input surface.
   return JSON.stringify([
     s.subject.trim().toLowerCase(),
@@ -63,7 +63,7 @@ export interface ResolveOpts {
 // hash gets the LLM result. This keeps the trigger() hot path non-blocking
 // while still warming the cache.
 export function resolveScene(
-  scene: DreamSceneState,
+  scene: SonaraSceneState,
   opts: ResolveOpts,
 ): ResolvedScene {
   const hash = hashScene(scene);
@@ -114,7 +114,7 @@ export function resolveScene(
 // real LLM result rather than the deterministic stand-in. Still respects
 // the cache and the in-flight dedupe.
 export async function resolveSceneAwaited(
-  scene: DreamSceneState,
+  scene: SonaraSceneState,
   opts: ResolveOpts,
 ): Promise<ResolvedScene> {
   const hash = hashScene(scene);

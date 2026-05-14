@@ -1,5 +1,5 @@
 import { fal } from "@fal-ai/client";
-import type { NowPlaying } from "@music-visualizer/shared";
+import type { NowPlaying } from "@sonara/shared";
 import { env } from "../env";
 import type { Logger } from "../lib/logger";
 

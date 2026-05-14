@@ -2,12 +2,12 @@ import {
   type AudioFeatures,
   type ClientScenePatch,
   type DeckKey,
-  type DreamSceneState,
+  type SonaraSceneState,
   type NowPlaying,
   type ServerEvent,
   defaultScene,
-} from "@music-visualizer/shared";
-import type { ImageLibraryId } from "@music-visualizer/shared/typeid";
+} from "@sonara/shared";
+import type { ImageLibraryId } from "@sonara/shared/typeid";
 import { EventPublisher } from "@orpc/server";
 import type { Logger } from "../lib/logger";
 import { streamPreview } from "../generation/fal-provider";
@@ -106,8 +106,8 @@ function cadenceFromIntensity(i: number): { periodicMs: number; pauseMs: number 
 export class Session {
   readonly id: string;
   readonly userId: string;
-  private scene: DreamSceneState;
-  private lastGeneratedScene: DreamSceneState;
+  private scene: SonaraSceneState;
+  private lastGeneratedScene: SonaraSceneState;
   private activeJob?: AbortController;
   private activeVersion = 0;
   private pauseTimer?: ReturnType<typeof setTimeout>;
@@ -174,7 +174,7 @@ export class Session {
   // Idempotent snapshot of server-authoritative state for the client's
   // bootstrap pull (see session.router state procedure). Kept tiny on
   // purpose — the rest flows through the events stream.
-  getSnapshot(): DreamSceneState {
+  getSnapshot(): SonaraSceneState {
     return this.scene;
   }
 
@@ -182,7 +182,7 @@ export class Session {
     patch: ClientScenePatch,
     origin: "client" | "voice" = "client",
   ): void {
-    const next: DreamSceneState = { ...this.scene, ...patch };
+    const next: SonaraSceneState = { ...this.scene, ...patch };
     this.scene = next;
     this.send({ type: "scene.state", state: next });
 
@@ -333,7 +333,7 @@ export class Session {
     }
     if (controller.signal.aborted) return null;
 
-    const museExtra: Partial<DreamSceneState> = {};
+    const museExtra: Partial<SonaraSceneState> = {};
     if (muse?.subject && this.scene.subject === defaultScene.subject) {
       museExtra.subject = muse.subject;
     }
@@ -425,7 +425,8 @@ export class Session {
       if (now - this.lastKeyframeAt < periodicMs) return;
       const hasAudio = now - this.lastAudioAt < 5000;
       const hasScene = this.scene.subject.trim().length > 0;
-      if (!hasAudio && !hasScene) return;
+      const hasDemo = this.demoMode && this.demoDeck !== null;
+      if (!hasAudio && !hasScene && !hasDemo) return;
       this.trigger("periodic");
     }, 1000);
   }
@@ -519,7 +520,7 @@ export class Session {
       : albumArt ?? undefined;
     const nextReferences = referenceImage ? [referenceImage] : [];
     this.scene = { ...this.scene, version, references: nextReferences };
-    const snapshot: DreamSceneState = this.scene;
+    const snapshot: SonaraSceneState = this.scene;
 
     this.send({ type: "scene.state", state: this.scene });
 

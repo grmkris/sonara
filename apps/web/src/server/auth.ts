@@ -7,9 +7,23 @@ import {
   webhooks,
 } from "@dodopayments/better-auth";
 import DodoPayments from "dodopayments";
+import {
+  type IdTypePrefixNames,
+  typeIdGenerator,
+} from "@sonara/shared/typeid";
 import { env } from "@/env";
-import { createDb, SCHEMA, type Database } from "@music-visualizer/db";
+import { createDb, SCHEMA, type Database } from "@sonara/db";
 import { createDodoWebhookHandlers } from "./dodo-webhook";
+
+// Map of Better Auth model names → our typeid prefix names. Identity here
+// (auth models happen to match our convention), but explicit so a typo in
+// either side surfaces at compile time.
+const AUTH_MODEL_TO_PREFIX: Record<string, IdTypePrefixNames> = {
+  user: "user",
+  session: "session",
+  account: "account",
+  verification: "verification",
+};
 
 export function createAuth(props: {
   db: Database;
@@ -22,10 +36,12 @@ export function createAuth(props: {
   const { db, secret, baseURL, dodoApiKey, dodoWebhookSecret, dodoMode } =
     props;
 
-  const dodoClient = new DodoPayments({
-    bearerToken: dodoApiKey,
-    environment: dodoMode,
-  });
+  // Empty Dodo creds → skip the plugin entirely. Login + signup still work;
+  // only the checkout/webhook surfaces are disabled.
+  const dodoEnabled = dodoApiKey.length > 0 && dodoWebhookSecret.length > 0;
+  const dodoClient = dodoEnabled
+    ? new DodoPayments({ bearerToken: dodoApiKey, environment: dodoMode })
+    : null;
 
   return betterAuth({
     database: drizzleAdapter(db, { provider: "pg", schema: SCHEMA }),
@@ -69,25 +85,43 @@ export function createAuth(props: {
       },
     },
 
-    plugins: [
-      dodopayments({
-        client: dodoClient,
-        // Customer is created lazily on first checkout (see
-        // creditsRouter.createCheckout). Keeping this `false` means signup
-        // doesn't hit Dodo, so users can register even before the API key
-        // is wired or if Dodo is down.
-        createCustomerOnSignUp: false,
-        use: [
-          webhooks({
-            webhookKey: dodoWebhookSecret,
-            ...createDodoWebhookHandlers({ db }),
+    plugins: dodoEnabled
+      ? [
+          dodopayments({
+            client: dodoClient!,
+            // Customer is created lazily on first checkout (see
+            // creditsRouter.createCheckout). Keeping this `false` means signup
+            // doesn't hit Dodo, so users can register even before the API key
+            // is wired or if Dodo is down.
+            createCustomerOnSignUp: false,
+            use: [
+              webhooks({
+                webhookKey: dodoWebhookSecret,
+                ...createDodoWebhookHandlers({ db }),
+              }),
+            ],
           }),
-        ],
-      }),
-    ],
+        ]
+      : [],
 
     advanced: {
-      database: { generateId: false },
+      database: {
+        // Generate typeid-prefixed ids for the auth tables. The drizzle
+        // adapter writes via our typeId customType which converts the
+        // prefixed string into the underlying uuid on its way to Postgres.
+        // Returning false from a model the map doesn't cover would let
+        // Better Auth fall through to its own random string — we don't
+        // expect to hit that branch, but it stays loud if we ever do.
+        generateId: ({ model }) => {
+          const prefix = AUTH_MODEL_TO_PREFIX[model];
+          if (!prefix) {
+            throw new Error(
+              `Better Auth requested an id for unknown model "${model}"`,
+            );
+          }
+          return typeIdGenerator(prefix);
+        },
+      },
     },
   });
 }

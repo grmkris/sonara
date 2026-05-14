@@ -11,7 +11,7 @@ import {
   createPgLite,
   pgliteAsPool,
   type TestPg,
-} from "@music-visualizer/test-utils";
+} from "@sonara/test-utils";
 import {
   CREDIT_DENIAL_COOLDOWN_MS,
   COST_PER_FRAME,

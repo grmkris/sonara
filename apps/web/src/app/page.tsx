@@ -2,7 +2,7 @@
 
 import { Suspense, useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
-import { DreamCanvas } from "@/components/visualizer/canvas/dream-canvas";
+import { SonaraCanvas } from "@/components/visualizer/canvas/sonara-canvas";
 import { GhostOverlay } from "@/components/visualizer/canvas/ghost-overlay";
 import { PromptInput } from "@/components/visualizer/controls/prompt-input";
 import { MusicSource } from "@/components/visualizer/controls/music-source";
@@ -18,7 +18,9 @@ import { ScanSweep } from "@/components/visualizer/canvas/scan-sweep";
 import { VoiceListen } from "@/components/visualizer/voice/voice-listen";
 import { NowPlaying } from "@/components/visualizer/controls/now-playing";
 import { Button } from "@/components/ui/button";
+import { useSession } from "@/lib/auth-client";
 import { useWsSession } from "@/hooks/use-ws-session";
+import Link from "next/link";
 import {
   useAudioFeatures,
   type AudioSource,
@@ -27,6 +29,7 @@ import { useSongRecognition } from "@/hooks/use-song-recognition";
 import { useHotkey } from "@/hooks/use-hotkey";
 import {
   hydrateConsoleTab,
+  hydrateDemoPrefs,
   hydratePresetPrefs,
   hydrateUiVisible,
   useVisualizerStore,
@@ -35,6 +38,8 @@ import { cn } from "@/lib/utils";
 
 export default function Page() {
   const send = useWsSession();
+  const { data: sessionData, isPending: sessionPending } = useSession();
+  const isSignedIn = !!sessionData?.session;
   const [audioSource, setAudioSource] = useState<AudioSource>({ type: "none" });
 
   const onAudioError = useCallback(
@@ -70,6 +75,7 @@ export default function Page() {
   useEffect(() => {
     hydrateUiVisible();
     hydratePresetPrefs();
+    hydrateDemoPrefs();
     hydrateConsoleTab();
   }, []);
 
@@ -84,7 +90,7 @@ export default function Page() {
 
   return (
     <main className="fixed inset-0 overflow-hidden">
-      <DreamCanvas />
+      <SonaraCanvas />
       <GhostOverlay />
       <ScanSweep />
 
@@ -115,7 +121,40 @@ export default function Page() {
         </div>
       </div>
 
-      {/* Collapsible rails. */}
+      {/* Auth gate — the whole interactive surface (WS session, prompt, demo
+         picker, audio source) requires sign-in. Show a centred CTA in place
+         of the rails when not authenticated. `sessionPending` covers the
+         brief window before better-auth resolves the cookie; we render
+         nothing rather than flashing the wrong state. */}
+      {!sessionPending && !isSignedIn && (
+        <div className="absolute inset-0 z-30 flex items-center justify-center pointer-events-none">
+          <div className="pointer-events-auto relative px-10 py-8">
+            <div aria-hidden className="paper-scrim absolute -inset-4 -z-10" />
+            <div className="flex flex-col items-center gap-4 text-center">
+              <span className="font-serif italic text-[color:var(--paper)] text-2xl">
+                sign in to start
+              </span>
+              <span className="font-sans text-[10px] uppercase tracking-[0.24em] text-[color:var(--stone)] max-w-[280px]">
+                the visualiser needs a session — demo and live generation both
+                run through your signed-in account.
+              </span>
+              <Button asChild variant="ghost" size="sm" className="mt-2">
+                <Link
+                  href="/login"
+                  className="font-sans text-[11px] uppercase tracking-[0.24em]"
+                >
+                  sign in
+                </Link>
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Collapsible rails. Only mounted when signed in — keeps the unauth
+         overlay clean and stops the controls from dispatching dead WS
+         actions. */}
+      {isSignedIn && (
       <div
         className={cn(
           "absolute inset-0 z-20 flex flex-col",
@@ -164,6 +203,7 @@ export default function Page() {
           </div>
         </section>
       </div>
+      )}
 
       {/* DemoRecorder reads `?record=` via useSearchParams, which Next 16
           requires inside a Suspense boundary so the rest of the page can
@@ -181,7 +221,7 @@ function Logotype() {
       className="font-serif pointer-events-auto block select-none italic tracking-tight text-[color:var(--paper)]/85"
       style={{ fontSize: "34px", fontWeight: 500, lineHeight: 0.9 }}
     >
-      dream
+      sonara
     </span>
   );
 }

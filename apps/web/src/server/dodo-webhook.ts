@@ -1,7 +1,7 @@
 import { sql } from "drizzle-orm";
-import { type Database, SCHEMA } from "@music-visualizer/db";
-import { findPack } from "@music-visualizer/shared";
-import { typeIdGenerator, type UserId } from "@music-visualizer/shared/typeid";
+import { type Database, SCHEMA } from "@sonara/db";
+import { findPack } from "@sonara/shared";
+import { typeIdGenerator, type UserId } from "@sonara/shared/typeid";
 
 // Minimal payload shape we care about — Dodo's full PaymentSucceededPayload
 // has many more fields. Typed loose because the plugin already validated it.

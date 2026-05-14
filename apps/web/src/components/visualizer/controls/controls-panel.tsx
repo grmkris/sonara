@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import type { DreamSceneState } from "@music-visualizer/shared";
+import type { SonaraSceneState } from "@sonara/shared";
 import type { SessionSend } from "@/lib/session-actions";
 import { Slider } from "@/components/ui/slider";
 import {
@@ -45,7 +45,7 @@ export function ControlsPanel({ send }: ControlsPanelProps) {
   const patchSlider = (key: SliderKey, value: number) =>
     send({
       type: "scene.patch",
-      patch: { [key]: value } as Partial<DreamSceneState>,
+      patch: { [key]: value } as Partial<SonaraSceneState>,
     });
 
   return (

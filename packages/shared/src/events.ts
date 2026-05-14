@@ -1,12 +1,12 @@
 import { z } from "zod";
-import { DreamSceneState } from "./scene";
+import { SonaraSceneState } from "./scene";
 import { NowPlaying } from "./now-playing";
 import { ResolvedScene } from "./scene-resolved";
 import { VISUAL_PRESET_NAMES } from "./visual-presets";
 
 // Clients may only patch user-authored fields. version/references/nowPlaying
 // are server-authoritative and are omitted from the patch payload.
-export const ClientScenePatch = DreamSceneState.omit({
+export const ClientScenePatch = SonaraSceneState.omit({
   version: true,
   references: true,
   nowPlaying: true,
@@ -18,7 +18,7 @@ export type ClientScenePatch = z.infer<typeof ClientScenePatch>;
 // inputs (scenePatch, voicePatch, audioFeatures, recognize, …) carry the
 // client → server side.
 export const ServerEvent = z.discriminatedUnion("type", [
-  z.object({ type: z.literal("scene.state"), state: DreamSceneState }),
+  z.object({ type: z.literal("scene.state"), state: SonaraSceneState }),
   z.object({
     type: z.literal("frame.preview"),
     imageUrl: z.string(),

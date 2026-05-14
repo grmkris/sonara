@@ -1,4 +1,4 @@
-import { typeIdGenerator, typeIdToUuid } from "@music-visualizer/shared/typeid";
+import { typeIdGenerator, typeIdToUuid } from "@sonara/shared/typeid";
 import { closePool as closeSharedPool, getPool } from "../db/pool";
 import type { Logger } from "../lib/logger";
 

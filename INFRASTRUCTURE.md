@@ -1,6 +1,6 @@
 ---
 title: "Music Visualizer — Infrastructure"
-description: "Topology, data flow, deployment, and external dependencies for the music-visualizer app."
+description: "Topology, data flow, deployment, and external dependencies for the sonara app."
 generated: "2026-05-12"
 ---
 
@@ -67,7 +67,7 @@ flowchart LR
 
 ```mermaid
 graph TD
-    Root["music-visualizer/<br/>(Turborepo + Bun workspaces)"]
+    Root["sonara/<br/>(Turborepo + Bun workspaces)"]
     Root --> Apps["apps/"]
     Root --> Packages["packages/"]
 
@@ -300,7 +300,7 @@ sequenceDiagram
 ```mermaid
 flowchart LR
     Dev["Developer<br/>git push main"]
-    GH["GitHub<br/>grmkris/music-visualizer"]
+    GH["GitHub<br/>grmkris/sonara"]
     RW["Railway<br/>auto-deploy on push"]
 
     subgraph Build["Per-service Docker build"]
@@ -408,7 +408,7 @@ erDiagram
 
 - **Schema source:** `packages/db/src/schema/` (`auth.db.ts`, `credits.db.ts`).
 - **Migrations:** `packages/db/drizzle/*.sql`, applied by `runMigrations()` on every server boot. **No manual `db:push` in prod.**
-- **Author:** drizzle-kit generates SQL from schema diff (`bun run --filter=@music-visualizer/db db:generate`).
+- **Author:** drizzle-kit generates SQL from schema diff (`bun run --filter=@sonara/db db:generate`).
 
 ---
 

@@ -1,4 +1,4 @@
-import type { ResolvedScene } from "@music-visualizer/shared";
+import type { ResolvedScene } from "@sonara/shared";
 
 // Serialise a structured ResolvedScene to a FLUX.2-friendly prompt string.
 // This is the single prompt path — FAL receives exactly what this returns.
