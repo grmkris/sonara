@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useCallback, useEffect, useState } from "react";
+import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { SlidersHorizontal } from "lucide-react";
 import { toast } from "sonner";
 import { SonaraCanvas } from "@/components/visualizer/canvas/sonara-canvas";
@@ -101,6 +101,10 @@ export default function Page() {
       <SonaraCanvas />
       <GhostOverlay />
       <ScanSweep />
+
+      {/* Editorial paper grain — fixed, very faint, blended with overlay so it
+         tints both the dark background and the generated image consistently. */}
+      <div aria-hidden className="grain-overlay" />
 
       {/* Corner-reveal trigger: an invisible 200×48 div anchored top-right.
          While the UI is hidden, mousing into it brings the chrome back —
@@ -249,9 +253,25 @@ export default function Page() {
 }
 
 function Logotype() {
+  const ref = useRef<HTMLSpanElement | null>(null);
+  // Subscribe to live RMS and write to a CSS variable on the wordmark span.
+  // Done via a ref + RAF coalescer rather than React state so the underline
+  // can react at frame rate without re-rendering the React subtree.
+  useEffect(() => {
+    const unsub = useVisualizerStore.subscribe((s, prev) => {
+      if (s.audio.rms === prev.audio.rms) return;
+      const el = ref.current;
+      if (!el) return;
+      const clamped = Math.max(0, Math.min(1, s.audio.rms));
+      el.style.setProperty("--amp", clamped.toFixed(3));
+    });
+    return () => unsub();
+  }, []);
+
   return (
     <span
-      className="font-serif pointer-events-auto block select-none italic tracking-tight text-[color:var(--paper)]/85"
+      ref={ref}
+      className="wordmark font-serif pointer-events-auto block select-none italic tracking-tight text-[color:var(--paper)]/85"
       style={{ fontSize: "34px", fontWeight: 500, lineHeight: 0.9 }}
     >
       sonara

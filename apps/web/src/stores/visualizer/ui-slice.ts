@@ -10,6 +10,10 @@ export interface UiSlice {
   uiVisible: boolean;
   consoleTab: ConsoleTab;
   sweepPulse: number;
+  /** performance.now() captured once at store init — derived as MM:SS for the
+   *  uptime readout in the status HUD. Survives across re-renders but resets
+   *  on full page reload, which matches user mental model of "session time". */
+  sessionStartedAt: number;
 
   toggleUi: () => void;
   setUiVisible: (v: boolean) => void;
@@ -22,6 +26,8 @@ export const createUiSlice: StateCreator<VisualizerState, [], [], UiSlice> = (
   uiVisible: true,
   consoleTab: "scene",
   sweepPulse: 0,
+  sessionStartedAt:
+    typeof performance !== "undefined" ? performance.now() : 0,
 
   toggleUi: () =>
     set((s) => {
