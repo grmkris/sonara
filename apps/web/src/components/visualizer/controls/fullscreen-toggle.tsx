@@ -33,7 +33,7 @@ export function FullscreenToggle() {
       onClick={toggle}
       aria-label={isFs ? "Exit fullscreen" : "Enter fullscreen"}
       icon={<Icon className="size-3" strokeWidth={1.5} />}
-      label={isFs ? "exit · f" : "full · f"}
+      label={isFs ? "exit" : "fullscreen"}
     />
   );
 }

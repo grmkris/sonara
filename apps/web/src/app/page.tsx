@@ -1,293 +1,217 @@
 "use client";
 
-import { Suspense, useCallback, useEffect, useRef, useState } from "react";
-import { SlidersHorizontal } from "lucide-react";
-import { toast } from "sonner";
-import { SonaraCanvas } from "@/components/visualizer/canvas/sonara-canvas";
-import { GhostOverlay } from "@/components/visualizer/canvas/ghost-overlay";
-import { PromptInput } from "@/components/visualizer/controls/prompt-input";
-import { MusicSource } from "@/components/visualizer/controls/music-source";
-import { AudioRibbon } from "@/components/visualizer/audio/audio-ribbon";
-import { ControlsPanel } from "@/components/visualizer/controls/controls-panel";
-import { SceneHud } from "@/components/visualizer/controls/scene-hud";
-import { HideToggle } from "@/components/visualizer/controls/hide-toggle";
-import { FullscreenToggle } from "@/components/visualizer/controls/fullscreen-toggle";
-import { RecordToggle } from "@/components/visualizer/controls/record-toggle";
-import { UserControls } from "@/components/user-controls";
-import { DemoRecorder } from "@/components/visualizer/controls/demo-recorder";
-import { ScanSweep } from "@/components/visualizer/canvas/scan-sweep";
-import { VoiceListen } from "@/components/visualizer/voice/voice-listen";
-import { NowPlaying } from "@/components/visualizer/controls/now-playing";
-import { Button } from "@/components/ui/button";
-import {
-  Sheet,
-  SheetContent,
-  SheetTitle,
-  SheetTrigger,
-} from "@/components/ui/sheet";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { useSession } from "@/lib/auth-client";
+import { useRouter, useSearchParams } from "next/navigation";
+import { SonaraCanvas } from "@/components/visualizer/canvas/sonara-canvas";
 import { useWsSession } from "@/hooks/use-ws-session";
-import {
-  useAudioFeatures,
-  type AudioSource,
-} from "@/hooks/use-audio-features";
-import { useSongRecognition } from "@/hooks/use-song-recognition";
-import { useHotkey } from "@/hooks/use-hotkey";
-import { HOTKEYS } from "@/lib/hotkeys";
-import {
-  hydrateConsoleTab,
-  hydrateDemoPrefs,
-  hydratePresetPrefs,
-  hydrateUiVisible,
-  useVisualizerStore,
-} from "@/stores/visualizer";
-import { cn } from "@/lib/utils";
+import { useAudioFeatures, type AudioSource } from "@/hooks/use-audio-features";
+import { useVisualizerStore } from "@/stores/visualizer";
+import { getDemoTrack } from "@/lib/demo-audio";
 
-export default function Page() {
+// Landing page. Same SonaraCanvas the visualiser uses, mounted as a
+// fixed backplate so it stays visible while marketing copy scrolls over
+// it. Anon WS session pins the server to demo-library mode, and the
+// state() snapshot hydrates demoMode + demoDeck on connect — that's
+// what makes the audio + frames actually start without any toggle.
+
+export default function LandingPage() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const send = useWsSession();
-  const { data: sessionData } = useSession();
-  const isSignedIn = !!sessionData?.session;
+  const audioRef = useRef<HTMLAudioElement | null>(null);
   const [audioSource, setAudioSource] = useState<AudioSource>({ type: "none" });
 
-  const onAudioError = useCallback(
-    (err: unknown) => {
-      const name =
-        err instanceof Error ? err.name || err.message : "unavailable";
-      // NotAllowedError fires when the user cancels the share picker or
-      // denies mic permission — silent reset is friendlier than a toast.
-      if (name === "NotAllowedError") {
-        setAudioSource({ type: "none" });
-        return;
-      }
-      const label =
-        audioSource.type === "display" ? "audio share failed" : "mic unavailable";
-      toast.error(label, { description: name, duration: 3200 });
-      setAudioSource({ type: "none" });
-    },
-    [audioSource.type],
-  );
-
-  const onAudioSourceLost = useCallback(() => {
-    toast("audio share stopped", { duration: 2200 });
-    setAudioSource({ type: "none" });
-  }, []);
-
-  useAudioFeatures(audioSource, send, onAudioError, onAudioSourceLost);
-  // Song recognition (AudD) is signed-in only. The hook noops when disabled
-  // so the audio-features subscription on the store doesn't even fire.
-  useSongRecognition(send, isSignedIn);
-
-  const uiVisible = useVisualizerStore((s) => s.uiVisible);
-  const setUiVisible = useVisualizerStore((s) => s.setUiVisible);
-
-  // Apply localStorage preference after mount so SSR and first client paint match.
+  // Old `/?record=…` share links should still land on the visualiser.
+  // Client-side redirect (the page is a client component); the search-
+  // param check is cheap and only fires once on mount.
   useEffect(() => {
-    hydrateUiVisible();
-    hydratePresetPrefs();
-    hydrateDemoPrefs();
-    hydrateConsoleTab();
+    if (searchParams.get("record") !== null) {
+      const qs = searchParams.toString();
+      router.replace(`/play${qs ? `?${qs}` : ""}`);
+    }
+  }, [router, searchParams]);
+
+  // Demo-audio auto-play. Mirrors the effect in music-source.tsx but
+  // headless: no file picker, no mic toggle, just a hidden <audio>. The
+  // server pushed demoMode=true via the state() snapshot, the store
+  // received it, and this effect fires.
+  const demoMode = useVisualizerStore((s) => s.demoMode);
+  const demoDeck = useVisualizerStore((s) => s.demoDeck);
+  useEffect(() => {
+    const el = audioRef.current;
+    if (!el || !demoMode) return;
+    const track = getDemoTrack(demoDeck);
+    if (el.src.endsWith(track.url)) return;
+    el.src = track.url;
+    el.loop = true;
+    el.crossOrigin = "anonymous";
+    void el.play().catch(() => undefined);
+    setAudioSource({ type: "element", element: el });
+  }, [demoMode, demoDeck]);
+
+  // Browsers block <audio> autoplay until the visitor has interacted with
+  // the page. Retry on the first pointerdown anywhere on the landing —
+  // after that the audio-reactive shader can do its job.
+  useEffect(() => {
+    const retry = () => {
+      const el = audioRef.current;
+      if (el && el.paused) void el.play().catch(() => undefined);
+      window.removeEventListener("pointerdown", retry);
+    };
+    window.addEventListener("pointerdown", retry, { once: true });
+    return () => window.removeEventListener("pointerdown", retry);
   }, []);
 
-  useHotkey(
-    HOTKEYS.reset,
-    useCallback(() => {
-      setAudioSource({ type: "none" });
-      send({ type: "session.reset" });
-    }, [send]),
-  );
-
+  // Audio features → store (drives the shader's audio-reactive uniforms)
+  // + WS at 5 Hz. The 5 Hz forward goes to an anon Session that ignores
+  // most of it; the 60 Hz store write is what makes the visuals feel
+  // alive on the landing.
+  useAudioFeatures(audioSource, send);
 
   return (
-    <main className="fixed inset-0 overflow-hidden">
-      <SonaraCanvas />
-      <GhostOverlay />
-      <ScanSweep />
-
-      {/* Editorial paper grain — fixed, very faint, blended with overlay so it
-         tints both the dark background and the generated image consistently. */}
+    <main className="relative min-h-svh overflow-x-hidden bg-[color:var(--ink)] text-[color:var(--paper)]">
+      {/* Canvas backplate. Fixed so it stays visible as the visitor
+         scrolls; everything below sits in a z-10 column on top. */}
+      <div className="pointer-events-none fixed inset-0 z-0">
+        <SonaraCanvas />
+      </div>
       <div aria-hidden className="grain-overlay" />
+      {/* Hidden demo-audio element. Source attached by the effect above. */}
+      <audio ref={audioRef} className="hidden" aria-hidden />
 
-      {/* Corner-reveal trigger: an invisible 200×48 div anchored top-right.
-         While the UI is hidden, mousing into it brings the chrome back —
-         cheaper than a global mousemove listener. */}
-      {!uiVisible && (
-        <div
-          aria-hidden
-          className="pointer-events-auto absolute right-0 top-0 z-40 h-12 w-[200px]"
-          onMouseEnter={() => setUiVisible(true)}
-        />
-      )}
-
-      {/* Always-visible corner: wordmark (with micro-hud beneath) +
-         tight right-side control cluster. */}
-      <div className="pointer-events-none absolute inset-x-0 top-0 z-30 flex items-start justify-between gap-3 px-4 pt-6 md:px-10 md:pt-8">
-        <div className="pointer-events-auto flex flex-col gap-3">
-          <Logotype />
-          <SceneHud />
-        </div>
-        <div className="pointer-events-auto flex items-center gap-3 pt-2 sm:gap-5">
-          <NowPlaying />
-          <UserControls />
-          <RecordToggle />
-          <FullscreenToggle />
-          <HideToggle />
-          <Sheet>
-            <SheetTrigger asChild>
-              <button
-                type="button"
-                aria-label="open controls"
-                className="focus-ring flex items-center text-[color:var(--stone)] transition-colors hover:text-[color:var(--paper)] md:hidden"
-              >
-                <SlidersHorizontal className="size-4" strokeWidth={1.5} />
-              </button>
-            </SheetTrigger>
-            <SheetContent
-              side="right"
-              className="w-[min(360px,90vw)] border-l border-[color:var(--hairline)]/30 bg-[color:var(--ink)]/95 p-5 backdrop-blur-md"
-            >
-              <span
-                aria-hidden
-                className="mx-auto -mt-2 mb-3 block h-1 w-10 rounded-full bg-[color:var(--stone)]/40"
-              />
-              <SheetTitle className="font-mono text-[10px] uppercase tracking-[0.22em] text-[color:var(--stone)]">
-                controls
-              </SheetTitle>
-              <div className="mt-4 overflow-y-auto pr-1">
-                <ControlsPanel send={send} />
-              </div>
-            </SheetContent>
-          </Sheet>
-        </div>
-      </div>
-
-      {/* Collapsible rails — render for everyone. Unauthenticated visitors
-         get the same chrome, but live-only affordances (PromptInput,
-         VoiceListen, RecordToggle, NowPlaying) gate themselves on
-         useSession and hide / disable when there's no user. The server
-         pins anon WS sessions to demo-library mode, so the controls that
-         remain (deck picker, presets, audio source) behave correctly. */}
-      <div
-        className={cn(
-          "absolute inset-0 z-20 flex flex-col",
-          uiVisible ? "ui-fade-in" : "ui-fade-out",
-        )}
-      >
-        {/* Scene rail — left-anchored, top third. */}
-        <section className="pointer-events-auto mt-24 flex flex-1 gap-6 px-4 md:mt-28 md:gap-10 md:px-10">
-          <div className="relative w-full md:w-[360px] md:shrink-0">
-            <div aria-hidden className="paper-scrim absolute -inset-6 -z-10" />
-            {isSignedIn ? (
-              <PromptInput send={send} />
-            ) : (
-              <AnonPromptPlaceholder />
-            )}
-          </div>
-
-          <div className="hidden flex-1 md:block" />
-
-          {/* Controls rail — right-anchored on md+; folds into the mobile
-             Sheet (see header) at narrower widths. */}
-          <div className="relative hidden w-[260px] shrink-0 flex-col gap-10 md:flex">
-            <div aria-hidden className="paper-scrim absolute -inset-6 -z-10" />
-            <ControlsPanel send={send} />
-          </div>
-        </section>
-
-        {/* Bottom strip — single audio ribbon + one tight control row. */}
-        <section className="pointer-events-auto relative mb-4 px-4 pt-2 md:mb-6 md:px-10">
-          <div aria-hidden className="paper-scrim absolute -inset-x-4 -inset-y-2 -z-10" />
-
-          <AudioRibbon height={40} />
-
-          <div className="mt-3 flex items-center justify-between gap-3 sm:gap-6">
-            <div className="flex items-center gap-3 sm:gap-6">
-              <MusicSource source={audioSource} setSource={setAudioSource} />
-              <span aria-hidden className="hairline h-3 w-px opacity-30" />
-              <VoiceListen send={send} />
-            </div>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => {
-                setAudioSource({ type: "none" });
-                send({ type: "session.reset" });
+      <div className="relative z-10 flex min-h-svh flex-col">
+        {/* Fold */}
+        <section className="relative flex flex-1 items-end px-6 pb-10 pt-16 md:items-center md:px-12 md:pt-24">
+          {/* Paper scrim feathers the canvas so the headline reads
+             cleanly against any frame. */}
+          <div
+            aria-hidden
+            className="paper-scrim pointer-events-none absolute inset-x-0 bottom-0 top-1/4 -z-10"
+          />
+          <div className="flex max-w-[680px] flex-col gap-6">
+            <h1
+              className="wordmark font-serif italic leading-[0.95] text-[color:var(--paper)]"
+              style={{
+                fontSize: "clamp(56px, 9vw, 128px)",
+                fontWeight: 500,
               }}
-              className="font-sans text-[10px] uppercase tracking-[0.24em] text-[color:var(--stone)] hover:text-[color:var(--paper)]"
             >
-              reset · ⌫
-            </Button>
+              music,
+              <br />
+              made visible.
+            </h1>
+            <p className="font-sans max-w-[38ch] text-[15px] leading-relaxed text-[color:var(--paper)]/85 md:text-[16px]">
+              a browser-based visualiser that listens to what you play and
+              paints what it hears — in realtime, at 60 frames a second.
+            </p>
+            <div className="flex flex-wrap items-center gap-5 pt-2">
+              <Link
+                href="/play"
+                className="focus-ring font-sans border border-[color:var(--paper)]/70 px-5 py-2.5 text-[11px] uppercase tracking-[0.24em] text-[color:var(--paper)] transition-colors hover:bg-[color:var(--paper)] hover:text-[color:var(--ink)]"
+              >
+                open the visualiser
+              </Link>
+              <Link
+                href="/login"
+                className="focus-ring font-sans text-[11px] uppercase tracking-[0.24em] text-[color:var(--stone)] underline-offset-4 transition-colors hover:text-[color:var(--paper)] hover:underline"
+              >
+                sign in
+              </Link>
+            </div>
+            <p className="font-mono mt-2 text-[10px] uppercase tracking-[0.24em] text-[color:var(--stone)]">
+              no install · works in chrome · webgl2
+            </p>
           </div>
         </section>
-      </div>
 
-      {/* DemoRecorder reads `?record=` via useSearchParams, which Next 16
-          requires inside a Suspense boundary so the rest of the page can
-          prerender. */}
-      <Suspense fallback={null}>
-        <DemoRecorder />
-      </Suspense>
+        {/* Capability band */}
+        <section className="relative border-t border-[color:var(--hairline)]/25 bg-[color:var(--ink)]/85 px-6 py-12 backdrop-blur-sm md:px-12 md:py-16">
+          <div className="grid gap-10 md:grid-cols-3 md:gap-8">
+            <Capability
+              eyebrow="01 listen"
+              hook="from any sound"
+              body="share a browser tab, plug a mic, or drop in an audio file. song-recognition adds the artist and title automatically."
+            />
+            <Capability
+              eyebrow="02 speak"
+              hook="from your voice"
+              body="describe what you want — by voice or by typing — across four fields: subject, environment, mood, palette. one click commits."
+            />
+            <Capability
+              eyebrow="03 watch"
+              hook="at sixty frames a second"
+              body="a webgl2 displacement shader carries continuity between ai-generated keyframes. twenty-one presets, a kuwahara painterly pass, audio-reactive throughout."
+            />
+          </div>
+        </section>
+
+        {/* Discovery strip — surfaces the hotkeys that used to clutter
+           the visualiser chrome. */}
+        <section className="relative border-t border-[color:var(--hairline)]/25 bg-[color:var(--ink)]/85 px-6 py-6 backdrop-blur-sm md:px-12">
+          <p className="font-mono flex flex-wrap items-center gap-x-6 gap-y-2 text-[10px] uppercase tracking-[0.24em] text-[color:var(--stone)]">
+            <span>
+              <span className="text-[color:var(--paper)]">f</span> fullscreen
+            </span>
+            <span>
+              <span className="text-[color:var(--paper)]">h</span> hide ui
+            </span>
+            <span>
+              <span className="text-[color:var(--paper)]">r</span> record
+            </span>
+            <span>
+              <span className="text-[color:var(--paper)]">⌫</span> reset
+            </span>
+          </p>
+        </section>
+
+        {/* Footer */}
+        <footer className="relative border-t border-[color:var(--hairline)]/25 bg-[color:var(--ink)]/85 px-6 py-6 backdrop-blur-sm md:px-12">
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <span className="font-serif text-[22px] italic text-[color:var(--paper)]/85">
+              sonara
+            </span>
+            <nav className="font-mono flex items-center gap-5 text-[10px] uppercase tracking-[0.24em] text-[color:var(--stone)]">
+              <Link
+                href="/play"
+                className="transition-colors hover:text-[color:var(--paper)]"
+              >
+                play
+              </Link>
+              <Link
+                href="/login"
+                className="transition-colors hover:text-[color:var(--paper)]"
+              >
+                sign in
+              </Link>
+            </nav>
+          </div>
+        </footer>
+      </div>
     </main>
   );
 }
 
-// Anonymous visitors see the visualiser running off the demo library
-// (server-side: `Session` with `userId = null` pins demoMode + random deck).
-// Typing into PromptInput would have no visual effect for them — every
-// trigger short-circuits to library regardless of subject — so we hide it
-// and put a brief CTA where it would have lived. Keeps the layout balanced
-// and surfaces the upgrade path without dropping a modal in front.
-function AnonPromptPlaceholder() {
+function Capability({
+  eyebrow,
+  hook,
+  body,
+}: {
+  eyebrow: string;
+  hook: string;
+  body: string;
+}) {
   return (
-    <div className="flex flex-col gap-4">
-      <span className="font-serif italic text-[color:var(--paper)] text-[26px] leading-tight">
-        a demo, on shuffle.
+    <div className="flex flex-col gap-3 md:border-r md:border-[color:var(--hairline)]/25 md:pr-8 md:last:border-r-0">
+      <span className="font-mono text-[10px] uppercase tracking-[0.28em] text-[color:var(--stone)]">
+        {eyebrow}
       </span>
-      <span className="font-sans text-[10px] uppercase tracking-[0.24em] text-[color:var(--stone)] max-w-[300px] leading-relaxed">
-        you're watching a random deck from the library. sign in to direct the
-        visuals with prompts, voice, and the songs you play.
+      <span className="font-serif text-[28px] italic leading-tight text-[color:var(--paper)] md:text-[32px]">
+        {hook}
       </span>
-      <Button
-        asChild
-        variant="ghost"
-        size="sm"
-        className="-ml-2 w-fit"
-      >
-        <Link
-          href="/login"
-          className="font-sans text-[11px] uppercase tracking-[0.24em]"
-        >
-          sign in
-        </Link>
-      </Button>
+      <p className="font-sans text-[14px] leading-relaxed text-[color:var(--paper)]/80">
+        {body}
+      </p>
     </div>
   );
 }
-
-function Logotype() {
-  const ref = useRef<HTMLSpanElement | null>(null);
-  // Subscribe to live RMS and write to a CSS variable on the wordmark span.
-  // Done via a ref + RAF coalescer rather than React state so the underline
-  // can react at frame rate without re-rendering the React subtree.
-  useEffect(() => {
-    const unsub = useVisualizerStore.subscribe((s, prev) => {
-      if (s.audio.rms === prev.audio.rms) return;
-      const el = ref.current;
-      if (!el) return;
-      const clamped = Math.max(0, Math.min(1, s.audio.rms));
-      el.style.setProperty("--amp", clamped.toFixed(3));
-    });
-    return () => unsub();
-  }, []);
-
-  return (
-    <span
-      ref={ref}
-      className="wordmark font-serif pointer-events-auto block select-none italic tracking-tight text-[color:var(--paper)]/85"
-      style={{ fontSize: "34px", fontWeight: 500, lineHeight: 0.9 }}
-    >
-      sonara
-    </span>
-  );
-}
-

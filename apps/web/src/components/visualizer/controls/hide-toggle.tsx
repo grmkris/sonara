@@ -28,7 +28,7 @@ export function HideToggle() {
       onClick={toggleUi}
       aria-label={uiVisible ? "Hide interface" : "Show interface"}
       icon={<Icon className="size-3" strokeWidth={1.5} />}
-      label={uiVisible ? "hide · h" : "show · h"}
+      label={uiVisible ? "hide" : "show"}
     />
   );
 }

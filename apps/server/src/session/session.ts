@@ -191,6 +191,17 @@ export class Session {
     return this.scene;
   }
 
+  // Demo state accessors exposed for the bootstrap snapshot. Anon sessions
+  // are constructor-pinned with demoMode=true + a random deck, and the
+  // client has no other way to learn that — so the snapshot carries it.
+  isDemoMode(): boolean {
+    return this.demoMode;
+  }
+
+  getDemoDeck(): DeckKey | null {
+    return this.demoDeck;
+  }
+
   applyPatch(
     patch: ClientScenePatch,
     origin: "client" | "voice" = "client",

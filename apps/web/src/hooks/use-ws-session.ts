@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useRef } from "react";
 import { toast } from "sonner";
 import type { ServerEvent } from "@sonara/shared";
-import { rpcClient } from "@/lib/orpc";
 import { createSessionConnection } from "@/lib/orpc-ws";
 import {
   dispatchSessionAction,
@@ -99,17 +98,10 @@ export function useWsSession(): SessionSend {
     };
 
     const connect = async (): Promise<void> => {
-      // Probe auth once up front — if not signed in, stay offline quietly
-      // instead of letting partysocket retry-storm against a 401 ticket mint.
-      try {
-        await rpcClient.auth.mintWsTicket();
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
-        if (!/unauthorized/i.test(msg)) {
-          console.warn("[ws] ticket probe failed:", msg);
-        }
-        return;
-      }
+      // mintWsTicket is now public — signed-in callers get a uuid-bearing
+      // ticket, anon callers get a userId:null ticket and the server pins
+      // their session to demo-library mode. No upfront probe; partysocket
+      // opens the WS directly.
       if (cancelled) return;
 
       conn = createSessionConnection(sessionId);
@@ -124,15 +116,12 @@ export function useWsSession(): SessionSend {
       socket.addEventListener("open", () => {
         store.getState().setConnected(true);
         // Fire hello on every (re)connect so the server can re-init its
-        // side idempotently.
+        // side idempotently. The state() pull below will hydrate demoMode
+        // and demoDeck from server-authoritative state — anon sessions
+        // come up demo-pinned with a random deck, signed-in sessions come
+        // up with whatever they last set. The client no longer pushes its
+        // localStorage demo prefs on connect.
         sendRef.current({ type: "hello" });
-        // Server sessions reset to demoMode=false on construction. Push the
-        // client's last-known preference (from localStorage via the demo
-        // slice) so a refresh keeps the demo running.
-        const { demoMode, demoDeck } = store.getState();
-        if (demoMode && demoDeck) {
-          sendRef.current({ type: "demo.set", on: true, deck: demoDeck });
-        }
       });
       socket.addEventListener("close", () => {
         store.getState().setConnected(false);
@@ -150,7 +139,16 @@ export function useWsSession(): SessionSend {
             try {
               const snap = await client.state();
               if (!cancelled) {
-                store.getState().setScene(snap.scene);
+                const s = store.getState();
+                s.setScene(snap.scene);
+                // Hydrate demo state from the server snapshot. For anon
+                // sessions the server picked demoMode=true + a random deck
+                // at construction; for signed-in this matches whatever
+                // setDemoMode last persisted. Flipping demoMode on here is
+                // what triggers the auto-play effect in music-source.tsx
+                // (so anon visitors actually hear the demo track).
+                s.setDemoMode(snap.demoMode);
+                s.setDemoDeck(snap.demoDeck);
               }
             } catch (err) {
               const msg = err instanceof Error ? err.message : String(err);

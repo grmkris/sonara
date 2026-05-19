@@ -27,6 +27,8 @@ export interface SessionLike {
   reset(): void;
   subscribe(signal?: AbortSignal): AsyncGenerator<ServerEvent>;
   getSnapshot(): SonaraSceneState;
+  isDemoMode(): boolean;
+  getDemoDeck(): DeckKey | null;
 }
 
 export interface SessionContext {
@@ -63,6 +65,13 @@ const RecognizeInput = z.object({
 
 const StateOutput = z.object({
   scene: SonaraSceneState,
+  // Server-authoritative demo state. Anon sessions are pinned to demoMode=true
+  // at Session construction with a random deck; signed-in sessions reflect
+  // whatever the user last toggled. The client hydrates the zustand demo
+  // slice from this on every (re)connect — that's what triggers the demo
+  // audio auto-play effect in apps/web's music-source.tsx.
+  demoMode: z.boolean(),
+  demoDeck: DeckKeySchema.nullable(),
 });
 
 export const sessionRouter = {
@@ -136,6 +145,8 @@ export const sessionRouter = {
     .output(StateOutput)
     .handler(({ context }) => ({
       scene: context.session.getSnapshot(),
+      demoMode: context.session.isDemoMode(),
+      demoDeck: context.session.getDemoDeck(),
     })),
 };
 

@@ -55,7 +55,7 @@ export default function LoginPage() {
           return;
         }
       }
-      router.push("/");
+      router.push("/play");
       router.refresh();
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);

@@ -31,7 +31,7 @@ export default function CheckoutSuccessPage() {
           setStatus("credited");
           toast.success(`+${frames - initialFrames.current} frames credited`);
           setTimeout(() => {
-            if (!cancelled) router.push("/");
+            if (!cancelled) router.push("/play");
           }, 1200);
           return;
         }
@@ -74,9 +74,9 @@ export default function CheckoutSuccessPage() {
             <button
               type="button"
               className="font-mono text-[11px] uppercase tracking-[0.2em] text-[color:var(--signal)] underline"
-              onClick={() => router.push("/")}
+              onClick={() => router.push("/play")}
             >
-              back to visualizer
+              back to visualiser
             </button>
           </>
         )}
