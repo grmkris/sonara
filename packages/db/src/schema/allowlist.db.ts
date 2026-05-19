@@ -7,12 +7,11 @@ import {
 import { baseEntityFields, typeId } from "../utils";
 import { user } from "./auth.db";
 
-// Email allowlist for emailAndPassword signup. A row here means the given
-// email address is permitted to register an account via Better Auth's
-// emailAndPassword flow. See `databaseHooks.user.create.before` in
-// apps/web/src/server/auth.ts.
-//
-// Add with: `bun run --filter=web allow-email <address> [note]`.
+// Email allowlist. **Inert** since signup was opened (the public demo path
+// landed and live-generation is gated by the credits ledger instead). The
+// table is left in the schema as dead data so the migration history stays
+// consistent; a follow-up migration can drop the table when we're confident
+// the open-signup model is staying.
 export const allowedEmail = pgTable(
   "allowed_email",
   {

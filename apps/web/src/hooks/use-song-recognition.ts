@@ -24,7 +24,14 @@ const SILENCE_CLEAR_MS = 10_000;
 const RMS_ACTIVE = 0.05;
 const RMS_SILENT = 0.02;
 
-export function useSongRecognition(send: SessionSend): void {
+export function useSongRecognition(
+  send: SessionSend,
+  // Anonymous visitors never call AudD — the server rejects `recognize` for
+  // null-userId sessions anyway. Skipping the subscription on this side
+  // means we also don't burn the per-tick store work and the `now playing`
+  // UI never lights up for anon.
+  enabled: boolean,
+): void {
   const lastAutoAtRef = useRef(0);
   const activeSinceRef = useRef<number | null>(null);
   const silentSinceRef = useRef<number | null>(null);
@@ -32,6 +39,7 @@ export function useSongRecognition(send: SessionSend): void {
   const lastManualTickRef = useRef(0);
 
   useEffect(() => {
+    if (!enabled) return;
     const fire = async (trigger: "auto" | "manual") => {
       const engine = getCurrentAudioEngine();
       if (!engine) {
@@ -131,5 +139,5 @@ export function useSongRecognition(send: SessionSend): void {
     });
 
     return () => unsubscribe();
-  }, [send]);
+  }, [send, enabled]);
 }

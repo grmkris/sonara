@@ -10,7 +10,6 @@ type Mode = "signin" | "signup";
 function friendlyError(rawMessage: string | undefined): string {
   if (!rawMessage) return "Something went wrong. Try again.";
   const msg = rawMessage.toLowerCase();
-  if (msg.includes("allowlist")) return rawMessage; // pass through — already friendly
   if (msg.includes("invalid email or password")) return "Wrong email or password.";
   if (msg.includes("user already exists") || msg.includes("user_already_exists")) {
     return "An account with this email already exists. Try signing in.";

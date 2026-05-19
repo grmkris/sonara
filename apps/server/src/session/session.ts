@@ -5,6 +5,7 @@ import {
   type SonaraSceneState,
   type NowPlaying,
   type ServerEvent,
+  DECK_KEYS,
   defaultScene,
 } from "@sonara/shared";
 import type { ImageLibraryId } from "@sonara/shared/typeid";
@@ -26,7 +27,10 @@ import { semanticDiff } from "./semantic-diff";
 
 export interface SessionOpts {
   id: string;
-  userId: string; // raw UUID from the authenticated WS ticket
+  // raw UUID for authenticated sessions; null for anonymous demo sessions.
+  // Anon sessions are pinned to library-only mode (no fal, no credit debit,
+  // no AudD recognition) — see constructor + trigger() + recognize().
+  userId: string | null;
   logger: Logger;
 }
 
@@ -105,7 +109,7 @@ function cadenceFromIntensity(i: number): { periodicMs: number; pauseMs: number 
 
 export class Session {
   readonly id: string;
-  readonly userId: string;
+  readonly userId: string | null;
   private scene: SonaraSceneState;
   private lastGeneratedScene: SonaraSceneState;
   private activeJob?: AbortController;
@@ -159,9 +163,19 @@ export class Session {
     this.logger = opts.logger.child({
       sessionId: opts.id,
       userId: opts.userId,
+      anon: opts.userId === null,
     });
     this.scene = { ...defaultScene };
     this.lastGeneratedScene = { ...defaultScene };
+    // Anonymous sessions are pinned to demo mode for the lifetime of the WS
+    // connection. trigger() short-circuits to triggerLibrary() at the top
+    // whenever demoMode && demoDeck, so anon never reaches credit-gate or fal.
+    // Deck is picked at random on connect — setDemoMode() can still swap it
+    // (the deck picker is harmless without a userId).
+    if (opts.userId === null) {
+      this.demoMode = true;
+      this.demoDeck = DECK_KEYS[Math.floor(Math.random() * DECK_KEYS.length)] ?? null;
+    }
     this.startPeriodic();
   }
 
@@ -253,6 +267,11 @@ export class Session {
     mimeType: string,
     trigger: "auto" | "manual",
   ): Promise<NowPlaying | null> {
+    // Anonymous sessions never call AudD or the LLM muse — both have
+    // per-call cost and the demo loop doesn't need song titles. The UI
+    // hides the now-playing trigger for anon already; this is defence in
+    // depth in case a stale client posts here anyway.
+    if (this.userId === null) return null;
     // Auto-trigger dedupe: if we already know a song, don't burn an AudD
     // call. Manual always goes through so the user can force a refresh.
     if (trigger === "auto" && this.scene.nowPlaying) {
@@ -368,6 +387,14 @@ export class Session {
   }
 
   setDemoMode(on: boolean, deck: DeckKey | null): void {
+    // Anonymous sessions can switch decks but cannot leave demo mode. Letting
+    // them flip demoMode off would push trigger() into the fal path, where
+    // the userId-null guard would refuse to generate — the visualiser would
+    // just stop. Pin them on; the UI hides the Switch for anon anyway.
+    if (this.userId === null && !on) {
+      this.logger.info({}, "anon setDemoMode(false) ignored — pinned on");
+      return;
+    }
     this.demoMode = on;
     this.demoDeck = on ? deck : null;
     // Reset the LRU exclude-set so a deck switch can re-pick from scratch.
@@ -452,6 +479,16 @@ export class Session {
       return;
     }
 
+    // Defence in depth. The constructor pins anon sessions to demoMode=true
+    // with a deck, so the short-circuit above always catches them. If that
+    // invariant ever breaks (someone clears demoMode programmatically), we
+    // refuse to enter the paid path rather than billing a phantom user.
+    if (this.userId === null) {
+      this.logger.warn({ reason }, "anon trigger reached fal path — bailing");
+      return;
+    }
+    const userId = this.userId;
+
     // Empty-subject fast-exit. `serializeResolvedScene` also returns "" when
     // subjects[0] is blank, but short-circuiting here saves the resolver and
     // credit-gate work when there's nothing to generate.
@@ -467,7 +504,7 @@ export class Session {
     this.lastKeyframeAt = Date.now();
 
     const gate = await tryDebitCredit({
-      userId: this.userId,
+      userId,
       isUserInitiated: kind === "user",
       lastCreditDenialAt: this.lastCreditDenialAt,
       now: Date.now(),
@@ -611,7 +648,7 @@ export class Session {
         // generations through onError too, and the user should get the
         // credit back since no frame was delivered. Free-tier paths set
         // paidCost=null so this is a no-op for them.
-        refundOnError(this.userId, paidCost, this.logger);
+        refundOnError(userId, paidCost, this.logger);
         // Aborts are expected (newer trigger superseded this one). Don't
         // log noisily or surface to the client.
         if (controller.signal.aborted) return;

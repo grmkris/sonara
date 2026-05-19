@@ -2,6 +2,7 @@
 
 import { useCallback, useRef } from "react";
 import type { SessionSend } from "@/lib/session-actions";
+import { useSession } from "@/lib/auth-client";
 import { useKeyedPushToTalk } from "@/hooks/use-keyed-push-to-talk";
 import { useVoiceRecognition } from "@/hooks/use-voice-recognition";
 import { useVisualizerStore } from "@/stores/visualizer";
@@ -19,6 +20,8 @@ interface VoiceListenProps {
 // inline in PromptInput labels; this strip just shows the live indicator.
 
 export function VoiceListen({ send }: VoiceListenProps) {
+  const { data: sessionData } = useSession();
+  const isSignedIn = !!sessionData?.session;
   const activeField = useVisualizerStore((s) => s.activeField);
   const liveTranscript = useVisualizerStore((s) => s.liveTranscript);
   const setActiveField = useVisualizerStore((s) => s.setActiveField);
@@ -68,12 +71,16 @@ export function VoiceListen({ send }: VoiceListenProps) {
   }, [send]);
 
   useKeyedPushToTalk<VoiceField>({
-    enabled: supported,
+    enabled: supported && isSignedIn,
     keymap: PTT_KEYMAP,
     onHoldStart,
     onHoldEnd,
     tapMap: { KeyR: onReset },
   });
+
+  // Hide for anonymous visitors. The hold-to-talk hooks above are wired to
+  // `isSignedIn`, so even if a key gets through nothing fires.
+  if (!isSignedIn) return null;
 
   const armed = activeField !== null || listening;
 

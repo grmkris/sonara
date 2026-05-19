@@ -25,9 +25,9 @@ import {
   SheetTitle,
   SheetTrigger,
 } from "@/components/ui/sheet";
+import Link from "next/link";
 import { useSession } from "@/lib/auth-client";
 import { useWsSession } from "@/hooks/use-ws-session";
-import Link from "next/link";
 import {
   useAudioFeatures,
   type AudioSource,
@@ -46,7 +46,7 @@ import { cn } from "@/lib/utils";
 
 export default function Page() {
   const send = useWsSession();
-  const { data: sessionData, isPending: sessionPending } = useSession();
+  const { data: sessionData } = useSession();
   const isSignedIn = !!sessionData?.session;
   const [audioSource, setAudioSource] = useState<AudioSource>({ type: "none" });
 
@@ -74,7 +74,9 @@ export default function Page() {
   }, []);
 
   useAudioFeatures(audioSource, send, onAudioError, onAudioSourceLost);
-  useSongRecognition(send);
+  // Song recognition (AudD) is signed-in only. The hook noops when disabled
+  // so the audio-features subscription on the store doesn't even fire.
+  useSongRecognition(send, isSignedIn);
 
   const uiVisible = useVisualizerStore((s) => s.uiVisible);
   const setUiVisible = useVisualizerStore((s) => s.setUiVisible);
@@ -130,71 +132,41 @@ export default function Page() {
           <RecordToggle />
           <FullscreenToggle />
           <HideToggle />
-          {isSignedIn && (
-            <Sheet>
-              <SheetTrigger asChild>
-                <button
-                  type="button"
-                  aria-label="open controls"
-                  className="focus-ring flex items-center text-[color:var(--stone)] transition-colors hover:text-[color:var(--paper)] md:hidden"
-                >
-                  <SlidersHorizontal className="size-4" strokeWidth={1.5} />
-                </button>
-              </SheetTrigger>
-              <SheetContent
-                side="right"
-                className="w-[min(360px,90vw)] border-l border-[color:var(--hairline)]/30 bg-[color:var(--ink)]/95 p-5 backdrop-blur-md"
+          <Sheet>
+            <SheetTrigger asChild>
+              <button
+                type="button"
+                aria-label="open controls"
+                className="focus-ring flex items-center text-[color:var(--stone)] transition-colors hover:text-[color:var(--paper)] md:hidden"
               >
-                <span
-                  aria-hidden
-                  className="mx-auto -mt-2 mb-3 block h-1 w-10 rounded-full bg-[color:var(--stone)]/40"
-                />
-                <SheetTitle className="font-mono text-[10px] uppercase tracking-[0.22em] text-[color:var(--stone)]">
-                  controls
-                </SheetTitle>
-                <div className="mt-4 overflow-y-auto pr-1">
-                  <ControlsPanel send={send} />
-                </div>
-              </SheetContent>
-            </Sheet>
-          )}
+                <SlidersHorizontal className="size-4" strokeWidth={1.5} />
+              </button>
+            </SheetTrigger>
+            <SheetContent
+              side="right"
+              className="w-[min(360px,90vw)] border-l border-[color:var(--hairline)]/30 bg-[color:var(--ink)]/95 p-5 backdrop-blur-md"
+            >
+              <span
+                aria-hidden
+                className="mx-auto -mt-2 mb-3 block h-1 w-10 rounded-full bg-[color:var(--stone)]/40"
+              />
+              <SheetTitle className="font-mono text-[10px] uppercase tracking-[0.22em] text-[color:var(--stone)]">
+                controls
+              </SheetTitle>
+              <div className="mt-4 overflow-y-auto pr-1">
+                <ControlsPanel send={send} />
+              </div>
+            </SheetContent>
+          </Sheet>
         </div>
       </div>
 
-      {/* Auth gate — the whole interactive surface (WS session, prompt, demo
-         picker, audio source) requires sign-in. Show a centred CTA in place
-         of the rails when not authenticated. `sessionPending` covers the
-         brief window before better-auth resolves the cookie; we render
-         nothing rather than flashing the wrong state. */}
-      {!sessionPending && !isSignedIn && (
-        <div className="absolute inset-0 z-30 flex items-center justify-center pointer-events-none">
-          <div className="pointer-events-auto relative px-10 py-8">
-            <div aria-hidden className="paper-scrim absolute -inset-4 -z-10" />
-            <div className="flex flex-col items-center gap-4 text-center">
-              <span className="font-serif italic text-[color:var(--paper)] text-2xl">
-                sign in to start
-              </span>
-              <span className="font-sans text-[10px] uppercase tracking-[0.24em] text-[color:var(--stone)] max-w-[280px]">
-                the visualiser needs a session — demo and live generation both
-                run through your signed-in account.
-              </span>
-              <Button asChild variant="ghost" size="sm" className="mt-2">
-                <Link
-                  href="/login"
-                  className="font-sans text-[11px] uppercase tracking-[0.24em]"
-                >
-                  sign in
-                </Link>
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Collapsible rails. Only mounted when signed in — keeps the unauth
-         overlay clean and stops the controls from dispatching dead WS
-         actions. */}
-      {isSignedIn && (
+      {/* Collapsible rails — render for everyone. Unauthenticated visitors
+         get the same chrome, but live-only affordances (PromptInput,
+         VoiceListen, RecordToggle, NowPlaying) gate themselves on
+         useSession and hide / disable when there's no user. The server
+         pins anon WS sessions to demo-library mode, so the controls that
+         remain (deck picker, presets, audio source) behave correctly. */}
       <div
         className={cn(
           "absolute inset-0 z-20 flex flex-col",
@@ -205,7 +177,11 @@ export default function Page() {
         <section className="pointer-events-auto mt-24 flex flex-1 gap-6 px-4 md:mt-28 md:gap-10 md:px-10">
           <div className="relative w-full md:w-[360px] md:shrink-0">
             <div aria-hidden className="paper-scrim absolute -inset-6 -z-10" />
-            <PromptInput send={send} />
+            {isSignedIn ? (
+              <PromptInput send={send} />
+            ) : (
+              <AnonPromptPlaceholder />
+            )}
           </div>
 
           <div className="hidden flex-1 md:block" />
@@ -244,7 +220,6 @@ export default function Page() {
           </div>
         </section>
       </div>
-      )}
 
       {/* DemoRecorder reads `?record=` via useSearchParams, which Next 16
           requires inside a Suspense boundary so the rest of the page can
@@ -253,6 +228,39 @@ export default function Page() {
         <DemoRecorder />
       </Suspense>
     </main>
+  );
+}
+
+// Anonymous visitors see the visualiser running off the demo library
+// (server-side: `Session` with `userId = null` pins demoMode + random deck).
+// Typing into PromptInput would have no visual effect for them — every
+// trigger short-circuits to library regardless of subject — so we hide it
+// and put a brief CTA where it would have lived. Keeps the layout balanced
+// and surfaces the upgrade path without dropping a modal in front.
+function AnonPromptPlaceholder() {
+  return (
+    <div className="flex flex-col gap-4">
+      <span className="font-serif italic text-[color:var(--paper)] text-[26px] leading-tight">
+        a demo, on shuffle.
+      </span>
+      <span className="font-sans text-[10px] uppercase tracking-[0.24em] text-[color:var(--stone)] max-w-[300px] leading-relaxed">
+        you're watching a random deck from the library. sign in to direct the
+        visuals with prompts, voice, and the songs you play.
+      </span>
+      <Button
+        asChild
+        variant="ghost"
+        size="sm"
+        className="-ml-2 w-fit"
+      >
+        <Link
+          href="/login"
+          className="font-sans text-[11px] uppercase tracking-[0.24em]"
+        >
+          sign in
+        </Link>
+      </Button>
+    </div>
   );
 }
 

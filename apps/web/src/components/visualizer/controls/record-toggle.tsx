@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Circle, Volume2, VolumeX } from "lucide-react";
 import { toast } from "sonner";
+import { useSession } from "@/lib/auth-client";
 import { useHotkey } from "@/hooks/use-hotkey";
 import { HOTKEYS } from "@/lib/hotkeys";
 import { cn } from "@/lib/utils";
@@ -28,6 +29,8 @@ function formatDuration(ms: number): string {
 }
 
 export function RecordToggle() {
+  const { data: sessionData } = useSession();
+  const isSignedIn = !!sessionData?.session;
   const [supported, setSupported] = useState(true);
   const [phase, setPhase] = useState<Phase>("idle");
   const [withAudio, setWithAudio] = useState(true);
@@ -145,6 +148,10 @@ export function RecordToggle() {
 
   useHotkey(HOTKEYS.record, toggle);
 
+  // Anonymous visitors don't get recording — it's a power-user affordance
+  // for signed-in sessions only. Hiding (rather than disabling) keeps the
+  // chrome cluster tight on the anon landing experience.
+  if (!isSignedIn) return null;
   if (!supported) return null;
 
   const isRecording = phase === "recording";

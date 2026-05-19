@@ -1,5 +1,6 @@
 "use client";
 
+import { useSession } from "@/lib/auth-client";
 import { useVisualizerStore } from "@/stores/visualizer";
 import { cn } from "@/lib/utils";
 
@@ -12,10 +13,16 @@ import { cn } from "@/lib/utils";
 // When a manual identify is in flight the button shows a spinning icon +
 // "listening…" instead of just bouncing back to the resting state — users
 // couldn't tell whether the click had registered otherwise.
+//
+// Hidden for anonymous visitors. The underlying `recognize` WS proc returns
+// null for `userId === null`, so the chip would never light up anyway.
 export function NowPlaying() {
+  const { data: sessionData } = useSession();
   const track = useVisualizerStore((s) => s.nowPlaying);
   const requestIdentify = useVisualizerStore((s) => s.requestIdentify);
   const recognizing = useVisualizerStore((s) => s.recognizing);
+
+  if (!sessionData?.session) return null;
 
   if (!track) {
     return (

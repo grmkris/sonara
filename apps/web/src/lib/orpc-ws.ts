@@ -21,10 +21,10 @@ export function createSessionConnection(
   sessionId: string,
 ): SessionConnection {
   const urlProvider = async (): Promise<string> => {
-    // rpcClient.auth.mintWsTicket throws ORPCError("UNAUTHORIZED") if the
-    // user isn't signed in. Let it propagate; ReconnectingWebSocket surfaces
-    // it as an error and keeps retrying with backoff, which matches the
-    // behaviour of the old fetch-based flow.
+    // mintWsTicket is public: signed-in visitors get a ticket carrying
+    // their uuid; everyone else gets an anon ticket (userId: null) which
+    // pins the server-side Session to demo-library mode. Either way the
+    // socket opens — no auth-gated UNAUTHORIZED branch to handle here.
     const { token } = await rpcClient.auth.mintWsTicket();
     const url = new URL(WS_URL_BASE);
     url.searchParams.set("token", token);

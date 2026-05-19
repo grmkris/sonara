@@ -8,7 +8,10 @@
 // Deliberately NOT a JWT — no alg=none footgun, no library required.
 
 export interface WsTicketPayload {
-  userId: string; // raw UUID (not typeid); apps/server uses as-is in pg queries
+  // raw UUID for authenticated users; null for anonymous demo sessions.
+  // Server uses non-null as-is in pg queries; null means "skip credits + fal,
+  // demo library only" (see apps/server/src/session/session.ts).
+  userId: string | null;
   exp: number;    // epoch ms
   iat: number;    // epoch ms
 }
@@ -48,7 +51,7 @@ async function hmac(secret: string, data: string): Promise<string> {
 }
 
 export interface SignTicketArgs {
-  userId: string;
+  userId: string | null;
   secret: string;
   ttlMs?: number; // default 5 minutes
 }
@@ -90,11 +93,9 @@ export async function verifyTicket(
   } catch {
     return null;
   }
-  if (
-    typeof payload.userId !== "string" ||
-    typeof payload.exp !== "number" ||
-    Date.now() > payload.exp
-  ) {
+  const userIdOk =
+    typeof payload.userId === "string" || payload.userId === null;
+  if (!userIdOk || typeof payload.exp !== "number" || Date.now() > payload.exp) {
     return null;
   }
   return payload;

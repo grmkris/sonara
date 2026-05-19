@@ -45,4 +45,12 @@ describe("ws-ticket", () => {
     expect(await verifyTicket("only.two", SECRET)).toBeNull();
     expect(await verifyTicket("a.b.c.d", SECRET)).toBeNull();
   });
+
+  test("round-trip: anon ticket (null userId) verifies", async () => {
+    const token = await signTicket({ userId: null, secret: SECRET });
+    const payload = await verifyTicket(token, SECRET);
+    expect(payload).not.toBeNull();
+    expect(payload?.userId).toBeNull();
+    expect(typeof payload?.exp).toBe("number");
+  });
 });

@@ -43,7 +43,10 @@ const wsHandler = new WsRPCHandler<SessionContext>(sessionRouter);
 
 interface WsData {
   sessionId: string;
-  userId: string; // raw UUID, extracted from the signed ticket
+  // raw UUID for authenticated users; null for anonymous demo sessions.
+  // An anon ticket is still HMAC-signed by the web app — null just means
+  // "the visitor wasn't signed in when they minted this ticket."
+  userId: string | null;
 }
 
 const server = Bun.serve<WsData, never>({

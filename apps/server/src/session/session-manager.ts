@@ -9,7 +9,7 @@ export class SessionManager {
     this.logger = logger;
   }
 
-  create(id: string, userId: string): Session {
+  create(id: string, userId: string | null): Session {
     const existing = this.sessions.get(id);
     if (existing) existing.close();
     const session = new Session({ id, userId, logger: this.logger });

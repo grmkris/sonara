@@ -165,7 +165,7 @@ Voice intent is duplicated by design: the `VoiceController` on the server owns d
 
 Better Auth instance in `apps/web/src/server/auth.ts`. One session cookie, read by `protectedProcedure` middleware. `trustedOrigins = [baseURL]`, where `baseURL` is derived from `env.APP_URL` — bumping the env var transparently updates origins on the next deploy.
 
-- **Email + password** (allowlist-gated): Better Auth's built-in `emailAndPassword`. Signup is rejected by `databaseHooks.user.create.before` unless the email exists in the `allowed_email` table. Add an email with `bun run --filter=web allow-email <address> [note]`. UI lives at `/login`.
+- **Email + password** (open signup): Better Auth's built-in `emailAndPassword`. Anyone can register; live fal generation is gated by the credits ledger + free-tier. Unauthenticated visitors connect with an anon WS ticket (`userId: null`) and run the visualiser in demo-library mode — no fal calls, no credit debit, no AudD song recognition. UI lives at `/login`. The earlier `allowed_email` allowlist + `allow-email` script were removed when the public demo path landed; the table is kept as inert data pending a follow-up drop migration.
 - **Dodo Payments plugin** (optional, currently inactive in prod with placeholder envs): registers when both `DODO_PAYMENTS_API_KEY` and `DODO_PAYMENTS_WEBHOOK_SECRET` are set.
 
 For the WebSocket: the web app mints a 5-min HMAC ticket via `auth.mintWsTicket`; the browser opens `wss://api.sonara.fm/ws?token=…`; the server verifies the ticket via `verifyTicket` from `@sonara/shared`. The ticket path is auth-method-agnostic, which is why WS lives on a cross-origin subdomain without needing CORS or shared cookies.

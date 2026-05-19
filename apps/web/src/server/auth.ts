@@ -1,7 +1,5 @@
 import { betterAuth } from "better-auth";
-import { APIError } from "better-auth/api";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
-import { eq, sql } from "drizzle-orm";
 import {
   dodopayments,
   webhooks,
@@ -49,8 +47,12 @@ export function createAuth(props: {
     baseURL,
     trustedOrigins: [baseURL],
 
-    // Email + password is the sole auth method. Signup is gated by the
-    // allowlist hook below — only addresses in `allowed_email` can register.
+    // Email + password is the sole auth method. Signup is open — the
+    // earlier allowlist gate was dropped when the public demo path landed
+    // (unauthenticated visitors run the visualiser in demo-library mode;
+    // signup unlocks live fal generation, gated downstream by the credits
+    // ledger + free-tier). `allowed_email` table is unused but kept in the
+    // schema as inert data until a follow-up migration removes it.
     emailAndPassword: {
       enabled: true,
       minPasswordLength: 12,
@@ -59,30 +61,6 @@ export function createAuth(props: {
       requireEmailVerification: false,
       // Issue a session immediately on successful signup.
       autoSignIn: true,
-    },
-
-    // Defence-in-depth allowlist gate. Runs for every user create — must
-    // have a row in `allowed_email` else 403.
-    databaseHooks: {
-      user: {
-        create: {
-          before: async (data) => {
-            const normalised = data.email.toLowerCase().trim();
-            const [row] = await db
-              .select({ id: SCHEMA.allowedEmail.id })
-              .from(SCHEMA.allowedEmail)
-              .where(eq(sql`lower(${SCHEMA.allowedEmail.email})`, normalised))
-              .limit(1);
-            if (!row) {
-              throw new APIError("FORBIDDEN", {
-                message:
-                  "This email isn't on the allowlist. Contact an admin.",
-              });
-            }
-            return { data: { ...data, email: normalised } };
-          },
-        },
-      },
     },
 
     plugins: dodoEnabled
