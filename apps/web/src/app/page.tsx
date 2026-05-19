@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { Suspense, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { SonaraCanvas } from "@/components/visualizer/canvas/sonara-canvas";
@@ -16,21 +16,9 @@ import { getDemoTrack } from "@/lib/demo-audio";
 // what makes the audio + frames actually start without any toggle.
 
 export default function LandingPage() {
-  const router = useRouter();
-  const searchParams = useSearchParams();
   const send = useWsSession();
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const [audioSource, setAudioSource] = useState<AudioSource>({ type: "none" });
-
-  // Old `/?record=…` share links should still land on the visualiser.
-  // Client-side redirect (the page is a client component); the search-
-  // param check is cheap and only fires once on mount.
-  useEffect(() => {
-    if (searchParams.get("record") !== null) {
-      const qs = searchParams.toString();
-      router.replace(`/play${qs ? `?${qs}` : ""}`);
-    }
-  }, [router, searchParams]);
 
   // Demo-audio auto-play. Mirrors the effect in music-source.tsx but
   // headless: no file picker, no mic toggle, just a hidden <audio>. The
@@ -71,6 +59,12 @@ export default function LandingPage() {
 
   return (
     <main className="relative min-h-svh overflow-x-hidden bg-[color:var(--ink)] text-[color:var(--paper)]">
+      {/* Old `/?record=…` share-link redirect. Lives inside a Suspense
+         boundary because useSearchParams() triggers CSR-bailout otherwise
+         and the whole page falls off the prerender path. */}
+      <Suspense fallback={null}>
+        <OldShareLinkRedirect />
+      </Suspense>
       {/* Canvas backplate. Fixed so it stays visible as the visitor
          scrolls; everything below sits in a z-10 column on top. */}
       <div className="pointer-events-none fixed inset-0 z-0">
@@ -190,6 +184,18 @@ export default function LandingPage() {
       </div>
     </main>
   );
+}
+
+function OldShareLinkRedirect() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  useEffect(() => {
+    if (searchParams.get("record") !== null) {
+      const qs = searchParams.toString();
+      router.replace(`/play${qs ? `?${qs}` : ""}`);
+    }
+  }, [router, searchParams]);
+  return null;
 }
 
 function Capability({
