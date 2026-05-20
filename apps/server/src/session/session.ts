@@ -17,7 +17,7 @@ import { streamAnchor } from "../generation/anchor-provider";
 import { pickLibraryFrame } from "../generation/library-provider";
 import { serializeResolvedScene } from "../generation/prompt-compiler";
 import { DriftTrajectory } from "../generation/prompt-drift";
-import { resolveScene } from "../generation/scene-resolver";
+import { resolveScene, resolveSceneAwaited } from "../generation/scene-resolver";
 import {
   ANCHOR_FRAME_COST_CREDITS,
   refundOnError,
@@ -602,7 +602,14 @@ export class Session {
     // Resolve the flat scene into the structured ResolvedScene, then serialise
     // to the FLUX prompt. Single source of truth: the inspector HUD's
     // `promptString` and `resolvedScene` both come from this one build.
-    const resolved = resolveScene(this.scene, {
+    //
+    // For USER-initiated triggers (voice / semantic / pause) we await the LLM
+    // expansion so the first frame after a prompt edit gets the rich
+    // expanded resolved scene instead of the bland deterministic fallback.
+    // ~1-2s extra latency vs the parallel-fire path; subjective quality jump
+    // is large. Auto-triggers (periodic / section) keep the sync path so
+    // they never block.
+    const resolveOpts = {
       driftModifiers: drift ? [drift] : [],
       audio: {
         intensity: this.scene.intensity,
@@ -610,7 +617,13 @@ export class Session {
         energyDelta: 0,
       },
       logger: this.logger,
-    });
+      signal: controller.signal,
+    };
+    const resolved =
+      kind === "user"
+        ? await resolveSceneAwaited(this.scene, resolveOpts)
+        : resolveScene(this.scene, resolveOpts);
+    if (controller.signal.aborted) return;
     // Reseed the drift trajectory whenever fresh LLM candidates land. Same-
     // pool calls are no-ops (trajectory checks pool equality), so this is
     // safe to call on every trigger.
@@ -784,8 +797,10 @@ export class Session {
 
     // Resolve the prompt through the same LLM expander as text-mode so the
     // inspector HUD shows coherent metadata and so the drift trajectory
-    // gets seeded on first call.
-    const resolved = resolveScene(this.scene, {
+    // gets seeded on first call. User-initiated triggers await the LLM
+    // expansion (richer first frame after a prompt edit); auto-triggers
+    // stay on the sync deterministic-then-cache path.
+    const resolveOpts = {
       driftModifiers: drift ? [drift] : [],
       audio: {
         intensity: this.scene.intensity,
@@ -793,7 +808,13 @@ export class Session {
         energyDelta: 0,
       },
       logger: this.logger,
-    });
+      signal: controller.signal,
+    };
+    const resolved =
+      kind === "user"
+        ? await resolveSceneAwaited(this.scene, resolveOpts)
+        : resolveScene(this.scene, resolveOpts);
+    if (controller.signal.aborted) return;
     if (resolved.drift_candidates.length > 0) {
       this.driftTrajectory.reseed({
         candidates: resolved.drift_candidates,
