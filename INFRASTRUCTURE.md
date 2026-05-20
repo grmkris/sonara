@@ -34,8 +34,7 @@ flowchart LR
         AudD["AudD<br/>song recognition"]
         Apple["Apple Music<br/>track enrichment"]
         Gemini["Google Gemini<br/>(via fal any-llm)<br/>voice-intent parser"]
-        Base["Base chain<br/>USDC top-ups (Reown Pay)"]
-        Dodo["Dodo Payments<br/>(webhook on web)"]
+        Dodo["Dodo Payments<br/>(checkout + webhook on web)"]
     end
 
     User --> CF
@@ -49,15 +48,15 @@ flowchart LR
     Server -. "track metadata" .-> Apple
     Server -. "intent parse" .-> Gemini
 
-    User -. "USDC pay" .-> Base
-    Web -. "webhook in" .-> Dodo
+    User -. "checkout" .-> Dodo
+    Dodo -. "webhook" .-> Web
     Web -. "credit ledger sync" .-> PG
 
     classDef railway fill:#0b0d12,stroke:#7d5fff,color:#fff
     classDef ext fill:#1a1a2e,stroke:#ffa07a,color:#fff
     classDef cf fill:#2b1a0a,stroke:#ffaf5f,color:#fff
     class Web,Server,PG railway
-    class Fal,AudD,Apple,Gemini,Base,Dodo ext
+    class Fal,AudD,Apple,Gemini,Dodo ext
     class CF cf
 ```
 
@@ -99,7 +98,7 @@ graph TD
 
 | Workspace | Role | Key deps |
 |---|---|---|
-| `apps/web` | Next.js standalone build, browser bundle, SSR pages | next 16, react 19, zustand, meyda, partysocket, @reown/appkit, viem, wagmi, better-auth |
+| `apps/web` | Next.js standalone build, browser bundle, SSR pages | next 16, react 19, zustand, meyda, partysocket, better-auth, dodopayments |
 | `apps/server` | Bun process: Hono HTTP + Bun.serve WebSocket | hono, @orpc/server, @fal-ai/client, pino, pg |
 | `packages/shared` | Zod schemas + TS types for every event / state object | zod |
 | `packages/api` | oRPC routers (HTTP `/rpc` + WS `/ws` session surface) | @orpc/server, @orpc/client |
@@ -290,8 +289,7 @@ sequenceDiagram
 | fal.ai | HTTPS | `https://fal.run/...` | `FAL_KEY` | server → fal |
 | AudD | HTTPS | `https://api.audd.io/` | `AUDD_API_KEY` | server → AudD |
 | Apple Music | HTTPS | (public) | none | server → Apple |
-| Reown Pay | HTTPS | (Reown SDK) | Reown project id | browser → Reown |
-| Base USDC | RPC | (viem) | wallet sig | browser → Base |
+| Dodo Payments | HTTPS | `https://checkout.dodopayments.com/*` | API key + customer id | web → Dodo (server-side checkout create) |
 
 > **Warning.** WS upgrade is the **only** path that uses a single-use HMAC ticket
 > instead of a cookie. The browser RPC-calls `auth.mintWsTicket()` on every reconnect,
@@ -337,8 +335,6 @@ flowchart TB
     subgraph BT["Build time (BEFORE next build)"]
         direction LR
         N1["NEXT_PUBLIC_WS_URL"]
-        N2["NEXT_PUBLIC_REOWN_PROJECT_ID"]
-        N3["NEXT_PUBLIC_PAY_RECIPIENT_BASE"]
     end
 
     subgraph RT["Runtime"]
@@ -350,6 +346,8 @@ flowchart TB
         R5["LOG_LEVEL"]
         R6["APP_URL · AUTH_DOMAIN"]
         R7["PORT (Railway-injected)"]
+        R8["DODO_PAYMENTS_API_KEY · DODO_PAYMENTS_WEBHOOK_SECRET · DODO_PAYMENTS_MODE"]
+        R9["DODO_PRODUCT_STARTER · DODO_PRODUCT_PRO · DODO_PRODUCT_MAX"]
     end
 
     BT -. "inlined into client JS bundle" .-> Browser["client bundle"]
@@ -357,8 +355,8 @@ flowchart TB
 
     classDef build fill:#1a0e0e,stroke:#ff7f7f,color:#fff
     classDef runtime fill:#0e1a1a,stroke:#7fffff,color:#fff
-    class N1,N2,N3 build
-    class R1,R2,R3,R4,R5,R6,R7 runtime
+    class N1 build
+    class R1,R2,R3,R4,R5,R6,R7,R8,R9 runtime
 ```
 
 > **Important.** `NEXT_PUBLIC_*` must be set BEFORE the build runs. Next.js
@@ -375,12 +373,11 @@ erDiagram
     USER ||--o{ ACCOUNT : "links"
     USER ||--|| CREDITS_BALANCE : "has"
     USER ||--o{ CREDITS_LEDGER : "transacts"
-    USER ||--o{ TOPUP : "performs"
 
     USER {
         text id PK
         text email
-        text wallet_address
+        text dodo_customer_id
         timestamp createdAt
     }
     SESSION_TABLE {
@@ -401,17 +398,15 @@ erDiagram
     CREDITS_LEDGER {
         text id PK
         text userId FK
-        bigint delta_micros
-        text reason
+        text kind
+        bigint delta
+        integer amount_cents
+        text source
         timestamp createdAt
     }
-    TOPUP {
-        text id PK
-        text userId FK
-        text txHash
-        bigint amount_usdc
-    }
 ```
+
+Top-ups land as `kind = 'topup'` rows in `CREDITS_LEDGER` (with `amount_cents` set and `source = 'dodo'`). There is no separate `TOPUP` table — the Dodo webhook writes a ledger row directly.
 
 - **Schema source:** `packages/db/src/schema/` (`auth.db.ts`, `credits.db.ts`).
 - **Migrations:** `packages/db/drizzle/*.sql`, applied by `runMigrations()` on every server boot. **No manual `db:push` in prod.**
@@ -427,8 +422,7 @@ erDiagram
 | **AudD** | Song fingerprint | `AUDD_API_KEY` | Per-call quota | Silent: `nowPlaying` stays null |
 | **Apple Music** | ISRC → artwork / album / genre | none (public iTunes Search) | Free | Silent: partial metadata |
 | **Google Gemini** | Voice-intent parser | routed via fal any-llm | Per-token via fal | Voice phrase ignored; user can re-speak |
-| **Reown / WalletConnect** | SIWE login, Reown Pay UI | `NEXT_PUBLIC_REOWN_PROJECT_ID` | Free tier | Login blocked; rest of app usable as guest |
-| **Base chain** | USDC top-ups to `NEXT_PUBLIC_PAY_RECIPIENT_BASE` | user wallet | L2 gas (negligible) | Top-up fails; ledger unaffected |
+| **Dodo Payments** | Credit-pack checkout + webhook | `DODO_PAYMENTS_API_KEY` + `DODO_PAYMENTS_WEBHOOK_SECRET` | Per-transaction fee | Checkout link unavailable; rest of app works (anon demo + already-balance users keep generating) |
 
 ---
 
@@ -443,8 +437,7 @@ flowchart LR
 
     subgraph Tokens["Secrets / Tokens"]
         Cookie["better-auth cookie<br/>HttpOnly · SameSite=Lax"]
-        Ticket["HMAC WS ticket<br/>single-use · short TTL"]
-        SiweSig["SIWE signature<br/>EIP-191"]
+        Ticket["HMAC WS ticket<br/>userId or null · short TTL"]
     end
 
     subgraph Server["Server-only"]
@@ -452,22 +445,24 @@ flowchart LR
         FalKey[".env FAL_KEY"]
         Audd[".env AUDD_API_KEY"]
         DbUrl[".env DATABASE_URL"]
+        DodoKey[".env DODO_PAYMENTS_API_KEY"]
+        DodoHook[".env DODO_PAYMENTS_WEBHOOK_SECRET"]
     end
 
     WebDom -- "sets" --> Cookie
     Cookie -- "RPC auth" --> SrvDom
-    SrvDom -- "mints" --> Ticket
+    SrvDom -- "mints (signed or anon)" --> Ticket
     Ticket -- "WS upgrade" --> SrvDom
-    SiweSig -- "verified server-side" --> Cookie
 
     AuthSecret -. "signs" .-> Cookie
     AuthSecret -. "signs" .-> Ticket
+    DodoHook -. "verifies" .-> WebDom
 
     classDef secret fill:#2b0a0a,stroke:#ff5f5f,color:#fff
     classDef token fill:#2b1a0a,stroke:#ffaf5f,color:#fff
     classDef pub fill:#0a2b1a,stroke:#5fff8f,color:#fff
-    class AuthSecret,FalKey,Audd,DbUrl secret
-    class Cookie,Ticket,SiweSig token
+    class AuthSecret,FalKey,Audd,DbUrl,DodoKey,DodoHook secret
+    class Cookie,Ticket token
     class WebDom,SrvDom pub
 ```
 
@@ -476,7 +471,8 @@ flowchart LR
 | `BETTER_AUTH_SECRET` | Railway env (both services, identical) | `openssl rand -base64 32` → re-deploy both |
 | `FAL_KEY` | Railway env, **server only** | Rotate in fal.ai dashboard, update env |
 | `AUDD_API_KEY` | Railway env, **server only** | Rotate in audd.io, update env |
-| WS ticket | Memory only, server signs/verifies, never persisted | TTL ~30s, single use |
+| `DODO_PAYMENTS_API_KEY` / `DODO_PAYMENTS_WEBHOOK_SECRET` | Railway env, **web only** | Rotate in Dodo dashboard, update env |
+| WS ticket | Memory only, server signs/verifies, never persisted | TTL ~5min, anon or user-bound |
 
 ---
 

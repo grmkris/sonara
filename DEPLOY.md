@@ -140,14 +140,20 @@ openssl rand -base64 32
 |---|---|
 | `APP_URL` | `https://sonara.fm` |
 | `AUTH_DOMAIN` | `sonara.fm` (no protocol) |
+| `DODO_PAYMENTS_API_KEY` | from Dodo Payments dashboard |
+| `DODO_PAYMENTS_WEBHOOK_SECRET` | from Dodo Payments webhook settings |
+| `DODO_PAYMENTS_MODE` | `test_mode` or `live_mode` |
+| `DODO_PRODUCT_STARTER` | Dodo product id for the starter pack |
+| `DODO_PRODUCT_PRO` | Dodo product id for the pro pack |
+| `DODO_PRODUCT_MAX` | Dodo product id for the max pack |
+
+Leaving the `DODO_*` vars empty in dev silently disables the Dodo plugin + checkout flow; login / anon demo still work.
 
 ### `web` build-time (must be set BEFORE the build runs — Next.js inlines `NEXT_PUBLIC_*` into the client bundle)
 
 | Var | Value |
 |---|---|
 | `NEXT_PUBLIC_WS_URL` | `wss://api.sonara.fm/ws` |
-| `NEXT_PUBLIC_REOWN_PROJECT_ID` | from https://cloud.reown.com |
-| `NEXT_PUBLIC_PAY_RECIPIENT_BASE` | Base-chain address that receives USDC top-ups |
 
 Set via CLI:
 
@@ -163,8 +169,12 @@ railway variables --service web \
   --set 'APP_URL=https://sonara.fm' \
   --set 'AUTH_DOMAIN=sonara.fm' \
   --set 'NEXT_PUBLIC_WS_URL=wss://api.sonara.fm/ws' \
-  --set 'NEXT_PUBLIC_REOWN_PROJECT_ID=...' \
-  --set 'NEXT_PUBLIC_PAY_RECIPIENT_BASE=0x...'
+  --set 'DODO_PAYMENTS_API_KEY=...' \
+  --set 'DODO_PAYMENTS_WEBHOOK_SECRET=...' \
+  --set 'DODO_PAYMENTS_MODE=live_mode' \
+  --set 'DODO_PRODUCT_STARTER=pdt_...' \
+  --set 'DODO_PRODUCT_PRO=pdt_...' \
+  --set 'DODO_PRODUCT_MAX=pdt_...'
 ```
 
 ---

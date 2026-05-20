@@ -4,7 +4,7 @@ Conventions for working in this repo. Read this before making non-trivial change
 
 ## Quick orient
 
-- `apps/web` — Next.js 16, oRPC, Better Auth + SIWE. Renders the visualizer.
+- `apps/web` — Next.js 16, oRPC, Better Auth (email+password). Renders the landing page at `/` and the visualizer at `/play`. Also serves the Dodo Payments webhook.
 - `apps/server` — Bun + Hono + native WebSocket. Owns the live `Session`, fal generation, STT, song recognition, credit gating. Runs Drizzle migrations on boot.
 - `packages/api` — generic oRPC primitives, the shared `sessionRouter`, the WS bridge.
 - `packages/db` — Drizzle schema (`auth.db.ts`, `credits.db.ts`), migrations folder, `createDb` + `runMigrations` helpers. Owned by both apps.
@@ -168,14 +168,14 @@ Better Auth instance in `apps/web/src/server/auth.ts`. One session cookie, read 
 - **Email + password** (open signup): Better Auth's built-in `emailAndPassword`. Anyone can register; live fal generation is gated by the credits ledger + free-tier. Unauthenticated visitors connect with an anon WS ticket (`userId: null`) and run the visualiser in demo-library mode — no fal calls, no credit debit, no AudD song recognition. UI lives at `/login`. The earlier `allowed_email` allowlist + `allow-email` script were removed when the public demo path landed; the table is kept as inert data pending a follow-up drop migration.
 - **Dodo Payments plugin** (optional, currently inactive in prod with placeholder envs): registers when both `DODO_PAYMENTS_API_KEY` and `DODO_PAYMENTS_WEBHOOK_SECRET` are set.
 
-For the WebSocket: the web app mints a 5-min HMAC ticket via `auth.mintWsTicket`; the browser opens `wss://api.sonara.fm/ws?token=…`; the server verifies the ticket via `verifyTicket` from `@sonara/shared`. The ticket path is auth-method-agnostic, which is why WS lives on a cross-origin subdomain without needing CORS or shared cookies.
+For the WebSocket: the web app mints a 5-min HMAC ticket via `auth.mintWsTicket` (now a `publicProcedure`); the browser opens `wss://api.sonara.fm/ws?token=…`; the server verifies the ticket via `verifyTicket` from `@sonara/shared`. Signed-in callers get a ticket carrying the user uuid; unauthenticated callers get an anon ticket (`userId: null`) and the server pins that session to demo-library mode (no fal, no credits, no AudD). The ticket path is auth-method-agnostic, which is why WS lives on a cross-origin subdomain without needing CORS or shared cookies.
 
-SIWE / Reown wallet auth is not currently wired in `auth.ts` — earlier iterations referenced a Reown AppKit + SIWE plugin path; that code is not present today. The `NEXT_PUBLIC_REOWN_PROJECT_ID` / `NEXT_PUBLIC_PAY_RECIPIENT_BASE` envs feed the USDC top-up flow only.
+SIWE / Reown / wallet-based auth and USDC-on-Base top-ups were removed in `b906ac4`. No `viem`, `wagmi`, or `@reown/*` packages remain in the workspace. If a stale doc still references them, it's a doc bug.
 
 ## Credits & money path
 
 - `apps/server/src/credits/credits.service.ts` — atomic `debitFrame` / `tryConsumeFreeTier` / `refundFrame` / `getBalance`. Direct `pg` queries; no Drizzle dependency in apps/server.
-- `apps/web/src/server/rpc/credits.router.ts` — `getBalance` + `confirmTopUp` (viem-verified USDC receipt on Base, idempotent via `tx_hash` unique index).
+- `apps/web/src/server/rpc/credits.router.ts` — `getBalance` (frame balance + month-to-date usage + lifetime spend) + `createCheckout` (Dodo Payments hosted checkout for the credit packs in `packages/shared/src/pricing.ts`; the success page `apps/web/src/app/credits/success/page.tsx` polls `getBalance` for the webhook to land).
 - `apps/server/src/session/session.ts` — credit gate at the trigger site. BYOK fal key bypasses the gate entirely.
 
 Pricing in `packages/shared/src/pricing.ts` — single source of truth for both UI and server.
