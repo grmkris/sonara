@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback } from "react";
-import type { SonaraSceneState } from "@sonara/shared";
 import { SCENE_TEMPLATES } from "@sonara/shared";
 import type { SessionSend } from "@/lib/session-actions";
 import { useVisualizerStore } from "@/stores/visualizer";
@@ -11,8 +10,8 @@ interface SceneTemplatePickerProps {
   send: SessionSend;
 }
 
-// Horizontal chip-row of 8 scene templates. One click loads the template's
-// four text fields via scene.patch. Intensity dial + image-feel sliders +
+// Horizontal chip-row of scene templates. One click loads the template's
+// prompt sentence via scene.patch. Intensity dial + image-feel sliders +
 // render presets are unaffected — templates only shape the prompt.
 //
 // Not to be confused with `PresetPicker` (render-preset / shader style) —
@@ -21,8 +20,8 @@ export function SceneTemplatePicker({ send }: SceneTemplatePickerProps) {
   const scene = useVisualizerStore((s) => s.scene);
 
   const onPick = useCallback(
-    (patch: Partial<SonaraSceneState>) => {
-      send({ type: "scene.patch", patch });
+    (prompt: string) => {
+      send({ type: "scene.patch", patch: { prompt } });
     },
     [send],
   );
@@ -34,12 +33,12 @@ export function SceneTemplatePicker({ send }: SceneTemplatePickerProps) {
       </span>
       <div className="flex flex-wrap gap-1.5">
         {SCENE_TEMPLATES.map((t) => {
-          const active = scene.subject === t.scene.subject;
+          const active = scene.prompt === t.prompt;
           return (
             <button
               key={t.key}
               type="button"
-              onClick={() => onPick(t.scene)}
+              onClick={() => onPick(t.prompt)}
               className={cn(
                 "font-sans text-[10px] uppercase tracking-[0.14em] transition-colors border-b px-1.5 py-0.5",
                 active

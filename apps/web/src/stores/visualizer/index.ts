@@ -1,5 +1,9 @@
 import { create } from "zustand";
 import { createDemoSlice, readDemoPrefs } from "./demo-slice";
+import {
+  createImageAnchorSlice,
+  readClickwrapAccepted,
+} from "./image-anchor-slice";
 import { createInspectorSlice } from "./inspector-slice";
 import { createPlaybackSlice } from "./playback-slice";
 import {
@@ -28,6 +32,7 @@ export const useVisualizerStore = create<VisualizerState>()((...a) => ({
   ...createVoiceSlice(...a),
   ...createPresetSlice(...a),
   ...createDemoSlice(...a),
+  ...createImageAnchorSlice(...a),
 }));
 
 // ---------------------------------------------------------------------
@@ -88,6 +93,15 @@ export function hydrateDemoPrefs(): void {
   useVisualizerStore.setState({ demoMode, demoDeck });
 }
 
+// Hydrates the clickwrap-acceptance flag from localStorage so the user
+// doesn't see the consent prompt twice in the same browser.
+export function hydrateAnchorPrefs(): void {
+  if (typeof window === "undefined") return;
+  if (readClickwrapAccepted()) {
+    useVisualizerStore.setState({ clickwrapAccepted: true });
+  }
+}
+
 /**
  * Crossfade timing is driven by the `<img>.onLoad` event rather than the
  * moment a URL arrives. This avoids the black flash when a large fal image
@@ -107,6 +121,5 @@ export type {
 } from "./inspector-slice";
 export type { JobStatus } from "./scene-slice";
 export type { PresetMode } from "./preset-slice";
-export type { VoiceField } from "./voice-slice";
 export type { ConsoleTab } from "./ui-slice";
 export type { VisualizerState } from "./types";

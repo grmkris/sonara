@@ -15,6 +15,8 @@ export type SessionAction =
   | { type: "audio.features"; features: AudioFeatures }
   | { type: "session.reset" }
   | { type: "demo.set"; on: boolean; deck: DeckKey | null }
+  | { type: "image.anchor.set"; url: string; strength: number }
+  | { type: "image.anchor.clear" }
   | {
       type: "audio.recognize";
       clipBase64: string;
@@ -42,6 +44,13 @@ export function dispatchSessionAction(
       return client.reset();
     case "demo.set":
       return client.setDemoMode({ on: action.on, deck: action.deck });
+    case "image.anchor.set":
+      return client.setImageAnchor({
+        url: action.url,
+        strength: action.strength,
+      });
+    case "image.anchor.clear":
+      return client.setImageAnchor({ clear: true });
     case "audio.recognize":
       return client.recognize({
         clipBase64: action.clipBase64,

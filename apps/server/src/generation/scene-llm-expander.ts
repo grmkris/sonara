@@ -7,10 +7,10 @@ import {
 import { env } from "../env";
 import type { Logger } from "../lib/logger";
 
-// Server-side LLM expander: turns the flat user-facing SonaraSceneState into a
-// FLUX.2-style structured ResolvedSceneCore (subjects, palette hex, camera,
-// composition, drift candidates). One LLM call per scene-hash; the resolver
-// caches the result and reuses it across keyframes.
+// Server-side LLM expander: parses the user's flat prompt string + slider
+// values into a FLUX.2-style structured ResolvedSceneCore (subjects, palette
+// hex, camera, composition, drift candidates). One LLM call per prompt hash;
+// the resolver caches the result and reuses it across keyframes.
 //
 // Uses FAL's `any-llm` endpoint via the shared FAL key (no extra SDK / env).
 // Override model with FAL_LLM_MODEL.
@@ -19,7 +19,7 @@ const DEFAULT_MODEL = "google/gemini-2.5-flash-lite";
 const MAX_OUTPUT_TOKENS = 600;
 
 function buildSystemPrompt(): string {
-  return `You expand a flat sumi-e music-visualizer scene into a structured FLUX.2 prompt object. Given the user's flat scene fields and slider values, emit a SINGLE JSON object — no prose, no markdown fences. The object MUST match this schema exactly:
+  return `You parse a single user-written prompt sentence into a structured FLUX.2 prompt object. Given the user's prompt and 5 slider values, emit a SINGLE JSON object — no prose, no markdown fences. The object MUST match this schema exactly:
 
 {
   "scene": string,                          // 2-5 word title for this look
@@ -29,8 +29,8 @@ function buildSystemPrompt(): string {
       "action"?: string }                    // optional, 1-5 words
   ],
   "style": string,                           // 2-8 words; visual style (sumi-e ink wash, watercolor, oil, etc.)
-  "color_palette": [string],                 // 3-5 hex colors as #RRGGBB; MUST cover dark/mid/light range of the user's palette text
-  "palette_text": string,                    // echo the user's natural-language palette verbatim when present; "" if the user supplied none
+  "color_palette": [string],                 // 3-5 hex colors as #RRGGBB; MUST cover dark/mid/light range
+  "palette_text": string,                    // echo any colour words from the user's prompt verbatim; "" if none
   "lighting": string,                        // 2-8 words
   "mood": string,                            // 2-6 words
   "background": string,                      // 2-10 words; the environment expanded
@@ -44,27 +44,24 @@ function buildSystemPrompt(): string {
 }
 
 RULES:
-- subjects[0].description MUST closely match the user's "subject" field — same noun, same article. This is the identity anchor; FLUX.2 character consistency depends on it staying byte-stable across keyframes.
-- color_palette MUST be hex codes derived from the user's palette text. "iridescent teal and gold" → ["#1A4A45","#5FBFB0","#A0E5DC","#C9A14A","#E5CB7A"] (range from dark to light). If the palette text is empty, infer 3-5 colors from the mood + environment.
+- Extract whatever the user's prompt names: subject, environment, mood, palette, style. Fill the rest from context.
+- subjects[0].description MUST be the most prominent noun phrase from the user's prompt — keep it byte-stable so FLUX.2 character consistency holds across keyframes. Strip articles only if it improves readability.
+- background: the locative clue from the prompt expanded. If the prompt is subject-only, choose "negative space" or a minimal complement to the subject.
+- color_palette MUST be 3-5 hex codes spanning dark-to-light. If the user named colours, derive the palette from those. If not, infer from mood + subject.
+- palette_text: echo the user's colour words verbatim ("indigo and silver", "moss green and dappled gold"); "" if the prompt names no colours.
 - composition + camera should be biased by the SLIDERS:
     - softness > 0.7 → soft falloff DOF, diffuse lighting
     - surrealness > 0.7 → unusual angle, distorted composition
     - abstraction > 0.6 → loose framing, ambiguous boundaries
     - stability < 0.4 → off-balance composition, dutch tilt
-- drift_candidates should be evocative ink/paper/light/motion clauses thematically tied to subjects[0] + mood. Vary them — don't repeat words across entries.
+- drift_candidates: evocative ink/paper/light/motion clauses thematically tied to subjects[0] + mood. Vary them — don't repeat words across entries.
+- Stay sumi-e / ethereal / dreamlike unless the user's prompt explicitly names a different register.
 - Output ONLY the JSON object. No fences. No commentary.`;
 }
 
 function buildUserPrompt(s: SonaraSceneState): string {
-  return `Flat scene:
-  subject: ${s.subject || "(blank)"}
-  environment: ${s.environment || "(blank)"}
-  mood: ${s.mood || "(blank)"}
-  palette: ${s.palette || "(blank)"}
-  style: ${s.style || "(blank)"}
-  lighting: ${s.lighting || "(blank)"}
-  camera: ${s.camera || "(blank)"}
-  action: ${s.action || "(blank)"}
+  const prompt = s.prompt.trim();
+  return `User prompt: ${prompt.length > 0 ? `"${prompt}"` : "(blank)"}
 
 Sliders (0..1):
   intensity: ${s.intensity.toFixed(2)}
@@ -95,44 +92,52 @@ function stripFences(text: string): string {
   return out;
 }
 
+// Heuristic anchor extraction: take the first ~5 words of the prompt as the
+// stand-in subject. Used for the deterministic fallback when the LLM hasn't
+// expanded yet (cold cache or error path). The LLM rewrites `subjects[0]`
+// with a better choice on its hot-path completion.
+function anchorFromPrompt(prompt: string): string {
+  const trimmed = prompt.trim();
+  if (trimmed.length === 0) return "abstract form";
+  const words = trimmed.split(/\s+/);
+  return words.slice(0, 5).join(" ");
+}
+
 // Deterministic fallback used when the LLM errors / returns garbage, AND on
 // cold-cache first frames before the background LLM expansion lands. No
 // network. The resolver returns this immediately so generation never blocks
 // on the expander. Hex palette is intentionally empty — serializer falls back
-// to `palette_text` (the user's natural-language palette) for those frames.
-//
-// Slider-driven style clauses mirror what the legacy `buildPrompt` used to
-// append inline — moved here so cold-cache prompts carry the same texture
-// signal as the LLM-expanded ones.
+// to `palette_text` (which is also empty here; the user's raw prompt carries
+// the palette signal directly in this case).
 export function deterministicResolve(s: SonaraSceneState): ResolvedSceneCore {
-  const subject = s.subject?.trim() || "abstract form";
+  const anchor = anchorFromPrompt(s.prompt);
   const compositionParts: string[] = [];
   if (s.surrealness > 0.7) compositionParts.push("surreal fluid composition");
   if (s.abstraction > 0.6) compositionParts.push("dissolving edges");
   if (s.stability < 0.4) compositionParts.push("off-balance, shifting");
   if (compositionParts.length === 0) compositionParts.push("centered traditional");
 
-  const styleParts: string[] = [s.style?.trim() || "sumi-e ink wash"];
+  const styleParts: string[] = ["sumi-e ink wash"];
   if (s.surrealness > 0.7) styleParts.push("fluid transformations");
 
-  const lightingParts: string[] = [s.lighting?.trim() || "soft ambient"];
+  const lightingParts: string[] = ["soft ambient"];
   if (s.softness > 0.7) lightingParts.push("diffuse gossamer light");
 
-  const moodParts: string[] = [s.mood?.trim() || "contemplative"];
+  const moodParts: string[] = ["contemplative"];
   if (s.abstraction > 0.6) moodParts.push("luminous ambiguity");
 
   return {
-    scene: subject,
-    subjects: [{ description: subject }],
+    scene: anchor,
+    subjects: [{ description: anchor }],
     style: styleParts.join(", "),
     color_palette: [],
-    palette_text: s.palette?.trim() ?? "",
+    palette_text: "",
     lighting: lightingParts.join(", "),
     mood: moodParts.join(", "),
-    background: s.environment?.trim() || "negative space",
+    background: "negative space",
     composition: compositionParts.join(", "),
     camera: {
-      angle: s.camera?.trim() || "eye level",
+      angle: "eye level",
       lens: "50mm normal",
       depth_of_field:
         s.softness > 0.7 ? "shallow, soft falloff" : "moderate focus",
@@ -192,34 +197,6 @@ export async function expandScene(
         "scene-expander: schema validation failed",
       );
       return deterministicResolve(scene);
-    }
-
-    // Subject-anchor invariant guard: if the LLM drifted the first subject
-    // away from the user's `subject` field, force it back. FLUX.2 character
-    // consistency depends on this byte-stable across keyframes.
-    const userSubject = scene.subject.trim();
-    if (
-      userSubject.length > 0 &&
-      validated.data.subjects[0]?.description.trim().toLowerCase() !==
-        userSubject.toLowerCase()
-    ) {
-      opts.logger.debug(
-        {
-          userSubject,
-          llmSubject: validated.data.subjects[0]?.description,
-        },
-        "scene-expander: anchoring subjects[0] to user subject",
-      );
-      validated.data.subjects[0] = {
-        ...validated.data.subjects[0],
-        description: userSubject,
-      };
-    }
-
-    // Palette-text fallback: if the LLM didn't echo it, copy from the user's
-    // input. Load-bearing for the serializer when `color_palette` is empty.
-    if (!validated.data.palette_text.trim() && scene.palette?.trim()) {
-      validated.data.palette_text = scene.palette.trim();
     }
 
     return validated.data;

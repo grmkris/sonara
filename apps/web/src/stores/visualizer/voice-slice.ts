@@ -1,18 +1,18 @@
 import type { StateCreator } from "zustand";
 import type { VisualizerState } from "./types";
 
-export type VoiceField = "subject" | "environment" | "mood" | "palette";
-
-// Minimal keyed-PTT state. The user holds one of S/E/M/P to speak a value
-// for that field. Mic is on only while a key is held; on release we dispatch
-// the captured transcript as a direct field patch. No LLM disambiguation.
+// Tap-to-dictate state. The mic button on PromptInput toggles between
+// listening / not-listening; the transcript streams into the textarea as
+// draft text while listening. Commit happens when the user reviews and
+// presses Enter, NOT on stop — that way the user can edit the dictation
+// before sending.
 export interface VoiceSlice {
-  /** Which field the user is currently speaking to. null when no key held. */
-  activeField: VoiceField | null;
-  /** Live transcript shown in the held chip. Cleared on key release. */
+  /** True while the SpeechRecognition session is active. */
+  isListening: boolean;
+  /** Latest interim+final transcript while listening; cleared on start. */
   liveTranscript: string;
 
-  setActiveField: (f: VoiceField | null) => void;
+  setIsListening: (b: boolean) => void;
   setLiveTranscript: (t: string) => void;
 }
 
@@ -22,8 +22,8 @@ export const createVoiceSlice: StateCreator<
   [],
   VoiceSlice
 > = (set) => ({
-  activeField: null,
+  isListening: false,
   liveTranscript: "",
-  setActiveField: (f) => set({ activeField: f }),
+  setIsListening: (b) => set({ isListening: b }),
   setLiveTranscript: (t) => set({ liveTranscript: t }),
 });

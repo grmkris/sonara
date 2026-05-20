@@ -10,8 +10,9 @@ import { expandScene, deterministicResolve } from "./scene-llm-expander";
 // Module-level cache: scene-hash → expanded core. The hot path (periodic /
 // pause / section triggers) does NOT call the LLM — only `drift_modifiers`
 // and `audio_state` are per-trigger. The LLM hop fires only on miss, which
-// happens when the user changes one of the hash inputs (subject /
-// environment / mood / palette / style).
+// happens when the user changes their `prompt`. Slider knobs do NOT bust
+// the cache; they're sent to the LLM at expansion time and modulate the
+// deterministic fallback inline.
 //
 // In-memory only. Server restart re-warms naturally; this is by design — no
 // persistence cost, no stale-cross-deploy hazard.
@@ -31,14 +32,7 @@ const cache = new Map<string, CacheEntry>();
 const inFlight = new Map<string, Promise<ResolvedSceneCore>>();
 
 function hashScene(s: SonaraSceneState): string {
-  // Order matters; matches the LLM expander's input surface.
-  return JSON.stringify([
-    s.subject.trim().toLowerCase(),
-    s.environment.trim().toLowerCase(),
-    s.mood.trim().toLowerCase(),
-    s.palette.trim().toLowerCase(),
-    s.style.trim().toLowerCase(),
-  ]);
+  return s.prompt.trim().toLowerCase();
 }
 
 function getCached(hash: string): ResolvedSceneCore | null {

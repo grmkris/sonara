@@ -10,6 +10,12 @@ const serverEnvSchema = z.object({
   BETTER_AUTH_SECRET: z.string().min(1),
   AUTH_DOMAIN: z.string().default("localhost:4470"),
   APP_URL: z.string().url().default("http://localhost:4470"),
+  // Used by the image-anchor upload route at /api/upload/image. Optional
+  // so the web service can boot even if the var hasn't been wired on
+  // Railway yet — the route checks at request time and returns 503 when
+  // the key is missing. Set this via `railway variables --service web
+  // --set FAL_KEY=<key>` to enable image-anchor uploads.
+  FAL_KEY: z.string().default(""),
   // Optional in dev — empty values disable the dodopayments plugin and the
   // checkout/webhook flow. Login works without Dodo configured. Required in
   // production deploys (set both via Railway env).

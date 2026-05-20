@@ -5,10 +5,12 @@ import {
   AudioFeatures,
   ClientScenePatch,
   DeckKeySchema,
+  ImageAnchor,
   SonaraSceneState,
   NowPlaying,
   ServerEvent,
   type DeckKey,
+  type ImageAnchor as ImageAnchorType,
 } from "@sonara/shared";
 
 // Structural interface for a live session. apps/server's Session class
@@ -24,11 +26,15 @@ export interface SessionLike {
     trigger: "auto" | "manual",
   ): Promise<NowPlaying | null>;
   setDemoMode(on: boolean, deck: DeckKey | null): void;
+  setImageAnchor(
+    input: { url: string; strength: number } | { clear: true },
+  ): void;
   reset(): void;
   subscribe(signal?: AbortSignal): AsyncGenerator<ServerEvent>;
   getSnapshot(): SonaraSceneState;
   isDemoMode(): boolean;
   getDemoDeck(): DeckKey | null;
+  getImageAnchor(): ImageAnchorType | null;
 }
 
 export interface SessionContext {
@@ -56,6 +62,14 @@ const DemoModeInput = z.object({
   deck: DeckKeySchema.nullable(),
 });
 
+const SetImageAnchorInput = z.union([
+  z.object({
+    url: z.string().url(),
+    strength: z.number().min(0).max(1),
+  }),
+  z.object({ clear: z.literal(true) }),
+]);
+
 const RecognizeInput = z.object({
   clipBase64: z.string().min(1).max(400_000),
   mimeType: z.string().min(1).max(120),
@@ -72,6 +86,9 @@ const StateOutput = z.object({
   // audio auto-play effect in apps/web's music-source.tsx.
   demoMode: z.boolean(),
   demoDeck: DeckKeySchema.nullable(),
+  // Server-authoritative image anchor. Set via setImageAnchor; survives a
+  // tab refresh because the live Session keeps it in memory until disconnect.
+  imageAnchor: ImageAnchor.nullable(),
 });
 
 export const sessionRouter = {
@@ -122,6 +139,17 @@ export const sessionRouter = {
       context.session.setDemoMode(input.on, input.deck);
     }),
 
+  // Image-anchor switch. The browser uploaded an image via the web service's
+  // /api/upload/image route and got back a fal-hosted URL; this mutation
+  // pins that URL + strength preset onto the live Session, which fires an
+  // immediate triggerAnchor. Pass { clear: true } to remove the anchor.
+  // Setting an anchor implicitly clears demo mode (anchor wins).
+  setImageAnchor: sessionOs
+    .input(SetImageAnchorInput)
+    .handler(({ context, input }) => {
+      context.session.setImageAnchor(input);
+    }),
+
   recognize: sessionOs
     .input(RecognizeInput)
     .output(NowPlaying.nullable())
@@ -147,6 +175,7 @@ export const sessionRouter = {
       scene: context.session.getSnapshot(),
       demoMode: context.session.isDemoMode(),
       demoDeck: context.session.getDemoDeck(),
+      imageAnchor: context.session.getImageAnchor(),
     })),
 };
 

@@ -1,104 +1,66 @@
-// Hand-curated scene templates. One click loads the full set of text fields
-// (subject / environment / mood / palette). intensity + image-feel sliders
-// + render presets persist so a template change doesn't re-tune reactivity.
+// Hand-curated scene templates. One click loads a single evocative prompt
+// sentence. Treatment knobs (softness/surrealness/abstraction/stability/
+// intensity) and render presets persist so a template change doesn't re-tune
+// reactivity.
 //
 // Named `SCENE_TEMPLATES` (not `PRESETS`) to avoid collision with the
 // render-preset system in apps/web/src/lib/render/presets, which is a
 // separate concept for shader style selection.
 
-export interface SceneTemplateScene {
-  subject: string;
-  environment: string;
-  mood: string;
-  palette: string;
-}
-
 export interface SceneTemplate {
   key: string;
   label: string;
-  scene: SceneTemplateScene;
+  prompt: string;
 }
 
 export const SCENE_TEMPLATES: readonly SceneTemplate[] = [
   {
     key: "forest",
     label: "forest",
-    scene: {
-      subject: "a deer at the edge of a clearing",
-      environment: "ancient mossed forest, dawn light",
-      mood: "hushed, reverent",
-      palette: "moss green and dappled gold",
-    },
+    prompt:
+      "a deer at the edge of a clearing in ancient mossed forest at dawn, hushed and reverent, moss green and dappled gold",
   },
   {
     key: "ocean",
     label: "ocean",
-    scene: {
-      subject: "a single figure walking into the waves",
-      environment: "winter sea, overcast sky",
-      mood: "solitary, vast",
-      palette: "slate grey and pearl",
-    },
+    prompt:
+      "a single figure walking into the waves of a winter sea under an overcast sky, solitary and vast, slate grey and pearl",
   },
   {
     key: "cathedral",
     label: "cathedral",
-    scene: {
-      subject: "stained glass light on stone",
-      environment: "empty cathedral interior, afternoon",
-      mood: "sacred, still",
-      palette: "sapphire, garnet, cold gold",
-    },
+    prompt:
+      "stained glass light on stone in an empty cathedral interior in the afternoon, sacred and still, sapphire and garnet and cold gold",
   },
   {
     key: "temple",
     label: "temple",
-    scene: {
-      subject: "a lotus on still water",
-      environment: "zen temple courtyard after rain",
-      mood: "centered, quiet",
-      palette: "wet stone and moss",
-    },
+    prompt:
+      "a lotus on still water in a zen temple courtyard after rain, centered and quiet, wet stone and moss",
   },
   {
     key: "ruins",
     label: "ruins",
-    scene: {
-      subject: "ivy climbing a broken marble column",
-      environment: "overgrown ruins at dusk",
-      mood: "haunted, beautiful",
-      palette: "bone white and deep green",
-    },
+    prompt:
+      "ivy climbing a broken marble column in overgrown ruins at dusk, haunted and beautiful, bone white and deep green",
   },
   {
     key: "bedroom",
     label: "bedroom",
-    scene: {
-      subject: "a figure floating above a bed",
-      environment: "moonlit bedroom, drapes moving",
-      mood: "hypnagogic, tender",
-      palette: "indigo and silver",
-    },
+    prompt:
+      "a figure floating above a bed in a moonlit bedroom with drapes moving, hypnagogic and tender, indigo and silver",
   },
   {
     key: "rooftop",
     label: "rooftop",
-    scene: {
-      subject: "two figures watching the skyline",
-      environment: "rooftop at night, city below",
-      mood: "intimate, electric",
-      palette: "neon amber and deep blue",
-    },
+    prompt:
+      "two figures watching the skyline from a rooftop at night with the city below, intimate and electric, neon amber and deep blue",
   },
   {
     key: "winter-sea",
     label: "winter sea",
-    scene: {
-      subject: "a lighthouse above a stormy cove",
-      environment: "winter cliffs, crashing waves",
-      mood: "fierce, alone",
-      palette: "slate, foam, iron",
-    },
+    prompt:
+      "a lighthouse above a stormy cove on winter cliffs with crashing waves, fierce and alone, slate and foam and iron",
   },
 ] as const;
 

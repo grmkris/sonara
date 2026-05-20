@@ -149,6 +149,15 @@ export function useWsSession(): SessionSend {
                 // (so anon visitors actually hear the demo track).
                 s.setDemoMode(snap.demoMode);
                 s.setDemoDeck(snap.demoDeck);
+                // Hydrate image-anchor too — if the user pinned an anchor
+                // and the WS dropped (tab refresh, transient disconnect),
+                // the live Session kept it in memory and we want the
+                // client UI to reflect that on reconnect.
+                if (snap.imageAnchor) {
+                  s.setAnchorImageUrl(snap.imageAnchor.url);
+                } else {
+                  s.clearAnchor();
+                }
               }
             } catch (err) {
               const msg = err instanceof Error ? err.message : String(err);

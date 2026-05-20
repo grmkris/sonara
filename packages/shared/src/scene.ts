@@ -1,27 +1,34 @@
 import { z } from "zod";
 import { NowPlaying } from "./now-playing";
 
-export const SonaraSceneState = z.object({
-  subject: z.string(),
-  action: z.string(),
-  environment: z.string(),
-  style: z.string(),
-  lighting: z.string(),
-  palette: z.string(),
-  camera: z.string(),
-  mood: z.string(),
+// Image-anchor sub-object — a user-uploaded image that conditions the next
+// generation. Strength comes from a 3-preset client picker (style-only 0.3,
+// style+subject 0.55, lock-subject 0.8). URL is a fal.storage CDN address;
+// session-bound and dropped on disconnect (no DB row).
+export const ImageAnchor = z.object({
+  url: z.string(),
+  strength: z.number().min(0).max(1),
+});
+export type ImageAnchor = z.infer<typeof ImageAnchor>;
 
+export const SonaraSceneState = z.object({
+  // Single user-facing content field. Replaces the previous 8-field split
+  // (subject/action/environment/style/lighting/palette/camera/mood). The
+  // server-side scene-llm-expander parses this into the rich ResolvedSceneCore.
+  prompt: z.string(),
+
+  // Treatment knobs — unchanged. Consumed by scene-llm-expander for
+  // composition/style modulation, by cadenceFromIntensity for trigger timing.
   softness: z.number().min(0).max(1),
   surrealness: z.number().min(0).max(1),
   abstraction: z.number().min(0).max(1),
   stability: z.number().min(0).max(1),
-
-  // Master audio→visual coupling dial. Composes VU time-constants, onset
-  // impulse gain, hue pump range, zoom impulse, periodic AI cadence, pause
-  // threshold, onset refractory.
   intensity: z.number().min(0).max(1),
 
-  references: z.array(z.string()),
+  // Set by the server via the dedicated setImageAnchor mutation, never
+  // through scene.patch. Client surfaces are auth-gated (PromptInput).
+  imageAnchor: ImageAnchor.optional(),
+
   version: z.number().int().nonnegative(),
 
   // Server-authoritative. Set by the song-recognition pipeline; cleared on
@@ -35,19 +42,11 @@ export const SonaraSceneStatePatch = SonaraSceneState.partial();
 export type SonaraSceneStatePatch = z.infer<typeof SonaraSceneStatePatch>;
 
 export const defaultScene: SonaraSceneState = {
-  subject: "",
-  action: "",
-  environment: "",
-  style: "ethereal, dreamlike",
-  lighting: "soft luminous haze",
-  palette: "iridescent pastels",
-  camera: "",
-  mood: "serene, floating",
+  prompt: "",
   softness: 0.8,
   surrealness: 0.7,
   abstraction: 0.6,
   stability: 0.5,
   intensity: 0.5,
-  references: [],
   version: 0,
 };

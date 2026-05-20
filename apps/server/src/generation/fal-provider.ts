@@ -2,14 +2,20 @@ import { createFalClient } from "@fal-ai/client";
 import { env } from "../env";
 import type { Logger } from "../lib/logger";
 
-// Single-endpoint generation pipeline. Every keyframe goes through klein/9b
-// text-to-image at a fixed 768² resolution. We don't use the /edit endpoint
-// because (a) it bills 1 MP in + 1 MP out per frame (~3.7× pricier than
-// text-to-image), and (b) reference-image identity-lock fights against
+// Text-mode generation pipeline. Every text-mode keyframe goes through
+// klein/9b text-to-image at a fixed 768² resolution. We don't use the
+// `/edit` endpoint because (a) it bills 1 MP in + 1 MP out per frame
+// (~3.7× pricier), and (b) reference-image identity-lock fights against
 // prompt changes — when the user pivots subject mid-session we want the
 // next frame to pivot too, not blend with the previous hero. Visual
 // continuity comes from the client-side displacement shader + 60 fps
 // feedback loop, not from server-side identity lock.
+//
+// A low-weight `image_prompt` reference is a SEPARATE code path in
+// `anchor-provider.ts` — it engages only when the user explicitly uploads
+// an image. The "no reference image" invariant above is specifically about
+// `/edit`; the Redux-style image-prompt conditioning is a different fal
+// surface with different cost trade-offs and explicit opt-in.
 
 export interface StreamPreviewInput {
   prompt: string;

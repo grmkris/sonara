@@ -3,14 +3,15 @@ import type { NowPlaying } from "@sonara/shared";
 import { env } from "../env";
 import type { Logger } from "../lib/logger";
 
-// Song muse — LLM translation from track metadata into an evocative sumi-e
-// scene. The deterministic `mergeNowPlayingIntoScene` path handles mood /
-// palette / camera / intensity (cheap, sync). Subject needs more taste, so we
-// ask the same LLM we use for voice intent to ABSTRACT the song (never quote
-// title / artist) into a visual.
+// Song muse — LLM translation from track metadata into a single evocative
+// sumi-e prompt sentence. Output is fed into scene.prompt when the user
+// hasn't authored their own prompt. We ask the same `any-llm` model we use
+// for the scene expander to ABSTRACT the song (never quote title / artist)
+// into one sentence the FLUX pipeline can render.
 
 const DEFAULT_MODEL = "google/gemini-2.5-flash-lite";
-const MAX_OUTPUT_TOKENS = 220;
+const MAX_OUTPUT_TOKENS = 180;
+const MAX_PROMPT_CHARS = 140;
 
 export interface SongMuseInput {
   track: NowPlaying;
@@ -20,10 +21,7 @@ export interface SongMuseInput {
 }
 
 export interface SongMusePatch {
-  subject?: string;
-  environment?: string;
-  action?: string;
-  mood?: string;
+  prompt: string;
 }
 
 export interface SongMuseOpts {
@@ -32,33 +30,28 @@ export interface SongMuseOpts {
 }
 
 function buildSystemPrompt(): string {
-  return `You translate a recognized song into an evocative sumi-e-style visual scene. Given the track metadata and the live audio mood, emit a SINGLE JSON object — no prose, no markdown fences, no commentary:
+  return `You translate a recognized song into a single evocative sumi-e-style scene description. Given track metadata and the live audio mood, emit a SINGLE JSON object — no prose, no markdown fences, no commentary:
 
-{
-  "subject": string | null,       // concrete visual subject, 2–6 words — NEVER the track title or artist name
-  "environment": string | null,   // setting/place, 2–8 words
-  "action": string | null,        // present-participle phrase, 2–6 words
-  "mood": string | null           // emotional register, 1–4 words
-}
+{ "prompt": string }   // ONE sentence describing a concrete visual scene; ≤ ${MAX_PROMPT_CHARS} characters
 
 RULES:
-- Translate, don't quote. Do NOT use the artist's name or the track's title literally. Abstract the song's IMAGE, MOOD, and ARCHETYPE into a scene.
-- Subject must be CONCRETE and VISUAL (a figure, a creature, an object, a landscape element). No proper names. No abstractions like "melody" or "rhythm".
-- Stay sumi-e / ethereal / dreamlike — single-figure, minimal, evocative; no photoreal specifics.
-- Fields are optional. Return null for any field you can't synthesize meaningfully.
+- Translate, don't quote. NEVER use the artist's name or the track's title literally. Abstract the song's IMAGE, MOOD, and ARCHETYPE into a scene.
+- The sentence must name a CONCRETE VISUAL SUBJECT (a figure, a creature, an object, a landscape element) and ideally hint at setting, mood, and palette.
+- Stay sumi-e / ethereal / dreamlike — single-figure, minimal, evocative; no photoreal specifics, no proper names.
+- One sentence. No leading "a scene of" or "an image showing" — just describe the scene directly.
 
 GOOD:
 Track: Rihanna — Umbrella (valence 0.45, arousal 0.55)
-→ {"subject":"figure beneath a dark umbrella","environment":"rain-slicked neon street","action":"sheltering from the downpour","mood":"warmth in storm"}
+→ {"prompt":"a figure sheltering beneath a dark umbrella on a rain-slicked neon street, warmth in storm, indigo and wet gold"}
 
 Track: Sigur Rós — Svefn-g-englar (valence 0.60, arousal 0.20, 60 bpm)
-→ {"subject":"a drifting angel","environment":"cold northern sea at dawn","action":"floating above still water","mood":"hushed, weightless"}
+→ {"prompt":"a drifting angel above a cold northern sea at dawn, hushed and weightless, pearl and slate"}
 
 Track: Miles Davis — So What (valence 0.35, arousal 0.40)
-→ {"subject":"an empty jazz stage","environment":"late-night lounge","action":"smoke curling upward","mood":"cool, contemplative"}
+→ {"prompt":"smoke curling above an empty jazz stage in a late-night lounge, cool and contemplative, smoke and brass and cognac"}
 
 Track: Daft Punk — Around the World (valence 0.75, arousal 0.85, 122 bpm)
-→ {"subject":"a neon orbit","environment":"mirrored club interior","action":"spinning in synthetic light","mood":"euphoric, relentless"}
+→ {"prompt":"a neon orbit spinning through a mirrored club interior in synthetic light, euphoric and relentless, magenta and chrome"}
 
 Output ONLY the JSON object.`;
 }
@@ -97,28 +90,22 @@ function stripFences(text: string): string {
   return out;
 }
 
-function trimField(raw: unknown, maxWords: number): string | undefined {
-  if (typeof raw !== "string") return undefined;
-  const cleaned = raw.trim().replace(/^["']|["']$/g, "").replace(/\.+$/, "").trim();
-  if (cleaned.length === 0) return undefined;
-  const words = cleaned.split(/\s+/);
-  if (words.length > maxWords) return words.slice(0, maxWords).join(" ");
-  return cleaned;
-}
-
 function coerce(raw: unknown): SongMusePatch | null {
   if (!raw || typeof raw !== "object") return null;
   const o = raw as Record<string, unknown>;
-  const patch: SongMusePatch = {};
-  const subject = trimField(o.subject, 8);
-  const environment = trimField(o.environment, 10);
-  const action = trimField(o.action, 8);
-  const mood = trimField(o.mood, 6);
-  if (subject) patch.subject = subject;
-  if (environment) patch.environment = environment;
-  if (action) patch.action = action;
-  if (mood) patch.mood = mood;
-  return Object.keys(patch).length > 0 ? patch : null;
+  if (typeof o.prompt !== "string") return null;
+  const cleaned = o.prompt
+    .trim()
+    .replace(/^["']|["']$/g, "")
+    .replace(/\.+$/, "")
+    .trim();
+  if (cleaned.length === 0) return null;
+  // Hard cap so a runaway LLM can't dump a paragraph into the prompt slot.
+  const capped =
+    cleaned.length > MAX_PROMPT_CHARS
+      ? cleaned.slice(0, MAX_PROMPT_CHARS).trimEnd()
+      : cleaned;
+  return { prompt: capped };
 }
 
 export async function synthesizeFromTrack(

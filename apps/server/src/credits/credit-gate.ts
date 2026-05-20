@@ -1,11 +1,12 @@
 import type { Logger } from "../lib/logger";
 import { debitFrame, refundFrame, tryConsumeFreeTier } from "./credits.service";
 
-// Single-cost ledger: every keyframe (first or subsequent) costs the same.
-// The first frame of a session is the load-bearing anchor, but it runs on
-// the same klein/9b family as every other frame, so there's no separate
-// price tier to encode.
+// Per-mode credit cost. Text-mode keyframes (klein/9b) cost 1 credit;
+// image-anchor mode (flux-pro/v1.1-ultra) costs more because the underlying
+// model is ~17× pricier. Callers pass the relevant constant to
+// tryDebitCredit via the optional `cost` field.
 export const COST_PER_FRAME = 1;
+export const ANCHOR_FRAME_COST_CREDITS = 8;
 
 // Hourly free-tier quota that fires when paid balance runs out. Applies to
 // every trigger uniformly — there's no longer a "first frame too expensive
@@ -24,6 +25,8 @@ export interface CreditGateInput {
   lastCreditDenialAt: number;
   now: number;
   logger: Logger;
+  /** Per-frame credit cost. Defaults to text-mode COST_PER_FRAME. */
+  cost?: number;
 }
 
 interface CreditGateOk {
@@ -59,15 +62,16 @@ export type CreditGateResult = CreditGateOk | CreditGateDenied;
 export async function tryDebitCredit(
   input: CreditGateInput,
 ): Promise<CreditGateResult> {
+  const cost = input.cost ?? COST_PER_FRAME;
   try {
     const remaining = await debitFrame(
       input.userId,
-      COST_PER_FRAME,
+      cost,
       input.logger,
     );
     if (remaining !== null) {
-      input.logger.debug({ remaining }, "credit debited");
-      return { ok: true, paidCost: COST_PER_FRAME, nextLastDenialAt: 0 };
+      input.logger.debug({ remaining, cost }, "credit debited");
+      return { ok: true, paidCost: cost, nextLastDenialAt: 0 };
     }
 
     const freeOk = await tryConsumeFreeTier(

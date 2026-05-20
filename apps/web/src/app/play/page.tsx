@@ -15,7 +15,6 @@ import { RecordToggle } from "@/components/visualizer/controls/record-toggle";
 import { UserControls } from "@/components/user-controls";
 import { DemoRecorder } from "@/components/visualizer/controls/demo-recorder";
 import { ScanSweep } from "@/components/visualizer/canvas/scan-sweep";
-import { VoiceListen } from "@/components/visualizer/voice/voice-listen";
 import { NowPlaying } from "@/components/visualizer/controls/now-playing";
 import { Button } from "@/components/ui/button";
 import {
@@ -35,6 +34,7 @@ import { useSongRecognition } from "@/hooks/use-song-recognition";
 import { useHotkey } from "@/hooks/use-hotkey";
 import { HOTKEYS } from "@/lib/hotkeys";
 import {
+  hydrateAnchorPrefs,
   hydrateConsoleTab,
   hydrateDemoPrefs,
   hydratePresetPrefs,
@@ -85,6 +85,7 @@ export default function Page() {
     hydrateUiVisible();
     hydratePresetPrefs();
     hydrateDemoPrefs();
+    hydrateAnchorPrefs();
     hydrateConsoleTab();
   }, []);
 
@@ -202,8 +203,6 @@ export default function Page() {
           <div className="mt-3 flex items-center justify-between gap-3 sm:gap-6">
             <div className="flex items-center gap-3 sm:gap-6">
               <MusicSource source={audioSource} setSource={setAudioSource} />
-              <span aria-hidden className="hairline h-3 w-px opacity-30" />
-              <VoiceListen send={send} />
             </div>
             <Button
               variant="ghost"

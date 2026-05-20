@@ -4,11 +4,12 @@ import { NowPlaying } from "./now-playing";
 import { ResolvedScene } from "./scene-resolved";
 import { VISUAL_PRESET_NAMES } from "./visual-presets";
 
-// Clients may only patch user-authored fields. version/references/nowPlaying
-// are server-authoritative and are omitted from the patch payload.
+// Clients may only patch user-authored fields. version/nowPlaying are
+// server-authoritative; imageAnchor goes through its dedicated mutation
+// (setImageAnchor) — none of them belong in a scene.patch payload.
 export const ClientScenePatch = SonaraSceneState.omit({
   version: true,
-  references: true,
+  imageAnchor: true,
   nowPlaying: true,
 }).partial();
 export type ClientScenePatch = z.infer<typeof ClientScenePatch>;

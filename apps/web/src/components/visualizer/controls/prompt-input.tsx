@@ -1,122 +1,167 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import type { SonaraSceneState } from "@sonara/shared";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { SessionSend } from "@/lib/session-actions";
-import { FieldRow } from "@/components/visualizer/controls/field-row";
 import { flashCommit } from "@/lib/commit-flash";
-import {
-  SCENE_FIELDS,
-  type SceneFieldKey,
-} from "@/lib/scene-fields";
+import { useVoiceRecognition } from "@/hooks/use-voice-recognition";
 import { useVisualizerStore } from "@/stores/visualizer";
+import { cn } from "@/lib/utils";
+import { ImageAnchorZone } from "./image-anchor-zone";
 
 interface PromptInputProps {
   send: SessionSend;
 }
 
+// Single textarea — the user's whole scene description as one sentence.
+// Enter commits; Shift+Enter inserts a newline. Mic button toggles
+// tap-to-dictate: spoken text streams into the textarea as draft so the
+// user can review + edit before pressing Enter to commit.
+//
+// Typed commits go via `scene.patch`; voice-dictated commits go via
+// `voice.patch` so the server's lower semantic-diff threshold for voice
+// still applies. We track `lastDraftFromVoice` to decide which message
+// type to send on commit.
 export function PromptInput({ send }: PromptInputProps) {
   const scene = useVisualizerStore((s) => s.scene);
   const status = useVisualizerStore((s) => s.status);
-  const [draft, setDraft] = useState<Partial<Record<SceneFieldKey, string>>>({});
-  const [sweepKey, setSweepKey] = useState<Record<SceneFieldKey, number>>({
-    subject: 0,
-    environment: 0,
-    mood: 0,
-    palette: 0,
-  });
-  const [lastCommittedKey, setLastCommittedKey] = useState<SceneFieldKey | null>(
-    null,
+  const isListening = useVisualizerStore((s) => s.isListening);
+  const setIsListening = useVisualizerStore((s) => s.setIsListening);
+  const liveTranscript = useVisualizerStore((s) => s.liveTranscript);
+  const setLiveTranscript = useVisualizerStore((s) => s.setLiveTranscript);
+
+  const [draft, setDraft] = useState<string | null>(null);
+  const lastDraftFromVoiceRef = useRef(false);
+  const lastSentRef = useRef<string | null>(null);
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+
+  // Reconcile draft with server-echoed scene state. As soon as the server
+  // echoes any prompt back after our send, clear the optimistic draft so
+  // the textarea reads from `scene.prompt`. Compares against the exact
+  // value we last sent (not strict equality with scene.prompt) so server
+  // normalisation doesn't leave the draft stuck.
+  useEffect(() => {
+    if (draft === null) return;
+    const sent = lastSentRef.current;
+    if (sent !== null && scene.prompt !== undefined) {
+      // Any echo with a defined prompt clears the draft.
+      setDraft(null);
+      lastSentRef.current = null;
+    }
+  }, [scene.prompt, draft]);
+
+  // Voice recognition — interim transcript streams into the draft so the
+  // user sees the words appear in the textarea. On stop, the final
+  // transcript stays as a draft for the user to review.
+  const handleVoiceResult = useCallback(
+    (text: string) => {
+      lastDraftFromVoiceRef.current = true;
+      setDraft(text);
+      setLiveTranscript(text);
+    },
+    [setLiveTranscript],
   );
-  // Which field's popover is open. At most one is open at a time.
-  const [openKey, setOpenKey] = useState<SceneFieldKey | null>(null);
-  const inputRefs = useRef<Record<SceneFieldKey, HTMLInputElement | null>>({
-    subject: null,
-    environment: null,
-    mood: null,
-    palette: null,
+
+  const { supported, start, stop } = useVoiceRecognition({
+    onResult: handleVoiceResult,
   });
-  const lastSentRef = useRef<Partial<Record<SceneFieldKey, string>>>({});
 
-  useEffect(() => {
-    if (status !== "running") setLastCommittedKey(null);
-  }, [status]);
+  const onMicToggle = useCallback(() => {
+    if (!supported) return;
+    if (isListening) {
+      stop();
+      setIsListening(false);
+    } else {
+      lastDraftFromVoiceRef.current = true;
+      setDraft("");
+      setLiveTranscript("");
+      start();
+      setIsListening(true);
+      textareaRef.current?.focus();
+    }
+  }, [isListening, supported, start, stop, setIsListening, setLiveTranscript]);
 
-  // Reconcile drafts with the server-echoed scene state. As soon as we see
-  // any value for a field after our send (even one the server normalised
-  // from our draft), clear the optimistic draft so the input reads from
-  // `scene[key]` again. The previous version compared strict equality,
-  // which left the draft stuck whenever the server normalised the input.
-  useEffect(() => {
-    setDraft((d) => {
-      let next = d;
-      let changed = false;
-      for (const f of SCENE_FIELDS) {
-        const sent = lastSentRef.current[f.key];
-        if (
-          sent !== undefined &&
-          scene[f.key] !== undefined &&
-          next[f.key] !== undefined
-        ) {
-          const { [f.key]: _drop, ...rest } = next;
-          next = rest;
-          lastSentRef.current[f.key] = undefined;
-          changed = true;
-        }
+  const commit = useCallback(
+    (value: string) => {
+      const next = value.trim();
+      if (next.length === 0) return;
+      if (next === scene.prompt) return;
+      if (lastSentRef.current === next) return;
+      lastSentRef.current = next;
+      const messageType: "voice.patch" | "scene.patch" = lastDraftFromVoiceRef
+        .current
+        ? "voice.patch"
+        : "scene.patch";
+      send({ type: messageType, patch: { prompt: next } });
+      lastDraftFromVoiceRef.current = false;
+      flashCommit();
+    },
+    [scene.prompt, send],
+  );
+
+  const onChange = useCallback(
+    (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+      lastDraftFromVoiceRef.current = false;
+      setDraft(e.target.value);
+    },
+    [],
+  );
+
+  const onKeyDown = useCallback(
+    (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+      if (e.key === "Enter" && !e.shiftKey) {
+        e.preventDefault();
+        const value = draft ?? scene.prompt;
+        commit(value);
       }
-      return changed ? next : d;
-    });
-  }, [scene]);
+    },
+    [draft, scene.prompt, commit],
+  );
 
-  const commitValue = (key: SceneFieldKey, value: string) => {
-    if (value === scene[key]) return;
-    if (lastSentRef.current[key] === value) return;
-    lastSentRef.current[key] = value;
-    send({
-      type: "scene.patch",
-      patch: { [key]: value } as Partial<SonaraSceneState>,
-    });
-    setDraft((d) => ({ ...d, [key]: value }));
-    setSweepKey((s) => ({ ...s, [key]: s[key] + 1 }));
-    setLastCommittedKey(key);
-    flashCommit();
-  };
-
-  const commit = (key: SceneFieldKey) => {
-    const v = draft[key];
-    if (v === undefined) return;
-    commitValue(key, v);
-  };
+  const value = draft ?? scene.prompt ?? "";
+  const isRunning = status === "running";
 
   return (
-    <div className="flex flex-col gap-5">
-      {SCENE_FIELDS.map((f) => {
-        const value = draft[f.key] ?? scene[f.key];
-        return (
-          <FieldRow
-            key={f.key}
-            field={f}
-            value={value}
-            isOpen={openKey === f.key}
-            isRunning={status === "running"}
-            isLastCommitted={lastCommittedKey === f.key}
-            sweepKey={sweepKey[f.key]}
-            inputRef={(el) => {
-              inputRefs.current[f.key] = el;
-            }}
-            onDraftChange={(next) =>
-              setDraft((d) => ({ ...d, [f.key]: next }))
-            }
-            onCommit={() => commit(f.key)}
-            onCommitValue={(next) => {
-              commitValue(f.key, next);
-              setOpenKey(null);
-            }}
-            onOpenChange={(open) => setOpenKey(open ? f.key : null)}
-            onFocusInput={() => inputRefs.current[f.key]?.focus()}
-          />
-        );
-      })}
+    <div className="flex flex-col gap-2">
+      <div className="flex items-center justify-between">
+        <span className="font-sans text-[9px] uppercase tracking-[0.28em] text-[color:var(--stone)]">
+          scene
+        </span>
+        {supported && (
+          <button
+            type="button"
+            onClick={onMicToggle}
+            className={cn(
+              "font-sans text-[10px] uppercase tracking-[0.18em] px-2 py-0.5 border-b transition-colors",
+              isListening
+                ? "text-[color:var(--signal)] border-[color:var(--signal)] animate-pulse"
+                : "text-[color:var(--stone)] border-[color:var(--hairline)]/30 hover:text-[color:var(--paper)] hover:border-[color:var(--paper)]/60",
+            )}
+            aria-label={isListening ? "stop dictation" : "start dictation"}
+          >
+            {isListening ? "● mic" : "○ mic"}
+          </button>
+        )}
+      </div>
+      <textarea
+        ref={textareaRef}
+        value={value}
+        onChange={onChange}
+        onKeyDown={onKeyDown}
+        rows={3}
+        placeholder="describe the scene… e.g. a deer at the edge of a clearing, hushed and reverent, moss green and gold"
+        className={cn(
+          "w-full resize-none bg-transparent border border-[color:var(--hairline)]/40 px-3 py-2",
+          "font-serif text-[14px] leading-[1.4] text-[color:var(--paper)] placeholder:text-[color:var(--stone)]/50",
+          "focus:outline-none focus:border-[color:var(--paper)]/60 transition-colors",
+          isRunning && "opacity-90",
+        )}
+      />
+      {isListening && (
+        <span className="font-mono text-[9px] uppercase tracking-[0.2em] text-[color:var(--signal)]">
+          ▼ listening · {liveTranscript || "…"}
+        </span>
+      )}
+      <ImageAnchorZone send={send} />
     </div>
   );
 }

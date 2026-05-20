@@ -2,6 +2,7 @@ import {
   type AudioFeatures,
   type ClientScenePatch,
   type DeckKey,
+  type ImageAnchor,
   type SonaraSceneState,
   type NowPlaying,
   type ServerEvent,
@@ -12,17 +13,21 @@ import type { ImageLibraryId } from "@sonara/shared/typeid";
 import { EventPublisher } from "@orpc/server";
 import type { Logger } from "../lib/logger";
 import { streamPreview } from "../generation/fal-provider";
+import { streamAnchor } from "../generation/anchor-provider";
 import { pickLibraryFrame } from "../generation/library-provider";
 import { serializeResolvedScene } from "../generation/prompt-compiler";
 import { DriftTrajectory } from "../generation/prompt-drift";
 import { resolveScene } from "../generation/scene-resolver";
-import { refundOnError, tryDebitCredit } from "../credits/credit-gate";
+import {
+  ANCHOR_FRAME_COST_CREDITS,
+  refundOnError,
+  tryDebitCredit,
+} from "../credits/credit-gate";
 import { recognizeClip } from "../recognition/recognition.service";
 import {
   synthesizeFromTrack,
   type SongMusePatch,
 } from "../generation/song-muse";
-import { mergeNowPlayingIntoScene } from "./now-playing-merge";
 import { semanticDiff } from "./semantic-diff";
 
 export interface SessionOpts {
@@ -137,7 +142,6 @@ export class Session {
   private lastValence = 0.5;
   private lastArousal = 0;
   private lastBpm = 0;
-  private lastFlatness = 0;
   private silentSinceAt: number | null = null;
   private recognitionInFlight: AbortController | null = null;
 
@@ -202,6 +206,43 @@ export class Session {
     return this.demoDeck;
   }
 
+  getImageAnchor(): ImageAnchor | null {
+    return this.scene.imageAnchor ?? null;
+  }
+
+  // Set or clear the live session's image anchor. Setting clears demoMode
+  // (anchor and demo are mutually exclusive — anchor wins). Fires a trigger
+  // immediately so the first anchor frame lands without waiting for the
+  // semantic-diff gate.
+  setImageAnchor(
+    input: { url: string; strength: number } | { clear: true },
+  ): void {
+    if ("clear" in input) {
+      if (!this.scene.imageAnchor) return;
+      this.scene = { ...this.scene, imageAnchor: undefined };
+      this.send({ type: "scene.state", state: this.scene });
+      this.logger.info({}, "image anchor cleared");
+      return;
+    }
+    // Anchor wins over demo. setDemoMode doesn't touch anchor; if both are
+    // attempted to be set simultaneously, the most recent mutation lands.
+    if (this.demoMode) {
+      this.demoMode = false;
+    }
+    this.scene = {
+      ...this.scene,
+      imageAnchor: { url: input.url, strength: input.strength },
+    };
+    this.send({ type: "scene.state", state: this.scene });
+    this.logger.info(
+      { url: input.url, strength: input.strength },
+      "image anchor set",
+    );
+    // Fire trigger immediately — bypasses semantic-diff gate so the first
+    // anchor frame lands without waiting.
+    void this.trigger("semantic");
+  }
+
   applyPatch(
     patch: ClientScenePatch,
     origin: "client" | "voice" = "client",
@@ -226,7 +267,6 @@ export class Session {
     this.lastValence = features.valence;
     this.lastArousal = features.arousal;
     this.lastBpm = features.bpm;
-    this.lastFlatness = features.flatness;
 
     // Silence-clear for nowPlaying. Kept independent of section detection
     // because sectionEnergy is EMA-smoothed and lags actual silence.
@@ -327,25 +367,18 @@ export class Session {
 
     if (!track) return null;
 
-    // Apply nowPlaying + deterministic scene-field backfill (only fills
-    // fields that still match defaultScene — user-authored wins).
-    // Deterministic merge handles mood/palette/camera/intensity. Subject is
-    // intentionally NOT set here; the LLM muse below synthesizes an evocative
-    // sumi-e subject that abstracts the song rather than quoting its title.
-    const { patch } = mergeNowPlayingIntoScene(this.scene, track, {
-      valence: this.lastValence,
-      arousal: this.lastArousal,
-      bpm: this.lastBpm,
-      flatness: this.lastFlatness,
-    });
-    this.scene = { ...this.scene, ...patch, nowPlaying: track };
+    // Pin nowPlaying to the scene so the HUD can show it. Track metadata no
+    // longer auto-fills scene fields deterministically — the LLM muse below
+    // synthesises a single evocative prompt that abstracts the song, and
+    // overwrites scene.prompt only when the user hasn't authored their own.
+    this.scene = { ...this.scene, nowPlaying: track };
     this.send({ type: "scene.state", state: this.scene });
 
-    // LLM muse — translate the track into an evocative visual scene.
-    // Awaited so we fire a single trigger with a good subject instead of
-    // triggering twice (once for the deterministic fill, once for the muse).
-    // ~1-2s on gemini-2.5-flash-lite; user is already waiting on the identify
-    // click. Failures fall through to `track.title` as a last-resort subject.
+    // LLM muse — translate the track into an evocative visual prompt sentence.
+    // Awaited so we fire a single trigger with the synthesised prompt instead
+    // of triggering twice. ~1-2s on gemini-2.5-flash-lite; user is already
+    // waiting on the identify click. Failures fall through to `track.title`
+    // as a last-resort prompt.
     let muse: SongMusePatch | null = null;
     try {
       muse = await synthesizeFromTrack(
@@ -362,37 +395,26 @@ export class Session {
     }
     if (controller.signal.aborted) return null;
 
-    const museExtra: Partial<SonaraSceneState> = {};
-    if (muse?.subject && this.scene.subject === defaultScene.subject) {
-      museExtra.subject = muse.subject;
-    }
-    if (muse?.environment && this.scene.environment === defaultScene.environment) {
-      museExtra.environment = muse.environment;
-    }
-    if (muse?.action && this.scene.action === defaultScene.action) {
-      museExtra.action = muse.action;
-    }
-    if (muse?.mood && this.scene.mood === defaultScene.mood) {
-      museExtra.mood = muse.mood;
-    }
-    // Fallback so the trigger below actually fires: if the muse failed AND
-    // the user still hasn't authored a subject, at least populate it with the
-    // bare title (no "Artist — Title" literal dump — that used to read as
-    // quotation inside FLUX).
-    if (!museExtra.subject && this.scene.subject === defaultScene.subject) {
-      museExtra.subject = track.title;
-    }
-    if (Object.keys(museExtra).length > 0) {
-      this.scene = { ...this.scene, ...museExtra };
+    // Only fill the prompt slot if the user hasn't typed their own. "Hasn't
+    // typed" === scene.prompt still matches defaultScene.prompt (""). Voice
+    // dictation also writes through scene.prompt, so this respects spoken
+    // input the same as typed input.
+    const userHasPrompt = this.scene.prompt !== defaultScene.prompt;
+    if (!userHasPrompt) {
+      // Prefer the LLM's evocative one-liner; fall back to the bare track
+      // title if the muse failed (no "Artist — Title" literal dump — that
+      // used to read as quotation inside FLUX).
+      const nextPrompt = muse?.prompt?.trim() || track.title;
+      this.scene = { ...this.scene, prompt: nextPrompt };
       this.send({ type: "scene.state", state: this.scene });
       this.logger.info(
-        { museExtra, hasLlmSynth: muse !== null },
+        { prompt: nextPrompt, hasLlmSynth: muse !== null },
         "song-muse: scene enriched",
       );
     }
 
-    // Fire a regeneration so the new subject/mood/palette lands immediately.
-    // "section" is the closest semantic match ("the song changed").
+    // Fire a regeneration so the new prompt lands immediately. "section" is
+    // the closest semantic match ("the song changed").
     this.trigger("section");
     return track;
   }
@@ -467,7 +489,7 @@ export class Session {
       const { periodicMs } = cadenceFromIntensity(this.scene.intensity);
       if (now - this.lastKeyframeAt < periodicMs) return;
       const hasAudio = now - this.lastAudioAt < 5000;
-      const hasScene = this.scene.subject.trim().length > 0;
+      const hasScene = this.scene.prompt.trim().length > 0;
       const hasDemo = this.demoMode && this.demoDeck !== null;
       if (!hasAudio && !hasScene && !hasDemo) return;
       this.trigger("periodic");
@@ -490,6 +512,16 @@ export class Session {
       return;
     }
 
+    // Image-anchor short-circuit. When the user has pinned an uploaded
+    // image as a reference, route to flux-pro/v1.1-ultra with image_url
+    // conditioning instead of klein/9b. Distinct credit cost; same
+    // crossfade + observability events on the wire.
+    if (this.scene.imageAnchor) {
+      this.lastKeyframeAt = Date.now();
+      await this.triggerAnchor(reason);
+      return;
+    }
+
     // Defence in depth. The constructor pins anon sessions to demoMode=true
     // with a deck, so the short-circuit above always catches them. If that
     // invariant ever breaks (someone clears demoMode programmatically), we
@@ -500,11 +532,11 @@ export class Session {
     }
     const userId = this.userId;
 
-    // Empty-subject fast-exit. `serializeResolvedScene` also returns "" when
+    // Empty-prompt fast-exit. `serializeResolvedScene` also returns "" when
     // subjects[0] is blank, but short-circuiting here saves the resolver and
     // credit-gate work when there's nothing to generate.
-    if (!this.scene.subject.trim()) {
-      this.logger.debug({ reason }, "trigger skipped: empty subject");
+    if (!this.scene.prompt.trim()) {
+      this.logger.debug({ reason }, "trigger skipped: empty prompt");
       return;
     }
 
@@ -562,7 +594,7 @@ export class Session {
     // Every keyframe is a fresh text-to-image generation. No reference
     // image, no identity lock — prompt changes take effect on the very
     // next frame.
-    this.scene = { ...this.scene, version, references: [] };
+    this.scene = { ...this.scene, version };
     const snapshot: SonaraSceneState = this.scene;
 
     this.send({ type: "scene.state", state: this.scene });
@@ -685,6 +717,165 @@ export class Session {
     });
   }
 
+  // Image-anchor-mode trigger. Calls fal flux-pro/v1.1-ultra with the user's
+  // uploaded image conditioning the output. Emits the same crossfade events
+  // as the text-mode path so the client doesn't need to distinguish.
+  private async triggerAnchor(source: TriggerSource): Promise<void> {
+    const anchor = this.scene.imageAnchor;
+    if (!anchor) return;
+
+    // Anon defence in depth — the upload route is authed-only, but if a
+    // null userId somehow reached this path we refuse to bill phantom.
+    if (this.userId === null) {
+      this.logger.warn({ source }, "anon trigger reached anchor path — bailing");
+      return;
+    }
+    const userId = this.userId;
+    const kind = kindFromSource(source);
+    const reason = source;
+
+    const gate = await tryDebitCredit({
+      userId,
+      isUserInitiated: kind === "user",
+      lastCreditDenialAt: this.lastCreditDenialAt,
+      now: Date.now(),
+      logger: this.logger,
+      cost: ANCHOR_FRAME_COST_CREDITS,
+    });
+    this.lastCreditDenialAt = gate.nextLastDenialAt;
+
+    if (!gate.ok) {
+      this.logger.info(
+        { reason, gateReason: gate.reason, cost: ANCHOR_FRAME_COST_CREDITS },
+        "anchor trigger denied",
+      );
+      if (gate.shouldEmit) {
+        this.send({
+          type: "job.status",
+          status: "error",
+          reason,
+          message:
+            gate.reason === "system_error"
+              ? "Payment system unavailable"
+              : "Out of credits — top up to keep generating",
+        });
+      }
+      return;
+    }
+    const paidCost = gate.paidCost;
+
+    const sessionProgress = Math.min(
+      1,
+      (Date.now() - this.sessionStartAt) / SESSION_ARC_MS,
+    );
+    const drift = this.driftTrajectory.next();
+    const driftSource: "pool" | "none" = drift ? "pool" : "none";
+
+    this.activeJob?.abort();
+    const controller = new AbortController();
+    this.activeJob = controller;
+
+    this.activeVersion += 1;
+    const version = this.activeVersion;
+    this.scene = { ...this.scene, version };
+    const snapshot: SonaraSceneState = this.scene;
+
+    this.send({ type: "scene.state", state: this.scene });
+
+    // Resolve the prompt through the same LLM expander as text-mode so the
+    // inspector HUD shows coherent metadata and so the drift trajectory
+    // gets seeded on first call.
+    const resolved = resolveScene(this.scene, {
+      driftModifiers: drift ? [drift] : [],
+      audio: {
+        intensity: this.scene.intensity,
+        section: this.lastSectionEnergy,
+        energyDelta: 0,
+      },
+      logger: this.logger,
+    });
+    if (resolved.drift_candidates.length > 0) {
+      this.driftTrajectory.reseed({
+        candidates: resolved.drift_candidates,
+        sessionProgress,
+      });
+    }
+    const prompt = serializeResolvedScene(resolved);
+
+    this.logger.info(
+      {
+        reason,
+        version,
+        prompt,
+        anchorUrl: anchor.url,
+        anchorStrength: anchor.strength,
+        seed: this.seed,
+      },
+      "anchor trigger fire",
+    );
+    this.send({ type: "job.status", status: "running", reason });
+
+    const requestedAt = Date.now();
+    const { periodicMs } = cadenceFromIntensity(this.scene.intensity);
+    this.send({
+      type: "generation.requested",
+      reason,
+      version,
+      promptString: prompt,
+      driftSource,
+      resolvedScene: resolved,
+      requestedAt,
+      nextKeyframeAt: this.lastKeyframeAt + periodicMs,
+    });
+
+    streamAnchor({
+      prompt,
+      imageUrl: anchor.url,
+      strength: anchor.strength,
+      seed: this.seed,
+      signal: controller.signal,
+      logger: this.logger,
+      onPreview: (url) => {
+        if (version !== this.activeVersion) return;
+        this.send({ type: "frame.preview", imageUrl: url, version });
+      },
+      onFinal: (url) => {
+        if (version !== this.activeVersion) return;
+        this.lastGeneratedScene = snapshot;
+        this.send({ type: "frame.final", imageUrl: url, version });
+        this.send({ type: "job.status", status: "idle" });
+        this.send({
+          type: "generation.completed",
+          version,
+          durationMs: Date.now() - requestedAt,
+          success: true,
+        });
+      },
+      onError: (err) => {
+        refundOnError(userId, paidCost, this.logger);
+        if (controller.signal.aborted) return;
+        this.logger.error({ err }, "anchor generation failed");
+        const message = err instanceof Error ? err.message : String(err);
+        this.send({
+          type: "job.status",
+          status: "error",
+          message,
+        });
+        this.send({
+          type: "generation.completed",
+          version,
+          durationMs: Date.now() - requestedAt,
+          success: false,
+          message,
+        });
+      },
+    }).catch((err) => {
+      if (!controller.signal.aborted) {
+        this.logger.error({ err }, "streamAnchor unhandled");
+      }
+    });
+  }
+
   // Library-mode trigger. Picks one row from image_library, emits the same
   // frame.final / job.status / generation.completed sequence the fal path
   // emits — the client crossfade is identical. No credit debit, no fal call,
@@ -733,7 +924,7 @@ export class Session {
 
     // Bump scene.version for the wire so the client renders the new image
     // through the same path as a fal frame.
-    this.scene = { ...this.scene, version, references: [] };
+    this.scene = { ...this.scene, version };
     this.lastGeneratedScene = this.scene;
     this.send({ type: "scene.state", state: this.scene });
 

@@ -10,43 +10,43 @@ Older entries (clickable suggestion chips per scene field, the pre-generated dem
 
 ### Status
 
-**Brainstorm — not designed yet.** Open product question first, then architecture.
+**Designed — ready to build.** Decisions locked 2026-05-20. Coexists with §3 (prompt collapse); image-anchor UI ships on top of the collapsed single-prompt surface, but the server work is surface-independent and can land in parallel.
 
 ### Context
 
-Today the pipeline is **text-to-image only**, by deliberate choice. `apps/server/src/generation/fal-provider.ts:5-12` documents the reasoning: the `/edit` endpoint costs ~3.7× per frame, and reference-image identity-lock fights against mid-session subject pivots — we want the next frame to follow the prompt, not blend with a previous hero.
+Today the pipeline is **text-to-image only**, by deliberate choice. `apps/server/src/generation/fal-provider.ts:5-12` documents the reasoning: the `/edit` endpoint costs ~3.7× per frame, and reference-image identity-lock fights against mid-session subject pivots. The header comment narrows on `/edit` specifically — a *style-strength* image reference at low weight is a different parameter and a different code path; it doesn't violate the invariant.
 
-The user-facing idea: let someone upload **their own image** (a band photo, an album cover, a personal photo, a logo) and have generated frames derive from it — same style, same palette, same subject identity riding the audio.
+The user-facing idea: someone uploads **their own image** (band photo, album cover, personal photo, logo) and a session-wide *anchor strength* slider controls how strongly generated frames derive from it.
 
-This isn't a small add. It pushes against the stated design invariant. So the plan has to answer: *under what mode does identity-lock become a feature instead of a bug?*
+### Locked decisions
 
-### Open questions to resolve before any code
+1. **Strength control**: three named presets — *style only* (~0.3) / *style + subject* (~0.55) / *lock subject* (~0.8) — mapped to fixed `image_prompt_strength` values. Single dropdown, never a free-floating number.
+2. **Storage**: `fal.storage.upload()` only. Returned URL lives on the live `Session` instance in memory. **No R2, no S3, no `user_uploads` DB table.** Session-bound, drops on disconnect. Anon + authed both supported.
+3. **Endpoint**: TBD spike — `klein/9b` (current default) is text-only. Need a fal model that accepts `image_prompt` + `image_prompt_strength` (likely a `flux-pro` variant). Confirm per-frame cost before committing.
+4. **Pricing**: new debit rate constant for anchor-mode in `credits.service.ts` (likely 2–3× text-to-image rate). Free-tier still applies. Cost surfaced in HUD before user enables.
+5. **Moderation, three thin layers**: (a) client-side size/mime/dim pre-check; (b) fal NSFW classifier on the upload itself before accepting; (c) `enable_safety_checker: true` on the anchor-mode generation call (currently `false` for text-mode; anchor-mode flips it). Plus a clickwrap "I have rights to this image". No face-detection / non-consenting-person detection in v1 — documented gap.
 
-1. **What does "derive from" mean?**
-   - **Style transfer** — keep the user's image as a style anchor, generate new subjects in that style. (Closer to today's free-form prompting; smaller pivot.)
-   - **Identity lock** — keep the subject (the user's face, the band, the logo) and vary environment/mood/palette via the existing four-field prompt. (Bigger product shift, more "personalized music video".)
-   - **Hybrid** — start identity-locked, decay to style-only as the session progresses or as the prompt diverges.
-2. **Which fal endpoint?** `/edit` is the obvious candidate but billing is 1MP in + 1MP out (~3.7× a text-to-image frame). At that cost, demo library frames remain the cheap path and uploads become the premium path. Acceptable? Pricing implication for credits.
-3. **Per-session or per-account?** Does the upload live for one session and vanish, or is it a saved asset? Saved means a new DB table, storage retention, GDPR/DSAR surface.
-4. **Moderation.** Free-form uploads → NSFW / IP / identity-of-non-consenting-person risks. fal has moderation on inputs but we'd want our own layer; minimum: a `nsfw_detected` flag returned from fal, surface a "rejected" state in the client.
+### Architecture
 
-### Sketch of where this would land
+- **Upload route** — `apps/server/src/uploads/upload-routes.ts` (new). Multipart POST → fal NSFW classifier → `fal.storage.upload()` → return the fal-hosted URL. Logs URL + sessionId for audit; no DB row.
+- **Anchor provider** — `apps/server/src/generation/anchor-provider.ts` (new). Mirrors the shape of `fal-provider.ts:streamPreview` but calls the chosen fal endpoint with `image_url` + `image_prompt_strength` + `enable_safety_checker: true`.
+- **Third trigger branch** — `apps/server/src/session/session.ts:477` (`trigger()`). Order: demo-library short-circuit (existing) → image-anchor branch (new, when `imageAnchor.url` set) → text-to-image (existing). Image-anchor overrides anon-pinned demo mode.
+- **WS mutation** — `setImageAnchor({ url, strength } | { clear: true })` in `packages/api/src/routers/session.router.ts`, mirroring the existing `setDemoMode` shape.
+- **UI surface** — small upload zone + 3-preset dropdown adjacent to the collapsed prompt textarea (paperclip-style). Clickwrap shown on first upload per session.
+- **fal-provider.ts header** — narrow "no reference images" → "no `/edit` endpoint, but low-weight `image_prompt` references are a separate path (see `anchor-provider.ts`)". Do not delete the original reasoning.
 
-- **Storage** — same R2 (or S3) bucket the demo library already needs. New `user_uploads` table with `id`, `userId`, `url`, `width`, `height`, `mimeType`, `status` ("active" | "rejected" | "expired"), `expiresAt`. TTL of e.g. 7 days unless the user is on a paid plan.
-- **Upload surface** — drag-drop zone on the visualizer controls panel, or a "+" button next to the prompt fields. Reuse the same controls slot pattern as `SceneTemplatePicker`.
-- **Generation switch** — `apps/server/src/session/session.ts` gets a third branch alongside text-to-image and the existing library-mode short-circuit: if the session has an `activeUploadId`, route through a new `apps/server/src/generation/edit-provider.ts` that calls fal `/edit` with the upload URL + the assembled prompt.
-- **Credit pricing** — `apps/server/src/credits/credits.service.ts` needs a separate per-frame debit constant for edit-mode (~3–4× the text-to-image rate). Surface the higher cost in the UI before the user enables upload-mode.
-- **Conflict with the existing invariant** — the `fal-provider.ts` comment block should be updated, not deleted. Edit-mode coexists; text-to-image stays the default.
+### Critical files
 
-### Critical files (when designed)
-
-- `packages/db/src/schema/user-uploads.db.ts` *(new)*
-- `apps/server/src/generation/edit-provider.ts` *(new)*
-- `apps/server/src/session/session.ts` — third generation branch.
-- `apps/server/src/credits/credits.service.ts` — edit-mode debit rate.
-- `apps/web/src/components/visualizer/controls/upload-zone.tsx` *(new)*
-- `apps/server/src/uploads/upload-routes.ts` *(new)* — presigned-URL endpoint.
-- `apps/server/src/generation/fal-provider.ts` — update header comment to note the edit-mode exception.
+- `apps/server/src/uploads/upload-routes.ts` *(new)*
+- `apps/server/src/generation/anchor-provider.ts` *(new)*
+- `apps/server/src/session/session.ts` — third trigger branch + `setImageAnchor` + in-memory `imageAnchor` field.
+- `apps/server/src/credits/credits.service.ts` — anchor-mode debit rate.
+- `apps/server/src/generation/fal-provider.ts` — narrow header comment.
+- `packages/api/src/routers/session.router.ts` — `setImageAnchor` mutation + scene event shape.
+- `packages/shared/src/typeid.ts` — if we typeid the upload (probably skip for v1, just use the raw fal URL).
+- `apps/web/src/components/visualizer/controls/image-anchor-zone.tsx` *(new)* — upload zone + preset dropdown.
+- `apps/web/src/components/visualizer/controls/anchor-clickwrap.tsx` *(new)* — first-use consent.
+- `apps/web/src/stores/visualizer/image-anchor-slice.ts` *(new)* — zustand slice.
 
 ---
 
@@ -105,3 +105,62 @@ Start with **shape A**. It unlocks the share moment, validates demand, reuses st
 - `apps/web/src/components/visualizer/share/share-button.tsx` *(new)* — UI surface.
 - `apps/server/src/uploads/clip-routes.ts` *(new)* — presigned-URL endpoint for the clip, returns a public share URL.
 - `apps/server/src/integrations/slack/` *(new — only if pursuing Slack direct-post)* — OAuth + `files.upload` wrapper.
+
+---
+
+## 3. Collapse scene state to a single prompt field
+
+### Status
+
+**Designed — ready to build.** Decisions locked 2026-05-20. User explicitly chose "real collapse" over the min-change option, accepting that voice intent has to learn to rewrite prompts instead of patching atoms.
+
+### Context
+
+`SonaraSceneState` today carries four fields — `subject`, `environment`, `mood`, `palette` — and the UI exposes one input per field. Each is independently editable; the LLM "song muse" (`apps/server/src/generation/song-muse.ts`) returns those exact four keys; voice intent patches them individually ("warmer" → mutates only `mood`); the trigger guard at `session.ts:506` requires non-empty `scene.subject`.
+
+The 4-field shape is the contract between UI, muse, voice controller, and renderer. **Onboarding cost is real** — new users see four blank inputs and bounce. Modern image-gen UX is one prompt box. The distinctive personality the four fields encode is a brand asset, but its onboarding tax outweighs the differentiation.
+
+### Locked decisions
+
+1. **Drop the four fields entirely.** `SonaraSceneState` becomes `{ prompt: string }`. No "advanced view" hiding the old fields — they're gone.
+2. **Muse outputs one sentence.** `song-muse.ts` JSON contract changes to `{ prompt: string }`. Existing 4-field parser/coercion is deleted.
+3. **Voice intent rewrites the prompt.** "Make it warmer" calls an LLM with the current prompt + the intent, gets back a new prompt. Cheap fal `any-llm` call, same as the muse. Spike this early — it's the riskiest piece of the refactor.
+4. **Templates collapse to one string each.** `SCENE_TEMPLATES` in `packages/shared/src/scene-templates.ts` becomes `{ label: string, prompt: string }[]`. Existing 4-field templates flatten via concatenation as a one-time migration.
+5. **Trigger guard becomes empty-prompt.** `session.ts:506` checks `!scene.prompt.trim()` instead of `!scene.subject.trim()`.
+
+### Architecture
+
+- **Shared types** — `packages/shared/src/scene.ts` (or wherever `SonaraSceneState` lives): new shape. Delete `SCENE_FIELDS`, `SceneFieldKey`.
+- **Muse** — `apps/server/src/generation/song-muse.ts`: rewrite JSON contract + parser. Output is one sentence ≤ 120 chars, sumi-e-flavoured by default.
+- **Voice intent** — wherever voice atoms currently dispatch (likely inline in `session.ts`): replace per-atom patch with a single `rewritePromptWithIntent(currentPrompt, intent)` LLM call. New helper in `apps/server/src/generation/` mirroring `song-muse.ts`.
+- **Session** — `apps/server/src/session/session.ts`: simplify scene merge (no more per-field user-touched-flag), update empty guard, update `serializeResolvedScene` to a no-op pass-through.
+- **WS contract** — `packages/api/src/routers/session.router.ts`: `scene.patch` shape changes from `Partial<{subject, environment, mood, palette}>` to `{ prompt: string }`.
+- **Client UI** — `apps/web/src/components/visualizer/controls/prompt-input.tsx`: replace the `SCENE_FIELDS.map(...)` loop with a single textarea. Delete `field-row.tsx`, `scene-fields.ts`. Keep the commit-flash and sweep animation.
+- **Store** — `apps/web/src/stores/visualizer-store.ts`: shrink the scene slice.
+
+### Risks
+
+- **Voice path regression.** The LLM rewrite is slower than an atom patch (300–600 ms vs instant) and can produce a prompt the user didn't expect. Mitigations: stream the rewrite to the UI so the user sees the change land; allow undo. If the rewrite quality is bad, fall back to appending the intent ("warmer") to the prompt.
+- **Loss of fine-grained control.** Power-users who liked tweaking just `palette` lose that. Acceptable per the locked direction.
+- **Scene-template migration.** Flattening the 4 fields into one sentence per template needs a quick pass for readability. ~10 templates, 10 min of editing.
+
+### Critical files
+
+- `packages/shared/src/scene-templates.ts` — collapse template shape, rewrite each as a single sentence.
+- `packages/shared/src/scene.ts` *(or current location)* — new `SonaraSceneState`, drop `SCENE_FIELDS`.
+- `apps/server/src/generation/song-muse.ts` — single-sentence output contract.
+- `apps/server/src/generation/voice-rewrite.ts` *(new)* — LLM helper for "rewrite this prompt with intent X".
+- `apps/server/src/session/session.ts` — simplify merge, update trigger guard, swap voice dispatch.
+- `packages/api/src/routers/session.router.ts` — `scene.patch` shape.
+- `apps/web/src/components/visualizer/controls/prompt-input.tsx` — single textarea.
+- `apps/web/src/lib/scene-fields.ts` — *delete*.
+- `apps/web/src/components/visualizer/controls/field-row.tsx` — *delete*.
+- `apps/web/src/stores/visualizer-store.ts` — shrink scene slice.
+
+### Order of operations
+
+1. **Spike** the voice-rewrite LLM call in isolation (one file, throwaway). Verify latency + quality before committing the refactor.
+2. **Shared types** — change `SonaraSceneState` shape, fix everything that breaks.
+3. **Server** — muse, voice, session, templates.
+4. **Client** — PromptInput, store, delete dead components.
+5. **Smoke test** in browser: text input, voice "warmer", template click, demo mode toggle, anon flow.
