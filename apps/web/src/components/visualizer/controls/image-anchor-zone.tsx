@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
+import { FRAME_COST_CREDITS } from "@sonara/shared";
 import type { SessionSend } from "@/lib/session-actions";
 import {
   STRENGTH_PRESET_LABELS,
@@ -179,9 +180,17 @@ export function ImageAnchorZone({ send }: ImageAnchorZoneProps) {
 
   return (
     <div className="flex flex-col gap-2">
-      <span className="font-sans text-[9px] uppercase tracking-[0.28em] text-[color:var(--stone)]">
-        anchor image
-      </span>
+      <div className="flex items-baseline justify-between">
+        <span className="font-sans text-[9px] uppercase tracking-[0.28em] text-[color:var(--stone)]">
+          anchor image
+        </span>
+        <span
+          className="font-sans text-[9px] uppercase tracking-[0.2em] text-[color:var(--signal)]"
+          title={`Image-anchor frames cost ${FRAME_COST_CREDITS.anchor} credits each (vs ${FRAME_COST_CREDITS.text} for normal frames) — the underlying model is heavier.`}
+        >
+          ~{FRAME_COST_CREDITS.anchor} cr / frame
+        </span>
+      </div>
 
       {thumbnail ? (
         <div className="flex items-center gap-3">
