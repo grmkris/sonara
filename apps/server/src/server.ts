@@ -1,14 +1,21 @@
 import { Hono } from "hono";
 import {
+  buildContext,
+  RPCHandler,
   sessionRouter,
   WsRPCHandler,
   type SessionContext,
 } from "@sonara/api/server";
+import { createDb } from "@sonara/db";
 import { runMigrations } from "@sonara/db/migrator";
 import { verifyTicket } from "@sonara/shared";
+import type { UserId } from "@sonara/shared/typeid";
+import { getAuth } from "./auth/auth";
 import { seedLibraryOnBoot } from "./db/library-boot-seed";
 import { env } from "./env";
+import { uploadImage } from "./http/upload";
 import { logger } from "./lib/logger";
+import { appRouter } from "./rpc/app.router";
 import { SessionManager } from "./session/session-manager";
 
 // Apply pending schema migrations before binding the HTTP port. Matches
@@ -28,10 +35,41 @@ const port = env.PORT;
 
 const app = new Hono();
 
+// Shared singletons for the HTTP surface. The auth instance owns its own db
+// pool (Better Auth + Dodo webhook); a second pool backs the oRPC context.
+// createDb pools per connection string, so this is cheap.
+const auth = getAuth();
+const db = createDb(env.DATABASE_URL);
+const rpcHandler = new RPCHandler(appRouter);
+
 app.get("/health", (c) => c.json({ ok: true }));
 app.get("/", (c) =>
   c.text("sonara server — connect to /ws via WebSocket"),
 );
+
+// Better Auth owns every /api/auth/* path (sign-up, session, sign-out, and
+// the Dodo webhook at /api/auth/dodopayments/webhook). Reached from the
+// browser same-origin through the gateway, so cookies are first-party.
+app.on(["GET", "POST"], "/api/auth/*", (c) => auth.handler(c.req.raw));
+
+// Image-anchor upload (multipart → fal storage).
+app.post("/api/upload/image", (c) => uploadImage(c.req.raw));
+
+// oRPC HTTP router (credits, mintWsTicket). Build the context per request
+// from the Better Auth session, then delegate to the oRPC fetch handler.
+app.all("/rpc/*", async (c) => {
+  const session = await auth.api.getSession({ headers: c.req.raw.headers });
+  const context = buildContext({
+    db,
+    session: session ? { user: { id: session.user.id as UserId } } : null,
+  });
+  const { matched, response } = await rpcHandler.handle(c.req.raw, {
+    prefix: "/rpc",
+    context,
+  });
+  if (matched) return response;
+  return c.notFound();
+});
 
 const manager = new SessionManager(logger);
 
@@ -51,6 +89,8 @@ interface WsData {
 
 const server = Bun.serve<WsData, never>({
   port,
+  // Dual-stack bind so Railway's private network (gateway → server.railway.internal) reaches us.
+  hostname: "::",
   async fetch(req, srv) {
     const url = new URL(req.url);
     if (url.pathname === "/ws") {

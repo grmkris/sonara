@@ -18,10 +18,10 @@
     "fix": "ultracite fix --type-aware --type-check",
     "fix:unsafe": "ultracite fix --unsafe --type-aware --type-check",
     "ci:local": "turbo run lint typecheck test build --concurrency=1",
-    "db:start": "turbo -F @sonara/db db:start",
-    "db:stop": "turbo -F @sonara/db db:stop",
-    "db:down": "turbo -F @sonara/db db:down",
-    "db:watch": "turbo -F @sonara/db db:watch"
+    "db:start": "bun --filter @sonara/db db:start",
+    "db:stop": "bun --filter @sonara/db db:stop",
+    "db:down": "bun --filter @sonara/db db:down",
+    "db:watch": "bun --filter @sonara/db db:watch"
   },
   "devDependencies": {
     "@types/bun": "^1.1.14",

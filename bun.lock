@@ -15,15 +15,22 @@
         "ultracite": "^7.6.0",
       },
     },
+    "apps/gateway": {
+      "name": "gateway",
+      "version": "0.1.0",
+    },
     "apps/server": {
       "name": "server",
       "version": "0.1.0",
       "dependencies": {
+        "@dodopayments/better-auth": "^1.5.0",
         "@fal-ai/client": "^1.9.5",
         "@orpc/server": "^1.14.0",
         "@sonara/api": "workspace:*",
         "@sonara/db": "workspace:*",
         "@sonara/shared": "workspace:*",
+        "better-auth": "^1.6.6",
+        "dodopayments": "^2.27.0",
         "drizzle-orm": "^0.45.2",
         "hono": "^4.12.12",
         "pg": "^8.20.0",
@@ -44,22 +51,17 @@
       "version": "0.1.0",
       "dependencies": {
         "@dodopayments/better-auth": "^1.5.0",
-        "@fal-ai/client": "^1.9.5",
         "@ffmpeg/ffmpeg": "^0.12.15",
         "@orpc/client": "^1.14.0",
-        "@orpc/server": "^1.14.0",
         "@radix-ui/react-slider": "^1.2.4",
         "@radix-ui/react-slot": "^1.2.4",
         "@sonara/api": "workspace:*",
-        "@sonara/db": "workspace:*",
         "@sonara/shared": "workspace:*",
         "@tanstack/react-query": "^5.96.2",
         "better-auth": "^1.6.6",
         "class-variance-authority": "^0.7.1",
         "clsx": "^2.1.1",
         "cmdk": "^1.1.1",
-        "dodopayments": "^2.27.0",
-        "drizzle-orm": "^0.45.2",
         "lucide-react": "^1.8.0",
         "meyda": "^5.6.3",
         "next": "^16.2.2",
@@ -80,6 +82,7 @@
         "@types/react": "^19.2.14",
         "@types/react-dom": "^19.2.3",
         "react-grab": "^0.1.31",
+        "server": "workspace:*",
         "tailwindcss": "^4.2.4",
         "typescript": "^6.0.3",
       },
@@ -976,6 +979,8 @@
     "function-bind": ["function-bind@1.1.2", "", {}, "sha512-7XHNxH7qX9xG5mIwxkhumTox/MIRNcOgDrxWsMt2pAr23WHp6MrRlN7FBSFpCpr+oVO0F744iUgR82nJMfG2SA=="],
 
     "fuzzysort": ["fuzzysort@3.1.0", "", {}, "sha512-sR9BNCjBg6LNgwvxlBd0sBABvQitkLzoVY9MYYROQVX/FvfJ4Mai9LsGhDgd8qYdds0bY77VzYd5iuB+v5rwQQ=="],
+
+    "gateway": ["gateway@workspace:apps/gateway"],
 
     "gensync": ["gensync@1.0.0-beta.2", "", {}, "sha512-3hN7NaskYvMDLQY55gnW3NQ+mesEAepTqlg+VEbj7zzqEMBVNhzcGYYeqFo/TlYz6eQiFcp1HcsCZO+nGgS8zg=="],
 

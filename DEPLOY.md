@@ -4,6 +4,8 @@
 
 Public traffic enters via Cloudflare DNS on the `sonara.fm` zone (DNS + TLS edge only, no compute). Everything else runs on Railway via Docker.
 
+> **Note — the tables/diagram immediately below describe the *pre-gateway* topology that may still be live.** The current codebase expects the **Caddy gateway** topology; see **`## Gateway cutover`** below for the new layout and the one-time migration steps. After cutover, the `web` and `server` services are internal-only and a new `gateway` service is the single public entry.
+
 | Service | Source | Public URL | Notes |
 |---|---|---|---|
 | `server` (Bun + Hono + WS) | `apps/server/Dockerfile` | `https://api.sonara.fm` | Runs `packages/db` migrator on boot, then binds. Healthcheck `/health`. WSS `/ws`. |
@@ -41,6 +43,54 @@ Public traffic enters via Cloudflare DNS on the `sonara.fm` zone (DNS + TLS edge
                          ↕
                  fal.ai / AudD
 ```
+
+---
+
+## Gateway cutover
+
+The single source of truth is now the **server**; the **web** app is a thin frontend. A **Caddy gateway** (`apps/gateway`, `caddy:2-alpine`) becomes the only public service and path-routes the browser's requests to web vs server over Railway's internal network — so everything is same-origin (cookies first-party, no CORS). New target topology:
+
+```
+                    Browser
+                       │  https://sonara.fm  +  wss://sonara.fm/ws
+                       ▼
+            Cloudflare DNS (sonara.fm, proxied)
+                       │
+                       ▼
+        ┌──────────────────────────────────┐
+        │  gateway  (Caddy)  ← only public  │
+        │   /api/auth/*  /rpc/*             │
+        │   /api/upload/*  /ws   → server   │
+        │   everything else      → web      │
+        └───────┬───────────────────┬───────┘
+        web.railway.internal:4472  server.railway.internal:4471
+                │                       │
+                └───────────┬───────────┘
+                            ▼
+                        Postgres
+```
+
+**Steps (run once; safe order to avoid downtime):**
+
+1. **Create the `gateway` service** from `apps/gateway/Dockerfile` (Root Directory `/`). Set vars:
+   ```bash
+   railway variables --service gateway \
+     --set 'PORT=4470' \
+     --set 'SERVER_URL=http://server.railway.internal:4471' \
+     --set 'WEB_URL=http://web.railway.internal:4472'
+   ```
+   Make sure `server` listens on `4471` and `web` on `4472` internally (set `PORT`/`--port` accordingly; Railway also auto-injects `PORT` to the gateway).
+2. **Move secrets web → server.** Set on `server`: `APP_URL=https://sonara.fm`, and all `DODO_PAYMENTS_*` / `DODO_PRODUCT_*`. (`FAL_KEY`, `AUDD_API_KEY`, `BETTER_AUTH_SECRET`, `DATABASE_URL` are already on `server`.) Then **remove** `DATABASE_URL`, `BETTER_AUTH_SECRET`, `APP_URL`, `AUTH_DOMAIN`, `FAL_KEY`, `DODO_*` from `web`.
+3. **Set `web` runtime + rebuild vars:** `RPC_INTERNAL_URL=http://server.railway.internal:4471` and **rebuild-time** `NEXT_PUBLIC_WS_URL=wss://sonara.fm/ws`.
+4. **Update the Dodo webhook URL** in the Dodo dashboard to `https://sonara.fm/api/auth/dodopayments/webhook` (Better Auth serves it; the gateway routes `/api/auth/*` to the server).
+5. **Deploy order:** server → web → gateway.
+6. **Cloudflare:** point `CNAME @` (and `www`) at the **gateway**'s Railway CNAME target. `api.sonara.fm` is no longer needed (WSS is now `wss://sonara.fm/ws`); keep it pointed at `server` only if you want a fallback during the window, otherwise remove it + its `_railway-verify.api` TXT.
+7. **Verify** (see the `## Verify` section, gateway-origin variants):
+   ```bash
+   curl -I https://sonara.fm                      # 200 (gateway → web)
+   curl https://sonara.fm/api/auth/get-session    # null (gateway → server auth)
+   # DevTools → Network → WS: wss://sonara.fm/ws → 101
+   ```
 
 ---
 
@@ -117,43 +167,46 @@ Generate the auth secret once:
 openssl rand -base64 32
 ```
 
-### Shared (both `server` and `web`)
+> Ownership reflects the gateway topology: **all secrets live on `server`**; `web` is a thin frontend with no DB and no secrets; `gateway` only knows the two internal addresses.
+
+### `server` runtime (the single source of truth — all secrets here)
 
 | Var | Value |
 |---|---|
 | `DATABASE_URL` | `${{Postgres.DATABASE_URL}}` |
 | `BETTER_AUTH_SECRET` | output of `openssl rand -base64 32` |
-
-### `server` runtime only
-
-| Var | Value |
-|---|---|
 | `FAL_KEY` | from fal.ai dashboard |
 | `AUDD_API_KEY` | from audd.io |
-| `LOG_LEVEL` | `info` |
-
-(`PORT` is auto-injected — never set manually.)
-
-### `web` runtime
-
-| Var | Value |
-|---|---|
-| `APP_URL` | `https://sonara.fm` |
-| `AUTH_DOMAIN` | `sonara.fm` (no protocol) |
+| `APP_URL` | `https://sonara.fm` (public gateway origin — Better Auth baseURL + checkout return_url) |
 | `DODO_PAYMENTS_API_KEY` | from Dodo Payments dashboard |
 | `DODO_PAYMENTS_WEBHOOK_SECRET` | from Dodo Payments webhook settings |
 | `DODO_PAYMENTS_MODE` | `test_mode` or `live_mode` |
-| `DODO_PRODUCT_STARTER` | Dodo product id for the starter pack |
-| `DODO_PRODUCT_PRO` | Dodo product id for the pro pack |
-| `DODO_PRODUCT_MAX` | Dodo product id for the max pack |
+| `DODO_PRODUCT_STARTER` / `_PRO` / `_MAX` | Dodo product ids for the credit packs |
+| `LOG_LEVEL` | `info` |
+| `PORT` | `4471` (internal address the gateway proxies to) |
 
-Leaving the `DODO_*` vars empty in dev silently disables the Dodo plugin + checkout flow; login / anon demo still work.
+Leaving the `DODO_*` vars empty silently disables the Dodo plugin + checkout flow; login / anon demo still work. The Dodo webhook is served at `https://sonara.fm/api/auth/dodopayments/webhook`.
 
-### `web` build-time (must be set BEFORE the build runs — Next.js inlines `NEXT_PUBLIC_*` into the client bundle)
+### `web` runtime (thin frontend — no DB, no secrets)
 
 | Var | Value |
 |---|---|
-| `NEXT_PUBLIC_WS_URL` | `wss://api.sonara.fm/ws` |
+| `RPC_INTERNAL_URL` | `http://server.railway.internal:4471` (SSR-only oRPC; no window to read the gateway origin) |
+| `PORT` | `4472` (internal address the gateway proxies to) |
+
+### `web` build-time (Next.js inlines `NEXT_PUBLIC_*` at build time)
+
+| Var | Value |
+|---|---|
+| `NEXT_PUBLIC_WS_URL` | `wss://sonara.fm/ws` (same-origin through the gateway) |
+
+### `gateway` runtime
+
+| Var | Value |
+|---|---|
+| `PORT` | `4470` (also auto-injected by Railway for the public service) |
+| `SERVER_URL` | `http://server.railway.internal:4471` |
+| `WEB_URL` | `http://web.railway.internal:4472` |
 
 Set via CLI:
 
@@ -161,20 +214,24 @@ Set via CLI:
 railway variables --service server \
   --set 'DATABASE_URL=${{Postgres.DATABASE_URL}}' \
   --set "BETTER_AUTH_SECRET=$(openssl rand -base64 32)" \
-  --set 'FAL_KEY=...' --set 'AUDD_API_KEY=...' --set 'LOG_LEVEL=info'
-
-railway variables --service web \
-  --set 'DATABASE_URL=${{Postgres.DATABASE_URL}}' \
-  --set 'BETTER_AUTH_SECRET=...same...' \
-  --set 'APP_URL=https://sonara.fm' \
-  --set 'AUTH_DOMAIN=sonara.fm' \
-  --set 'NEXT_PUBLIC_WS_URL=wss://api.sonara.fm/ws' \
+  --set 'FAL_KEY=...' --set 'AUDD_API_KEY=...' --set 'LOG_LEVEL=info' \
+  --set 'APP_URL=https://sonara.fm' --set 'PORT=4471' \
   --set 'DODO_PAYMENTS_API_KEY=...' \
   --set 'DODO_PAYMENTS_WEBHOOK_SECRET=...' \
   --set 'DODO_PAYMENTS_MODE=live_mode' \
   --set 'DODO_PRODUCT_STARTER=pdt_...' \
   --set 'DODO_PRODUCT_PRO=pdt_...' \
   --set 'DODO_PRODUCT_MAX=pdt_...'
+
+railway variables --service web \
+  --set 'RPC_INTERNAL_URL=http://server.railway.internal:4471' \
+  --set 'NEXT_PUBLIC_WS_URL=wss://sonara.fm/ws' \
+  --set 'PORT=4472'
+
+railway variables --service gateway \
+  --set 'PORT=4470' \
+  --set 'SERVER_URL=http://server.railway.internal:4471' \
+  --set 'WEB_URL=http://web.railway.internal:4472'
 ```
 
 ---

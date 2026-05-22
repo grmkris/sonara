@@ -1,0 +1,21 @@
+{
+	admin off
+	auto_https off
+}
+
+# Local-dev variant of the prod Caddyfile. Run via `bun --filter gateway dev`,
+# which starts caddy:2-alpine with --network host so localhost reaches the
+# server (4471) and web (4472) processes running on the host.
+:{$PORT:4470} {
+	@server path /api/auth/* /rpc/* /api/upload/* /ws
+
+	handle @server {
+		reverse_proxy {$SERVER_URL:http://localhost:4471} {
+			flush_interval -1
+		}
+	}
+
+	handle {
+		reverse_proxy {$WEB_URL:http://localhost:4472}
+	}
+}
