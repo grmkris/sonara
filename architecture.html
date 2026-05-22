@@ -1,0 +1,599 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Sonara — Architecture &amp; Technical Flows</title>
+<style>
+  :root {
+    --ink: #0d0f14;
+    --ink-2: #141821;
+    --panel: #171c27;
+    --panel-2: #1e2530;
+    --hairline: #2c3340;
+    --paper: #ece6da;
+    --stone: #8a8f9a;
+    --stone-dim: #5a606c;
+    --signal: #d98a5b;       /* warm amber — sumi-e ember */
+    --jade: #6fb6a4;         /* server / live */
+    --violet: #a98fe0;       /* web / client */
+    --sky: #6fa8d9;          /* data / shared */
+    --rose: #e07a7a;         /* external / cost / danger */
+    --gold: #d9b25b;         /* money */
+    --mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+    --serif: "Iowan Old Style", "Palatino Linotype", Georgia, serif;
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0;
+    background:
+      radial-gradient(1200px 700px at 80% -10%, rgba(217,138,91,0.07), transparent 60%),
+      radial-gradient(900px 600px at 0% 100%, rgba(111,182,164,0.05), transparent 55%),
+      var(--ink);
+    color: var(--paper);
+    font-family: var(--sans);
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { display: grid; grid-template-columns: 248px 1fr; max-width: 1320px; margin: 0 auto; }
+
+  /* ---- nav ---- */
+  nav {
+    position: sticky; top: 0; align-self: start; height: 100vh; overflow-y: auto;
+    padding: 28px 18px 60px; border-right: 1px solid var(--hairline);
+    background: linear-gradient(180deg, var(--ink-2), transparent);
+  }
+  nav .brand { font-family: var(--serif); font-size: 22px; letter-spacing: .02em; margin: 0 0 2px; }
+  nav .brand b { color: var(--signal); font-weight: 600; }
+  nav .tag { font-size: 11px; color: var(--stone); text-transform: uppercase; letter-spacing: .22em; margin-bottom: 22px; }
+  nav a {
+    display: block; color: var(--stone); text-decoration: none; font-size: 13px;
+    padding: 5px 10px; border-radius: 6px; border-left: 2px solid transparent; transition: .15s;
+  }
+  nav a:hover { color: var(--paper); background: var(--panel); }
+  nav a.sub { padding-left: 22px; font-size: 12px; color: var(--stone-dim); }
+  nav .grp { font-size: 10px; text-transform: uppercase; letter-spacing: .2em; color: var(--stone-dim); margin: 18px 10px 6px; }
+
+  /* ---- main ---- */
+  main { padding: 40px 52px 120px; min-width: 0; }
+  h1 { font-family: var(--serif); font-size: 40px; line-height: 1.12; margin: 0 0 8px; }
+  h1 .accent { color: var(--signal); }
+  .lede { font-size: 16px; color: var(--stone); max-width: 70ch; margin: 0 0 10px; }
+  .stamp { font-family: var(--mono); font-size: 11px; color: var(--stone-dim); margin-bottom: 38px; }
+  section { margin: 0 0 56px; scroll-margin-top: 24px; }
+  h2 { font-family: var(--serif); font-size: 27px; margin: 48px 0 6px; padding-top: 14px; border-top: 1px solid var(--hairline); }
+  h2 .num { color: var(--signal); font-size: 16px; font-family: var(--mono); margin-right: 10px; vertical-align: 2px; }
+  h3 { font-size: 17px; margin: 26px 0 8px; color: var(--paper); }
+  p { max-width: 74ch; }
+  p, li { color: #cbc8c0; }
+  strong { color: var(--paper); }
+  a.inline { color: var(--signal); text-decoration: none; border-bottom: 1px dotted var(--signal); }
+  code {
+    font-family: var(--mono); font-size: 12.5px; background: var(--panel-2);
+    border: 1px solid var(--hairline); border-radius: 4px; padding: 1px 5px; color: #e3ddd0;
+  }
+  .path { color: var(--sky); }
+
+  /* ---- cards / callouts ---- */
+  .card { background: var(--panel); border: 1px solid var(--hairline); border-radius: 12px; padding: 18px 20px; margin: 14px 0; }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  .grid3 { display: grid; grid-template-columns: repeat(3,1fr); gap: 14px; }
+  @media (max-width: 900px){ .grid2,.grid3{grid-template-columns:1fr;} .wrap{grid-template-columns:1fr;} nav{position:static;height:auto;} main{padding:28px;} }
+  .note { border-left: 3px solid var(--signal); background: rgba(217,138,91,0.07); padding: 12px 16px; border-radius: 0 8px 8px 0; margin: 16px 0; }
+  .note.jade { border-color: var(--jade); background: rgba(111,182,164,0.07); }
+  .note.rose { border-color: var(--rose); background: rgba(224,122,122,0.07); }
+  .note .lbl { font-size: 10px; text-transform: uppercase; letter-spacing: .2em; color: var(--signal); display: block; margin-bottom: 4px; }
+  .note.jade .lbl { color: var(--jade); } .note.rose .lbl { color: var(--rose); }
+
+  /* ---- tables ---- */
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13.5px; }
+  th, td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--hairline); vertical-align: top; }
+  th { color: var(--stone); font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: .12em; }
+  td code { font-size: 11.5px; }
+  tr:hover td { background: rgba(255,255,255,0.015); }
+
+  /* ---- diagram primitives ---- */
+  .flow { display: flex; flex-wrap: wrap; align-items: stretch; gap: 0; margin: 18px 0; }
+  .node {
+    background: var(--panel-2); border: 1px solid var(--hairline); border-radius: 10px;
+    padding: 12px 14px; font-size: 13px; flex: 1; min-width: 130px; position: relative;
+  }
+  .node .t { font-weight: 600; color: var(--paper); display: block; margin-bottom: 3px; }
+  .node .d { font-size: 11.5px; color: var(--stone); font-family: var(--mono); }
+  .arrow { display: flex; align-items: center; justify-content: center; padding: 0 6px; color: var(--signal); font-size: 20px; flex: 0 0 auto; }
+  .arrow.down { width: 100%; padding: 4px 0; }
+  .lane { border-radius: 12px; border: 1px solid var(--hairline); padding: 16px; margin: 14px 0; }
+  .lane.web { border-color: rgba(169,143,224,.4); background: rgba(169,143,224,.04); }
+  .lane.srv { border-color: rgba(111,182,164,.4); background: rgba(111,182,164,.04); }
+  .lane.ext { border-color: rgba(224,122,122,.4); background: rgba(224,122,122,.04); }
+  .lane .h { font-size: 11px; text-transform: uppercase; letter-spacing: .2em; margin: 0 0 12px; font-weight: 700; }
+  .lane.web .h { color: var(--violet); } .lane.srv .h { color: var(--jade); } .lane.ext .h { color: var(--rose); }
+
+  /* ---- sequence ---- */
+  .seq { counter-reset: step; margin: 16px 0; }
+  .seq .row { display: grid; grid-template-columns: 30px 150px 1fr; gap: 12px; align-items: start; padding: 8px 0; border-bottom: 1px dashed var(--hairline); }
+  .seq .row:before { counter-increment: step; content: counter(step); font-family: var(--mono); font-size: 11px; color: var(--ink); background: var(--signal); width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; font-weight: 700; }
+  .seq .who { font-family: var(--mono); font-size: 12px; color: var(--jade); padding-top: 2px; }
+  .seq .who.web { color: var(--violet); } .seq .who.ext { color: var(--rose); }
+  .seq .what { font-size: 13.5px; }
+
+  /* ---- pills ---- */
+  .pill { display: inline-block; font-family: var(--mono); font-size: 11px; padding: 2px 8px; border-radius: 20px; border: 1px solid var(--hairline); color: var(--stone); margin: 2px 3px 2px 0; }
+  .pill.web { color: var(--violet); border-color: rgba(169,143,224,.5); }
+  .pill.srv { color: var(--jade); border-color: rgba(111,182,164,.5); }
+  .pill.ext { color: var(--rose); border-color: rgba(224,122,122,.5); }
+  .pill.new { color: var(--signal); border-color: rgba(217,138,91,.6); background: rgba(217,138,91,.08); }
+
+  ul.tight { margin: 8px 0; } ul.tight li { margin: 3px 0; }
+  .kbd { font-family: var(--mono); font-size: 11px; background: var(--ink); border: 1px solid var(--hairline); border-bottom-width: 2px; border-radius: 4px; padding: 1px 6px; }
+  hr.soft { border: none; border-top: 1px solid var(--hairline); margin: 30px 0; }
+  .foot { font-size: 12px; color: var(--stone-dim); margin-top: 60px; padding-top: 20px; border-top: 1px solid var(--hairline); }
+  .decision { font-family: var(--mono); font-size: 12.5px; background: var(--ink-2); border: 1px solid var(--hairline); border-radius: 10px; padding: 16px 18px; margin: 16px 0; white-space: pre; overflow-x: auto; color: #d4cfc4; line-height: 1.7; }
+  .decision .k { color: var(--signal); } .decision .v { color: var(--jade); } .decision .c { color: var(--stone-dim); }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<nav>
+  <p class="brand">son<b>a</b>ra</p>
+  <p class="tag">architecture map</p>
+  <a href="#tldr">Mental model</a>
+  <div class="grp">Shape</div>
+  <a href="#stack">Stack &amp; monorepo</a>
+  <a href="#topology">Runtime topology</a>
+  <a href="#scene">The scene model</a>
+  <div class="grp">The engine</div>
+  <a href="#generation">Generation: 3 paths</a>
+  <a href="#trigger">Trigger decision tree</a>
+  <a href="#expander">LLM expander &amp; cache</a>
+  <a href="#drift">Drift &amp; continuity</a>
+  <div class="grp">Hot flows</div>
+  <a href="#flow-audio" class="sub">Audio firehose</a>
+  <a href="#flow-prompt" class="sub">Prompt commit</a>
+  <a href="#flow-voice" class="sub">Voice dictation</a>
+  <a href="#flow-anchor" class="sub">Image anchor</a>
+  <a href="#flow-song" class="sub">Song recognition</a>
+  <div class="grp">Business</div>
+  <a href="#credits">Credits &amp; money</a>
+  <a href="#auth">Auth &amp; transport</a>
+  <a href="#cost">Cost envelope</a>
+  <div class="grp">Ops</div>
+  <a href="#deploy">Deploy</a>
+  <a href="#failure">Failure modes</a>
+  <a href="#files">Key files</a>
+</nav>
+
+<main>
+  <h1>Sonara <span class="accent">— Architecture</span></h1>
+  <p class="lede">A browser-based realtime AI music visualizer. Audio goes in; ~15 features stream out at 60&nbsp;Hz; a thin server orchestrates prompts and generation triggers; fal.ai returns keyframes; a WebGL2 displacement shader carries 60&nbsp;fps continuity between them.</p>
+  <p class="stamp">Reflects code state after the γ scene-collapse + image-anchor work · single-prompt model · three generation paths</p>
+
+  <!-- ===================== TLDR ===================== -->
+  <section id="tldr">
+    <h2><span class="num">00</span>Mental model in one breath</h2>
+    <div class="note">
+      <span class="lbl">The whole thing in one sentence</span>
+      The <strong>browser does the rendering and audio analysis</strong>; the <strong>server is a thin orchestrator</strong> that turns <em>prompt + audio + image-anchor</em> into fal.ai calls and emits events back; <strong>Postgres only stores auth + credits</strong>. Everything else is in-memory, one object per WebSocket connection.
+    </div>
+    <div class="grid3">
+      <div class="card"><span class="pill web">browser</span><p style="margin:8px 0 0">Audio analysis (Meyda + Web Audio), the zustand store, and the 900-line WebGL2 displacement shader. The visuals never stop moving — the shader is audio-reactive every frame even when no new image arrives.</p></div>
+      <div class="card"><span class="pill srv">bun server</span><p style="margin:8px 0 0">One <code>Session</code> per WebSocket. Holds scene state, timers, the credit gate, and the trigger logic. Calls fal.ai. Streams events back. No browser-facing HTTP beyond <code>/health</code>.</p></div>
+      <div class="card"><span class="pill ext">external</span><p style="margin:8px 0 0">fal.ai (image gen + the LLM), AudD (song fingerprint), Apple Music (track metadata), Dodo (payments). Each fails silently or degrades — none can take the app down.</p></div>
+    </div>
+  </section>
+
+  <!-- ===================== STACK ===================== -->
+  <section id="stack">
+    <h2><span class="num">01</span>Stack &amp; monorepo</h2>
+    <p>One git repo (Turborepo + Bun workspaces). Two deployable apps, four shared packages. Two Docker images, three Railway services.</p>
+    <table>
+      <tr><th>Workspace</th><th>Role</th><th>Key tech</th></tr>
+      <tr><td><code class="path">apps/web</code> <span class="pill web">web</span></td><td>Next.js standalone — SSR, the visualizer page, Better Auth, the Dodo webhook, <strong>and the image-upload route</strong></td><td>Next.js 16, React 19, Tailwind v4, zustand, Meyda, partysocket</td></tr>
+      <tr><td><code class="path">apps/server</code> <span class="pill srv">server</span></td><td>Bun process — Hono HTTP (<code>/health</code> only) + Bun.serve WebSocket. Owns the live Session, fal calls, recognition, credit debit</td><td>Hono, @orpc/server, @fal-ai/client, pino, pg</td></tr>
+      <tr><td><code class="path">packages/shared</code></td><td>Zod schemas + TS types for every event/state object. The <strong>contract</strong> between web, server, and api</td><td>zod</td></tr>
+      <tr><td><code class="path">packages/api</code></td><td>oRPC routers — the framework-agnostic <code>sessionRouter</code> that both apps build against</td><td>@orpc/server, @orpc/client</td></tr>
+      <tr><td><code class="path">packages/db</code></td><td>Drizzle schema (<code>auth</code>, <code>credits</code>, <code>image-library</code>) + <code>runMigrations()</code> boot helper</td><td>drizzle-orm, node-postgres</td></tr>
+      <tr><td><code class="path">packages/test-utils</code></td><td>pglite (in-memory Postgres) helper for tests</td><td>drizzle-orm</td></tr>
+    </table>
+    <div class="note jade">
+      <span class="lbl">The split that matters</span>
+      The cut between web and server is by <strong>transport + auth model</strong>, not "frontend vs backend". Both run server-side business logic, both touch Postgres. The browser hits <strong>web over HTTPS with a cookie</strong> (auth, payments, uploads); it hits <strong>server over WSS with an HMAC ticket</strong> (the live session). That's why they can live on different origins with no CORS.
+    </div>
+  </section>
+
+  <!-- ===================== TOPOLOGY ===================== -->
+  <section id="topology">
+    <h2><span class="num">02</span>Runtime topology</h2>
+    <p>Public traffic enters through Cloudflare DNS on the <code>sonara.fm</code> zone (DNS + TLS edge only — no compute). All compute is on Railway.</p>
+
+    <div class="lane web">
+      <p class="h">Browser tab</p>
+      <div class="flow">
+        <div class="node"><span class="t">Audio source</span><span class="d">mic · file · tab share</span></div>
+        <div class="arrow">→</div>
+        <div class="node"><span class="t">AudioEngine</span><span class="d">analyzer.ts · Meyda</span></div>
+        <div class="arrow">→</div>
+        <div class="node"><span class="t">zustand store</span><span class="d">7 slices</span></div>
+        <div class="arrow">→</div>
+        <div class="node"><span class="t">DisplacementCanvas</span><span class="d">WebGL2 · ~50 uniforms</span></div>
+      </div>
+      <div class="flow">
+        <div class="node"><span class="t">Prompt textarea / mic</span><span class="d">tap-to-dictate</span></div>
+        <div class="arrow">→</div>
+        <div class="node"><span class="t">orpc-ws.ts</span><span class="d">RPCLink over reconnecting WS</span></div>
+        <div class="arrow">↔</div>
+        <div class="node"><span class="t">use-ws-session.ts</span><span class="d">handleEvent() switch → store</span></div>
+      </div>
+    </div>
+
+    <div class="arrow down">↕ &nbsp; <span style="font-family:var(--mono);font-size:11px;color:var(--stone)">WSS /ws &nbsp;·&nbsp; HMAC ticket</span></div>
+
+    <div class="lane srv">
+      <p class="h">Bun server (one Session per connection)</p>
+      <div class="flow">
+        <div class="node"><span class="t">server.ts</span><span class="d">verifyTicket → WsRPCHandler</span></div>
+        <div class="arrow">→</div>
+        <div class="node"><span class="t">sessionRouter</span><span class="d">scenePatch · voicePatch · setImageAnchor · audioFeatures · recognize</span></div>
+        <div class="arrow">→</div>
+        <div class="node"><span class="t">Session.trigger()</span><span class="d">the decision point</span></div>
+      </div>
+      <div class="flow">
+        <div class="node"><span class="t">credit gate</span><span class="d">debit · free-tier · refund</span></div>
+        <div class="arrow">→</div>
+        <div class="node"><span class="t">scene-resolver</span><span class="d">LLM expand + cache</span></div>
+        <div class="arrow">→</div>
+        <div class="node"><span class="t">fal-provider / anchor-provider</span><span class="d">image gen</span></div>
+        <div class="arrow">→</div>
+        <div class="node"><span class="t">EventPublisher</span><span class="d">frame.* back to client</span></div>
+      </div>
+    </div>
+
+    <div class="arrow down">↕</div>
+
+    <div class="lane ext">
+      <p class="h">External APIs</p>
+      <span class="pill ext">fal.ai · FLUX.2 klein (text) + flux-pro/v1.1-ultra (anchor) + any-llm (Gemini)</span>
+      <span class="pill ext">AudD · song fingerprint</span>
+      <span class="pill ext">Apple Music · ISRC → metadata</span>
+      <span class="pill ext">Dodo · checkout + webhook</span>
+      <span class="pill srv">Postgres · auth + credits (the only durable state)</span>
+    </div>
+  </section>
+
+  <!-- ===================== SCENE MODEL ===================== -->
+  <section id="scene">
+    <h2><span class="num">03</span>The scene model <span class="pill new">recently reshaped</span></h2>
+    <p>The scene state is the heart of the contract. It used to carry <strong>eight separate text fields</strong> (subject / action / environment / style / lighting / palette / camera / mood), each with its own UI input. New users saw eight blank boxes and bounced. It was collapsed to a <strong>single <code>prompt</code> string</strong> — the user types one sentence — while the engine's depth was preserved server-side.</p>
+
+    <div class="grid2">
+      <div class="card">
+        <h3 style="margin-top:0">What the user controls now</h3>
+        <ul class="tight">
+          <li><code>prompt: string</code> — one sentence, e.g. <em>"a snow leopard in falling snow, hushed, slate and pearl"</em></li>
+          <li><code>imageAnchor?: { url, strength }</code> — optional uploaded reference image <span class="pill new">new</span></li>
+          <li>5 numeric "treatment" knobs: <code>softness</code>, <code>surrealness</code>, <code>abstraction</code>, <code>stability</code>, <code>intensity</code></li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3 style="margin-top:0">What the server adds</h3>
+        <ul class="tight">
+          <li><code>version</code> — bumped per keyframe</li>
+          <li><code>nowPlaying?</code> — set by the song-recognition pipeline</li>
+          <li>The rich <code>ResolvedSceneCore</code> — subjects, hex palette, camera, composition, drift candidates — derived by an LLM from the one sentence (next section)</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="note">
+      <span class="lbl">Why "collapse the surface, keep the engine"</span>
+      The single prompt is purely the <em>input surface</em>. Server-side, an LLM expander parses that sentence back into the same rich structured representation the 8 fields used to provide — so the visual quality and the sumi-e house style survive. The user just doesn't have to author eight fields by hand. The 5 numeric knobs stay because they modulate <em>composition and treatment</em>, which a prompt sentence can't easily express.
+    </div>
+  </section>
+
+  <!-- ===================== GENERATION ===================== -->
+  <section id="generation">
+    <h2><span class="num">04</span>Generation: three paths, one event shape</h2>
+    <p>Every keyframe is produced by exactly one of three paths. They all emit the <em>same</em> <code>frame.preview</code> / <code>frame.final</code> / <code>job.status</code> events, so the client crossfade is identical regardless of which fired.</p>
+
+    <div class="grid3">
+      <div class="card">
+        <span class="pill srv">path 1 · text</span>
+        <h3 style="margin:8px 0 6px">Text-to-image</h3>
+        <p style="margin:0;font-size:13.5px">The default. <code>fal-ai/flux-2/klein/9b</code> at 768². ~3–4&nbsp;s/frame, <strong>1 credit</strong>. Prompt is the LLM-expanded scene. No reference image — continuity comes from the client shader.</p>
+      </div>
+      <div class="card" style="border-color:rgba(217,138,91,.5)">
+        <span class="pill new">path 2 · anchor</span>
+        <h3 style="margin:8px 0 6px">Image-anchor</h3>
+        <p style="margin:0;font-size:13.5px">When the user uploaded an image. <code>fal-pro/v1.1-ultra</code> with <code>image_prompt_strength</code> from a 3-preset picker (style&nbsp;0.3 / style+subject&nbsp;0.55 / lock&nbsp;0.8). Heavier model — <strong>8 credits</strong>, safety checker on.</p>
+      </div>
+      <div class="card">
+        <span class="pill srv">path 3 · demo</span>
+        <h3 style="margin:8px 0 6px">Demo library</h3>
+        <p style="margin:0;font-size:13.5px">Pre-generated WebPs shipped in the Next build, organised into themed decks. <strong>Zero credits, zero latency, no fal call.</strong> Used for the public demo + anon visitors.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================== TRIGGER ===================== -->
+  <section id="trigger">
+    <h2><span class="num">05</span>The trigger decision tree</h2>
+    <p><code>Session.trigger(source)</code> is the single decision point. The first matching branch wins — order is deliberate. <code>source</code> is one of <code>pause · semantic · periodic · section · voice</code>, collapsed downstream to <code>kind: "auto" | "user"</code> for cooldown logic.</p>
+
+    <div class="decision"><span class="c"># Session.trigger(source) — first match wins</span>
+
+<span class="k">if</span> demoMode &amp;&amp; demoDeck            <span class="c">→ triggerLibrary()  </span><span class="v"># path 3, no credit, no fal</span>
+<span class="k">if</span> scene.imageAnchor               <span class="c">→ triggerAnchor()   </span><span class="v"># path 2, 8 credits, flux-pro</span>
+<span class="k">if</span> userId == null                  <span class="c">→ bail             </span><span class="v"># anon never reaches paid fal</span>
+<span class="k">if</span> !scene.prompt.trim()             <span class="c">→ skip             </span><span class="v"># nothing to generate</span>
+<span class="k">else</span>                                <span class="c">→ streamPreview()  </span><span class="v"># path 1, 1 credit, klein/9b</span>
+    </div>
+
+    <p>What <em>fires</em> a trigger:</p>
+    <table>
+      <tr><th>Source</th><th>Fired by</th><th>kind</th></tr>
+      <tr><td><code>semantic</code></td><td>Prompt edit whose semantic-diff clears the 0.4 threshold</td><td>user</td></tr>
+      <tr><td><code>voice</code></td><td>Dictated prompt — lowers the threshold to 0.1 so small tweaks still fire</td><td>user</td></tr>
+      <tr><td><code>pause</code></td><td>A deliberate edit settling (debounced)</td><td>user</td></tr>
+      <tr><td><code>section</code></td><td>Audio energy delta crosses a section boundary (chorus/drop)</td><td>auto</td></tr>
+      <tr><td><code>periodic</code></td><td>Timer; cadence scales with <code>intensity</code> (8–16&nbsp;s)</td><td>auto</td></tr>
+    </table>
+    <div class="note jade">
+      <span class="lbl">A subtle but important fix</span>
+      <strong>User-initiated triggers now <code>await</code> the LLM expansion</strong> before calling fal. Previously the first frame after a prompt edit used a bland deterministic fallback while the LLM filled the cache for the <em>next</em> frame — so you'd type, get a flat frame, then ~12&nbsp;s later a much nicer one. Awaiting on user triggers (but not auto-triggers, which shouldn't block) makes the first frame land rich. Costs ~1–2&nbsp;s of latency for a large quality jump.
+    </div>
+  </section>
+
+  <!-- ===================== EXPANDER ===================== -->
+  <section id="expander">
+    <h2><span class="num">06</span>The LLM expander &amp; its cache</h2>
+    <p>This is the bridge between "one user sentence" and "rich structured prompt". <code class="path">scene-llm-expander.ts</code> sends the prompt + 5 knobs to fal's <code>any-llm</code> (Gemini) and gets back a <code>ResolvedSceneCore</code>: a scene title, a subjects array (subject[0] is the byte-stable identity anchor), hex palette, lighting, mood, composition, camera, and 6–10 atmospheric "drift candidates".</p>
+
+    <div class="seq">
+      <div class="row"><div class="who">trigger()</div><div class="what">Needs a resolved scene to build the fal prompt</div></div>
+      <div class="row"><div class="who">resolver</div><div class="what">Hashes the prompt. <strong>Cache hit</strong> → return instantly. The 5 knobs do <em>not</em> bust the cache.</div></div>
+      <div class="row"><div class="who">resolver</div><div class="what"><strong>Cache miss, auto-trigger</strong> → return deterministic fallback immediately, kick off the LLM call in the background to warm the cache</div></div>
+      <div class="row"><div class="who">resolver</div><div class="what"><strong>Cache miss, user-trigger</strong> → <code>await</code> the LLM call so the first frame is rich (the fix above)</div></div>
+      <div class="row"><div class="who ext">fal any-llm</div><div class="what">Returns structured JSON; validated by zod; cached by prompt hash (5-min TTL)</div></div>
+      <div class="row"><div class="who">prompt-compiler</div><div class="what">Serializes <code>ResolvedSceneCore</code> → the final FLUX prompt string</div></div>
+    </div>
+    <div class="note">
+      <span class="lbl">Why cache by prompt</span>
+      One LLM call per unique prompt. Same prompt → same JSON → same character across every keyframe for that prompt. The cache is what gives the visuals consistency across the rapid auto-triggers without re-paying for the LLM each frame. In-memory only; warms naturally after a deploy.
+    </div>
+  </section>
+
+  <!-- ===================== DRIFT ===================== -->
+  <section id="drift">
+    <h2><span class="num">07</span>Drift &amp; visual continuity</h2>
+    <p>Two mechanisms keep a fast-moving session from feeling random:</p>
+    <div class="grid2">
+      <div class="card">
+        <h3 style="margin-top:0">Drift trajectory (server)</h3>
+        <p style="margin:0;font-size:13.5px"><code class="path">prompt-drift.ts</code> pre-samples a 10-slot trajectory of atmospheric micro-modifiers ("ink wash", "dappled light"), biased by session progress (intro → build → dissolve arc). One is appended per keyframe. Seeded from the LLM's <code>drift_candidates</code> when available, else a curated static pool.</p>
+      </div>
+      <div class="card">
+        <h3 style="margin-top:0">Displacement shader (client)</h3>
+        <p style="margin:0;font-size:13.5px">The real continuity. A monolithic WebGL2 fragment shader (~750 lines GLSL, ~30 audio-reactive uniforms) ping-pongs feedback FBOs and crossfades between keyframes over 800&nbsp;ms. <strong>It runs at 60&nbsp;fps regardless of how often new images arrive</strong> — so the visual feels alive even between generations.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================== HOT FLOWS ===================== -->
+  <section id="flow-audio">
+    <h2><span class="num">08</span>Hot flow — the audio firehose</h2>
+    <p>The highest-frequency path. Analysis runs at 60&nbsp;Hz in the browser; only a 5&nbsp;Hz digest crosses the wire.</p>
+    <div class="seq">
+      <div class="row"><div class="who web">AudioEngine</div><div class="what">Every 16&nbsp;ms: AnalyserNode + Meyda → RMS, BPM, onset, valence, arousal, chroma</div></div>
+      <div class="row"><div class="who web">AudioEngine</div><div class="what"><code>store.setAudio(features)</code> at 60&nbsp;Hz — feeds the shader uniforms directly, never leaves the browser</div></div>
+      <div class="row"><div class="who web">AudioEngine</div><div class="what"><code>session.audioFeatures(...)</code> at 5&nbsp;Hz, gated by a musicality check — the only audio that hits the wire</div></div>
+      <div class="row"><div class="who">Session</div><div class="what"><code>applyAudio()</code> → section-delta check; a big enough jump fires <code>trigger("section")</code></div></div>
+    </div>
+  </section>
+
+  <section id="flow-prompt">
+    <h2><span class="num">09</span>Hot flow — prompt commit</h2>
+    <div class="seq">
+      <div class="row"><div class="who web">User</div><div class="what">Types in the textarea, presses <span class="kbd">Enter</span></div></div>
+      <div class="row"><div class="who web">PromptInput</div><div class="what"><code>scene.patch { prompt }</code> over WS (typed) — or <code>voice.patch</code> if it came from dictation</div></div>
+      <div class="row"><div class="who">Session</div><div class="what"><code>applyPatch()</code> → <code>semanticDiff</code>; clears threshold → <code>trigger("semantic")</code></div></div>
+      <div class="row"><div class="who">resolver</div><div class="what"><strong>awaits</strong> LLM expansion (user trigger) → rich resolved scene</div></div>
+      <div class="row"><div class="who">credit gate</div><div class="what">Debit 1 credit (or consume a free-tier slot)</div></div>
+      <div class="row"><div class="who ext">fal klein/9b</div><div class="what">Returns image URL → <code>frame.final</code> event → client crossfades it in</div></div>
+    </div>
+  </section>
+
+  <section id="flow-voice">
+    <h2><span class="num">10</span>Hot flow — voice dictation <span class="pill new">reworked</span></h2>
+    <p>Voice used to be field-keyed push-to-talk (hold S/E/M/P to speak into one of the four fields). With one prompt field, it's now <strong>tap-to-dictate</strong>: tap the mic, the interim transcript streams into the textarea as a draft, tap to stop, review, press Enter. There is no LLM "intent parsing" — dictation is just typing with your voice.</p>
+    <div class="seq">
+      <div class="row"><div class="who web">User</div><div class="what">Taps the mic button on the textarea</div></div>
+      <div class="row"><div class="who web">useVoiceRecognition</div><div class="what">Browser SpeechRecognition in continuous mode; <code>onResult</code> streams interim text → fills the textarea draft</div></div>
+      <div class="row"><div class="who web">User</div><div class="what">Taps mic to stop, edits if needed, presses <span class="kbd">Enter</span></div></div>
+      <div class="row"><div class="who web">PromptInput</div><div class="what">Commits via <code>voice.patch</code> → server uses the lower 0.1 semantic threshold so even small spoken tweaks regenerate</div></div>
+    </div>
+  </section>
+
+  <section id="flow-anchor">
+    <h2><span class="num">11</span>Hot flow — image anchor <span class="pill new">new feature</span></h2>
+    <p>The upload route lives on the <strong>web</strong> service (Next.js Route Handler), not the Bun server — keeping the "browser HTTP only talks to web" invariant. The image is stored on fal's CDN; we never run our own bucket. The URL lives only on the live Session and drops on disconnect.</p>
+    <div class="seq">
+      <div class="row"><div class="who web">User</div><div class="what">Drops a JPG/PNG/WebP into the anchor zone (first time → a one-line rights clickwrap)</div></div>
+      <div class="row"><div class="who web">image-anchor-zone</div><div class="what">Optimistic thumbnail via <code>URL.createObjectURL</code>; POST multipart to <code>/api/upload/image</code></div></div>
+      <div class="row"><div class="who web">upload route</div><div class="what">Better Auth session check → validate (≤5&nbsp;MB, image mime) → <code>fal.storage.upload(file)</code> → return <code>{ url }</code></div></div>
+      <div class="row"><div class="who web">client</div><div class="what"><code>setImageAnchor({ url, strength })</code> over WS</div></div>
+      <div class="row"><div class="who">Session</div><div class="what">Pins <code>scene.imageAnchor</code>, clears demo mode, fires an immediate trigger (bypasses the semantic gate)</div></div>
+      <div class="row"><div class="who ext">fal flux-pro</div><div class="what">Generates with the uploaded image conditioning the look → <code>frame.final</code></div></div>
+    </div>
+    <div class="note rose">
+      <span class="lbl">Cost &amp; gating</span>
+      Anchor frames are <strong>8 credits</strong> vs 1 for text-mode (flux-pro/v1.1-ultra is ~17× pricier than klein/9b). Authed-only in v1. The model name is an env var — swap to a cheaper variant with zero code change if the cost bites.
+    </div>
+  </section>
+
+  <section id="flow-song">
+    <h2><span class="num">12</span>Hot flow — song recognition (background)</h2>
+    <div class="seq">
+      <div class="row"><div class="who web">Tab audio</div><div class="what">A ~10&nbsp;s clip is sampled (rarely, on demand)</div></div>
+      <div class="row"><div class="who">Session</div><div class="what"><code>recognize()</code> → AudD fingerprint</div></div>
+      <div class="row"><div class="who ext">AudD</div><div class="what">Returns <code>{ title, artist, isrc }</code> (or nothing → silent no-op)</div></div>
+      <div class="row"><div class="who">song-muse</div><div class="what">An LLM turns the track into <strong>one evocative prompt sentence</strong> — never quoting the title — and fills <code>scene.prompt</code> <em>only if the user hasn't typed their own</em></div></div>
+      <div class="row"><div class="who">Session</div><div class="what">Fires a trigger so the new scene lands; <code>nowPlaying</code> shows in the HUD</div></div>
+    </div>
+  </section>
+
+  <!-- ===================== CREDITS ===================== -->
+  <section id="credits">
+    <h2><span class="num">13</span>Credits &amp; the money path</h2>
+    <p>fal.ai dominates cost by two orders of magnitude, so the credit system exists almost entirely to bound it.</p>
+    <div class="grid2">
+      <div class="card">
+        <h3 style="margin-top:0">The gate (per frame)</h3>
+        <ul class="tight">
+          <li>Try to <strong>debit</strong> the per-frame cost (1 text / 8 anchor) atomically from the balance</li>
+          <li>Balance empty → try a <strong>free-tier</strong> slot (3 / hour)</li>
+          <li>Neither → deny with a cooldown-aware error toast</li>
+          <li>fal call fails after debit → <strong>refund</strong> in the same ledger</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3 style="margin-top:0">Top-up path</h3>
+        <ul class="tight">
+          <li>User buys a credit pack via <strong>Dodo Payments</strong> checkout (server-side create on web)</li>
+          <li>Dodo webhook → web → writes a <code>kind:'topup'</code> ledger row</li>
+          <li>Balance is the sum of the ledger; race-safe atomic SQL on debit</li>
+          <li>Demo + anon paths never touch credits at all</li>
+        </ul>
+      </div>
+    </div>
+    <div class="note">
+      <span class="lbl">Where the money logic actually runs</span>
+      Credit <strong>debit</strong> happens on the <em>server</em> (per frame, raw <code>pg</code> queries, no Drizzle). Credit <strong>top-up confirmation</strong> happens on <em>web</em> (the Dodo webhook + oRPC <code>confirmTopUp</code>). Both write to the same ledger table. Pricing lives in <code class="path">packages/shared/src/pricing.ts</code> as the single source of truth.
+    </div>
+  </section>
+
+  <!-- ===================== AUTH ===================== -->
+  <section id="auth">
+    <h2><span class="num">14</span>Auth &amp; transport</h2>
+    <table>
+      <tr><th>Channel</th><th>Protocol</th><th>Auth</th></tr>
+      <tr><td>Web SSR + visualizer page</td><td>HTTPS <code>sonara.fm</code></td><td>none (public — anon demo works)</td></tr>
+      <tr><td>Better Auth</td><td>HTTPS <code>/api/auth/*</code></td><td>session cookie</td></tr>
+      <tr><td>Image upload <span class="pill new">new</span></td><td>HTTPS <code>/api/upload/image</code></td><td>session cookie (Better Auth)</td></tr>
+      <tr><td>Credits / ticket mint</td><td>HTTPS oRPC on web</td><td>session cookie</td></tr>
+      <tr><td><strong>Live session</strong></td><td><strong>WSS <code>api.sonara.fm/ws</code></strong></td><td><strong>single-use HMAC ticket</strong></td></tr>
+    </table>
+    <div class="note jade">
+      <span class="lbl">The HMAC ticket trick</span>
+      The WebSocket is the <em>only</em> path that uses a ticket instead of a cookie. The browser RPC-calls <code>mintWsTicket()</code> on web (cookie-authed), gets a short-TTL signed ticket (carrying <code>userId</code> or <code>null</code> for anon), and passes it as a query param on WS upgrade. The server verifies the HMAC. This is exactly what lets <code>api.sonara.fm</code> live on a different origin from <code>sonara.fm</code> with no CORS and no shared cookies — WebSockets are origin-agnostic by construction.
+    </div>
+  </section>
+
+  <!-- ===================== COST ===================== -->
+  <section id="cost">
+    <h2><span class="num">15</span>Cost envelope</h2>
+    <p>Back-of-envelope at intensity 1.0 (~20 generations/min). <strong>fal.ai is essentially the entire bill.</strong></p>
+    <table>
+      <tr><th>Item</th><th>Shape</th><th>Note</th></tr>
+      <tr><td>fal text-mode (klein/9b)</td><td>~$0.0035 / frame</td><td>The common path</td></tr>
+      <tr><td>fal anchor-mode (flux-pro/ultra)</td><td>~$0.06 / frame</td><td>~17× — hence 8 credits</td></tr>
+      <tr><td>fal any-llm (expander + muse)</td><td>per-token, cheap</td><td>1 call per unique prompt</td></tr>
+      <tr><td>Railway (web + server + pg)</td><td>~$5–20 / mo flat</td><td>Negligible vs fal</td></tr>
+      <tr><td>AudD + Apple + everything else</td><td>~$2 / mo</td><td>Negligible</td></tr>
+    </table>
+    <div class="note rose">
+      <span class="lbl">The lever</span>
+      The whole credit + free-tier + demo-library architecture exists because a single active user at full intensity can burn ~$0.36/minute on fal. Demo mode (zero fal) is what makes the public, no-signup demo financially possible.
+    </div>
+  </section>
+
+  <!-- ===================== DEPLOY ===================== -->
+  <section id="deploy">
+    <h2><span class="num">16</span>Deploy</h2>
+    <div class="seq">
+      <div class="row"><div class="who">dev</div><div class="what"><code>git push main</code> → GitHub <code>grmkris/sonara</code></div></div>
+      <div class="row"><div class="who">Railway</div><div class="what">Auto-deploys both services from their Dockerfiles on push</div></div>
+      <div class="row"><div class="who srv">server boot</div><div class="what"><code>runMigrations(DATABASE_URL)</code> applies pending <code>packages/db/drizzle/*.sql</code> → then <code>Bun.serve()</code></div></div>
+      <div class="row"><div class="who web">web boot</div><div class="what"><code>next start</code> (standalone build)</div></div>
+    </div>
+    <div class="note">
+      <span class="lbl">Two gotchas</span>
+      <strong>(1)</strong> <code>NEXT_PUBLIC_*</code> vars are inlined at <em>build</em> time — changing them on Railway after deploy does nothing until a rebuild. <strong>(2)</strong> The local <code>.env</code> <code>DATABASE_URL</code> points at a localhost Docker Postgres for dev only; prod injects Railway's <code>${{Postgres.DATABASE_URL}}</code> at runtime. Never infer the prod stack from <code>.env</code>.
+    </div>
+  </section>
+
+  <!-- ===================== FAILURE ===================== -->
+  <section id="failure">
+    <h2><span class="num">17</span>Failure modes (all graceful)</h2>
+    <table>
+      <tr><th>What breaks</th><th>What happens</th></tr>
+      <tr><td>fal rate-limit / 5xx</td><td><code>frame.error</code> emitted; canvas holds the last texture and keeps shading (audio-reactive but static keyframe). Credit refunded.</td></tr>
+      <tr><td>AudD fails</td><td><code>nowPlaying</code> stays null; no badge, no behavior change</td></tr>
+      <tr><td>WS disconnect</td><td>partysocket reconnects with backoff; client re-mints the ticket; <code>session.state()</code> bootstrap pull re-syncs scene + anchor</td></tr>
+      <tr><td>DB unreachable on boot</td><td><code>runMigrations</code> throws → process exits → Railway restarts the service</td></tr>
+      <tr><td>WebGL2 unavailable</td><td>"WebGL2 required" overlay — there is no CSS fallback renderer</td></tr>
+      <tr><td>Upload route, FAL_KEY unset on web</td><td>Returns 503 <code>upload_not_configured</code> instead of crashing; rest of app unaffected</td></tr>
+    </table>
+  </section>
+
+  <!-- ===================== FILES ===================== -->
+  <section id="files">
+    <h2><span class="num">18</span>Key files — where to look</h2>
+    <div class="grid2">
+      <div class="card">
+        <h3 style="margin-top:0">Server — the engine</h3>
+        <ul class="tight">
+          <li><code class="path">session/session.ts</code> — the Session class, <code>trigger()</code>, all the timers</li>
+          <li><code class="path">generation/scene-llm-expander.ts</code> — prompt → ResolvedSceneCore</li>
+          <li><code class="path">generation/scene-resolver.ts</code> — the LLM cache + awaited path</li>
+          <li><code class="path">generation/fal-provider.ts</code> — text-mode image gen</li>
+          <li><code class="path">generation/anchor-provider.ts</code> — image-anchor gen <span class="pill new">new</span></li>
+          <li><code class="path">generation/song-muse.ts</code> — track → prompt sentence</li>
+          <li><code class="path">credits/credit-gate.ts</code> — debit / free-tier / refund</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3 style="margin-top:0">Web — the surface</h3>
+        <ul class="tight">
+          <li><code class="path">components/visualizer/canvas/displacement-canvas.tsx</code> — the 900-line WebGL2 heart</li>
+          <li><code class="path">components/visualizer/controls/prompt-input.tsx</code> — single textarea + mic</li>
+          <li><code class="path">components/visualizer/controls/image-anchor-zone.tsx</code> — upload UI <span class="pill new">new</span></li>
+          <li><code class="path">app/api/upload/image/route.ts</code> — upload route <span class="pill new">new</span></li>
+          <li><code class="path">stores/visualizer/</code> — the 7-slice zustand store</li>
+          <li><code class="path">hooks/use-ws-session.ts</code> — the event loop</li>
+          <li><code class="path">lib/audio/analyzer.ts</code> — Meyda + Web Audio</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3 style="margin-top:0">Shared contract</h3>
+        <ul class="tight">
+          <li><code class="path">packages/shared/src/scene.ts</code> — <code>SonaraSceneState</code> (the collapsed shape)</li>
+          <li><code class="path">packages/shared/src/scene-resolved.ts</code> — <code>ResolvedSceneCore</code></li>
+          <li><code class="path">packages/shared/src/events.ts</code> — every server→client event</li>
+          <li><code class="path">packages/api/src/routers/session.router.ts</code> — the WS procedures</li>
+          <li><code class="path">packages/shared/src/pricing.ts</code> — credit pack catalogue</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3 style="margin-top:0">Docs (companion)</h3>
+        <ul class="tight">
+          <li><code class="path">AGENTS.md</code> — repo conventions, production IDs, CLI cheat-sheet</li>
+          <li><code class="path">INFRASTRUCTURE.md</code> — topology diagrams, env matrix</li>
+          <li><code class="path">ARCHITECTURE.md</code> — render-pipeline internals, refactor backlog</li>
+          <li><code class="path">DEPLOY.md</code> — from-scratch deploy procedure</li>
+          <li><em>Note: the two .md files predate the scene-collapse; this HTML is the current picture.</em></li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <p class="foot">
+    Sonara architecture map · generated as a self-contained HTML doc · open directly in any browser, no server needed.<br/>
+    Production: <code>sonara.fm</code> (web) · <code>api.sonara.fm</code> (server WSS) · Railway + Cloudflare DNS.
+  </p>
+</main>
+</div>
+</body>
+</html>
