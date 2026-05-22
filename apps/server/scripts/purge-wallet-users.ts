@@ -8,7 +8,7 @@
  * rows where `provider_id = 'siwe'` as defence in depth.
  *
  * Usage:
- *   bun run --filter=web purge-wallet-users
+ *   bun run --filter=server purge-wallet-users
  */
 
 import { eq, like, sql } from "drizzle-orm";
@@ -22,7 +22,7 @@ function fail(msg: string): never {
 async function main() {
   const databaseUrl = process.env.DATABASE_URL;
   if (!databaseUrl) {
-    fail("DATABASE_URL not set — run from apps/web with .env in place");
+    fail("DATABASE_URL not set — run from apps/server with .env in place");
   }
   const db = createDb(databaseUrl);
 

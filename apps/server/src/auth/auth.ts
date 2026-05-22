@@ -1,16 +1,13 @@
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
-import {
-  dodopayments,
-  webhooks,
-} from "@dodopayments/better-auth";
+import { dodopayments, webhooks } from "@dodopayments/better-auth";
 import DodoPayments from "dodopayments";
 import {
   type IdTypePrefixNames,
   typeIdGenerator,
 } from "@sonara/shared/typeid";
-import { env } from "@/env";
 import { createDb, SCHEMA, type Database } from "@sonara/db";
+import { env } from "../env";
 import { createDodoWebhookHandlers } from "./dodo-webhook";
 
 // Map of Better Auth model names → our typeid prefix names. Identity here
@@ -106,7 +103,7 @@ export function createAuth(props: {
 
 export type Auth = ReturnType<typeof createAuth>;
 
-// Singleton — Next.js route handlers + server components share this instance.
+// Singleton — the Hono routes (auth handler, /rpc context, upload) share it.
 let cached: Auth | null = null;
 export function getAuth(): Auth {
   if (cached) return cached;

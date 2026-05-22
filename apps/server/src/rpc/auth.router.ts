@@ -1,14 +1,14 @@
 import { ORPCError } from "@sonara/api/server";
 import { signTicket } from "@sonara/shared";
-import { env } from "@/env";
 import { typeIdToUuid, type UserId } from "@sonara/shared/typeid";
+import { env } from "../env";
 import { publicProcedure } from "./procedures";
 
 export const authRouter = {
   // Mint a short-lived HMAC ticket (5 min TTL) the client uses to upgrade
-  // to the ws:// endpoint on apps/server. Signed-in users get their raw
+  // to the ws:// endpoint on this server. Signed-in users get their raw
   // UUID in the payload; unauthenticated visitors get a null userId —
-  // apps/server then pins that session to demo-library mode (no fal, no
+  // the server then pins that session to demo-library mode (no fal, no
   // credit debit, no AudD). Public on purpose so the marketing visitor can
   // experience the visualiser without an account.
   mintWsTicket: publicProcedure.handler(async ({ context }) => {

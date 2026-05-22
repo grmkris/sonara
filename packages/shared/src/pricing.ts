@@ -1,9 +1,19 @@
-// Top-up pack catalogue. One source of truth for both client (<TopUpButton>
-// shows the prices) and server (creates the Dodo checkout session for the
-// right product).
+// Top-up pack catalogue + per-frame cost model. One source of truth for both
+// client (<TopUpButton> shows the prices; the anchor zone shows the per-frame
+// cost) and server (creates the Dodo checkout session; the credit gate debits
+// the right amount).
 //
-// Cost model: every keyframe costs 1 credit. A 320-credit starter pack
-// yields ~320 keyframes per session.
+// Cost model is NO LONGER uniform: a standard text-to-image keyframe costs
+// FRAME_COST_CREDITS.text, but an image-anchor keyframe (heavier fal model)
+// costs FRAME_COST_CREDITS.anchor. So a 320-credit pack yields ~320 text
+// frames OR ~40 anchor frames. The credit gate (apps/server credit-gate.ts)
+// imports these so the server and the UI never disagree.
+export const FRAME_COST_CREDITS = {
+  text: 1,
+  anchor: 8,
+} as const;
+
+export type FrameMode = keyof typeof FRAME_COST_CREDITS;
 
 export type DodoProductEnv =
   | "DODO_PRODUCT_STARTER"

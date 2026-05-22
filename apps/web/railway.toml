@@ -9,6 +9,17 @@
 [build]
 builder = "DOCKERFILE"
 dockerfilePath = "apps/web/Dockerfile"
+# Rebuild when web sources OR the shared packages it imports change. Includes
+# apps/server/src/rpc because web imports the oRPC router *type* (`server/rpc`)
+# — if the router's input/output types change, web must rebuild to stay in sync.
+watchPatterns = [
+  "apps/web/**",
+  "apps/server/src/rpc/**",
+  "packages/api/**",
+  "packages/shared/**",
+  "bun.lock",
+  "package.json",
+]
 
 [deploy]
 startCommand = "bun apps/web/server.js"

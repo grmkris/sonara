@@ -3,12 +3,13 @@ import type { ApiContext } from "@sonara/api/server";
 import type { UserId } from "@sonara/shared/typeid";
 import type { Database } from "@sonara/db";
 
-export type WebContext = ApiContext<Database>;
+export type ServerHttpContext = ApiContext<Database>;
 
-// Separate builder from packages/api so procedures here know the concrete DB
-// type. Matches ai-stilist's pattern of defining procedure primitives per-app
-// once the concrete context is known.
-const o = os.$context<WebContext>();
+// Procedure primitives for the HTTP (oRPC over fetch) surface, bound to the
+// concrete server DB type. The realtime WebSocket surface uses its own
+// SessionContext primitives in packages/api — these are only for the
+// request/response routers (auth ticket, credits).
+const o = os.$context<ServerHttpContext>();
 
 export const publicProcedure = o;
 
