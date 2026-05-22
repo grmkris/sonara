@@ -16,7 +16,7 @@ interface DodoPaymentPayload {
 /**
  * Webhook handlers for the @dodopayments/better-auth `webhooks()` plugin.
  * Only `onPaymentSucceeded` is wired — we sell one-time credit packs, no
- * subscriptions. Served by better-auth at /api/auth/dodopayments/webhook.
+ * subscriptions.
  *
  * Idempotency: we store `payment_id` in `usage_ledger.tx_hash`. The partial
  * unique index `usage_ledger_tx_hash_idx WHERE tx_hash IS NOT NULL` makes

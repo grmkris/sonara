@@ -4,10 +4,6 @@
   "private": true,
   "type": "module",
   "main": "src/server.ts",
-  "exports": {
-    ".": "./src/server.ts",
-    "./rpc": "./src/rpc/app.router.ts"
-  },
   "scripts": {
     "dev": "bun run --hot src/server.ts",
     "start": "bun run src/server.ts",
@@ -17,19 +13,14 @@
     "test": "bun test || echo 'no tests yet'",
     "ingest-demo": "bun run src/scripts/ingest-demo.ts",
     "seed:library": "bun run scripts/seed-library.ts",
-    "export:library": "bun run scripts/export-library.ts",
-    "seed-credits": "bun run scripts/seed-credits.ts",
-    "purge-wallet-users": "bun run scripts/purge-wallet-users.ts"
+    "export:library": "bun run scripts/export-library.ts"
   },
   "dependencies": {
-    "@dodopayments/better-auth": "^1.5.0",
     "@fal-ai/client": "^1.9.5",
     "@sonara/api": "workspace:*",
     "@sonara/db": "workspace:*",
     "@sonara/shared": "workspace:*",
     "@orpc/server": "^1.14.0",
-    "better-auth": "^1.6.6",
-    "dodopayments": "^2.27.0",
     "drizzle-orm": "^0.45.2",
     "hono": "^4.12.12",
     "pg": "^8.20.0",

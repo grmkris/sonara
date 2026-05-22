@@ -13,16 +13,6 @@ carries continuity between them at 60 fps.
 This document is the **single map of moving parts**: every runtime, network hop, datastore,
 and external API the app touches in production.
 
-> **Topology update (May 2026) — gateway + backend unification.** A **Caddy gateway**
-> (`apps/gateway`) is now the single public service. It path-routes `/api/auth/*`, `/rpc/*`,
-> `/api/upload/*`, `/ws` to the **server** and everything else to the **web** app, over
-> `*.railway.internal` — so the browser sees one origin (`sonara.fm`), cookies are first-party,
-> and there's no CORS. The **server** owns Better Auth, the oRPC HTTP router, image upload, the
-> Dodo webhook, and the WebSocket session; **web** is a thin frontend (no DB, no secrets). The
-> diagrams below depict the pre-gateway split (`web` public on `sonara.fm`, `server` on
-> `api.sonara.fm`) — read them with that caveat. Canonical: `AGENTS.md §Production`,
-> `DEPLOY.md §Gateway cutover`.
-
 ---
 
 ## 1. The 10-second picture

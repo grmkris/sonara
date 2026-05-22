@@ -7,10 +7,13 @@
 #     --build-arg NEXT_PUBLIC_WS_URL=wss://your-server.up.railway.app/ws \
 #     -t mv-web .
 #
-# Run (thin frontend — no DB, no secrets; auth/RPC live on the server behind
-# the gateway). Reached internally by the gateway at web.railway.internal:PORT:
-#   docker run --rm -p 4472:4472 -e PORT=4472 \
-#     -e RPC_INTERNAL_URL=http://localhost:4471 \
+# Run:
+#   docker run --rm -p 4470:3000 \
+#     -e BETTER_AUTH_SECRET=... -e DATABASE_URL=... \
+#     -e APP_URL=http://localhost:4470 -e AUTH_DOMAIN=localhost:4470 \
+#     -e DODO_PAYMENTS_API_KEY=... -e DODO_PAYMENTS_WEBHOOK_SECRET=... \
+#     -e DODO_PAYMENTS_MODE=test_mode \
+#     -e DODO_PRODUCT_STARTER=... -e DODO_PRODUCT_PRO=... -e DODO_PRODUCT_MAX=... \
 #     mv-web
 #
 # Next.js standalone mode emits a self-contained server at
@@ -39,12 +42,8 @@ COPY packages/test-utils/package.json ./packages/test-utils/
 RUN bun install --no-summary
 
 # Sources needed to build web: apps/web plus the workspace packages it
-# imports (shared + api). apps/server is copied for its TYPE export only —
-# web does `import type { AppRouterClient } from "server/rpc"`, which tsc must
-# resolve at build time; `import type` is erased so no server code ships. db
-# is a transitive type dep of that router type.
+# imports (shared + api + db).
 COPY apps/web ./apps/web
-COPY apps/server ./apps/server
 COPY packages/api ./packages/api
 COPY packages/db ./packages/db
 COPY packages/shared ./packages/shared

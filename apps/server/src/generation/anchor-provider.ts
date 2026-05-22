@@ -51,24 +51,17 @@ export async function streamAnchor(input: StreamAnchorInput): Promise<void> {
 
   // image_url + image_prompt_strength is the Redux-style conditioning that
   // flux-pro/v1.1-ultra accepts. Strength range is roughly 0.05–1.0; we
-  // expose 3 preset values from the client (0.3 / 0.55 / 0.8).
-  //
-  // NOTE on the param names: this endpoint's schema uses `aspect_ratio` and
-  // `safety_tolerance` — it does NOT honour `image_size` or
-  // `enable_safety_checker` (those are the flux/dev schema and get silently
-  // dropped here). We pin `aspect_ratio: "1:1"` so anchor frames match the
-  // square text-mode frames (the default is 16:9, which both looked wrong in
-  // the canvas and ~doubled the pixel count → WebGL texture/FPS pressure).
-  // `safety_tolerance` lower = stricter; "2" is fal's own default for
-  // user-facing surfaces and actually engages the output gate.
+  // expose 3 preset values from the client (0.3 / 0.55 / 0.8). Safety
+  // checker flipped ON for anchor mode (user-supplied input is the higher-
+  // risk surface vs purely-server-generated text prompts).
   const payload: Record<string, unknown> = {
     prompt: input.prompt,
     image_url: input.imageUrl,
     image_prompt_strength: input.strength,
     num_images: 1,
-    aspect_ratio: "1:1",
+    image_size: { width: 768, height: 768 },
     output_format: "jpeg",
-    safety_tolerance: "2",
+    enable_safety_checker: true,
   };
   if (typeof input.seed === "number") payload.seed = input.seed;
 

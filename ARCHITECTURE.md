@@ -2,8 +2,6 @@
 
 A code tour for refactoring decisions. Read top-down: data flow first, then a layer-by-layer map with file paths, then an honest list of where complexity has accumulated and what to do about it.
 
-> **Backend unification (May 2026):** the API **server** is now the single source of truth — Better Auth, the oRPC HTTP router (credits, `mintWsTicket`), image upload, and the Dodo webhook all moved out of the Next.js app into `apps/server/src/{auth,rpc,http}/`. A **Caddy gateway** (`apps/gateway`) fronts both and makes everything same-origin (cookies first-party, no CORS). The web app is now a thin frontend — no DB, no secrets. See `AGENTS.md §Quick orient` + `DEPLOY.md §Gateway cutover`. Per-layer paths below that still say `apps/web/src/server/*` now live under `apps/server/`.
-
 > **Status at last update:**
 > - ✅ CSS fallback renderer deleted (was smell #5).
 > - ✅ Papari–Kuwahara painterly post-pass landed (new `uPainterly` uniform + preset field).

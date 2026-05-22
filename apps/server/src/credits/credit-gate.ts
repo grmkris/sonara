@@ -1,15 +1,12 @@
-import { FRAME_COST_CREDITS } from "@sonara/shared";
 import type { Logger } from "../lib/logger";
 import { debitFrame, refundFrame, tryConsumeFreeTier } from "./credits.service";
 
-// Per-mode credit cost. Single source of truth lives in
-// packages/shared/src/pricing.ts (FRAME_COST_CREDITS) so the UI and the
-// server never disagree. Text-mode keyframes (klein/9b) cost 1 credit;
+// Per-mode credit cost. Text-mode keyframes (klein/9b) cost 1 credit;
 // image-anchor mode (flux-pro/v1.1-ultra) costs more because the underlying
-// model is heavier. Callers pass the relevant constant to tryDebitCredit
-// via the optional `cost` field.
-export const COST_PER_FRAME = FRAME_COST_CREDITS.text;
-export const ANCHOR_FRAME_COST_CREDITS = FRAME_COST_CREDITS.anchor;
+// model is ~17× pricier. Callers pass the relevant constant to
+// tryDebitCredit via the optional `cost` field.
+export const COST_PER_FRAME = 1;
+export const ANCHOR_FRAME_COST_CREDITS = 8;
 
 // Hourly free-tier quota that fires when paid balance runs out. Applies to
 // every trigger uniformly — there's no longer a "first frame too expensive

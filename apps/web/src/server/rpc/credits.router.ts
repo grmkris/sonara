@@ -3,8 +3,8 @@ import { findPack } from "@sonara/shared";
 import { and, eq, gte, sum } from "drizzle-orm";
 import DodoPayments from "dodopayments";
 import { z } from "zod";
+import { env } from "@/env";
 import { SCHEMA } from "@sonara/db";
-import { env } from "../env";
 import { protectedProcedure } from "./procedures";
 
 let _dodo: DodoPayments | null = null;
@@ -66,7 +66,7 @@ export const creditsRouter = {
    * Create a Dodo Payments checkout session for the given pack and return
    * the hosted checkout URL. Client redirects to it; the user pays on
    * Dodo's page; on `payment.succeeded` the webhook handler credits frames
-   * (see apps/server/src/auth/dodo-webhook.ts).
+   * (see apps/web/src/server/dodo-webhook.ts).
    */
   createCheckout: protectedProcedure
     .input(z.object({ packId: z.string() }))

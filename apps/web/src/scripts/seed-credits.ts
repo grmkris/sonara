@@ -1,17 +1,18 @@
 #!/usr/bin/env bun
 /**
- * Grant credits to a user without going through the Dodo top-up path.
- * Useful for local development, QA fixtures, and one-off support actions.
+ * Grant credits to a user without going through the on-chain top-up path.
+ * Useful for local development (no real USDC required), QA fixtures, and
+ * one-off support actions.
  *
  * Usage:
- *   bun run apps/server/scripts/seed-credits.ts <userId> <frames>
+ *   bun run apps/web/src/scripts/seed-credits.ts <userId> <frames>
  *
  * `userId` can be either a typeid (`usr_01HJ…`) or a raw UUID — the script
  * handles both. Updates `credits` if a row exists for the user, otherwise
  * inserts a fresh one. Always appends a `kind: "topup"` ledger row with the
  * exact delta granted, so the seed is auditable alongside real top-ups.
  *
- * Reads DATABASE_URL from `apps/server/.env`. Refuses to run with NODE_ENV=
+ * Reads DATABASE_URL from `apps/web/.env`. Refuses to run with NODE_ENV=
  * production unless ALLOW_PROD_SEED=1 is set, since this writes real money.
  */
 
@@ -36,14 +37,14 @@ function parseUserId(raw: string): string {
 async function main() {
   const [userIdRaw, framesRaw] = process.argv.slice(2);
   if (!userIdRaw || !framesRaw) {
-    fail("usage: bun run apps/server/scripts/seed-credits.ts <userId> <frames>");
+    fail("usage: bun run apps/web/src/scripts/seed-credits.ts <userId> <frames>");
   }
   const frames = Number(framesRaw);
   if (!Number.isInteger(frames) || frames < 0) fail("frames must be a non-negative integer");
   if (frames === 0) fail("nothing to grant — frames is 0");
 
   const databaseUrl = process.env.DATABASE_URL;
-  if (!databaseUrl) fail("DATABASE_URL not set — run from apps/server with .env in place");
+  if (!databaseUrl) fail("DATABASE_URL not set — run from apps/web with .env in place");
 
   if (process.env.NODE_ENV === "production" && process.env.ALLOW_PROD_SEED !== "1") {
     fail("refusing to seed in production — set ALLOW_PROD_SEED=1 to override");

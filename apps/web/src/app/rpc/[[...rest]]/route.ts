@@ -1,0 +1,36 @@
+import { buildContext, RPCHandler } from "@sonara/api/server";
+import type { UserId } from "@sonara/shared/typeid";
+import { env } from "@/env";
+import { getAuth } from "@/server/auth";
+import { createDb } from "@sonara/db";
+import { appRouter } from "@/server/rpc/app.router";
+
+// oRPC handler is server-only and per-request. Force-dynamic skips
+// Next.js's build-time page-data collection — sidesteps a Bun+Turbopack
+// CJS-loader interop bug that crashes on catch-all server routes.
+export const dynamic = "force-dynamic";
+
+const handler = new RPCHandler(appRouter);
+
+async function handle(request: Request): Promise<Response> {
+  const auth = getAuth();
+  const session = await auth.api.getSession({ headers: request.headers });
+
+  const db = createDb(env.DATABASE_URL);
+
+  const context = buildContext({
+    db,
+    session: session
+      ? { user: { id: session.user.id as UserId } }
+      : null,
+  });
+
+  const { matched, response } = await handler.handle(request, {
+    prefix: "/rpc",
+    context,
+  });
+  if (matched) return response;
+  return new Response("Not found", { status: 404 });
+}
+
+export { handle as GET, handle as POST };

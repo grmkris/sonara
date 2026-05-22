@@ -7,6 +7,9 @@ const nextConfig: NextConfig = {
   // image to a fraction of the full node_modules tree.
   output: "standalone",
   transpilePackages: ["@sonara/shared"],
+  // Keep pg + drizzle out of the client bundle — pg ships a native addon,
+  // drizzle has Node-only APIs.
+  serverExternalPackages: ["drizzle-orm", "pg"],
   images: {
     remotePatterns: [
       { protocol: "https", hostname: "**.fal.media" },

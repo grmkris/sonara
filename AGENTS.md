@@ -4,15 +4,12 @@ Conventions for working in this repo. Read this before making non-trivial change
 
 ## Quick orient
 
-- `apps/gateway` — Caddy reverse proxy (`caddy:2-alpine`). The single public entry. Path-routes `/api/auth/*`, `/rpc/*`, `/api/upload/*`, `/ws` to the server and everything else to web, over `*.railway.internal`. So the browser sees one origin → cookies first-party, no CORS.
-- `apps/web` — Next.js 16, thin frontend. Renders the landing page at `/` and the visualizer at `/play`. No DB, no secrets, no business logic — just UI + a little SSR. Consumes the server via the oRPC client (`/rpc`), the Better Auth React client (`/api/auth`), and the WebSocket (`/ws`), all same-origin through the gateway.
-- `apps/server` — Bun + Hono + native WebSocket. **Single source of truth.** Owns Better Auth (`/api/auth/*`, incl. the Dodo webhook), the oRPC HTTP router (`/rpc` — credits, `mintWsTicket`), image upload (`/api/upload/image`), the live `Session`, fal generation, STT, song recognition, credit gating. Runs Drizzle migrations on boot.
+- `apps/web` — Next.js 16, oRPC, Better Auth (email+password). Renders the landing page at `/` and the visualizer at `/play`. Also serves the Dodo Payments webhook.
+- `apps/server` — Bun + Hono + native WebSocket. Owns the live `Session`, fal generation, STT, song recognition, credit gating. Runs Drizzle migrations on boot.
 - `packages/api` — generic oRPC primitives, the shared `sessionRouter`, the WS bridge.
-- `packages/db` — Drizzle schema (`auth.db.ts`, `credits.db.ts`), migrations folder, `createDb` + `runMigrations` helpers. Imported by the **server** only (web no longer touches the DB).
+- `packages/db` — Drizzle schema (`auth.db.ts`, `credits.db.ts`), migrations folder, `createDb` + `runMigrations` helpers. Owned by both apps.
 - `packages/shared` — zod schemas, types, `typeid`, `ws-ticket` HMAC, pricing.
 - `packages/test-utils` — pglite helper.
-
-The HTTP oRPC router lives at `apps/server/src/rpc/app.router.ts`; the web client imports only its **type** via the `server/rpc` package export (`import type` is erased at build, so no server runtime deps leak into web).
 
 ## Production
 
@@ -26,18 +23,15 @@ Deployed on **Railway** behind **Cloudflare DNS** on the `sonara.fm` zone. Postg
 
 ### Services
 
-**Target topology (gateway cutover — see `DEPLOY.md §Gateway cutover`; pending):**
+| Service | Public URL | Railway CNAME target | Service ID | Role |
+|---|---|---|---|---|
+| `web` | https://sonara.fm (+ www → 301 → apex) | `oatvmd0b.up.railway.app` (apex), `sdb5b4d0.up.railway.app` (www) | `235aa1d4-8c1b-4b7a-989a-099e61807e8c` | Next.js standalone; SSR + `/api/auth/*` (Better Auth) + future `/api/dodo/*` |
+| `server` | https://api.sonara.fm | `bgpax7bc.up.railway.app` | `12262832-9534-4230-b032-c675d87f29b8` | Bun + Hono; HTTP `/health`, WSS `/ws` |
+| `Postgres` | `postgres.railway.internal:5432` (private) | n/a | n/a (Railway template) | auth + credits ledger |
 
-| Service | Public URL | Internal address | Role |
-|---|---|---|---|
-| `gateway` | https://sonara.fm (+ www → 301) | — | Caddy. The only public service. Path-routes to server/web internally. |
-| `web` | — (internal only) | `web.railway.internal:4472` | Next.js standalone; UI + SSR. |
-| `server` | — (internal only) | `server.railway.internal:4471` | Bun + Hono; Better Auth, `/rpc`, upload, WSS `/ws`, `/health`. |
-| `Postgres` | `postgres.railway.internal:5432` (private) | — | auth + credits ledger |
+The Bun server exposes **no browser-facing HTTP API** beyond `/health`. All HTTP that the browser hits (Better Auth, Dodo webhook) is served by Next.js on the web service. Only the WebSocket crosses the origin boundary, and it auths with an HMAC ticket (not the auth cookie), so cross-origin to `api.sonara.fm` is fine.
 
-Existing service IDs: web `235aa1d4-8c1b-4b7a-989a-099e61807e8c`, server `12262832-9534-4230-b032-c675d87f29b8`. With the gateway in front, the browser only ever talks to `sonara.fm` (gateway) — auth, RPC, upload and WSS (`wss://sonara.fm/ws`) are all same-origin, so cookies are first-party and there's no CORS. The WS still auths with the short-lived HMAC ticket minted by `mintWsTicket` (now a server `/rpc` procedure).
-
-**Pre-cutover (current live prod):** `sonara.fm` → web service (which used to serve `/api/auth` + the Dodo webhook), `api.sonara.fm` → server (WSS + `/health`). The cutover flips DNS to the gateway and moves secrets web→server.
+Railway's auto-generated `*.up.railway.app` domains remain live as a fallback during the cutover window. Remove after a week of stable traffic on the new URLs.
 
 ### Cloudflare
 
@@ -110,17 +104,16 @@ See `DEPLOY.md` for the from-scratch wiring procedure (project create, service c
 
 ```bash
 bun install
-bun run db:start       # local Postgres (docker) — start this first
-bun run dev            # gateway + web + server in parallel via turbo
+bun run dev            # web + server in parallel via turbo
 bun run dev:web        # web only
 bun run dev:server     # server only
-bun run typecheck      # all packages
+bun run typecheck      # all 6 packages
 bun run lint           # oxlint
 bun run test           # turbo test
 bun run ci:local       # lint → typecheck → test → build (serial)
 ```
 
-Open **`http://localhost:4470`** (the Caddy gateway) — that's the only origin the browser should use. The gateway proxies to web (`:4472`) and server (`:4471`) internally. WS is same-origin: `ws://localhost:4470/ws`. The gateway dev task runs `caddy:2-alpine` via `docker run --network host` (so it needs Docker; it's in `bun run dev`). Hitting `:4472` directly works for the UI but auth/RPC/WS won't (those live on the server behind the gateway).
+Web on `http://localhost:4470`, server on `ws://localhost:4471/ws`.
 
 ## Database
 
@@ -156,10 +149,10 @@ Services (`*-service.ts`) may `throw new Error(...)`. The router catches and re-
 
 Two definitions, on purpose — do not deduplicate:
 
-- `packages/api/src/api.ts` — generic `publicProcedure` / `protectedProcedure` parameterised by `AnyContext`. Used for the shared `sessionRouter` (the WS surface).
-- `apps/server/src/rpc/procedures.ts` — concrete `publicProcedure` / `protectedProcedure` narrowed to the server's `Database` type (`ServerHttpContext`). Used for `auth.router.ts`, `credits.router.ts` (the HTTP `/rpc` surface).
+- `packages/api/src/api.ts` — generic `publicProcedure` / `protectedProcedure` parameterised by `WebContext`. Used for the shared `sessionRouter`.
+- `apps/web/src/server/rpc/procedures.ts` — concrete `publicProcedure` / `protectedProcedure` narrowed to the web app's `Database` type. Used for `auth.router.ts`, `credits.router.ts`, etc.
 
-The duplication exists so the HTTP routers can supply a concrete context shape without leaking concrete types across the `packages/api` boundary. Mirrors the pattern in `~/code/invok/apps/admin-api/src/procedures.ts`.
+The duplication exists so each app can supply its own context shape without leaking concrete types across the package boundary. Mirrors the pattern in `~/Code/github-com/invok/apps/admin-api/src/procedures.ts`.
 
 ## State ownership
 
@@ -170,20 +163,19 @@ Voice intent is duplicated by design: the `VoiceController` on the server owns d
 
 ## Auth
 
-Better Auth instance in `apps/server/src/auth/auth.ts`, mounted on the server's Hono app at `/api/auth/*`. One session cookie, read by the `/rpc` context builder + `protectedProcedure` middleware. `trustedOrigins = [baseURL]`, where `baseURL` is `env.APP_URL` (the public gateway origin) — bumping the env var transparently updates origins on the next deploy. Because the browser reaches `/api/auth` same-origin through the gateway, the cookie is first-party on the public domain and there's no CORS. The web side uses the `better-auth/react` client (`apps/web/src/lib/auth-client.ts`) with `baseURL = window.location.origin`.
+Better Auth instance in `apps/web/src/server/auth.ts`. One session cookie, read by `protectedProcedure` middleware. `trustedOrigins = [baseURL]`, where `baseURL` is derived from `env.APP_URL` — bumping the env var transparently updates origins on the next deploy.
 
 - **Email + password** (open signup): Better Auth's built-in `emailAndPassword`. Anyone can register; live fal generation is gated by the credits ledger + free-tier. Unauthenticated visitors connect with an anon WS ticket (`userId: null`) and run the visualiser in demo-library mode — no fal calls, no credit debit, no AudD song recognition. UI lives at `/login`. The earlier `allowed_email` allowlist + `allow-email` script were removed when the public demo path landed; the table is kept as inert data pending a follow-up drop migration.
 - **Dodo Payments plugin** (optional, currently inactive in prod with placeholder envs): registers when both `DODO_PAYMENTS_API_KEY` and `DODO_PAYMENTS_WEBHOOK_SECRET` are set.
 
-For the WebSocket: the browser mints a 5-min HMAC ticket via `auth.mintWsTicket` — now a server `/rpc` `publicProcedure` (`apps/server/src/rpc/auth.router.ts`), reached same-origin through the gateway — then opens `wss://sonara.fm/ws?token=…` (also gateway → server). The server verifies the ticket via `verifyTicket` from `@sonara/shared`. Signed-in callers get a ticket carrying the user uuid; unauthenticated callers get an anon ticket (`userId: null`) and the server pins that session to demo-library mode (no fal, no credits, no AudD). The ticket scheme stays even though everything is same-origin now: it cleanly carries identity to the WS upgrade without parsing cookies at the socket layer.
+For the WebSocket: the web app mints a 5-min HMAC ticket via `auth.mintWsTicket` (now a `publicProcedure`); the browser opens `wss://api.sonara.fm/ws?token=…`; the server verifies the ticket via `verifyTicket` from `@sonara/shared`. Signed-in callers get a ticket carrying the user uuid; unauthenticated callers get an anon ticket (`userId: null`) and the server pins that session to demo-library mode (no fal, no credits, no AudD). The ticket path is auth-method-agnostic, which is why WS lives on a cross-origin subdomain without needing CORS or shared cookies.
 
 SIWE / Reown / wallet-based auth and USDC-on-Base top-ups were removed in `b906ac4`. No `viem`, `wagmi`, or `@reown/*` packages remain in the workspace. If a stale doc still references them, it's a doc bug.
 
 ## Credits & money path
 
-- `apps/server/src/credits/credits.service.ts` — atomic `debitFrame` / `tryConsumeFreeTier` / `refundFrame` / `getBalance`. Direct `pg` queries at the trigger site.
-- `apps/server/src/rpc/credits.router.ts` — `getBalance` (frame balance + month-to-date usage + lifetime spend) + `createCheckout` (Dodo Payments hosted checkout for the credit packs in `packages/shared/src/pricing.ts`). Drizzle queries. The success page `apps/web/src/app/credits/success/page.tsx` polls `getBalance` (via the gateway → server `/rpc`) for the webhook to land.
-- `apps/server/src/auth/dodo-webhook.ts` — `onPaymentSucceeded` credits frames; served by Better Auth at `/api/auth/dodopayments/webhook`. Idempotent on `payment_id` via the `usage_ledger.tx_hash` partial unique index.
+- `apps/server/src/credits/credits.service.ts` — atomic `debitFrame` / `tryConsumeFreeTier` / `refundFrame` / `getBalance`. Direct `pg` queries; no Drizzle dependency in apps/server.
+- `apps/web/src/server/rpc/credits.router.ts` — `getBalance` (frame balance + month-to-date usage + lifetime spend) + `createCheckout` (Dodo Payments hosted checkout for the credit packs in `packages/shared/src/pricing.ts`; the success page `apps/web/src/app/credits/success/page.tsx` polls `getBalance` for the webhook to land).
 - `apps/server/src/session/session.ts` — credit gate at the trigger site. BYOK fal key bypasses the gate entirely.
 
 Pricing in `packages/shared/src/pricing.ts` — single source of truth for both UI and server.
