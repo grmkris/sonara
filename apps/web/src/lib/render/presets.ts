@@ -116,15 +116,20 @@ export const PRESETS: Record<PresetName, PresetConfig> = {
   // and big bloom for a "very active" feel. Pair with the fast cadence.
   rave: {
     ...BASE,
-    noiseMult: 1.6,
-    bloomMult: 1.5,
-    feedbackAmount: 0.5,
-    invert: 0.4,
-    polarWarp: 0.22,
-    edge: 0.6,
-    halation: 0.45,
-    duotoneMix: 0.18,
-    duotoneLo: [0.12, 0.02, 0.16],
+    // Hard + trippy but kept clean for fast cadence: lighter feedback so old
+    // frames don't ghost/linger (which read as "stuck"), a gentler kick-invert
+    // accent instead of a jarring full flip, and only a whisper of duotone so
+    // varied imagery (pandas, the Great Wall, Shanghai) still reads true.
+    // Punch comes from displacement + bloom + swirl reacting hard to the beat.
+    noiseMult: 1.5,
+    bloomMult: 1.55,
+    feedbackAmount: 0.28,
+    invert: 0.22,
+    polarWarp: 0.28,
+    edge: 0.7,
+    halation: 0.5,
+    duotoneMix: 0.1,
+    duotoneLo: [0.1, 0.02, 0.16],
     duotoneHi: [0.3, 0.95, 0.98],
   },
 

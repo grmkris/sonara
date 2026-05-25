@@ -325,6 +325,19 @@
     "status": "active"
   },
   {
+    "id": "img_01ksf5at0sfzrb4wmcsdaqrvcc",
+    "deck": "cyborg",
+    "prompt": "fireworks bursting over a neon-lit Great Wall, magenta and cyan sparks",
+    "promptHash": "04d60699fa92d13a358816e29d70b59d2e4355a6d03799caa95f16167fc0b1d9",
+    "model": "fal-ai/flux-2/klein/9b",
+    "seed": 635584026,
+    "url": "/library/cyborg/img_01ksf5at0sfzrb4wmcsdaqrvcc.webp",
+    "width": 1024,
+    "height": 1024,
+    "palette": null,
+    "status": "active"
+  },
+  {
     "id": "img_01ksev16pbe4dve5eqsa4k6py7",
     "deck": "cyborg",
     "prompt": "a cybernetic arm raised in a crowd, glowing knuckle lights",
@@ -436,6 +449,19 @@
     "model": "fal-ai/flux-2/klein/9b",
     "seed": 1872399099,
     "url": "/library/cyborg/img_01ksf2svjgeh7vmcteen836q8e.webp",
+    "width": 1024,
+    "height": 1024,
+    "palette": null,
+    "status": "active"
+  },
+  {
+    "id": "img_01ksf5ad08fzrb4wk58hbefqz3",
+    "deck": "cyborg",
+    "prompt": "a Great Wall watchtower glowing with neon, drifting fog, magenta sky",
+    "promptHash": "0b013ef1a2679e34b08b02afddf306c42a4db88338623a75e2394bed1628114c",
+    "model": "fal-ai/flux-2/klein/9b",
+    "seed": 270952857,
+    "url": "/library/cyborg/img_01ksf5ad08fzrb4wk58hbefqz3.webp",
     "width": 1024,
     "height": 1024,
     "palette": null,
@@ -702,6 +728,19 @@
     "status": "active"
   },
   {
+    "id": "img_01ksf59m6zfzrb4wgmmyxcdhq2",
+    "deck": "cyborg",
+    "prompt": "a giant panda in a glowing neon bamboo forest, cyan rim light, magenta haze",
+    "promptHash": "1bac7469535bbb6d90baed3a5062ecc25a8b243d752df1eaa53e56c7d7a24f43",
+    "model": "fal-ai/flux-2/klein/9b",
+    "seed": 1651048763,
+    "url": "/library/cyborg/img_01ksf59m6zfzrb4wgmmyxcdhq2.webp",
+    "width": 1024,
+    "height": 1024,
+    "palette": null,
+    "status": "active"
+  },
+  {
     "id": "img_01ksev03z6e4dve5b1pqts2qqj",
     "deck": "cyborg",
     "prompt": "two androids locked in a dance, sparks arcing between their fingertips",
@@ -709,6 +748,19 @@
     "model": "fal-ai/flux-2/klein/9b",
     "seed": 1281238224,
     "url": "/library/cyborg/img_01ksev03z6e4dve5b1pqts2qqj.webp",
+    "width": 1024,
+    "height": 1024,
+    "palette": null,
+    "status": "active"
+  },
+  {
+    "id": "img_01ksf59hcxfzrb4wgccdjg4jc8",
+    "deck": "cyborg",
+    "prompt": "the Great Wall of China snaking over dark mountains at night, neon-lit ramparts, magenta and cyan",
+    "promptHash": "1ca8736916d9f05f1d9aa267d23cfce97454254dc0823d70d2fc8cc3f362674d",
+    "model": "fal-ai/flux-2/klein/9b",
+    "seed": 1629810238,
+    "url": "/library/cyborg/img_01ksf59hcxfzrb4wgccdjg4jc8.webp",
     "width": 1024,
     "height": 1024,
     "palette": null,
@@ -754,6 +806,19 @@
     "status": "active"
   },
   {
+    "id": "img_01ksf5besgfzrb4wpmtkbqc2bb",
+    "deck": "cyborg",
+    "prompt": "the Forbidden City rooftops under glowing neon rain, magenta and cyan",
+    "promptHash": "1f0963449b5ba569eaacc21283c31ed8c7fd216cf4d16e642ae8aadb270007e2",
+    "model": "fal-ai/flux-2/klein/9b",
+    "seed": 1262954345,
+    "url": "/library/cyborg/img_01ksf5besgfzrb4wpmtkbqc2bb.webp",
+    "width": 1024,
+    "height": 1024,
+    "palette": null,
+    "status": "active"
+  },
+  {
     "id": "img_01ksev38fge4dve5j0csx692p1",
     "deck": "cyborg",
     "prompt": "an android with holographic wings spread on a dark stage, drifting particles",
@@ -793,6 +858,19 @@
     "status": "active"
   },
   {
+    "id": "img_01ksf5a5mbfzrb4wj970bt36j4",
+    "deck": "cyborg",
+    "prompt": "a jade dragon statue lit in neon, magenta and cyan, dark temple interior",
+    "promptHash": "249b86ac84c432d80adfdc68de544ac1bfe5d5a28ff868012bca6fcc04e67eff",
+    "model": "fal-ai/flux-2/klein/9b",
+    "seed": 299555893,
+    "url": "/library/cyborg/img_01ksf5a5mbfzrb4wj970bt36j4.webp",
+    "width": 1024,
+    "height": 1024,
+    "palette": null,
+    "status": "active"
+  },
+  {
     "id": "img_01ksetzw49e4dve5acfqxnqygx",
     "deck": "cyborg",
     "prompt": "an android DJ at a glowing console, hands blurred over the decks",
@@ -800,6 +878,19 @@
     "model": "fal-ai/flux-2/klein/9b",
     "seed": 319144874,
     "url": "/library/cyborg/img_01ksetzw49e4dve5acfqxnqygx.webp",
+    "width": 1024,
+    "height": 1024,
+    "palette": null,
+    "status": "active"
+  },
+  {
+    "id": "img_01ksf5c3hdfzrb4wrpp4jnp94m",
+    "deck": "cyborg",
+    "prompt": "a giant panda silhouette against a glowing neon moon, bamboo, cyan glow",
+    "promptHash": "267023980e04a5d0c52ae23181e97d62e279839562d24e05a5019e70b5562cdf",
+    "model": "fal-ai/flux-2/klein/9b",
+    "seed": 211860400,
+    "url": "/library/cyborg/img_01ksf5c3hdfzrb4wrpp4jnp94m.webp",
     "width": 1024,
     "height": 1024,
     "palette": null,
@@ -884,6 +975,19 @@
     "status": "active"
   },
   {
+    "id": "img_01ksf59vzrfzrb4wh9c868ww1j",
+    "deck": "cyborg",
+    "prompt": "a panda raver waving glow sticks of light, neon bamboo, magenta and cyan",
+    "promptHash": "2d9b8b53fed8e47b3eedc6c8711e206ee294b9e5d4a5376506a2f004ae71747c",
+    "model": "fal-ai/flux-2/klein/9b",
+    "seed": 1367669664,
+    "url": "/library/cyborg/img_01ksf59vzrfzrb4wh9c868ww1j.webp",
+    "width": 1024,
+    "height": 1024,
+    "palette": null,
+    "status": "active"
+  },
+  {
     "id": "img_01ksf2wjfeeh7vmd2sf2n0a33s",
     "deck": "cyborg",
     "prompt": "an iridescent soap-bubble surface rippling with rainbow neon, macro psychedelic",
@@ -904,6 +1008,19 @@
     "model": "fal-ai/flux-2/klein/9b",
     "seed": 1134063154,
     "url": "/library/cyborg/img_01ksev08hke4dve5bjgz8r3jpt.webp",
+    "width": 1024,
+    "height": 1024,
+    "palette": null,
+    "status": "active"
+  },
+  {
+    "id": "img_01ksf5cgvpfzrb4wsjrexy6z8j",
+    "deck": "cyborg",
+    "prompt": "the Great Wall at dawn dissolving into a neon grid horizon, magenta light",
+    "promptHash": "2e439ba208a25651316838ba645d3df403111d01429c6064145a99972754c8e6",
+    "model": "fal-ai/flux-2/klein/9b",
+    "seed": 866044635,
+    "url": "/library/cyborg/img_01ksf5cgvpfzrb4wsjrexy6z8j.webp",
     "width": 1024,
     "height": 1024,
     "palette": null,
@@ -1027,6 +1144,19 @@
     "status": "active"
   },
   {
+    "id": "img_01ksf5brv5fzrb4wqhe3z68e5m",
+    "deck": "cyborg",
+    "prompt": "a panda in a glowing neon hanfu robe, luminous embroidery, cyan rim light",
+    "promptHash": "3823288eca15b26e2b03dade7e8746b81fce26eb14ed7f5bb40af32d281f64fd",
+    "model": "fal-ai/flux-2/klein/9b",
+    "seed": 1176086534,
+    "url": "/library/cyborg/img_01ksf5brv5fzrb4wqhe3z68e5m.webp",
+    "width": 1024,
+    "height": 1024,
+    "palette": null,
+    "status": "active"
+  },
+  {
     "id": "img_01ksf3583meh7vmdyycnkwtw94",
     "deck": "cyborg",
     "prompt": "a neon-lit Shanghai underpass dripping with rain, graffiti hanzi, cyan glow",
@@ -1034,6 +1164,19 @@
     "model": "fal-ai/flux-2/klein/9b",
     "seed": 1457951155,
     "url": "/library/cyborg/img_01ksf3583meh7vmdyycnkwtw94.webp",
+    "width": 1024,
+    "height": 1024,
+    "palette": null,
+    "status": "active"
+  },
+  {
+    "id": "img_01ksf5a7vvfzrb4wjpknksdsjy",
+    "deck": "cyborg",
+    "prompt": "koi fish swimming through luminous neon water, magenta and cyan ripples",
+    "promptHash": "38db16408227fccbf166784c6e470014d259dd2d10cbe849f91662de8745a774",
+    "model": "fal-ai/flux-2/klein/9b",
+    "seed": 1408284648,
+    "url": "/library/cyborg/img_01ksf5a7vvfzrb4wjpknksdsjy.webp",
     "width": 1024,
     "height": 1024,
     "palette": null,
@@ -1099,6 +1242,32 @@
     "model": "fal-ai/flux-2/klein/9b",
     "seed": 1606784989,
     "url": "/library/cyborg/img_01ksf2q9x4eh7vmcjc7rxaqxzk.webp",
+    "width": 1024,
+    "height": 1024,
+    "palette": null,
+    "status": "active"
+  },
+  {
+    "id": "img_01ksf5bp4nfzrb4wqcpvs5ncah",
+    "deck": "cyborg",
+    "prompt": "a holographic phoenix rising over a neon Great Wall, magenta flames, cyan",
+    "promptHash": "3c4658217d9667664e2794ea51f09d0bbf6fb17e1e396e7bf9c3d7404c91ad80",
+    "model": "fal-ai/flux-2/klein/9b",
+    "seed": 576951740,
+    "url": "/library/cyborg/img_01ksf5bp4nfzrb4wqcpvs5ncah.webp",
+    "width": 1024,
+    "height": 1024,
+    "palette": null,
+    "status": "active"
+  },
+  {
+    "id": "img_01ksf5a2xhfzrb4wj2r6sc3se2",
+    "deck": "cyborg",
+    "prompt": "red paper lanterns glowing over a rain-slick alley, cyan reflections in puddles",
+    "promptHash": "3e3d59bd97437f3023d106c16c8ffc4352b2e177d582144b063bfb0836d01fae",
+    "model": "fal-ai/flux-2/klein/9b",
+    "seed": 702504803,
+    "url": "/library/cyborg/img_01ksf5a2xhfzrb4wj2r6sc3se2.webp",
     "width": 1024,
     "height": 1024,
     "palette": null,
@@ -1183,6 +1352,19 @@
     "status": "active"
   },
   {
+    "id": "img_01ksf5cnbhfzrb4wt7qnr292t7",
+    "deck": "cyborg",
+    "prompt": "red and gold neon dragons spiraling over a dark dancefloor, cyan beams",
+    "promptHash": "4482c7afd0036e4cb28ce11ed0434648d3925c7faea31a306e060a5a5f1f3b39",
+    "model": "fal-ai/flux-2/klein/9b",
+    "seed": 243327772,
+    "url": "/library/cyborg/img_01ksf5cnbhfzrb4wt7qnr292t7.webp",
+    "width": 1024,
+    "height": 1024,
+    "palette": null,
+    "status": "active"
+  },
+  {
     "id": "img_01ksf2xe56eh7vmd598pm4597z",
     "deck": "cyborg",
     "prompt": "a holographic HUD floating mid-air with rotating wireframe globes, cyan glow",
@@ -1216,6 +1398,32 @@
     "model": "fal-ai/flux-2/klein/9b",
     "seed": 1540891717,
     "url": "/library/cyborg/img_01ksev1pe5e4dve5f8axw83q38.webp",
+    "width": 1024,
+    "height": 1024,
+    "palette": null,
+    "status": "active"
+  },
+  {
+    "id": "img_01ksf5bka4fzrb4wq5gx1hb4bg",
+    "deck": "cyborg",
+    "prompt": "jade and chrome koi swirling in a neon pond, magenta and cyan ripples",
+    "promptHash": "4814deb45dfddc2c62efd7c363ae12095a7485bd4c53b0cc0ec7f8797d2f1046",
+    "model": "fal-ai/flux-2/klein/9b",
+    "seed": 1844165869,
+    "url": "/library/cyborg/img_01ksf5bka4fzrb4wq5gx1hb4bg.webp",
+    "width": 1024,
+    "height": 1024,
+    "palette": null,
+    "status": "active"
+  },
+  {
+    "id": "img_01ksf5a9y9fzrb4wjxms51hryt",
+    "deck": "cyborg",
+    "prompt": "a giant panda meditating under a glowing neon waterfall, cyan mist, serene",
+    "promptHash": "4852e8909e327a042ec17a04920d1d3b5645f01ee6a79fa0fee69f9a71c8c5a2",
+    "model": "fal-ai/flux-2/klein/9b",
+    "seed": 1305414947,
+    "url": "/library/cyborg/img_01ksf5a9y9fzrb4wjxms51hryt.webp",
     "width": 1024,
     "height": 1024,
     "palette": null,
@@ -1346,6 +1554,19 @@
     "model": "fal-ai/flux-2/klein/9b",
     "seed": 2133094362,
     "url": "/library/cyborg/img_01ksf10yh6fevtpwdqv1z9re9e.webp",
+    "width": 1024,
+    "height": 1024,
+    "palette": null,
+    "status": "active"
+  },
+  {
+    "id": "img_01ksf59s9rfzrb4wh6d5vkfwxa",
+    "deck": "cyborg",
+    "prompt": "the Great Wall under a cyberpunk sky, holographic dragons overhead, neon mist",
+    "promptHash": "4e316c0186e8dcbde3fe88616e166ddb0c44295daba9a3f7971253b486c6aa80",
+    "model": "fal-ai/flux-2/klein/9b",
+    "seed": 2054115895,
+    "url": "/library/cyborg/img_01ksf59s9rfzrb4wh6d5vkfwxa.webp",
     "width": 1024,
     "height": 1024,
     "palette": null,
@@ -1716,6 +1937,19 @@
     "status": "active"
   },
   {
+    "id": "img_01ksf5b9qpfzrb4wp4bjswhrby",
+    "deck": "cyborg",
+    "prompt": "a cyber dragon facing off with a chrome android, neon Shanghai backdrop",
+    "promptHash": "5d052291d57884328227216b2cb40dac5a713c32d24ddaa66bd726eec1247755",
+    "model": "fal-ai/flux-2/klein/9b",
+    "seed": 521646578,
+    "url": "/library/cyborg/img_01ksf5b9qpfzrb4wp4bjswhrby.webp",
+    "width": 1024,
+    "height": 1024,
+    "palette": null,
+    "status": "active"
+  },
+  {
     "id": "img_01ksf2smaqeh7vmcsj8x169hry",
     "deck": "cyborg",
     "prompt": "a robot raver with LED visor flashing the beat, fog-lit, magenta and cyan",
@@ -1807,6 +2041,19 @@
     "status": "active"
   },
   {
+    "id": "img_01ksf5csg3fzrb4wtjdz8jyjzr",
+    "deck": "cyborg",
+    "prompt": "a glowing neon gateway arch of a Chinese garden, magenta and cyan, rain",
+    "promptHash": "63814ff2f7961f2ba860f2a40e90c920e8dca5e450a23522c0fcce74ffdd5363",
+    "model": "fal-ai/flux-2/klein/9b",
+    "seed": 1439394615,
+    "url": "/library/cyborg/img_01ksf5csg3fzrb4wtjdz8jyjzr.webp",
+    "width": 1024,
+    "height": 1024,
+    "palette": null,
+    "status": "active"
+  },
+  {
     "id": "img_01ksf398eteh7vmebr6dqpak27",
     "deck": "cyborg",
     "prompt": "a strobe-lit drop with the crowd a blur of motion, light streaking, magenta",
@@ -1872,6 +2119,19 @@
     "status": "active"
   },
   {
+    "id": "img_01ksf5c67nfzrb4wrwtt1bdbz2",
+    "deck": "cyborg",
+    "prompt": "a dragon dance winding through a strobing neon crowd, magenta haze",
+    "promptHash": "694690729bc7bd490080c32919d819d6e1bec5e8f66d1e5b0d9eee47846b2fc4",
+    "model": "fal-ai/flux-2/klein/9b",
+    "seed": 863309141,
+    "url": "/library/cyborg/img_01ksf5c67nfzrb4wrwtt1bdbz2.webp",
+    "width": 1024,
+    "height": 1024,
+    "palette": null,
+    "status": "active"
+  },
+  {
     "id": "img_01ksf2tpm5eh7vmcwzpk0rvtn0",
     "deck": "cyborg",
     "prompt": "an op-art tunnel of warping checkerboards bending space, strobing contrast",
@@ -1879,6 +2139,19 @@
     "model": "fal-ai/flux-2/klein/9b",
     "seed": 980030661,
     "url": "/library/cyborg/img_01ksf2tpm5eh7vmcwzpk0rvtn0.webp",
+    "width": 1024,
+    "height": 1024,
+    "palette": null,
+    "status": "active"
+  },
+  {
+    "id": "img_01ksf5ahswfzrb4wkk2n56fnrm",
+    "deck": "cyborg",
+    "prompt": "a giant panda eating bamboo under magenta neon, soft cyan bokeh, cinematic",
+    "promptHash": "6a063c39cd869b1bce8d224bff4ff8b5ddb1125244349a9ab35ba3aa9752b5f8",
+    "model": "fal-ai/flux-2/klein/9b",
+    "seed": 844542308,
+    "url": "/library/cyborg/img_01ksf5ahswfzrb4wkk2n56fnrm.webp",
     "width": 1024,
     "height": 1024,
     "palette": null,
@@ -1918,6 +2191,19 @@
     "model": "fal-ai/flux-2/klein/9b",
     "seed": 831201250,
     "url": "/library/cyborg/img_01ksf305b5eh7vmde0w287pjjc.webp",
+    "width": 1024,
+    "height": 1024,
+    "palette": null,
+    "status": "active"
+  },
+  {
+    "id": "img_01ksf5aq6dfzrb4wm5m61t2d9b",
+    "deck": "cyborg",
+    "prompt": "a lion dance costume rendered in chrome and neon, magenta glow, dark stage",
+    "promptHash": "6c26ead7816e849b3414e7ac3538c06e8e9f7cc4533a5d10d60feba7e6d8946c",
+    "model": "fal-ai/flux-2/klein/9b",
+    "seed": 108037638,
+    "url": "/library/cyborg/img_01ksf5aq6dfzrb4wm5m61t2d9b.webp",
     "width": 1024,
     "height": 1024,
     "palette": null,
@@ -2132,6 +2418,19 @@
     "status": "active"
   },
   {
+    "id": "img_01ksf5a0pwfzrb4whwf4xbzdv8",
+    "deck": "cyborg",
+    "prompt": "a Chinese dragon of pure neon light coiling over the Shanghai skyline, magenta scales",
+    "promptHash": "7c20800c533a2683c3862080c1bf2db5bb4708d74712ad81c6c9a3ead851c586",
+    "model": "fal-ai/flux-2/klein/9b",
+    "seed": 479715690,
+    "url": "/library/cyborg/img_01ksf5a0pwfzrb4whwf4xbzdv8.webp",
+    "width": 1024,
+    "height": 1024,
+    "palette": null,
+    "status": "active"
+  },
+  {
     "id": "img_01ksf33p9aeh7vmdsv4ke7px5w",
     "deck": "cyborg",
     "prompt": "a cramped neon alley of stacked hanzi signs, steam rising, cyan light, cinematic",
@@ -2249,6 +2548,19 @@
     "status": "active"
   },
   {
+    "id": "img_01ksf5afpsfzrb4wkbtb8qy1c2",
+    "deck": "cyborg",
+    "prompt": "a chrome panda mech stomping through a neon bamboo grove, cyan beams",
+    "promptHash": "827dbe37d3fe428b6b52f970a2295aed51dc845762e19c27e4c4b7344b4598ad",
+    "model": "fal-ai/flux-2/klein/9b",
+    "seed": 312662741,
+    "url": "/library/cyborg/img_01ksf5afpsfzrb4wkbtb8qy1c2.webp",
+    "width": 1024,
+    "height": 1024,
+    "palette": null,
+    "status": "active"
+  },
+  {
     "id": "img_01ksf2r8q6eh7vmcn9sd0mf7nx",
     "deck": "cyborg",
     "prompt": "a humanoid robot in a B-boy freeze on one hand, chrome highlights, pink glow",
@@ -2275,6 +2587,19 @@
     "status": "active"
   },
   {
+    "id": "img_01ksf5cjtkfzrb4wswc8kt4z41",
+    "deck": "cyborg",
+    "prompt": "a cyber-panda wielding an LED bamboo staff in a neon dojo, magenta and cyan",
+    "promptHash": "8634e9aa4cf58295a543424e4e7dbc1924bb5a3acbce30985913b5ed3995fc4f",
+    "model": "fal-ai/flux-2/klein/9b",
+    "seed": 652862442,
+    "url": "/library/cyborg/img_01ksf5cjtkfzrb4wswc8kt4z41.webp",
+    "width": 1024,
+    "height": 1024,
+    "palette": null,
+    "status": "active"
+  },
+  {
     "id": "img_01ksev0jste4dve5cqdgr6c8x6",
     "deck": "cyborg",
     "prompt": "an android hand reaching through laser beams, volumetric light",
@@ -2282,6 +2607,19 @@
     "model": "fal-ai/flux-2/klein/9b",
     "seed": 2064598265,
     "url": "/library/cyborg/img_01ksev0jste4dve5cqdgr6c8x6.webp",
+    "width": 1024,
+    "height": 1024,
+    "palette": null,
+    "status": "active"
+  },
+  {
+    "id": "img_01ksf59q60fzrb4wgrkfe6xwgv",
+    "deck": "cyborg",
+    "prompt": "a chrome cyborg panda DJ leaning over glowing decks, magenta glow, club haze",
+    "promptHash": "89c6125c67ca56a92e2ad508a6c55ac1a3e9a33a27903a81ce818a37dbfde678",
+    "model": "fal-ai/flux-2/klein/9b",
+    "seed": 18035692,
+    "url": "/library/cyborg/img_01ksf59q60fzrb4wgrkfe6xwgv.webp",
     "width": 1024,
     "height": 1024,
     "palette": null,
@@ -2379,6 +2717,19 @@
     "status": "active"
   },
   {
+    "id": "img_01ksf5b0ekfzrb4wn2r98qahy9",
+    "deck": "cyborg",
+    "prompt": "the Great Wall drawn as a glowing circuit trace across dark mountains, neon",
+    "promptHash": "8ce608d6971ef610033ddd8b1fb4040acd6d93fe4d1635c3541f63497500f2a9",
+    "model": "fal-ai/flux-2/klein/9b",
+    "seed": 1672424943,
+    "url": "/library/cyborg/img_01ksf5b0ekfzrb4wn2r98qahy9.webp",
+    "width": 1024,
+    "height": 1024,
+    "palette": null,
+    "status": "active"
+  },
+  {
     "id": "img_01ksf312gdeh7vmdh4dpvcy3bq",
     "deck": "cyborg",
     "prompt": "a stack of glowing rack effects units, blinking LEDs, dark studio, cyan",
@@ -2412,6 +2763,19 @@
     "model": "fal-ai/flux-2/klein/9b",
     "seed": 1555525979,
     "url": "/library/cyborg/img_01ksf2sj3teh7vmcsdmk5ncyaz.webp",
+    "width": 1024,
+    "height": 1024,
+    "palette": null,
+    "status": "active"
+  },
+  {
+    "id": "img_01ksf5awatfzrb4wmq8qd37mv0",
+    "deck": "cyborg",
+    "prompt": "a panda astronaut floating in a neon nebula, cyan helmet glow, dreamy",
+    "promptHash": "8ea7a5be67f1219de1dc7a3e81bf35e6a8830f54838be680ade290493752622f",
+    "model": "fal-ai/flux-2/klein/9b",
+    "seed": 1519353540,
+    "url": "/library/cyborg/img_01ksf5awatfzrb4wmq8qd37mv0.webp",
     "width": 1024,
     "height": 1024,
     "palette": null,
@@ -2711,6 +3075,19 @@
     "model": "fal-ai/flux-2/klein/9b",
     "seed": 1013215249,
     "url": "/library/cyborg/img_01ksf2qmpteh7vmckexhwc6mp1.webp",
+    "width": 1024,
+    "height": 1024,
+    "palette": null,
+    "status": "active"
+  },
+  {
+    "id": "img_01ksf5amn1fzrb4wktjyqy4xca",
+    "deck": "cyborg",
+    "prompt": "a cyberpunk Chinese temple with neon eaves and dragons, magenta and cyan",
+    "promptHash": "a0a284b1e5171484f12c41b51a25c16a4b9a86d79cbaf53dc1b0049015e67a10",
+    "model": "fal-ai/flux-2/klein/9b",
+    "seed": 8720422,
+    "url": "/library/cyborg/img_01ksf5amn1fzrb4wktjyqy4xca.webp",
     "width": 1024,
     "height": 1024,
     "palette": null,
@@ -3354,6 +3731,19 @@
     "status": "active"
   },
   {
+    "id": "img_01ksf5c0wgfzrb4wr85jfzhbsz",
+    "deck": "cyborg",
+    "prompt": "a misty mountain temple strung with neon prayer flags, magenta and cyan",
+    "promptHash": "c2ec408e8b541de38a7ca5fc968fc21abbff9df48bf6b58a4189c6536371052f",
+    "model": "fal-ai/flux-2/klein/9b",
+    "seed": 900748233,
+    "url": "/library/cyborg/img_01ksf5c0wgfzrb4wr85jfzhbsz.webp",
+    "width": 1024,
+    "height": 1024,
+    "palette": null,
+    "status": "active"
+  },
+  {
     "id": "img_01ksf2y5e8eh7vmd7gn1t6hrsw",
     "deck": "cyborg",
     "prompt": "a waveform spectrum analyzer bar chart pulsing to a beat, magenta and cyan",
@@ -3504,6 +3894,19 @@
     "model": "fal-ai/flux-2/klein/9b",
     "seed": 862554798,
     "url": "/library/cyborg/img_01ksf2zj3qeh7vmdc77njny9zj.webp",
+    "width": 1024,
+    "height": 1024,
+    "palette": null,
+    "status": "active"
+  },
+  {
+    "id": "img_01ksf5bh5rfzrb4wpsjmjhhn07",
+    "deck": "cyborg",
+    "prompt": "a panda breakdancing in a fog-filled club, chrome floor, neon strobe",
+    "promptHash": "ce27d2dc82fc970278c10e05941f7cf7ce3f969384b9a4f5fedac8f965f54cf7",
+    "model": "fal-ai/flux-2/klein/9b",
+    "seed": 928561048,
+    "url": "/library/cyborg/img_01ksf5bh5rfzrb4wpsjmjhhn07.webp",
     "width": 1024,
     "height": 1024,
     "palette": null,
@@ -3718,6 +4121,19 @@
     "status": "active"
   },
   {
+    "id": "img_01ksf5bcb6fzrb4wp8qc66w523",
+    "deck": "cyborg",
+    "prompt": "a panda DJ duo back to back at neon decks, magenta and cyan, club haze",
+    "promptHash": "e37db2984fbef52c409d63a2c78dc1b4148c2b2ddf4c5f5bffc0f9ff243a1c0d",
+    "model": "fal-ai/flux-2/klein/9b",
+    "seed": 1428002964,
+    "url": "/library/cyborg/img_01ksf5bcb6fzrb4wp8qc66w523.webp",
+    "width": 1024,
+    "height": 1024,
+    "palette": null,
+    "status": "active"
+  },
+  {
     "id": "img_01ksf34n5heh7vmdx0kmqxec42",
     "deck": "cyborg",
     "prompt": "a neon-drenched dumpling stall in a Shanghai alley, steam and cyan glow",
@@ -3757,6 +4173,19 @@
     "status": "active"
   },
   {
+    "id": "img_01ksf5bvhhfzrb4wqzkhvybccq",
+    "deck": "cyborg",
+    "prompt": "terracotta warriors marching under sweeping cyan laser beams, neon dust",
+    "promptHash": "e5dd729da444f0a3ff2b85f82af313c412e169d13215abb646f65f014e0bcebb",
+    "model": "fal-ai/flux-2/klein/9b",
+    "seed": 821958632,
+    "url": "/library/cyborg/img_01ksf5bvhhfzrb4wqzkhvybccq.webp",
+    "width": 1024,
+    "height": 1024,
+    "palette": null,
+    "status": "active"
+  },
+  {
     "id": "img_01ksf0zb46fevtpw8caxhfpp5e",
     "deck": "cyborg",
     "prompt": "a robot silhouette refracted through a prism into rainbow ghosts",
@@ -3783,6 +4212,19 @@
     "status": "active"
   },
   {
+    "id": "img_01ksf5cc7kfzrb4ws15r6zzxdv",
+    "deck": "cyborg",
+    "prompt": "a panda raver crowd-surfing over a sea of chrome hands, cyan lasers",
+    "promptHash": "e6e3686521ffcf50470dfedda78e0d213e5b6f2c214c2e4052d12d891d9763b4",
+    "model": "fal-ai/flux-2/klein/9b",
+    "seed": 286158812,
+    "url": "/library/cyborg/img_01ksf5cc7kfzrb4ws15r6zzxdv.webp",
+    "width": 1024,
+    "height": 1024,
+    "palette": null,
+    "status": "active"
+  },
+  {
     "id": "img_01ksf2vvkgeh7vmd0p2yknxjgm",
     "deck": "cyborg",
     "prompt": "a slow-motion ink-in-water swirl of magenta and cyan, liquid psychedelic",
@@ -3790,6 +4232,32 @@
     "model": "fal-ai/flux-2/klein/9b",
     "seed": 2080264951,
     "url": "/library/cyborg/img_01ksf2vvkgeh7vmd0p2yknxjgm.webp",
+    "width": 1024,
+    "height": 1024,
+    "palette": null,
+    "status": "active"
+  },
+  {
+    "id": "img_01ksf5cey6fzrb4wsdhp34xg7t",
+    "deck": "cyborg",
+    "prompt": "a neon bonsai tree glowing magenta and cyan in a dark chrome room",
+    "promptHash": "e760d31d6d2a336fa72faf42089ab2ae116a5c760d1a2a8341dcbac17f7a4a6b",
+    "model": "fal-ai/flux-2/klein/9b",
+    "seed": 1635616955,
+    "url": "/library/cyborg/img_01ksf5cey6fzrb4wsdhp34xg7t.webp",
+    "width": 1024,
+    "height": 1024,
+    "palette": null,
+    "status": "active"
+  },
+  {
+    "id": "img_01ksf5b53zfzrb4wnq30rx3rd1",
+    "deck": "cyborg",
+    "prompt": "a neon night market where pandas and chrome robots mingle, cyan glow",
+    "promptHash": "e843b8689f015e44c1ad5e18ba7416fc94e185f2d6b7afaa8e66a96bfc72832b",
+    "model": "fal-ai/flux-2/klein/9b",
+    "seed": 1927209457,
+    "url": "/library/cyborg/img_01ksf5b53zfzrb4wnq30rx3rd1.webp",
     "width": 1024,
     "height": 1024,
     "palette": null,
@@ -3822,6 +4290,19 @@
     "status": "active"
   },
   {
+    "id": "img_01ksf5b2j1fzrb4wnbanq7x3y8",
+    "deck": "cyborg",
+    "prompt": "a panda in mirrored sunglasses spinning vinyl, neon decks, magenta haze",
+    "promptHash": "ea4f74848350fae6a392eb031cea797817362c96274505ee9e7a783159621cd7",
+    "model": "fal-ai/flux-2/klein/9b",
+    "seed": 902434846,
+    "url": "/library/cyborg/img_01ksf5b2j1fzrb4wnbanq7x3y8.webp",
+    "width": 1024,
+    "height": 1024,
+    "palette": null,
+    "status": "active"
+  },
+  {
     "id": "img_01ksf338e0eh7vmdrn961kt17f",
     "deck": "cyborg",
     "prompt": "a macro of an 808 cowbell button glowing under a single neon spotlight",
@@ -3829,6 +4310,19 @@
     "model": "fal-ai/flux-2/klein/9b",
     "seed": 770385143,
     "url": "/library/cyborg/img_01ksf338e0eh7vmdrn961kt17f.webp",
+    "width": 1024,
+    "height": 1024,
+    "palette": null,
+    "status": "active"
+  },
+  {
+    "id": "img_01ksf5cqemfzrb4wtf7zh6c42b",
+    "deck": "cyborg",
+    "prompt": "a panda in a chrome mech suit dancing under strobes, neon glow, fog",
+    "promptHash": "ec0f944d4551013aaa984d586f553e735cd1174b5cc1949d350f529a38252cb9",
+    "model": "fal-ai/flux-2/klein/9b",
+    "seed": 600669371,
+    "url": "/library/cyborg/img_01ksf5cqemfzrb4wtf7zh6c42b.webp",
     "width": 1024,
     "height": 1024,
     "palette": null,
@@ -3894,6 +4388,19 @@
     "model": "fal-ai/flux-2/klein/9b",
     "seed": 247048915,
     "url": "/library/cyborg/img_01ksf2z57geh7vmdawfbn97we8.webp",
+    "width": 1024,
+    "height": 1024,
+    "palette": null,
+    "status": "active"
+  },
+  {
+    "id": "img_01ksf59yr6fzrb4whk9jx0sk63",
+    "deck": "cyborg",
+    "prompt": "terracotta warriors with glowing neon cracks, a cyber army, cyan light, dust",
+    "promptHash": "ef19b51c784dc71753eb45bb7065b8a2a31e0029f63cac7f5e827a244d138c55",
+    "model": "fal-ai/flux-2/klein/9b",
+    "seed": 1261018402,
+    "url": "/library/cyborg/img_01ksf59yr6fzrb4whk9jx0sk63.webp",
     "width": 1024,
     "height": 1024,
     "palette": null,
@@ -3985,6 +4492,19 @@
     "model": "fal-ai/flux-2/klein/9b",
     "seed": 859128079,
     "url": "/library/cyborg/img_01ksf10bdhfevtpwbmjmjnnzhx.webp",
+    "width": 1024,
+    "height": 1024,
+    "palette": null,
+    "status": "active"
+  },
+  {
+    "id": "img_01ksf5by5efzrb4wr447hzvg25",
+    "deck": "cyborg",
+    "prompt": "a chrome panda head wrapped in neon circuitry, magenta eyes, black background",
+    "promptHash": "f50b1f670086f0f554aad0681b2ec5b9bc5443180a0e2d32fe6fb3c3afb77d33",
+    "model": "fal-ai/flux-2/klein/9b",
+    "seed": 1042272510,
+    "url": "/library/cyborg/img_01ksf5by5efzrb4wr447hzvg25.webp",
     "width": 1024,
     "height": 1024,
     "palette": null,
@@ -4121,6 +4641,19 @@
     "status": "active"
   },
   {
+    "id": "img_01ksf5ayenfzrb4wmvfemxcgyv",
+    "deck": "cyborg",
+    "prompt": "a Chinese paper dragon parade lit by neon, magenta and cyan lanterns, night",
+    "promptHash": "fa75d78ad0afb6eb8e8577cd960451518bd03c088a4e2fc33944027907f138c0",
+    "model": "fal-ai/flux-2/klein/9b",
+    "seed": 2016614630,
+    "url": "/library/cyborg/img_01ksf5ayenfzrb4wmvfemxcgyv.webp",
+    "width": 1024,
+    "height": 1024,
+    "palette": null,
+    "status": "active"
+  },
+  {
     "id": "img_01ksf2xazneh7vmd51c10x6362",
     "deck": "cyborg",
     "prompt": "cascading streams of green-cyan data rain down a black screen, matrix glow",
@@ -4206,6 +4739,19 @@
     "model": "fal-ai/flux-2/klein/9b",
     "seed": 146308521,
     "url": "/library/cyborg/img_01ksf10qezfevtpwctb7fgxmj4.webp",
+    "width": 1024,
+    "height": 1024,
+    "palette": null,
+    "status": "active"
+  },
+  {
+    "id": "img_01ksf5b79hfzrb4wnwkqqrw9zt",
+    "deck": "cyborg",
+    "prompt": "a giant red lantern descending over a chrome crowd, magenta light, fog",
+    "promptHash": "fee11d81f09fec9dd606aff503a199f7b2211b965aef33d65b8c5d0b5549c324",
+    "model": "fal-ai/flux-2/klein/9b",
+    "seed": 396897000,
+    "url": "/library/cyborg/img_01ksf5b79hfzrb4wnwkqqrw9zt.webp",
     "width": 1024,
     "height": 1024,
     "palette": null,

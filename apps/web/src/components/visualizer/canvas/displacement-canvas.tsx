@@ -40,9 +40,9 @@ import {
   VERTEX_SHADER,
 } from "./displacement-shaders";
 
-const BLEED_MS = 2500;
-const FADE_MS = 1800;
-const PRESET_CROSSFADE_MS = 2000;
+const BLEED_MS = 1300;
+const FADE_MS = 1000;
+const PRESET_CROSSFADE_MS = 1400;
 // Client-side session arc length. sessionProgress = min(1, (now-mountedAt)/ARC).
 // Drives glitch-peek cadence, feedback trail depth, and a subtle palette temp
 // via uSessionProgress in the fragment shader. Server has its own arc in
@@ -371,11 +371,14 @@ export function DisplacementCanvas() {
 
     let lastLoadedUrl: string | null = null;
     let pendingImg: HTMLImageElement | null = null;
-    const unsubFrame = useVisualizerStore.subscribe((state) => {
-      const url = state.currentFrame;
-      if (!url || url === lastLoadedUrl) return;
-      lastLoadedUrl = url;
+    let retryTimer: ReturnType<typeof setTimeout> | null = null;
 
+    // Load `url` into the inactive texture slot. On a transient load failure
+    // we retry (a few times, backing off) instead of leaving the visual frozen
+    // on the previous frame until the next periodic trigger — that gap was the
+    // cause of the occasional "stuck frame". Retries stop as soon as a newer
+    // frame supersedes this URL.
+    const loadFrame = (url: string, attempt: number) => {
       if (pendingImg) {
         pendingImg.onload = null;
         pendingImg.onerror = null;
@@ -401,12 +404,32 @@ export function DisplacementCanvas() {
         drops = randomDropLayers();
         markImageLoaded();
       };
-      img.onerror = (err) => {
+      img.onerror = () => {
         if (pendingImg !== img) return;
         pendingImg = null;
-        console.warn("[DisplacementCanvas] image load failed:", err);
+        const stillCurrent =
+          useVisualizerStore.getState().currentFrame === url;
+        if (attempt < 3 && stillCurrent) {
+          retryTimer = setTimeout(
+            () => loadFrame(url, attempt + 1),
+            300 * (attempt + 1),
+          );
+        } else {
+          console.warn("[DisplacementCanvas] image load failed:", url);
+        }
       };
       img.src = url;
+    };
+
+    const unsubFrame = useVisualizerStore.subscribe((state) => {
+      const url = state.currentFrame;
+      if (!url || url === lastLoadedUrl) return;
+      lastLoadedUrl = url;
+      if (retryTimer) {
+        clearTimeout(retryTimer);
+        retryTimer = null;
+      }
+      loadFrame(url, 0);
     });
 
     {
@@ -875,6 +898,7 @@ export function DisplacementCanvas() {
       unsubFrame();
       unsubPreset();
       unsubPalette();
+      if (retryTimer) clearTimeout(retryTimer);
       if (pendingImg) {
         pendingImg.onload = null;
         pendingImg.onerror = null;
