@@ -106,8 +106,19 @@ export class AudioEngine {
     await this.ensureContext();
     this.detachSource();
     if (!this.ctx || !this.analyser || !this.compressor) return;
+    // Request RAW capture. The browser defaults echoCancellation /
+    // noiseSuppression / autoGainControl to ON and tuned for *speech* — fine
+    // for a phone call, destructive for a music feed (AGC pumps levels,
+    // noise-suppression chews sustained pads, all of which wreck beat
+    // detection). This is the path used for a club line/USB feed (e.g. a
+    // Pioneer DJM master over USB, or REC OUT → a USB interface), so turn the
+    // voice DSP off and analyse the music as-is.
     const stream = await navigator.mediaDevices.getUserMedia({
-      audio: true,
+      audio: {
+        echoCancellation: false,
+        noiseSuppression: false,
+        autoGainControl: false,
+      },
       video: false,
     });
     this.mediaStream = stream;
