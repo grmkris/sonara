@@ -85,7 +85,7 @@ export default function LandingPage() {
           />
           <div className="flex max-w-[680px] flex-col gap-6">
             <h1
-              className="wordmark font-serif italic leading-[0.95] text-[color:var(--paper)]"
+              className="reveal wordmark font-serif italic leading-[0.95] text-[color:var(--paper)]"
               style={{
                 fontSize: "clamp(56px, 9vw, 128px)",
                 fontWeight: 500,
@@ -95,11 +95,13 @@ export default function LandingPage() {
               <br />
               made visible.
             </h1>
-            <p className="font-sans max-w-[38ch] text-[15px] leading-relaxed text-[color:var(--paper)]/85 md:text-[16px]">
-              a browser-based visualiser that listens to what you play and
-              paints what it hears — in realtime, at 60 frames a second.
+            <p
+              className="reveal reveal-1 font-sans max-w-[38ch] text-[15px] leading-relaxed text-[color:var(--paper)]/85 md:text-[16px]"
+            >
+              it listens to whatever you're playing and paints what it hears, as
+              it happens.
             </p>
-            <div className="flex flex-wrap items-center gap-5 pt-2">
+            <div className="reveal reveal-2 flex flex-wrap items-center gap-5 pt-2">
               <Link
                 href="/play"
                 className="focus-ring font-sans border border-[color:var(--paper)]/70 px-5 py-2.5 text-[11px] uppercase tracking-[0.24em] text-[color:var(--paper)] transition-colors hover:bg-[color:var(--paper)] hover:text-[color:var(--ink)]"
@@ -113,9 +115,6 @@ export default function LandingPage() {
                 sign in
               </Link>
             </div>
-            <p className="font-mono mt-2 text-[10px] uppercase tracking-[0.24em] text-[color:var(--stone)]">
-              no install · works in chrome · webgl2
-            </p>
           </div>
         </section>
 
@@ -124,18 +123,18 @@ export default function LandingPage() {
           <div className="grid gap-10 md:grid-cols-3 md:gap-8">
             <Capability
               eyebrow="01 listen"
-              hook="from any sound"
-              body="share a browser tab, plug a mic, or drop in an audio file. song-recognition adds the artist and title automatically."
+              hook="any sound"
+              body="share a tab, open the mic, or drop in a track. it knows the song, too."
             />
             <Capability
               eyebrow="02 speak"
-              hook="from your voice"
-              body="describe what you want — by voice or by typing — across four fields: subject, environment, mood, palette. one click commits."
+              hook="in your words"
+              body="say it or type it; the scene composes itself."
             />
             <Capability
-              eyebrow="03 watch"
-              hook="at sixty frames a second"
-              body="a webgl2 displacement shader carries continuity between ai-generated keyframes. twenty-one presets, a kuwahara painterly pass, audio-reactive throughout."
+              eyebrow="03 show"
+              hook="an image"
+              body="hand it a picture and it carries that look through."
             />
           </div>
         </section>
@@ -163,7 +162,7 @@ export default function LandingPage() {
         <footer className="relative border-t border-[color:var(--hairline)]/25 bg-[color:var(--ink)]/85 px-6 py-6 backdrop-blur-sm md:px-12">
           <div className="flex flex-wrap items-center justify-between gap-4">
             <span className="font-serif text-[22px] italic text-[color:var(--paper)]/85">
-              sonara
+              sonara.fm
             </span>
             <nav className="font-mono flex items-center gap-5 text-[10px] uppercase tracking-[0.24em] text-[color:var(--stone)]">
               <Link

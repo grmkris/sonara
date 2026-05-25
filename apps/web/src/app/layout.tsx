@@ -13,12 +13,12 @@ export const metadata: Metadata = {
     template: "%s · sonara",
   },
   description:
-    "A browser-based visualiser that listens to what you play and paints what it hears — in realtime, at 60 frames a second.",
+    "It listens to whatever you're playing and paints what it hears, as it happens.",
   openGraph: {
     type: "website",
     title: "sonara — music, made visible",
     description:
-      "Realtime AI visuals driven by sound, voice, and prompt. No install, runs in the browser.",
+      "Visuals driven by what you play, what you say, and the images you show.",
     siteName: "sonara",
     url: "https://sonara.fm",
     images: [
@@ -34,7 +34,7 @@ export const metadata: Metadata = {
     card: "summary_large_image",
     title: "sonara — music, made visible",
     description:
-      "Realtime AI visuals driven by sound, voice, and prompt. No install, runs in the browser.",
+      "Visuals driven by what you play, what you say, and the images you show.",
     images: ["/library/wild/img_01krh2j35wf23vwphhkfxpyefv.webp"],
   },
 };
