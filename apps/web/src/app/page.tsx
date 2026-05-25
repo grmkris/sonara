@@ -139,25 +139,6 @@ export default function LandingPage() {
           </div>
         </section>
 
-        {/* Discovery strip — surfaces the hotkeys that used to clutter
-           the visualiser chrome. */}
-        <section className="relative border-t border-[color:var(--hairline)]/25 bg-[color:var(--ink)]/85 px-6 py-6 backdrop-blur-sm md:px-12">
-          <p className="font-mono flex flex-wrap items-center gap-x-6 gap-y-2 text-[10px] uppercase tracking-[0.24em] text-[color:var(--stone)]">
-            <span>
-              <span className="text-[color:var(--paper)]">f</span> fullscreen
-            </span>
-            <span>
-              <span className="text-[color:var(--paper)]">h</span> hide ui
-            </span>
-            <span>
-              <span className="text-[color:var(--paper)]">r</span> record
-            </span>
-            <span>
-              <span className="text-[color:var(--paper)]">⌫</span> reset
-            </span>
-          </p>
-        </section>
-
         {/* Footer */}
         <footer className="relative border-t border-[color:var(--hairline)]/25 bg-[color:var(--ink)]/85 px-6 py-6 backdrop-blur-sm md:px-12">
           <div className="flex flex-wrap items-center justify-between gap-4">
