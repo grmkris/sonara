@@ -156,6 +156,13 @@ export class Session {
   private recentLibraryPicks: ImageLibraryId[] = [];
   private static readonly LIBRARY_LRU = 10;
 
+  // Consecutive image-anchor generation failures. Resets on any anchor
+  // success; once it hits ANCHOR_FAILURE_LIMIT we auto-clear the anchor so a
+  // dead fal.storage URL (or repeated rejections) stops re-triggering on
+  // every periodic tick.
+  private anchorFailureCount = 0;
+  private static readonly ANCHOR_FAILURE_LIMIT = 3;
+
   // Stateful per-keyframe drift sequence. Reseeded whenever the resolver
   // returns fresh LLM-generated drift_candidates (i.e., scene-hash changed).
   // Falls back to the curated static pool until the first LLM cache fill.
@@ -224,11 +231,20 @@ export class Session {
       this.logger.info({}, "image anchor cleared");
       return;
     }
+    // No-op dedupe: re-pinning the exact same {url, strength} (reconnect
+    // re-hydration, or re-clicking the already-active preset) must not fire a
+    // fresh paid generation. A *different* strength still falls through.
+    const cur = this.scene.imageAnchor;
+    if (cur && cur.url === input.url && cur.strength === input.strength) {
+      return;
+    }
     // Anchor wins over demo. setDemoMode doesn't touch anchor; if both are
     // attempted to be set simultaneously, the most recent mutation lands.
     if (this.demoMode) {
       this.demoMode = false;
     }
+    // Fresh anchor → reset the failure streak from any prior anchor.
+    this.anchorFailureCount = 0;
     this.scene = {
       ...this.scene,
       imageAnchor: { url: input.url, strength: input.strength },
@@ -862,6 +878,7 @@ export class Session {
       },
       onFinal: (url) => {
         if (version !== this.activeVersion) return;
+        this.anchorFailureCount = 0; // success clears the failure streak
         this.lastGeneratedScene = snapshot;
         this.send({ type: "frame.final", imageUrl: url, version });
         this.send({ type: "job.status", status: "idle" });
@@ -874,14 +891,31 @@ export class Session {
       },
       onError: (err) => {
         refundOnError(userId, paidCost, this.logger);
+        // Aborts are expected supersessions (newer trigger won) — they don't
+        // count toward the failure streak.
         if (controller.signal.aborted) return;
-        this.logger.error({ err }, "anchor generation failed");
+        this.anchorFailureCount += 1;
+        this.logger.error(
+          { err, anchorFailureCount: this.anchorFailureCount },
+          "anchor generation failed",
+        );
         const message = err instanceof Error ? err.message : String(err);
-        this.send({
-          type: "job.status",
-          status: "error",
-          message,
-        });
+        if (this.anchorFailureCount >= Session.ANCHOR_FAILURE_LIMIT) {
+          // Dead fal.storage URL or repeated rejections — auto-clear the
+          // anchor so we stop retrying (and refunding) it on every periodic
+          // tick. The user can re-upload to try again.
+          this.anchorFailureCount = 0;
+          this.scene = { ...this.scene, imageAnchor: undefined };
+          this.send({ type: "scene.state", state: this.scene });
+          this.send({
+            type: "job.status",
+            status: "error",
+            message:
+              "Image anchor failed repeatedly — cleared it. Re-upload to try again.",
+          });
+        } else {
+          this.send({ type: "job.status", status: "error", message });
+        }
         this.send({
           type: "generation.completed",
           version,
