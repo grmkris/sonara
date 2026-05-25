@@ -25,22 +25,34 @@ export async function pickLibraryFrame(
   const excludeUuids = excludeIds.map((id) => typeIdToUuid(id).uuid);
   const client = await getPool().connect();
   try {
-    const res = await client.query<{
-      id: string;
-      url: string;
-      width: number;
-      height: number;
-    }>(
-      `SELECT id::text AS id, url, width, height
-         FROM image_library
-        WHERE deck = $1
-          AND status = 'active'
-          AND id <> ALL($2::uuid[])
-        ORDER BY random()
-        LIMIT 1`,
-      [deck, excludeUuids],
-    );
-    const row = res.rows[0];
+    const pick = async (exclude: string[]) =>
+      (
+        await client.query<{
+          id: string;
+          url: string;
+          width: number;
+          height: number;
+        }>(
+          `SELECT id::text AS id, url, width, height
+             FROM image_library
+            WHERE deck = $1
+              AND status = 'active'
+              AND id <> ALL($2::uuid[])
+            ORDER BY random()
+            LIMIT 1`,
+          [deck, exclude],
+        )
+      ).rows[0];
+
+    // Prefer a frame not recently served. But when the recent-LRU covers the
+    // whole deck (deck size <= LIBRARY_LRU), the exclusion empties the result
+    // and we'd otherwise return null → the session reports "deck empty" and
+    // freezes on the last frame. Fall back to the full deck so demo mode loops
+    // forever regardless of deck size (a small deck just repeats sooner).
+    let row = await pick(excludeUuids);
+    if (!row && excludeUuids.length > 0) {
+      row = await pick([]);
+    }
     if (!row) {
       logger.debug({ deck }, "library-provider: no rows for deck");
       return null;
