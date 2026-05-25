@@ -5,18 +5,23 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { SonaraCanvas } from "@/components/visualizer/canvas/sonara-canvas";
 import { useWsSession } from "@/hooks/use-ws-session";
+import { useDemoFrameLoop } from "@/hooks/use-demo-frame-loop";
 import { useAudioFeatures, type AudioSource } from "@/hooks/use-audio-features";
 import { useVisualizerStore } from "@/stores/visualizer";
 import { getDemoTrack } from "@/lib/demo-audio";
 
 // Landing page. Same SonaraCanvas the visualiser uses, mounted as a
 // fixed backplate so it stays visible while marketing copy scrolls over
-// it. Anon WS session pins the server to demo-library mode, and the
-// state() snapshot hydrates demoMode + demoDeck on connect — that's
-// what makes the audio + frames actually start without any toggle.
+// it. Demo is client-native: useDemoFrameLoop() cycles a deck's static
+// frames into the canvas (with the displacement-shader transitions) and
+// a hidden <audio> plays the demo track — no server/WS frames involved.
+// The anon WS snapshot still sets demoMode+deck for visitors, but the
+// effect below also self-starts demo so signed-in/offline visitors (who
+// get no anon pin) still see the backplate instead of black.
 
 export default function LandingPage() {
   const send = useWsSession();
+  useDemoFrameLoop();
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const [audioSource, setAudioSource] = useState<AudioSource>({ type: "none" });
 
@@ -26,6 +31,17 @@ export default function LandingPage() {
   // received it, and this effect fires.
   const demoMode = useVisualizerStore((s) => s.demoMode);
   const demoDeck = useVisualizerStore((s) => s.demoDeck);
+
+  // Self-start demo on the landing regardless of auth/connectivity. The anon
+  // WS snapshot sets these for most visitors, but signed-in or offline
+  // visitors get no anon pin — without this the backplate would be black.
+  // Only fills gaps (won't override a deck the snapshot already chose).
+  useEffect(() => {
+    const st = useVisualizerStore.getState();
+    if (!st.demoMode) st.setDemoMode(true);
+    if (!st.demoDeck) st.setDemoDeck("cyborg");
+  }, []);
+
   useEffect(() => {
     const el = audioRef.current;
     if (!el || !demoMode) return;
