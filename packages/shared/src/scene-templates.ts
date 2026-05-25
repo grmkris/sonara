@@ -62,6 +62,12 @@ export const SCENE_TEMPLATES: readonly SceneTemplate[] = [
     prompt:
       "a lighthouse above a stormy cove on winter cliffs with crashing waves, fierce and alone, slate and foam and iron",
   },
+  {
+    key: "cyborg",
+    label: "cyborg",
+    prompt:
+      "a chrome android dancing in a fog-filled neon club under strobing lights, electric and relentless, magenta and cyan and mirror-chrome",
+  },
 ] as const;
 
 export function getSceneTemplate(key: string): SceneTemplate | null {

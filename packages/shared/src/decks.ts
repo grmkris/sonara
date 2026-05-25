@@ -13,6 +13,7 @@ export const DECKS = [
   { key: "bloom", label: "Bloom" },
   { key: "sacred", label: "Sacred" },
   { key: "neon", label: "Neon" },
+  { key: "cyborg", label: "Cyborg" },
 ] as const;
 
 export type DeckKey = (typeof DECKS)[number]["key"];
