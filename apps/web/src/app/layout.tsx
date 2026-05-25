@@ -4,6 +4,7 @@ import Script from "next/script";
 import { mono, sans, serif } from "@/lib/fonts";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Toaster } from "@/components/ui/sonner";
+import { SwRegister } from "@/components/sw-register";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -55,6 +56,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
         )}
       </head>
       <body>
+        <SwRegister />
         <TooltipProvider delayDuration={100}>
           {children}
           <Toaster

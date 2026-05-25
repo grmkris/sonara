@@ -18,6 +18,17 @@
 	}
 
 	handle {
+		# Immutable content-addressed library frames (img_<typeid>.webp) — a
+		# far-future cache so the first visit + offline prefetch also stick in
+		# the browser's HTTP cache, not just the service worker.
+		@frames path *.webp
+		header @frames Cache-Control "public, max-age=31536000, immutable"
+
+		# The service worker must revalidate on every load so a new deploy's
+		# sw.js is picked up promptly.
+		@sw path /sw.js
+		header @sw Cache-Control "no-cache"
+
 		reverse_proxy {$WEB_URL:http://web.railway.internal:4472}
 	}
 }
