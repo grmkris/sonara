@@ -40,9 +40,9 @@ import {
   VERTEX_SHADER,
 } from "./displacement-shaders";
 
-const BLEED_MS = 7000;
-const FADE_MS = 2200;
-const PRESET_CROSSFADE_MS = 3500;
+const BLEED_MS = 2500;
+const FADE_MS = 1800;
+const PRESET_CROSSFADE_MS = 2000;
 // Client-side session arc length. sessionProgress = min(1, (now-mountedAt)/ARC).
 // Drives glitch-peek cadence, feedback trail depth, and a subtle palette temp
 // via uSessionProgress in the fragment shader. Server has its own arc in

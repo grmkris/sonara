@@ -110,6 +110,24 @@ export const BASE: PresetConfig = {
 export const PRESETS: Record<PresetName, PresetConfig> = {
   wet_ink: { ...BASE, wetEdge: 0.4, granulation: 0.25, painterly: 0.35, salt: 0.3 },
 
+  // Hard, trippy, beat-slamming. The event default for a techno DJ night:
+  // imagery stays readable, but the beat reactivity hits harder (noiseMult +
+  // boosted drum routing), with feedback trails, a swirl, kick-gated invert,
+  // and big bloom for a "very active" feel. Pair with the fast cadence.
+  rave: {
+    ...BASE,
+    noiseMult: 1.6,
+    bloomMult: 1.5,
+    feedbackAmount: 0.5,
+    invert: 0.4,
+    polarWarp: 0.22,
+    edge: 0.6,
+    halation: 0.45,
+    duotoneMix: 0.18,
+    duotoneLo: [0.12, 0.02, 0.16],
+    duotoneHi: [0.3, 0.95, 0.98],
+  },
+
   ember: {
     ...BASE,
     bloomMult: 1.25,

@@ -75,6 +75,13 @@ export interface ResolvedAudio {
 // Keep entries opinionated and sparse — only override where the preset has
 // a genuinely different "ear" than the default.
 export const AUDIO_ROUTING: Partial<Record<PresetName, PresetAudioRouting>> = {
+  // Hard techno ear: lean into the drums so the beat slams the visuals.
+  rave: {
+    kick: { src: "kick", gain: 1.6 },
+    snare: { src: "snare", gain: 1.4 },
+    bass: { src: "bass", gain: 1.3 },
+    treble: { src: "treble", gain: 1.4 },
+  },
   // Contemplative: treat percussion as sustained loudness so nothing twitches.
   dust: {
     kick: { src: "rms", gain: 0.4 },

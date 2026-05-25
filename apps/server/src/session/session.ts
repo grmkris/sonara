@@ -107,7 +107,7 @@ function lerp(a: number, b: number, t: number): number {
 function cadenceFromIntensity(i: number): { periodicMs: number; pauseMs: number } {
   const I = Math.max(0, Math.min(1, i));
   return {
-    periodicMs: Math.round(lerp(16_000, 8_000, I)),
+    periodicMs: Math.round(lerp(10_000, 5_000, I)),
     pauseMs: Math.round(lerp(1_500, 400, I)),
   };
 }

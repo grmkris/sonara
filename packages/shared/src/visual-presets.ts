@@ -26,6 +26,7 @@ export const VISUAL_PRESET_NAMES = [
   "cut_crystal",
   "long_exposure",
   "transfer_paper",
+  "rave",
 ] as const;
 
 export type VisualPresetName = (typeof VISUAL_PRESET_NAMES)[number];
@@ -52,4 +53,5 @@ export const VISUAL_PRESET_DESCRIPTIONS: Record<VisualPresetName, string> = {
   cut_crystal: "faceted kaleido, sharp light",
   long_exposure: "motion-blurred trails",
   transfer_paper: "ink-transfer texture, slight misregister",
+  rave: "hard, trippy, beat-slamming neon",
 };

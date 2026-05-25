@@ -52,7 +52,7 @@ export const createPresetSlice: StateCreator<
   [],
   PresetSlice
 > = (set) => ({
-  preset: "wet_ink",
+  preset: "rave",
   presetMode: "manual",
   presetCycleMs: 90_000,
   presetTick: 0,
