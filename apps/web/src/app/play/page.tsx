@@ -5,6 +5,7 @@ import { SlidersHorizontal } from "lucide-react";
 import { toast } from "sonner";
 import { SonaraCanvas } from "@/components/visualizer/canvas/sonara-canvas";
 import { GhostOverlay } from "@/components/visualizer/canvas/ghost-overlay";
+import { PromoOverlay } from "@/components/visualizer/promo-overlay";
 import { PromptInput } from "@/components/visualizer/controls/prompt-input";
 import { MusicSource } from "@/components/visualizer/controls/music-source";
 import { AudioRibbon } from "@/components/visualizer/audio/audio-ribbon";
@@ -26,6 +27,7 @@ import {
 import Link from "next/link";
 import { useSession } from "@/lib/auth-client";
 import { useWsSession } from "@/hooks/use-ws-session";
+import { useDemoFrameLoop } from "@/hooks/use-demo-frame-loop";
 import {
   useAudioFeatures,
   type AudioSource,
@@ -45,6 +47,10 @@ import { cn } from "@/lib/utils";
 
 export default function Page() {
   const send = useWsSession();
+  // Demo is client-native: the browser drives demo frames from a static
+  // manifest, so it works on slow/no internet (the server never generates in
+  // demo mode).
+  useDemoFrameLoop();
   const { data: sessionData } = useSession();
   const isSignedIn = !!sessionData?.session;
   const [audioSource, setAudioSource] = useState<AudioSource>({ type: "none" });
@@ -89,6 +95,17 @@ export default function Page() {
     hydrateConsoleTab();
   }, []);
 
+  // Anonymous visitors have no server session pinning them to demo mode, and
+  // offline there's no connect snapshot either — default them into demo so the
+  // client-native loop runs. Signed-in users control their own demo toggle.
+  useEffect(() => {
+    if (sessionData === undefined) return; // session still resolving
+    if (isSignedIn) return;
+    const st = useVisualizerStore.getState();
+    if (!st.demoMode) st.setDemoMode(true);
+    if (!st.demoDeck) st.setDemoDeck("cyborg");
+  }, [sessionData, isSignedIn]);
+
   useHotkey(
     HOTKEYS.reset,
     useCallback(() => {
@@ -107,6 +124,10 @@ export default function Page() {
       {/* Editorial paper grain — fixed, very faint, blended with overlay so it
          tints both the dark background and the generated image consistently. */}
       <div aria-hidden className="grain-overlay" />
+
+      {/* Promotion overlay — persists through the chrome hide toggle so the
+         brand stays on screen during a clean fullscreen show. */}
+      <PromoOverlay />
 
       {/* Corner-reveal trigger: an invisible 200×48 div anchored top-right.
          While the UI is hidden, mousing into it brings the chrome back —

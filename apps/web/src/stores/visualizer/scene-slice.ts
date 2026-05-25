@@ -18,6 +18,7 @@ export interface SceneSlice {
   pushFrame: (url: string, version: number) => void;
   setStatus: (s: JobStatus, msg?: string) => void;
   setConnected: (c: boolean) => void;
+  resetFrameVersion: () => void;
 }
 
 export const createSceneSlice: StateCreator<
@@ -54,4 +55,8 @@ export const createSceneSlice: StateCreator<
     if (status === "running") set((s) => ({ sweepPulse: s.sweepPulse + 1 }));
   },
   setConnected: (c) => set({ connected: c }),
+  // Zero the monotonic frame guard. Called when the frame *producer* changes
+  // (client demo loop ↔ server live-gen, toggled via demo mode) so the new
+  // producer's next frame is never rejected as "stale" by pushFrame's guard.
+  resetFrameVersion: () => set({ latestVersion: 0 }),
 });

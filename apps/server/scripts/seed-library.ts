@@ -35,6 +35,7 @@ import {
 import { eq } from "drizzle-orm";
 import sharp from "sharp";
 import { env } from "../src/env";
+import { buildLibraryManifests } from "./build-library-manifests";
 
 interface ManifestEntry {
   deck: DeckKey;
@@ -210,6 +211,7 @@ async function importFromExport(args: Args): Promise<void> {
   console.log(
     `\nfrom-export: ${imported} imported, ${skipped} skipped, ${failed} failed (out of ${filtered.length})`,
   );
+  await buildLibraryManifests();
   process.exit(failed > 0 ? 1 : 0);
 }
 
@@ -339,6 +341,7 @@ async function main() {
   console.log(
     `\ntotal: ${totalGen} generated, ${totalSkip} skipped, ${totalFail} failed`,
   );
+  if (!args.dryRun) await buildLibraryManifests();
   process.exit(totalFail > 0 ? 1 : 0);
 }
 

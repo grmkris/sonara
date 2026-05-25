@@ -8,13 +8,12 @@ import {
   type ServerEvent,
   DECK_KEYS,
   defaultScene,
+  libraryCadenceMs,
 } from "@sonara/shared";
-import type { ImageLibraryId } from "@sonara/shared/typeid";
 import { EventPublisher } from "@orpc/server";
 import type { Logger } from "../lib/logger";
 import { streamPreview } from "../generation/fal-provider";
 import { streamAnchor } from "../generation/anchor-provider";
-import { pickLibraryFrame } from "../generation/library-provider";
 import { serializeResolvedScene } from "../generation/prompt-compiler";
 import { DriftTrajectory } from "../generation/prompt-drift";
 import { resolveScene, resolveSceneAwaited } from "../generation/scene-resolver";
@@ -107,7 +106,7 @@ function lerp(a: number, b: number, t: number): number {
 function cadenceFromIntensity(i: number): { periodicMs: number; pauseMs: number } {
   const I = Math.max(0, Math.min(1, i));
   return {
-    periodicMs: Math.round(lerp(6_000, 2_000, I)),
+    periodicMs: libraryCadenceMs(I),
     pauseMs: Math.round(lerp(1_500, 400, I)),
   };
 }
@@ -148,13 +147,10 @@ export class Session {
   private sessionStartAt = Date.now();
   private lastCreditDenialAt = 0;
 
-  // DEMO mode — when on, trigger() pulls a row from image_library instead of
-  // calling fal. `recentLibraryPicks` is a small LRU so back-to-back triggers
-  // don't repeat the same image.
+  // DEMO mode state. Frame-driving is client-side now (use-demo-frame-loop);
+  // the server only tracks these to relay in the connect snapshot + anon pinning.
   private demoMode = false;
   private demoDeck: DeckKey | null = null;
-  private recentLibraryPicks: ImageLibraryId[] = [];
-  private static readonly LIBRARY_LRU = 10;
 
   // Consecutive image-anchor generation failures. Resets on any anchor
   // success; once it hits ANCHOR_FAILURE_LIMIT we auto-clear the anchor so a
@@ -178,11 +174,9 @@ export class Session {
     });
     this.scene = { ...defaultScene };
     this.lastGeneratedScene = { ...defaultScene };
-    // Anonymous sessions are pinned to demo mode for the lifetime of the WS
-    // connection. trigger() short-circuits to triggerLibrary() at the top
-    // whenever demoMode && demoDeck, so anon never reaches credit-gate or fal.
-    // Deck is picked at random on connect — setDemoMode() can still swap it
-    // (the deck picker is harmless without a userId).
+    // Anonymous sessions default to demo mode; the connect snapshot relays
+    // demoMode/demoDeck to the client, whose demo loop (use-demo-frame-loop)
+    // drives the frames locally. A random deck is suggested; the picker swaps it.
     if (opts.userId === null) {
       this.demoMode = true;
       this.demoDeck = DECK_KEYS[Math.floor(Math.random() * DECK_KEYS.length)] ?? null;
@@ -446,15 +440,9 @@ export class Session {
     }
     this.demoMode = on;
     this.demoDeck = on ? deck : null;
-    // Reset the LRU exclude-set so a deck switch can re-pick from scratch.
-    this.recentLibraryPicks = [];
     this.logger.info({ demoMode: on, demoDeck: this.demoDeck }, "demo mode set");
-    // Kill the up-to-16s wait between toggling DEMO on and seeing the first
-    // library frame. trigger() short-circuits into triggerLibrary() at the
-    // top, so this is one library pick without any fal involvement.
-    if (on && deck) {
-      void this.trigger("semantic");
-    }
+    // Demo frames are driven client-side (use-demo-frame-loop); the client
+    // starts/stops its own loop on this toggle, so nothing to trigger here.
   }
 
   reset(): void {
@@ -474,7 +462,6 @@ export class Session {
     this.seed = rollSeed();
     this.sessionStartAt = Date.now();
     this.silentSinceAt = null;
-    this.recentLibraryPicks = [];
     this.recognitionInFlight?.abort();
     this.recognitionInFlight = null;
     this.startPeriodic();
@@ -504,10 +491,12 @@ export class Session {
       const now = Date.now();
       const { periodicMs } = cadenceFromIntensity(this.scene.intensity);
       if (now - this.lastKeyframeAt < periodicMs) return;
+      // Demo is client-driven (use-demo-frame-loop); the server only
+      // auto-triggers LIVE generation, and never while in demo mode.
+      if (this.demoMode) return;
       const hasAudio = now - this.lastAudioAt < 5000;
       const hasScene = this.scene.prompt.trim().length > 0;
-      const hasDemo = this.demoMode && this.demoDeck !== null;
-      if (!hasAudio && !hasScene && !hasDemo) return;
+      if (!hasAudio && !hasScene) return;
       this.trigger("periodic");
     }, 1000);
   }
@@ -518,15 +507,11 @@ export class Session {
     // part of `job.status` / `generation.requested`.
     const reason = source;
 
-    // DEMO mode short-circuit. Library frames bypass the empty-subject
-    // guard (the user may not have typed anything), the credit gate, the
-    // prompt resolver, and fal entirely. The library_provider returns null
-    // when the deck is empty → fall through to the normal fal path.
-    if (this.demoMode && this.demoDeck) {
-      this.lastKeyframeAt = Date.now();
-      await this.triggerLibrary(reason);
-      return;
-    }
+    // Demo is fully client-driven (apps/web/src/hooks/use-demo-frame-loop.ts):
+    // the browser cycles a static per-deck manifest, so demo works on slow/no
+    // internet and the server never generates in demo mode. This path runs
+    // only for live generation.
+    if (this.demoMode) return;
 
     // Image-anchor short-circuit. When the user has pinned an uploaded
     // image as a reference, route to flux-pro/v1.1-ultra with image_url
@@ -931,66 +916,4 @@ export class Session {
     });
   }
 
-  // Library-mode trigger. Picks one row from image_library, emits the same
-  // frame.final / job.status / generation.completed sequence the fal path
-  // emits — the client crossfade is identical. No credit debit, no fal call,
-  // no prompt resolver. Empty deck emits a friendly error and stops; we do
-  // NOT silently fall back to fal — the user explicitly opted out of fal by
-  // entering DEMO mode, and falling back would burn credits unexpectedly.
-  private async triggerLibrary(
-    reason: TriggerSource,
-  ): Promise<void> {
-    if (!this.demoDeck) return;
-
-    this.activeJob?.abort();
-    const controller = new AbortController();
-    this.activeJob = controller;
-    this.activeVersion += 1;
-    const version = this.activeVersion;
-    const requestedAt = Date.now();
-
-    const pick = await pickLibraryFrame(
-      this.demoDeck,
-      this.recentLibraryPicks,
-      this.logger,
-    );
-
-    if (controller.signal.aborted) return;
-    if (version !== this.activeVersion) return;
-
-    if (!pick) {
-      this.logger.warn(
-        { deck: this.demoDeck },
-        "library deck empty — emitting error, not falling back to fal",
-      );
-      this.activeVersion -= 1;
-      this.send({
-        type: "job.status",
-        status: "error",
-        message: `Demo deck "${this.demoDeck}" is empty — pick another deck or turn DEMO off.`,
-      });
-      return;
-    }
-
-    this.recentLibraryPicks = [pick.id, ...this.recentLibraryPicks].slice(
-      0,
-      Session.LIBRARY_LRU,
-    );
-
-    // Bump scene.version for the wire so the client renders the new image
-    // through the same path as a fal frame.
-    this.scene = { ...this.scene, version };
-    this.lastGeneratedScene = this.scene;
-    this.send({ type: "scene.state", state: this.scene });
-
-    this.send({ type: "job.status", status: "running", reason });
-    this.send({ type: "frame.final", imageUrl: pick.url, version });
-    this.send({ type: "job.status", status: "idle" });
-    this.send({
-      type: "generation.completed",
-      version,
-      durationMs: Date.now() - requestedAt,
-      success: true,
-    });
-  }
 }
