@@ -119,9 +119,15 @@ export default function Page() {
         />
       )}
 
-      {/* Always-visible corner: wordmark (with micro-hud beneath) +
-         tight right-side control cluster. */}
-      <div className="pointer-events-none absolute inset-x-0 top-0 z-30 flex items-start justify-between gap-3 px-4 pt-6 md:px-10 md:pt-8">
+      {/* Top corner: wordmark (with micro-hud beneath) + tight right-side
+         control cluster. Fades out with the rest of the chrome when the UI
+         is hidden — restore via the z-40 corner-reveal trigger or `h`. */}
+      <div
+        className={cn(
+          "pointer-events-none absolute inset-x-0 top-0 z-30 flex items-start justify-between gap-3 px-4 pt-6 md:px-10 md:pt-8",
+          uiVisible ? "ui-fade-in" : "ui-fade-out",
+        )}
+      >
         <div className="pointer-events-auto flex flex-col gap-3">
           <Logotype />
           <DemoChip />
@@ -295,7 +301,7 @@ function Logotype() {
       className="wordmark font-serif pointer-events-auto block select-none italic tracking-tight text-[color:var(--paper)]/85"
       style={{ fontSize: "34px", fontWeight: 500, lineHeight: 0.9 }}
     >
-      sonara
+      sonara.fm
     </span>
   );
 }
