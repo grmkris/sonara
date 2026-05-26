@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import type { ReactNode } from "react";
 import Script from "next/script";
 import { mono, sans, serif } from "@/lib/fonts";
@@ -15,6 +15,8 @@ export const metadata: Metadata = {
   },
   description:
     "It listens to whatever you're playing and paints what it hears, as it happens.",
+  // og:image / twitter:image come from the file-convention opengraph-image.tsx
+  // + twitter-image.tsx (the branded 1200×630 card) — don't set images here too.
   openGraph: {
     type: "website",
     title: "sonara — music, made visible",
@@ -22,22 +24,17 @@ export const metadata: Metadata = {
       "Visuals driven by what you play, what you say, and the images you show.",
     siteName: "sonara",
     url: "https://sonara.fm",
-    images: [
-      {
-        url: "/library/wild/img_01krh2j35wf23vwphhkfxpyefv.webp",
-        width: 1024,
-        height: 1024,
-        alt: "sonara visualiser still",
-      },
-    ],
   },
   twitter: {
     card: "summary_large_image",
     title: "sonara — music, made visible",
     description:
       "Visuals driven by what you play, what you say, and the images you show.",
-    images: ["/library/wild/img_01krh2j35wf23vwphhkfxpyefv.webp"],
   },
+};
+
+export const viewport: Viewport = {
+  themeColor: "#1a1612",
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {

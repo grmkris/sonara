@@ -14,6 +14,7 @@ import { HideToggle } from "@/components/visualizer/controls/hide-toggle";
 import { FullscreenToggle } from "@/components/visualizer/controls/fullscreen-toggle";
 import { RecordToggle } from "@/components/visualizer/controls/record-toggle";
 import { UserControls } from "@/components/user-controls";
+import { Mark } from "@/components/brand/mark";
 import { DemoRecorder } from "@/components/visualizer/controls/demo-recorder";
 import { ScanSweep } from "@/components/visualizer/canvas/scan-sweep";
 import { NowPlaying } from "@/components/visualizer/controls/now-playing";
@@ -327,12 +328,15 @@ function Logotype() {
   }, []);
 
   return (
-    <span
-      ref={ref}
-      className="wordmark font-serif pointer-events-auto block select-none italic tracking-tight text-[color:var(--paper)]/85"
-      style={{ fontSize: "34px", fontWeight: 500, lineHeight: 0.9 }}
-    >
-      sonara.fm
+    <span className="pointer-events-auto flex items-center gap-2.5 text-[color:var(--paper)]/85">
+      <Mark reactive className="h-7 w-7 shrink-0" />
+      <span
+        ref={ref}
+        className="wordmark font-serif block select-none italic tracking-tight"
+        style={{ fontSize: "34px", fontWeight: 500, lineHeight: 0.9 }}
+      >
+        sonara.fm
+      </span>
     </span>
   );
 }
