@@ -103,7 +103,7 @@ export default function Page() {
     if (isSignedIn) return;
     const st = useVisualizerStore.getState();
     if (!st.demoMode) st.setDemoMode(true);
-    if (!st.demoDeck) st.setDemoDeck("cyborg");
+    if (!st.demoDeck) st.setDemoDeck("liquid");
   }, [sessionData, isSignedIn]);
 
   useHotkey(

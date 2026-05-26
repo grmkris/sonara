@@ -2,8 +2,8 @@
 
 import { useEffect } from "react";
 
-// The showcase deck we want fully cached for offline playback.
-const PREFETCH_DECK = "cyborg";
+// The default deck we want cached for offline playback.
+const PREFETCH_DECK = "liquid";
 
 interface NetworkInformation {
   saveData?: boolean;

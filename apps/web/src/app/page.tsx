@@ -1,36 +1,25 @@
 "use client";
 
-import { Suspense, useEffect, useRef, useState } from "react";
+import { Suspense, useEffect } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { SonaraCanvas } from "@/components/visualizer/canvas/sonara-canvas";
 import { useWsSession } from "@/hooks/use-ws-session";
 import { useDemoFrameLoop } from "@/hooks/use-demo-frame-loop";
-import { useAudioFeatures, type AudioSource } from "@/hooks/use-audio-features";
 import { useVisualizerStore } from "@/stores/visualizer";
-import { getDemoTrack } from "@/lib/demo-audio";
 
 // Landing page. Same SonaraCanvas the visualiser uses, mounted as a
 // fixed backplate so it stays visible while marketing copy scrolls over
 // it. Demo is client-native: useDemoFrameLoop() cycles a deck's static
-// frames into the canvas (with the displacement-shader transitions) and
-// a hidden <audio> plays the demo track — no server/WS frames involved.
-// The anon WS snapshot still sets demoMode+deck for visitors, but the
-// effect below also self-starts demo so signed-in/offline visitors (who
-// get no anon pin) still see the backplate instead of black.
+// frames into the canvas (with the displacement-shader transitions) — no
+// server/WS frames and no audio. The backplate cycles silently on its own
+// cadence; audio-reactivity is a /play concern once the visitor brings sound.
+// The effect below self-starts demo so signed-in/offline visitors (who get no
+// anon WS pin) still see the backplate instead of black.
 
 export default function LandingPage() {
-  const send = useWsSession();
+  useWsSession();
   useDemoFrameLoop();
-  const audioRef = useRef<HTMLAudioElement | null>(null);
-  const [audioSource, setAudioSource] = useState<AudioSource>({ type: "none" });
-
-  // Demo-audio auto-play. Mirrors the effect in music-source.tsx but
-  // headless: no file picker, no mic toggle, just a hidden <audio>. The
-  // server pushed demoMode=true via the state() snapshot, the store
-  // received it, and this effect fires.
-  const demoMode = useVisualizerStore((s) => s.demoMode);
-  const demoDeck = useVisualizerStore((s) => s.demoDeck);
 
   // Self-start demo on the landing regardless of auth/connectivity. The anon
   // WS snapshot sets these for most visitors, but signed-in or offline
@@ -39,39 +28,8 @@ export default function LandingPage() {
   useEffect(() => {
     const st = useVisualizerStore.getState();
     if (!st.demoMode) st.setDemoMode(true);
-    if (!st.demoDeck) st.setDemoDeck("cyborg");
+    if (!st.demoDeck) st.setDemoDeck("liquid");
   }, []);
-
-  useEffect(() => {
-    const el = audioRef.current;
-    if (!el || !demoMode) return;
-    const track = getDemoTrack(demoDeck);
-    if (el.src.endsWith(track.url)) return;
-    el.src = track.url;
-    el.loop = true;
-    el.crossOrigin = "anonymous";
-    void el.play().catch(() => undefined);
-    setAudioSource({ type: "element", element: el });
-  }, [demoMode, demoDeck]);
-
-  // Browsers block <audio> autoplay until the visitor has interacted with
-  // the page. Retry on the first pointerdown anywhere on the landing —
-  // after that the audio-reactive shader can do its job.
-  useEffect(() => {
-    const retry = () => {
-      const el = audioRef.current;
-      if (el && el.paused) void el.play().catch(() => undefined);
-      window.removeEventListener("pointerdown", retry);
-    };
-    window.addEventListener("pointerdown", retry, { once: true });
-    return () => window.removeEventListener("pointerdown", retry);
-  }, []);
-
-  // Audio features → store (drives the shader's audio-reactive uniforms)
-  // + WS at 5 Hz. The 5 Hz forward goes to an anon Session that ignores
-  // most of it; the 60 Hz store write is what makes the visuals feel
-  // alive on the landing.
-  useAudioFeatures(audioSource, send);
 
   return (
     <main className="relative min-h-svh overflow-x-hidden bg-[color:var(--ink)] text-[color:var(--paper)]">
@@ -87,8 +45,6 @@ export default function LandingPage() {
         <SonaraCanvas />
       </div>
       <div aria-hidden className="grain-overlay" />
-      {/* Hidden demo-audio element. Source attached by the effect above. */}
-      <audio ref={audioRef} className="hidden" aria-hidden />
 
       <div className="relative z-10 flex min-h-svh flex-col">
         {/* Fold */}
