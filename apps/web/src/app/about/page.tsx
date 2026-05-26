@@ -5,7 +5,7 @@ import { CanvasBackplate } from "@/components/canvas-backplate";
 import { SiteFooter } from "@/components/site-footer";
 
 // About page. Same fixed canvas backplate as the landing (via CanvasBackplate),
-// with the story + how-it-works + maker copy scrolling over it in a z-10 column.
+// with the intro + what-it-is + maker copy scrolling over it in a z-10 column.
 
 const CONTACT_LINK =
   "focus-ring font-sans inline-flex items-center gap-2 border border-[color:var(--paper)]/70 px-4 py-2.5 text-[11px] uppercase tracking-[0.24em] text-[color:var(--paper)] transition-colors hover:bg-[color:var(--paper)] hover:text-[color:var(--ink)]";
@@ -35,9 +35,9 @@ export default function AboutPage() {
               that listens.
             </h1>
             <p className="reveal reveal-1 font-sans max-w-[44ch] text-[15px] leading-relaxed text-[color:var(--paper)]/85 md:text-[16px]">
-              Sonara is a browser-based instrument that turns live sound into
-              continuously generated image — no rig, no install, just a tab and
-              whatever you're playing.
+              Sonara turns your music into moving art, right in your web browser.
+              Play anything and it paints pictures that shift and flow along with
+              the sound, as it happens — nothing to download, nothing to set up.
             </p>
           </div>
         </section>
@@ -58,19 +58,19 @@ export default function AboutPage() {
             </h2>
             <div className="flex flex-col gap-4 font-sans text-[15px] leading-relaxed text-[color:var(--paper)]/80 md:text-[16px]">
               <p>
-                Open a tab, a mic, or a track and Sonara listens — it even knows
-                the song. Tell it a mood in your own words, or hand it a picture,
-                and the scene bends that way. Whatever the source, the visuals
-                move in time with the music.
+                Play a song, sing into your mic, or drop in a track — Sonara
+                listens, and it even recognises what's playing. Or just tell it a
+                mood in your own words, or show it a picture, and the visuals
+                follow your lead.
               </p>
               <p>
-                The picture never freezes and never repeats — it moves with the
-                sound and breathes with the room.
+                The picture never sits still and never repeats itself — it moves
+                with every beat and breathes with the room.
               </p>
               <p>
-                Born in the browser, made for the floor. Pick a starter look and
-                you're going in a click; when you're ready, take it live and the
-                scene carries right on from there.
+                Start from one of the ready-made looks with a single click. When
+                you want to make it your own, take the controls and steer it
+                live — the visuals carry on right from there.
               </p>
             </div>
           </div>
@@ -89,8 +89,8 @@ export default function AboutPage() {
               built by Kristjan Grm.
             </h2>
             <p className="font-sans max-w-[52ch] text-[15px] leading-relaxed text-[color:var(--paper)]/80 md:text-[16px]">
-              An independent developer working where music meets generative AI.
-              Say hello, follow along, or read the code.
+              An independent developer building playful things where music and AI
+              meet. Say hello, follow along, or peek behind the scenes.
             </p>
             <div className="flex flex-wrap items-center gap-4 pt-2">
               <a
