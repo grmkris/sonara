@@ -111,6 +111,47 @@ export default function LandingPage() {
           </div>
         </section>
 
+        {/* Story / about band — a short promotional bio of what Sonara is. */}
+        <section className="relative border-t border-[color:var(--hairline)]/25 bg-[color:var(--ink)]/85 px-6 py-14 backdrop-blur-sm md:px-12 md:py-20">
+          <div className="flex max-w-[760px] flex-col gap-6">
+            <span className="font-mono text-[10px] uppercase tracking-[0.28em] text-[color:var(--stone)]">
+              what it is
+            </span>
+            <h2
+              className="font-serif italic leading-[1.05] text-[color:var(--paper)]"
+              style={{ fontSize: "clamp(30px, 5vw, 56px)" }}
+            >
+              a visualiser that
+              <br />
+              actually listens.
+            </h2>
+            <div className="flex flex-col gap-4 font-sans text-[15px] leading-relaxed text-[color:var(--paper)]/80 md:text-[16px]">
+              <p>
+                Sonara turns sound into moving image, live. Open a tab, a mic,
+                or a track and it paints what it hears — frame after frame, in
+                time with the music, at sixty a second. Tell it a mood in your
+                own words, or hand it a picture, and the scene bends that way.
+              </p>
+              <p>
+                Under the hood, AI keyframes meet a real-time shader: FLUX.2
+                imagines the looks, a WebGL2 displacement field flows between
+                them, and the live audio drives every ripple. The picture never
+                freezes and never repeats — it breathes with the room.
+              </p>
+              <p>
+                Born in the browser, made for the floor. Curated starter decks
+                get you moving in a click; when you're ready, take it live and
+                the scene picks up right where the deck left off. No install, no
+                rig — just{" "}
+                <span className="font-serif italic text-[color:var(--paper)]">
+                  sonara.fm
+                </span>{" "}
+                and whatever you're playing.
+              </p>
+            </div>
+          </div>
+        </section>
+
         {/* Footer */}
         <footer className="relative border-t border-[color:var(--hairline)]/25 bg-[color:var(--ink)]/85 px-6 py-6 backdrop-blur-sm md:px-12">
           <div className="flex flex-wrap items-center justify-between gap-4">
