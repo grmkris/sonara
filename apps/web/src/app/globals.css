@@ -86,6 +86,26 @@ input::placeholder {
   );
 }
 
+/* Single uniform veil between the canvas and page content. Replaces the old
+   per-section opaque ink panels so the generative backplate reads as ONE
+   continuous image top-to-bottom — light flat ink, gently stronger at the very
+   top/bottom edges for headline/footer legibility, no hard seams. */
+.page-veil {
+  background: linear-gradient(
+    to bottom,
+    color-mix(in srgb, var(--ink) 48%, transparent) 0%,
+    color-mix(in srgb, var(--ink) 38%, transparent) 12%,
+    color-mix(in srgb, var(--ink) 38%, transparent) 82%,
+    color-mix(in srgb, var(--ink) 52%, transparent) 100%
+  );
+}
+
+/* Soft ink halo behind body copy laid over the live canvas, so text stays
+   legible without an opaque card. */
+.text-legible {
+  text-shadow: 0 1px 2px color-mix(in srgb, var(--ink) 70%, transparent);
+}
+
 /* Edge vignette for the image so edge-anchored UI stays readable. */
 .vignette-mask {
   background:

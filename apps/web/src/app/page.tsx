@@ -3,34 +3,15 @@
 import { Suspense, useEffect } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { SonaraCanvas } from "@/components/visualizer/canvas/sonara-canvas";
-import { useWsSession } from "@/hooks/use-ws-session";
-import { useDemoFrameLoop } from "@/hooks/use-demo-frame-loop";
-import { useVisualizerStore } from "@/stores/visualizer";
+import { CanvasBackplate } from "@/components/canvas-backplate";
+import { SiteFooter } from "@/components/site-footer";
 
-// Landing page. Same SonaraCanvas the visualiser uses, mounted as a
-// fixed backplate so it stays visible while marketing copy scrolls over
-// it. Demo is client-native: useDemoFrameLoop() cycles a deck's static
-// frames into the canvas (with the displacement-shader transitions) — no
-// server/WS frames and no audio. The backplate cycles silently on its own
-// cadence; audio-reactivity is a /play concern once the visitor brings sound.
-// The effect below self-starts demo so signed-in/offline visitors (who get no
-// anon WS pin) still see the backplate instead of black.
+// Landing page. The fixed canvas backplate (+ grain + uniform veil) and its
+// demo self-start live in <CanvasBackplate />, shared with /about. Marketing
+// copy scrolls over it in a z-10 column. Audio-reactivity is a /play concern
+// once the visitor brings sound.
 
 export default function LandingPage() {
-  useWsSession();
-  useDemoFrameLoop();
-
-  // Self-start demo on the landing regardless of auth/connectivity. The anon
-  // WS snapshot sets these for most visitors, but signed-in or offline
-  // visitors get no anon pin — without this the backplate would be black.
-  // Only fills gaps (won't override a deck the snapshot already chose).
-  useEffect(() => {
-    const st = useVisualizerStore.getState();
-    if (!st.demoMode) st.setDemoMode(true);
-    if (!st.demoDeck) st.setDemoDeck("liquid");
-  }, []);
-
   return (
     <main className="relative min-h-svh overflow-x-hidden bg-[color:var(--ink)] text-[color:var(--paper)]">
       {/* Old `/?record=…` share-link redirect. Lives inside a Suspense
@@ -39,12 +20,9 @@ export default function LandingPage() {
       <Suspense fallback={null}>
         <OldShareLinkRedirect />
       </Suspense>
-      {/* Canvas backplate. Fixed so it stays visible as the visitor
-         scrolls; everything below sits in a z-10 column on top. */}
-      <div className="pointer-events-none fixed inset-0 z-0">
-        <SonaraCanvas />
-      </div>
-      <div aria-hidden className="grain-overlay" />
+      {/* Canvas backplate (fixed) + grain + uniform veil. Everything below
+         sits in a z-10 column on top. */}
+      <CanvasBackplate />
 
       <div className="relative z-10 flex min-h-svh flex-col">
         {/* Fold */}
@@ -91,8 +69,8 @@ export default function LandingPage() {
         </section>
 
         {/* Capability band */}
-        <section className="relative border-t border-[color:var(--hairline)]/25 bg-[color:var(--ink)]/85 px-6 py-12 backdrop-blur-sm md:px-12 md:py-16">
-          <div className="grid gap-10 md:grid-cols-3 md:gap-8">
+        <section className="relative border-t border-[color:var(--hairline)]/25 px-6 py-12 md:px-12 md:py-16">
+          <div className="text-legible grid gap-10 md:grid-cols-3 md:gap-8">
             <Capability
               eyebrow="01 listen"
               hook="any sound"
@@ -112,8 +90,8 @@ export default function LandingPage() {
         </section>
 
         {/* Story / about band — a short promotional bio of what Sonara is. */}
-        <section className="relative border-t border-[color:var(--hairline)]/25 bg-[color:var(--ink)]/85 px-6 py-14 backdrop-blur-sm md:px-12 md:py-20">
-          <div className="flex max-w-[760px] flex-col gap-6">
+        <section className="relative border-t border-[color:var(--hairline)]/25 px-6 py-14 md:px-12 md:py-20">
+          <div className="text-legible flex max-w-[760px] flex-col gap-6">
             <span className="font-mono text-[10px] uppercase tracking-[0.28em] text-[color:var(--stone)]">
               what it is
             </span>
@@ -152,28 +130,7 @@ export default function LandingPage() {
           </div>
         </section>
 
-        {/* Footer */}
-        <footer className="relative border-t border-[color:var(--hairline)]/25 bg-[color:var(--ink)]/85 px-6 py-6 backdrop-blur-sm md:px-12">
-          <div className="flex flex-wrap items-center justify-between gap-4">
-            <span className="font-serif text-[22px] italic text-[color:var(--paper)]/85">
-              sonara.fm
-            </span>
-            <nav className="font-mono flex items-center gap-5 text-[10px] uppercase tracking-[0.24em] text-[color:var(--stone)]">
-              <Link
-                href="/play"
-                className="transition-colors hover:text-[color:var(--paper)]"
-              >
-                play
-              </Link>
-              <Link
-                href="/login"
-                className="transition-colors hover:text-[color:var(--paper)]"
-              >
-                sign in
-              </Link>
-            </nav>
-          </div>
-        </footer>
+        <SiteFooter />
       </div>
     </main>
   );
