@@ -87,7 +87,7 @@ export default async function OpengraphImage() {
           display: "flex",
           flexDirection: "column",
           justifyContent: "space-between",
-          padding: 80,
+          padding: 72,
           position: "relative",
         }}
       >
@@ -105,12 +105,12 @@ export default async function OpengraphImage() {
 
         {/* Mark + wordmark lockup, top-left. */}
         <div style={{ display: "flex", alignItems: "center", gap: 28 }}>
-          {rings(0.62)}
+          {rings(0.56)}
           <div
             style={{
               fontFamily: serif,
               fontStyle: "italic",
-              fontSize: 92,
+              fontSize: 76,
               color: PAPER,
               lineHeight: 1,
             }}
@@ -119,19 +119,35 @@ export default async function OpengraphImage() {
           </div>
         </div>
 
-        {/* Tagline. */}
-        <div
-          style={{
-            fontFamily: serif,
-            fontStyle: "italic",
-            fontSize: 116,
-            color: PAPER,
-            lineHeight: 1.02,
-            maxWidth: 900,
-            display: "flex",
-          }}
-        >
-          music, made visible.
+        {/* Tagline + call-to-action. */}
+        <div style={{ display: "flex", flexDirection: "column", gap: 34 }}>
+          <div
+            style={{
+              fontFamily: serif,
+              fontStyle: "italic",
+              fontSize: 94,
+              color: PAPER,
+              lineHeight: 1.02,
+              maxWidth: 860,
+              display: "flex",
+            }}
+          >
+            music, made visible.
+          </div>
+          <div
+            style={{
+              display: "flex",
+              alignSelf: "flex-start",
+              border: `2px solid ${PAPER}`,
+              padding: "16px 30px",
+              fontSize: 26,
+              letterSpacing: 5,
+              textTransform: "uppercase",
+              color: PAPER,
+            }}
+          >
+            open the visualiser →
+          </div>
         </div>
 
         {/* Footer line. */}

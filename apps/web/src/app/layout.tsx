@@ -13,23 +13,26 @@ export const metadata: Metadata = {
     default: "sonara — music, made visible",
     template: "%s · sonara",
   },
+  // og/twitter descriptions are kept in the 110–160 char sweet spot for link
+  // unfurls; the <title> default stays short for the browser tab while the
+  // social title runs longer.
   description:
-    "It listens to whatever you're playing and paints what it hears, as it happens.",
+    "Sonara turns your music into moving art, right in your browser. Play anything and it paints flowing visuals in time with the sound, as it happens.",
   // og:image / twitter:image come from the file-convention opengraph-image.tsx
   // + twitter-image.tsx (the branded 1200×630 card) — don't set images here too.
   openGraph: {
     type: "website",
-    title: "sonara — music, made visible",
+    title: "sonara — music, made visible: a visualiser that listens",
     description:
-      "Visuals driven by what you play, what you say, and the images you show.",
+      "Sonara turns your music into moving art, right in your browser. Play anything and it paints flowing visuals in time with the sound, as it happens.",
     siteName: "sonara",
     url: "https://sonara.fm",
   },
   twitter: {
     card: "summary_large_image",
-    title: "sonara — music, made visible",
+    title: "sonara — music, made visible: a visualiser that listens",
     description:
-      "Visuals driven by what you play, what you say, and the images you show.",
+      "Sonara turns your music into moving art, right in your browser. Play anything and it paints flowing visuals in time with the sound, as it happens.",
   },
 };
 
