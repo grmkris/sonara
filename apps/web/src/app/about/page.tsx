@@ -42,42 +42,35 @@ export default function AboutPage() {
           </div>
         </section>
 
-        {/* How it works */}
+        {/* What it is */}
         <section className="relative border-t border-[color:var(--hairline)]/25 px-6 py-14 md:px-12 md:py-20">
           <div className="text-legible flex max-w-[760px] flex-col gap-6">
             <span className="font-mono text-[10px] uppercase tracking-[0.28em] text-[color:var(--stone)]">
-              how it works
+              what it is
             </span>
             <h2
               className="font-serif italic leading-[1.05] text-[color:var(--paper)]"
               style={{ fontSize: "clamp(28px, 4.5vw, 48px)" }}
             >
-              keyframes from an AI,
+              it paints what
               <br />
-              motion from the music.
+              it hears.
             </h2>
             <div className="flex flex-col gap-4 font-sans text-[15px] leading-relaxed text-[color:var(--paper)]/80 md:text-[16px]">
               <p>
                 Open a tab, a mic, or a track and Sonara listens — it even knows
                 the song. Tell it a mood in your own words, or hand it a picture,
-                and the scene bends that way. Whatever the source, it paints what
-                it hears, frame after frame, in time with the music.
+                and the scene bends that way. Whatever the source, the visuals
+                move in time with the music.
               </p>
               <p>
-                Under the hood, AI keyframes meet a real-time shader.{" "}
-                <span className="font-mono text-[13px] uppercase tracking-[0.12em] text-[color:var(--paper)]/90">
-                  FLUX.2
-                </span>{" "}
-                imagines the looks; a WebGL2 displacement field flows between
-                them at sixty frames a second; and the live audio drives every
-                ripple. The picture never freezes and never repeats — it
-                breathes with the room.
+                The picture never freezes and never repeats — it moves with the
+                sound and breathes with the room.
               </p>
               <p>
-                Born in the browser, made for the floor. Curated starter decks
-                get you moving in a click; when you're ready, take it live and
-                the scene picks up right where the deck left off — the look you
-                started from keeps nudging what comes next.
+                Born in the browser, made for the floor. Pick a starter look and
+                you're going in a click; when you're ready, take it live and the
+                scene carries right on from there.
               </p>
             </div>
           </div>
