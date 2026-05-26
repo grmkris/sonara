@@ -7,6 +7,7 @@ import {
   type NowPlaying,
   type ServerEvent,
   DECK_KEYS,
+  deckStyle,
   defaultScene,
   libraryCadenceMs,
 } from "@sonara/shared";
@@ -159,6 +160,18 @@ export class Session {
   private anchorFailureCount = 0;
   private static readonly ANCHOR_FAILURE_LIMIT = 3;
 
+  // One-shot handoff anchor. Set by goLive() when the user leaves a deck: the
+  // first live frame anchors off the deck frame on screen for visual
+  // continuity ("take it from there"), then triggerAnchor() clears it so
+  // subsequent frames take the cheap text path. Distinct from a user-uploaded
+  // anchor, which persists.
+  private handoffAnchor = false;
+
+  // The deck the session most recently left when going live. Kept so live
+  // generation keeps nudging toward that deck's style (see deckStyle drift in
+  // trigger()/triggerAnchor()). Cleared on reset().
+  private lastDeck: DeckKey | null = null;
+
   // Stateful per-keyframe drift sequence. Reseeded whenever the resolver
   // returns fresh LLM-generated drift_candidates (i.e., scene-hash changed).
   // Falls back to the curated static pool until the first LLM cache fill.
@@ -234,8 +247,12 @@ export class Session {
     }
     // Anchor wins over demo. setDemoMode doesn't touch anchor; if both are
     // attempted to be set simultaneously, the most recent mutation lands.
+    // Uploading an anchor from a deck is also "going live" — remember the deck
+    // so its style keeps nudging generation (deckStyle drift).
     if (this.demoMode) {
+      if (this.demoDeck) this.lastDeck = this.demoDeck;
       this.demoMode = false;
+      this.demoDeck = null;
     }
     // Fresh anchor → reset the failure streak from any prior anchor.
     this.anchorFailureCount = 0;
@@ -250,6 +267,46 @@ export class Session {
     );
     // Fire trigger immediately — bypasses semantic-diff gate so the first
     // anchor frame lands without waiting.
+    void this.trigger("semantic");
+  }
+
+  // Transition from deck/library phase to live generation. The browser flips
+  // its own demoMode (stopping the client demo loop) and calls this so the
+  // server mirrors the flag, applies the typed scene, and — for visual
+  // continuity — seeds the FIRST live frame off the deck frame currently on
+  // screen as a one-shot anchor (8 cr). triggerAnchor() clears that anchor
+  // after the frame lands, so everything after is the cheap text path (1 cr).
+  goLive(prompt: string, seedFrameUrl: string | null): void {
+    // Live generation needs credits. Anon is refused here (the client also
+    // gates by never showing the prompt input to anon).
+    if (this.userId === null) {
+      this.logger.info({}, "anon goLive refused");
+      this.send({
+        type: "job.status",
+        status: "error",
+        message: "Sign in to bring your own scenes",
+      });
+      return;
+    }
+    if (this.demoDeck) this.lastDeck = this.demoDeck;
+    this.demoMode = false;
+    this.demoDeck = null;
+    this.scene = { ...this.scene, prompt };
+    if (seedFrameUrl) {
+      this.handoffAnchor = true;
+      this.anchorFailureCount = 0;
+      this.scene = {
+        ...this.scene,
+        imageAnchor: { url: seedFrameUrl, strength: 0.55 },
+      };
+    }
+    this.send({ type: "scene.state", state: this.scene });
+    this.logger.info(
+      { prompt, seedFrameUrl, lastDeck: this.lastDeck },
+      "go live",
+    );
+    // Fire immediately — bypasses the semantic-diff gate so the handoff frame
+    // (or first text frame) lands without waiting.
     void this.trigger("semantic");
   }
 
@@ -462,6 +519,8 @@ export class Session {
     this.seed = rollSeed();
     this.sessionStartAt = Date.now();
     this.silentSinceAt = null;
+    this.handoffAnchor = false;
+    this.lastDeck = null;
     this.recognitionInFlight?.abort();
     this.recognitionInFlight = null;
     this.startPeriodic();
@@ -611,7 +670,12 @@ export class Session {
     // is large. Auto-triggers (periodic / section) keep the sync path so
     // they never block.
     const resolveOpts = {
-      driftModifiers: drift ? [drift] : [],
+      // Drift = pool/LLM walk + (when we came from a deck) that deck's style,
+      // so live frames stay on-vibe with the deck the user left.
+      driftModifiers: [
+        drift,
+        this.lastDeck ? deckStyle(this.lastDeck) : null,
+      ].filter((m): m is string => !!m),
       audio: {
         intensity: this.scene.intensity,
         section: this.lastSectionEnergy,
@@ -802,7 +866,12 @@ export class Session {
     // expansion (richer first frame after a prompt edit); auto-triggers
     // stay on the sync deterministic-then-cache path.
     const resolveOpts = {
-      driftModifiers: drift ? [drift] : [],
+      // Drift = pool/LLM walk + (when we came from a deck) that deck's style,
+      // so live frames stay on-vibe with the deck the user left.
+      driftModifiers: [
+        drift,
+        this.lastDeck ? deckStyle(this.lastDeck) : null,
+      ].filter((m): m is string => !!m),
       audio: {
         intensity: this.scene.intensity,
         section: this.lastSectionEnergy,
@@ -864,6 +933,14 @@ export class Session {
       onFinal: (url) => {
         if (version !== this.activeVersion) return;
         this.anchorFailureCount = 0; // success clears the failure streak
+        // One-shot deck→live handoff anchor: clear it now that the continuity
+        // frame has landed, so the NEXT trigger uses the cheap text path
+        // instead of re-billing 8 cr on every periodic tick.
+        if (this.handoffAnchor) {
+          this.handoffAnchor = false;
+          this.scene = { ...this.scene, imageAnchor: undefined };
+          this.send({ type: "scene.state", state: this.scene });
+        }
         this.lastGeneratedScene = snapshot;
         this.send({ type: "frame.final", imageUrl: url, version });
         this.send({ type: "job.status", status: "idle" });
@@ -879,6 +956,26 @@ export class Session {
         // Aborts are expected supersessions (newer trigger won) — they don't
         // count toward the failure streak.
         if (controller.signal.aborted) return;
+        // One-shot deck→live handoff anchor that failed (e.g. a seed URL fal
+        // can't fetch — local dev serves /library from localhost). Don't retry
+        // it: clear it so the next periodic tick generates from text. Doesn't
+        // count toward the user-anchor failure streak.
+        if (this.handoffAnchor) {
+          this.handoffAnchor = false;
+          this.scene = { ...this.scene, imageAnchor: undefined };
+          this.send({ type: "scene.state", state: this.scene });
+          this.logger.info(
+            { err: err instanceof Error ? err.message : String(err) },
+            "handoff anchor failed — cleared, continuing text-only",
+          );
+          this.send({
+            type: "generation.completed",
+            version,
+            durationMs: Date.now() - requestedAt,
+            success: false,
+          });
+          return;
+        }
         this.anchorFailureCount += 1;
         this.logger.error(
           { err, anchorFailureCount: this.anchorFailureCount },

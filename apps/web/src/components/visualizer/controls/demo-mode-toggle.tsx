@@ -27,6 +27,7 @@ export function DemoModeToggle({ send }: DemoModeToggleProps) {
   const demoDeck = useVisualizerStore((s) => s.demoDeck);
   const setDemoMode = useVisualizerStore((s) => s.setDemoMode);
   const setDemoDeck = useVisualizerStore((s) => s.setDemoDeck);
+  const clearAnchor = useVisualizerStore((s) => s.clearAnchor);
 
   // Anonymous sessions are server-pinned to demo mode: the on/off Switch
   // and the "vs paid" badges don't apply. Deck picker stays usable so the
@@ -37,17 +38,26 @@ export function DemoModeToggle({ send }: DemoModeToggleProps) {
   const toggle = useCallback(
     (next: boolean) => {
       if (!next) {
+        // Demo off → live. Generation starts when the user types a scene
+        // (PromptInput.goLive) or pins an anchor; until then the last frame
+        // holds. No prompt to clear here.
         setDemoMode(false);
         setDemoDeck(null);
         send({ type: "demo.set", on: false, deck: null });
         return;
       }
+      // Back to deck. Resume the free client demo loop AND clear any live
+      // scene + anchor, otherwise the server keeps generating (its periodic
+      // fires whenever a prompt is set) and would fight the demo loop.
       const deck = demoDeck ?? (DECKS[0]?.key as DeckKey);
       setDemoMode(true);
       setDemoDeck(deck);
+      clearAnchor();
+      send({ type: "image.anchor.clear" });
+      send({ type: "scene.patch", patch: { prompt: "" } });
       send({ type: "demo.set", on: true, deck });
     },
-    [demoDeck, send, setDemoMode, setDemoDeck],
+    [demoDeck, send, setDemoMode, setDemoDeck, clearAnchor],
   );
 
   const onPickDeck = useCallback(

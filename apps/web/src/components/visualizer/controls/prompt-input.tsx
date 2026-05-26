@@ -28,6 +28,9 @@ export function PromptInput({ send }: PromptInputProps) {
   const setIsListening = useVisualizerStore((s) => s.setIsListening);
   const liveTranscript = useVisualizerStore((s) => s.liveTranscript);
   const setLiveTranscript = useVisualizerStore((s) => s.setLiveTranscript);
+  const demoMode = useVisualizerStore((s) => s.demoMode);
+  const setDemoMode = useVisualizerStore((s) => s.setDemoMode);
+  const setDemoDeck = useVisualizerStore((s) => s.setDemoDeck);
 
   const [draft, setDraft] = useState<string | null>(null);
   const lastDraftFromVoiceRef = useRef(false);
@@ -87,15 +90,28 @@ export function PromptInput({ send }: PromptInputProps) {
       if (next === scene.prompt) return;
       if (lastSentRef.current === next) return;
       lastSentRef.current = next;
-      const messageType: "voice.patch" | "scene.patch" = lastDraftFromVoiceRef
-        .current
-        ? "voice.patch"
-        : "scene.patch";
-      send({ type: messageType, patch: { prompt: next } });
+
+      if (demoMode) {
+        // Leaving the deck → go live. Seed the first generated frame off the
+        // deck frame currently on screen so the visuals evolve out of it
+        // ("take it from there"), and stop the client demo loop by flipping
+        // demoMode off locally (the loop effect keys on demoMode).
+        const frame = useVisualizerStore.getState().currentFrame;
+        const seedFrameUrl = frame
+          ? new URL(frame, window.location.origin).href
+          : null;
+        setDemoMode(false);
+        setDemoDeck(null);
+        send({ type: "session.goLive", prompt: next, seedFrameUrl });
+      } else {
+        const messageType: "voice.patch" | "scene.patch" =
+          lastDraftFromVoiceRef.current ? "voice.patch" : "scene.patch";
+        send({ type: messageType, patch: { prompt: next } });
+      }
       lastDraftFromVoiceRef.current = false;
       flashCommit();
     },
-    [scene.prompt, send],
+    [scene.prompt, send, demoMode, setDemoMode, setDemoDeck],
   );
 
   const onChange = useCallback(

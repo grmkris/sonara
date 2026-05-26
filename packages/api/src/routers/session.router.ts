@@ -26,6 +26,7 @@ export interface SessionLike {
     trigger: "auto" | "manual",
   ): Promise<NowPlaying | null>;
   setDemoMode(on: boolean, deck: DeckKey | null): void;
+  goLive(prompt: string, seedFrameUrl: string | null): void;
   setImageAnchor(
     input: { url: string; strength: number } | { clear: true },
   ): void;
@@ -62,6 +63,15 @@ const DemoModeInput = z.object({
   deck: DeckKeySchema.nullable(),
 });
 
+const GoLiveInput = z.object({
+  // The scene the user typed to leave the deck and start generating.
+  prompt: z.string(),
+  // Absolute URL of the deck frame on screen when they went live, used as a
+  // one-shot anchor so the first generated frame evolves out of it ("take it
+  // from there"). Null skips the handoff and starts text-only.
+  seedFrameUrl: z.string().url().nullable(),
+});
+
 const SetImageAnchorInput = z.union([
   z.object({
     url: z.string().url(),
@@ -82,8 +92,8 @@ const StateOutput = z.object({
   // Server-authoritative demo state. Anon sessions are pinned to demoMode=true
   // at Session construction with a random deck; signed-in sessions reflect
   // whatever the user last toggled. The client hydrates the zustand demo
-  // slice from this on every (re)connect — that's what triggers the demo
-  // audio auto-play effect in apps/web's music-source.tsx.
+  // slice from this on every (re)connect — that's what starts the client-native
+  // demo loop (use-demo-frame-loop) for the right deck.
   demoMode: z.boolean(),
   demoDeck: DeckKeySchema.nullable(),
   // Server-authoritative image anchor. Set via setImageAnchor; survives a
@@ -137,6 +147,16 @@ export const sessionRouter = {
     .input(DemoModeInput)
     .handler(({ context, input }) => {
       context.session.setDemoMode(input.on, input.deck);
+    }),
+
+  // Leave the deck and go live. Flips demo off server-side, applies the typed
+  // scene, and (if a seed frame is given) seeds the first frame off it as a
+  // one-shot anchor before continuing with cheap text frames. Anon is refused
+  // (live generation needs credits) — the client gates this too.
+  goLive: sessionOs
+    .input(GoLiveInput)
+    .handler(({ context, input }) => {
+      context.session.goLive(input.prompt, input.seedFrameUrl);
     }),
 
   // Image-anchor switch. The browser uploaded an image via the web service's

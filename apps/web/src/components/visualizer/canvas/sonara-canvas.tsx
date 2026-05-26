@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useVisualizerStore } from "@/stores/visualizer";
+import { cn } from "@/lib/utils";
 import { isWebgl2Available } from "@/lib/render/webgl-util";
 import { CanvasGrain } from "@/components/visualizer/audio/canvas-grain";
 import { InkDrops } from "@/components/visualizer/canvas/ink-drops";
@@ -22,7 +23,10 @@ import { CanvasOscilloscope } from "@/components/visualizer/audio/canvas-oscillo
 //     compositing within the texture; this mask sits over the entire stack
 //     including overlays, so it's not redundant.
 // Audit pass concluded each is load-bearing in its own way. Keep all four.
-export function SonaraCanvas() {
+// `dimmed` desaturates + darkens the whole stack while no audio source is
+// connected, so the deck cycle reads as "asleep" until the visitor brings
+// sound — then it eases back to full and "wakes up" (see /play).
+export function SonaraCanvas({ dimmed = false }: { dimmed?: boolean }) {
   const [hasWebgl2, setHasWebgl2] = useState<boolean | null>(null);
 
   useEffect(() => {
@@ -33,7 +37,10 @@ export function SonaraCanvas() {
 
   return (
     <div
-      className="absolute inset-0 overflow-hidden bg-[color:var(--ink)]"
+      className={cn(
+        "absolute inset-0 overflow-hidden bg-[color:var(--ink)] transition-[filter] duration-1000 ease-out",
+        dimmed && "[filter:brightness(0.5)_saturate(0.6)]",
+      )}
       style={{ isolation: "isolate" }}
     >
       <EmptyIdeogram />

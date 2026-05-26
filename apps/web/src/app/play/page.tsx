@@ -115,9 +115,11 @@ export default function Page() {
   );
 
 
+  const audioConnected = audioSource.type !== "none";
+
   return (
     <main className="fixed inset-0 overflow-hidden">
-      <SonaraCanvas />
+      <SonaraCanvas dimmed={!audioConnected} />
       <GhostOverlay />
       <ScanSweep />
 
@@ -227,6 +229,15 @@ export default function Page() {
 
           <AudioRibbon height={40} />
 
+          {/* Bring-your-own-audio nudge. The deck cycles dimmed until the
+             visitor connects a source (mic / track / tab); once they do, the
+             canvas wakes up to full brightness + beat reactivity. */}
+          {!audioConnected && (
+            <p className="mt-2 font-sans text-[10px] uppercase tracking-[0.24em] text-[color:var(--signal)]">
+              ▷ bring sound — open the mic, drop a track, or share a tab
+            </p>
+          )}
+
           <div className="mt-3 flex items-center justify-between gap-3 sm:gap-6">
             <div className="flex items-center gap-3 sm:gap-6">
               <MusicSource source={audioSource} setSource={setAudioSource} />
@@ -257,10 +268,9 @@ export default function Page() {
 }
 
 // Quieter rail-side hint for anonymous visitors who reached /play from the
-// landing. The landing already sells the app and explains what demo mode
-// is — here we just point at the upgrade. Typing into PromptInput would
-// have no visual effect for anon (trigger() short-circuits to library
-// regardless of subject), so we surface a sign-in nudge instead.
+// landing. Going live (typing a scene / pinning an anchor) needs credits, so
+// anon never gets the PromptInput — this sign-in nudge is the wall. Deck
+// switching + bringing your own audio stay free for them.
 function AnonPromptPlaceholder() {
   return (
     <div className="flex flex-col gap-3">

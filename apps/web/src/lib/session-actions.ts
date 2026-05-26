@@ -15,6 +15,7 @@ export type SessionAction =
   | { type: "audio.features"; features: AudioFeatures }
   | { type: "session.reset" }
   | { type: "demo.set"; on: boolean; deck: DeckKey | null }
+  | { type: "session.goLive"; prompt: string; seedFrameUrl: string | null }
   | { type: "image.anchor.set"; url: string; strength: number }
   | { type: "image.anchor.clear" }
   | {
@@ -44,6 +45,11 @@ export function dispatchSessionAction(
       return client.reset();
     case "demo.set":
       return client.setDemoMode({ on: action.on, deck: action.deck });
+    case "session.goLive":
+      return client.goLive({
+        prompt: action.prompt,
+        seedFrameUrl: action.seedFrameUrl,
+      });
     case "image.anchor.set":
       return client.setImageAnchor({
         url: action.url,

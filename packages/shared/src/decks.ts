@@ -4,16 +4,21 @@ import { z } from "zod";
 // needed to enable a new deck — seed prompts live in
 // apps/server/scripts/library-manifest.json, image rows live in the
 // image_library table.
+//
+// `style` is a short descriptor of the deck's look. When a session leaves the
+// deck and goes live (see Session.goLive), the deck it came from keeps nudging
+// generation toward its vibe by feeding `style` into the prompt drift — so the
+// user's typed scene rendered "in the cyborg deck's world" still reads on-theme.
 export const DECKS = [
-  { key: "wild", label: "Wild Things" },
-  { key: "cute", label: "Cute Crush" },
-  { key: "sky", label: "Skyscapes" },
-  { key: "liquid", label: "Liquid" },
-  { key: "deep", label: "Deep" },
-  { key: "bloom", label: "Bloom" },
-  { key: "sacred", label: "Sacred" },
-  { key: "neon", label: "Neon" },
-  { key: "cyborg", label: "Cyborg" },
+  { key: "wild", label: "Wild Things", style: "untamed wildlife, raw primal nature" },
+  { key: "cute", label: "Cute Crush", style: "adorable creatures, soft pastel, charming" },
+  { key: "sky", label: "Skyscapes", style: "vast skies, drifting clouds, luminous air" },
+  { key: "liquid", label: "Liquid", style: "flowing liquid, fluid motion, glossy reflections" },
+  { key: "deep", label: "Deep", style: "deep dark ocean, abyssal, bioluminescent" },
+  { key: "bloom", label: "Bloom", style: "blossoming flowers, lush botanical, vivid petals" },
+  { key: "sacred", label: "Sacred", style: "sacred geometry, temples and ritual, golden reverence" },
+  { key: "neon", label: "Neon", style: "neon glow, electric night, saturated cyberpunk" },
+  { key: "cyborg", label: "Cyborg", style: "chrome androids, neon strobe, wet reflections" },
 ] as const;
 
 export type DeckKey = (typeof DECKS)[number]["key"];
@@ -23,3 +28,9 @@ export const DECK_KEYS: readonly DeckKey[] = DECKS.map((d) => d.key);
 export const DeckKeySchema = z.enum(
   DECKS.map((d) => d.key) as [DeckKey, ...DeckKey[]],
 );
+
+// Style descriptor for a deck, or "" if unknown. Used as a drift modifier on
+// live generation after leaving the deck (see Session.goLive / trigger()).
+export function deckStyle(key: DeckKey): string {
+  return DECKS.find((d) => d.key === key)?.style ?? "";
+}
