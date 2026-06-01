@@ -17,6 +17,7 @@ import {
 import { createSceneSlice } from "./scene-slice";
 import {
   CONSOLE_TAB_KEY,
+  TIMELINE_OPEN_KEY,
   UI_VISIBLE_KEY,
   createUiSlice,
   type ConsoleTab,
@@ -57,6 +58,13 @@ export function hydrateConsoleTab(): void {
   if (raw === "scene" || raw === "style" || raw === "inspector") {
     useVisualizerStore.setState({ consoleTab: raw as ConsoleTab });
   }
+}
+
+export function hydrateTimelineOpen(): void {
+  if (typeof window === "undefined") return;
+  const raw = window.localStorage.getItem(TIMELINE_OPEN_KEY);
+  if (raw === null) return;
+  useVisualizerStore.setState({ timelineOpen: raw === "1" });
 }
 
 // Pulls the last-used preset + mode from localStorage. Matches the
