@@ -8,7 +8,7 @@ import {
   TabsList,
   TabsTrigger,
 } from "@/components/ui/tabs";
-import { DemoModeToggle } from "@/components/visualizer/controls/demo-mode-toggle";
+import { DeckPicker } from "@/components/visualizer/controls/deck-picker";
 import { IntensityDial } from "@/components/visualizer/controls/intensity-dial";
 import { PresetPicker } from "@/components/visualizer/controls/preset-picker";
 import { SceneTemplatePicker } from "@/components/visualizer/controls/scene-template-picker";
@@ -49,7 +49,7 @@ export function ControlsPanel({ send }: ControlsPanelProps) {
 
   return (
     <div className="relative flex flex-col gap-5 rounded-sm border border-[color:var(--hairline)]/25 p-4">
-      <DemoModeToggle send={send} />
+      <DeckPicker send={send} />
 
       <div
         aria-hidden

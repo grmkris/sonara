@@ -1,0 +1,106 @@
+"use client";
+
+import { useCallback } from "react";
+import { DECKS, type DeckKey } from "@sonara/shared";
+import type { SessionSend } from "@/lib/session-actions";
+import { useSession } from "@/lib/auth-client";
+import {
+  ToggleGroup,
+  ToggleGroupItem,
+} from "@/components/ui/toggle-group";
+import { useVisualizerStore } from "@/stores/visualizer";
+import { cn } from "@/lib/utils";
+
+interface DeckPickerProps {
+  send: SessionSend;
+}
+
+// "Start from a look" — the deck picker that replaces the old DEMO toggle.
+// Decks are curated, pre-generated starter looks; clicking one starts the
+// client-side demo loop (no fal, no credits). Once the user commits a
+// prompt the session enters "Live" mode and frames stream from fal +
+// persist to the library; clicking another deck flips back to playback.
+//
+// Internally still uses the demoMode/demoDeck slice + the demo.set WS
+// action — a 10-file state rename is a deferred cleanup; the wire shape
+// and underlying behaviour are unchanged.
+export function DeckPicker({ send }: DeckPickerProps) {
+  const { data: sessionData } = useSession();
+  const isSignedIn = !!sessionData?.session;
+  const demoMode = useVisualizerStore((s) => s.demoMode);
+  const demoDeck = useVisualizerStore((s) => s.demoDeck);
+  const setDemoMode = useVisualizerStore((s) => s.setDemoMode);
+  const setDemoDeck = useVisualizerStore((s) => s.setDemoDeck);
+  const clearAnchor = useVisualizerStore((s) => s.clearAnchor);
+
+  // Anonymous sessions are always on a deck (server-pinned demo mode);
+  // for them, isLive is always false. Signed-in users go live when they
+  // commit a prompt — demoMode flips off, isLive flips on.
+  const isLive = isSignedIn && !demoMode;
+
+  const onPickDeck = useCallback(
+    (deck: string) => {
+      if (!deck) return;
+      const next = deck as DeckKey;
+      setDemoDeck(next);
+
+      if (isLive) {
+        // Click-while-live: switch BACK to deck playback. Clear any live
+        // anchor + prompt so the server stops generating, then signal
+        // demo-on. Mirrors the old `toggle(true)` body.
+        clearAnchor();
+        send({ type: "image.anchor.clear" });
+        send({ type: "scene.patch", patch: { prompt: "" } });
+        setDemoMode(true);
+      }
+      // For anon + already-on-deck signed-in, just push the deck change.
+      send({ type: "demo.set", on: true, deck: next });
+    },
+    [isLive, send, setDemoDeck, setDemoMode, clearAnchor],
+  );
+
+  return (
+    <div className="flex flex-col gap-3">
+      <div className="flex items-center gap-2">
+        <span className="font-sans text-[10px] uppercase tracking-[0.22em] text-[color:var(--stone)]">
+          start from a look
+        </span>
+        {isLive && (
+          <span
+            className={cn(
+              "ml-auto font-sans rounded-sm border px-1.5 py-0.5 text-[9px] uppercase tracking-[0.18em]",
+              "border-[color:var(--paper)]/60 bg-[color:var(--paper)]/10 text-[color:var(--paper)]",
+            )}
+            aria-label="live generation active"
+          >
+            live · generating
+          </span>
+        )}
+      </div>
+
+      <ToggleGroup
+        type="single"
+        value={demoDeck ?? ""}
+        onValueChange={onPickDeck}
+        spacing={6}
+        aria-label="starter deck"
+        className="flex flex-wrap justify-start gap-1.5"
+      >
+        {DECKS.map((d) => (
+          <ToggleGroupItem
+            key={d.key}
+            value={d.key}
+            aria-label={d.label}
+            className={cn(
+              "focus-ring font-sans h-auto rounded-sm border border-[color:var(--hairline)]/30 bg-transparent px-1.5 py-0.5 text-[10px] uppercase tracking-[0.14em] text-[color:var(--stone)] shadow-none transition-colors",
+              "hover:bg-transparent hover:text-[color:var(--paper)] hover:border-[color:var(--paper)]/60",
+              "data-[state=on]:bg-[color:var(--paper)] data-[state=on]:text-[color:var(--ink)] data-[state=on]:border-[color:var(--paper)]",
+            )}
+          >
+            {d.label}
+          </ToggleGroupItem>
+        ))}
+      </ToggleGroup>
+    </div>
+  );
+}
