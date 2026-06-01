@@ -5,6 +5,25 @@ import { ResolvedScene } from "./scene-resolved";
 import { ImageLibraryIdSchema, LiveSessionIdSchema } from "./typeid";
 import { VISUAL_PRESET_NAMES } from "./visual-presets";
 
+// One persisted generated frame. Returned by the library router (list /
+// bySession RPCs) and carried by the `library.appended` WS event. The `url`
+// field is a fresh presigned read URL — never store these long-term on the
+// client; refetch via library.list to get current URLs.
+export const LibraryFrameSchema = z.object({
+  id: ImageLibraryIdSchema,
+  url: z.string(),
+  width: z.number().int().positive(),
+  height: z.number().int().positive(),
+  palette: z.array(z.string()).nullable(),
+  deck: z.string(),
+  prompt: z.string(),
+  tMs: z.number().int().nonnegative(),
+  sessionId: LiveSessionIdSchema,
+  createdAt: z.coerce.date(),
+});
+
+export type LibraryFrame = z.infer<typeof LibraryFrameSchema>;
+
 // Clients may only patch user-authored fields. version/nowPlaying are
 // server-authoritative; imageAnchor goes through its dedicated mutation
 // (setImageAnchor) — none of them belong in a scene.patch payload.
@@ -84,17 +103,7 @@ export const ServerEvent = z.discriminatedUnion("type", [
   // and bucket-misconfigured dev never see it.
   z.object({
     type: z.literal("library.appended"),
-    id: ImageLibraryIdSchema,
-    // Presigned bucket read URL — refresh by calling library.list.
-    url: z.string(),
-    width: z.number().int().positive(),
-    height: z.number().int().positive(),
-    palette: z.array(z.string()).nullable(),
-    deck: z.string(),
-    prompt: z.string(),
-    tMs: z.number().int().nonnegative(),
-    sessionId: LiveSessionIdSchema,
-    createdAt: z.date(),
+    frame: LibraryFrameSchema,
   }),
 ]);
 

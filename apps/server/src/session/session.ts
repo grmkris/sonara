@@ -802,19 +802,7 @@ export class Session {
           logger: this.logger,
         }).then((row) => {
           if (!row) return;
-          this.send({
-            type: "library.appended",
-            id: row.id,
-            url: row.url,
-            width: row.width,
-            height: row.height,
-            palette: row.palette,
-            deck: row.deck,
-            prompt: row.prompt,
-            tMs: row.tMs,
-            sessionId: row.sessionId,
-            createdAt: row.createdAt,
-          });
+          this.send({ type: "library.appended", frame: row });
         });
       },
       onError: (err) => {
@@ -1031,19 +1019,7 @@ export class Session {
           logger: this.logger,
         }).then((row) => {
           if (!row) return;
-          this.send({
-            type: "library.appended",
-            id: row.id,
-            url: row.url,
-            width: row.width,
-            height: row.height,
-            palette: row.palette,
-            deck: row.deck,
-            prompt: row.prompt,
-            tMs: row.tMs,
-            sessionId: row.sessionId,
-            createdAt: row.createdAt,
-          });
+          this.send({ type: "library.appended", frame: row });
         });
       },
       onError: (err) => {

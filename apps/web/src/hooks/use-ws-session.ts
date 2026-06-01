@@ -94,6 +94,11 @@ export function useWsSession(): SessionSend {
             event.success,
           );
           break;
+        case "library.appended":
+          // Newly persisted frame — prepend to the timeline. Dedupes on id
+          // so the brief race with library.bootstrap can't double-insert.
+          s.libraryAppendFromEvent(event.frame);
+          break;
       }
     };
 
@@ -159,6 +164,13 @@ export function useWsSession(): SessionSend {
                   s.clearAnchor();
                 }
               }
+              // Bootstrap the timeline library on every (re)connect. The
+              // RPC is protected so it errors with UNAUTHORIZED for anon
+              // sessions — catch + ignore that case. The slice is idempotent
+              // (libraryReset wipes it on signout; bootstrap dedupes).
+              void store.getState().libraryBootstrap().catch(() => {
+                // anon or transient error — leave the slice empty
+              });
             } catch (err) {
               const msg = err instanceof Error ? err.message : String(err);
               console.warn("[ws] state snapshot failed:", msg);

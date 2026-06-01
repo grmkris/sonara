@@ -5,6 +5,7 @@ import {
   readClickwrapAccepted,
 } from "./image-anchor-slice";
 import { createInspectorSlice } from "./inspector-slice";
+import { createLibrarySlice } from "./library-slice";
 import { createPlaybackSlice } from "./playback-slice";
 import {
   PRESET_KEY,
@@ -33,6 +34,7 @@ export const useVisualizerStore = create<VisualizerState>()((...a) => ({
   ...createPresetSlice(...a),
   ...createDemoSlice(...a),
   ...createImageAnchorSlice(...a),
+  ...createLibrarySlice(...a),
 }));
 
 // ---------------------------------------------------------------------

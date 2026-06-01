@@ -1,6 +1,7 @@
 import type { RouterClient } from "@orpc/server";
 import { authRouter } from "./auth.router";
 import { creditsRouter } from "./credits.router";
+import { libraryRouter } from "./library.router";
 import { publicProcedure } from "./procedures";
 
 // The HTTP (oRPC over fetch) router. Mounted by the server's Hono app at
@@ -12,6 +13,7 @@ export const appRouter = {
   healthCheck: publicProcedure.handler(() => "OK" as const),
   auth: authRouter,
   credits: creditsRouter,
+  library: libraryRouter,
 };
 
 export type AppRouter = typeof appRouter;
