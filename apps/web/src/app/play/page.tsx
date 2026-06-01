@@ -2,6 +2,7 @@
 
 import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { SlidersHorizontal } from "lucide-react";
+import { deckLabel } from "@sonara/shared";
 import { toast } from "sonner";
 import { SonaraCanvas } from "@/components/visualizer/canvas/sonara-canvas";
 import { GhostOverlay } from "@/components/visualizer/canvas/ghost-overlay";
@@ -158,7 +159,7 @@ export default function Page() {
       >
         <div className="pointer-events-auto flex flex-col gap-3">
           <Logotype />
-          <DemoChip />
+          <LookChip />
         </div>
         <div className="pointer-events-auto flex items-center gap-3 pt-2 sm:gap-5">
           <NowPlaying />
@@ -299,23 +300,18 @@ function AnonPromptPlaceholder() {
   );
 }
 
-// Single chip under the wordmark, visible only in demo mode. Replaces the
-// old SceneHud (ver/amp/fps/up/status), which was mission-control telemetry
-// useless to first-time visitors. The audio-reactive 1px rule under "sonara"
-// (`.wordmark::after` via `--amp`) carries the live-presence signal more
-// elegantly than an FPS readout ever did.
-function DemoChip() {
+// Quiet caption under the wordmark naming the look you're starting from. Shows
+// only while on a deck; once you commit a prompt and go live it disappears (the
+// deck picker's "live · generating" chip carries the live state). Replaces the
+// old SceneHud telemetry; the audio-reactive 1px rule under "sonara"
+// (`.wordmark::after` via `--amp`) carries live-presence more elegantly.
+function LookChip() {
   const demoMode = useVisualizerStore((s) => s.demoMode);
   const demoDeck = useVisualizerStore((s) => s.demoDeck);
-  if (!demoMode) return null;
+  if (!demoMode || !demoDeck) return null;
   return (
-    <span className="font-mono pointer-events-none flex items-baseline gap-1.5 text-[10px] uppercase tracking-[0.22em] text-[color:var(--stone)]">
-      <span className="bg-[color:var(--paper)] text-[color:var(--ink)] px-1 tracking-[0.14em]">
-        demo
-      </span>
-      {demoDeck && (
-        <span className="text-[color:var(--paper)]">{demoDeck}</span>
-      )}
+    <span className="font-mono pointer-events-none text-[10px] uppercase tracking-[0.22em] text-[color:var(--paper)]/85">
+      {deckLabel(demoDeck)}
     </span>
   );
 }

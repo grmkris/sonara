@@ -34,3 +34,9 @@ export const DeckKeySchema = z.enum(
 export function deckStyle(key: DeckKey): string {
   return DECKS.find((d) => d.key === key)?.style ?? "";
 }
+
+// Human-facing label for a deck, or "" if unknown. The DeckPicker shows it on
+// the deck chips; the look badge under the wordmark shows it too.
+export function deckLabel(key: DeckKey): string {
+  return DECKS.find((d) => d.key === key)?.label ?? "";
+}
