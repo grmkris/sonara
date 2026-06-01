@@ -13,15 +13,13 @@ carries continuity between them at 60 fps.
 This document is the **single map of moving parts**: every runtime, network hop, datastore,
 and external API the app touches in production.
 
-> **Topology update (May 2026) — gateway + backend unification.** A **Caddy gateway**
-> (`apps/gateway`) is now the single public service. It path-routes `/api/auth/*`, `/rpc/*`,
-> `/api/upload/*`, `/ws` to the **server** and everything else to the **web** app, over
-> `*.railway.internal` — so the browser sees one origin (`sonara.fm`), cookies are first-party,
-> and there's no CORS. The **server** owns Better Auth, the oRPC HTTP router, image upload, the
-> Dodo webhook, and the WebSocket session; **web** is a thin frontend (no DB, no secrets). The
-> diagrams below depict the pre-gateway split (`web` public on `sonara.fm`, `server` on
-> `api.sonara.fm`) — read them with that caveat. Canonical: `AGENTS.md §Production`,
-> `DEPLOY.md §Gateway cutover`.
+> **Topology (post-cutover, live).** A **Caddy gateway** (`apps/gateway`) is the single
+> public service. It path-routes `/api/auth/*`, `/rpc/*`, `/api/upload/*`, `/ws` to the
+> **server** and everything else to the **web** app, over `*.railway.internal` — so the
+> browser sees one origin (`sonara.fm`), cookies are first-party, and there's no CORS. The
+> **server** owns Better Auth, the oRPC HTTP router, image upload, the Dodo webhook, and the
+> WebSocket session; **web** is a thin frontend (no DB, no secrets). Canonical:
+> `AGENTS.md §Production`, `DEPLOY.md`.
 
 ---
 
@@ -34,8 +32,9 @@ flowchart LR
     CF["Cloudflare DNS<br/>sonara.fm zone<br/>(DNS + TLS edge)"]
 
     subgraph Railway["Railway project: sonara"]
-        Web["web<br/>Next.js 16 standalone<br/>https://sonara.fm"]
-        Server["server<br/>Bun + Hono + Bun.serve WS<br/>https://api.sonara.fm"]
+        Gateway["gateway<br/>Caddy reverse proxy<br/>https://sonara.fm"]
+        Web["web<br/>Next.js 16 standalone<br/>internal :4472"]
+        Server["server<br/>Bun + Hono + Bun.serve WS<br/>internal :4471"]
         PG[("Postgres<br/>(Railway template)")]
     end
 
@@ -44,14 +43,14 @@ flowchart LR
         AudD["AudD<br/>song recognition"]
         Apple["Apple Music<br/>track enrichment"]
         Gemini["Google Gemini<br/>(via fal any-llm)<br/>voice-intent parser"]
-        Dodo["Dodo Payments<br/>(checkout + webhook on web)"]
+        Dodo["Dodo Payments<br/>(checkout + webhook)"]
     end
 
     User --> CF
-    CF -- "sonara.fm<br/>(SSR + /api/auth)" --> Web
-    CF -- "api.sonara.fm<br/>WSS /ws" --> Server
+    CF -- "sonara.fm + wss://sonara.fm/ws" --> Gateway
+    Gateway -- "/api/auth · /rpc · /api/upload · /ws" --> Server
+    Gateway -- "everything else (SSR, static)" --> Web
     Server --> PG
-    Web --> PG
 
     Server -. "image gen" .-> Fal
     Server -. "fingerprint" .-> AudD
@@ -59,13 +58,12 @@ flowchart LR
     Server -. "intent parse" .-> Gemini
 
     User -. "checkout" .-> Dodo
-    Dodo -. "webhook" .-> Web
-    Web -. "credit ledger sync" .-> PG
+    Dodo -. "webhook" .-> Gateway
 
     classDef railway fill:#0b0d12,stroke:#7d5fff,color:#fff
     classDef ext fill:#1a1a2e,stroke:#ffa07a,color:#fff
     classDef cf fill:#2b1a0a,stroke:#ffaf5f,color:#fff
-    class Web,Server,PG railway
+    class Gateway,Web,Server,PG railway
     class Fal,AudD,Apple,Gemini,Dodo ext
     class CF cf
 ```
@@ -287,26 +285,27 @@ sequenceDiagram
 
 ## 5. Transport — every wire on the network
 
+All public traffic enters via the gateway on `https://sonara.fm`. The gateway path-routes to web or server internally.
+
 | Channel | Protocol | URL | Auth | Direction |
 |---|---|---|---|---|
-| Web SSR | HTTPS | `https://sonara.fm/` | none (public) | Browser ⇄ web |
-| Better Auth | HTTPS | `https://sonara.fm/api/auth/*` | better-auth cookie | Browser ⇄ web |
-| oRPC (credits, ticket mint) | HTTPS | `https://sonara.fm/rpc/*` | better-auth cookie | Browser ⇄ web |
-| Dodo webhook (when live) | HTTPS | `https://sonara.fm/api/dodo/*` | Dodo signature | Dodo → web |
-| Healthcheck | HTTPS | `https://api.sonara.fm/health` | none | Railway / curl |
-| **Realtime session** | **WSS** | `wss://api.sonara.fm/ws` | **HMAC ticket** (single-use, minted via RPC on web) | Browser ⇄ server |
-| DB | TCP/TLS | `${{Postgres.DATABASE_URL}}` | password | server, web ⇄ Postgres |
+| Web SSR + static | HTTPS | `https://sonara.fm/` (gateway → web) | none (public) | Browser ⇄ gateway ⇄ web |
+| Better Auth | HTTPS | `https://sonara.fm/api/auth/*` (gateway → server) | better-auth cookie | Browser ⇄ gateway ⇄ server |
+| oRPC (credits, ticket mint) | HTTPS | `https://sonara.fm/rpc/*` (gateway → server) | better-auth cookie | Browser ⇄ gateway ⇄ server |
+| Image-anchor upload | HTTPS | `https://sonara.fm/api/upload/image` (gateway → server) | better-auth cookie | Browser ⇄ gateway ⇄ server |
+| Dodo webhook | HTTPS | `https://sonara.fm/api/auth/dodopayments/webhook` (gateway → server, Better Auth plugin) | Dodo signature | Dodo → gateway → server |
+| Healthcheck | HTTPS | `https://api.sonara.fm/health` (legacy fallback; gateway healthcheck via `/` on web is also fine) | none | Railway / curl |
+| **Realtime session** | **WSS** | `wss://sonara.fm/ws` (gateway → server) | **HMAC ticket** (single-use, minted via RPC) | Browser ⇄ gateway ⇄ server |
+| DB | TCP/TLS | `${{Postgres.DATABASE_URL}}` | password | server ⇄ Postgres |
 | fal.ai | HTTPS | `https://fal.run/...` | `FAL_KEY` | server → fal |
 | AudD | HTTPS | `https://api.audd.io/` | `AUDD_API_KEY` | server → AudD |
 | Apple Music | HTTPS | (public) | none | server → Apple |
-| Dodo Payments | HTTPS | `https://checkout.dodopayments.com/*` | API key + customer id | web → Dodo (server-side checkout create) |
+| Dodo Payments | HTTPS | `https://checkout.dodopayments.com/*` | API key + customer id | server → Dodo (checkout create) |
 
-> **Warning.** WS upgrade is the **only** path that uses a single-use HMAC ticket
-> instead of a cookie. The browser RPC-calls `auth.mintWsTicket()` on every reconnect,
-> then includes the ticket as a query param. The server verifies on upgrade and
-> rejects with 401 otherwise. This is also what lets `api.sonara.fm` live on a
-> different origin from `sonara.fm` without CORS or shared cookies — WS is
-> origin-agnostic by construction.
+> **Note.** The ticket scheme survives the same-origin move because it cleanly carries
+> identity to the WS upgrade without re-parsing cookies at the socket layer. The browser
+> RPC-calls `auth.mintWsTicket()` on every reconnect, then includes the ticket as a query
+> param; the server verifies on upgrade and rejects with 401 otherwise.
 
 ---
 

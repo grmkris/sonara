@@ -26,18 +26,18 @@ Deployed on **Railway** behind **Cloudflare DNS** on the `sonara.fm` zone. Postg
 
 ### Services
 
-**Target topology (gateway cutover — see `DEPLOY.md §Gateway cutover`; pending):**
+**Topology:**
 
 | Service | Public URL | Internal address | Role |
 |---|---|---|---|
 | `gateway` | https://sonara.fm (+ www → 301) | — | Caddy. The only public service. Path-routes to server/web internally. |
 | `web` | — (internal only) | `web.railway.internal:4472` | Next.js standalone; UI + SSR. |
-| `server` | — (internal only) | `server.railway.internal:4471` | Bun + Hono; Better Auth, `/rpc`, upload, WSS `/ws`, `/health`. |
+| `server` | — (internal only)¹ | `server.railway.internal:4471` | Bun + Hono; Better Auth, `/rpc`, upload, WSS `/ws`, `/health`. |
 | `Postgres` | `postgres.railway.internal:5432` (private) | — | auth + credits ledger |
 
-Existing service IDs: web `235aa1d4-8c1b-4b7a-989a-099e61807e8c`, server `12262832-9534-4230-b032-c675d87f29b8`. With the gateway in front, the browser only ever talks to `sonara.fm` (gateway) — auth, RPC, upload and WSS (`wss://sonara.fm/ws`) are all same-origin, so cookies are first-party and there's no CORS. The WS still auths with the short-lived HMAC ticket minted by `mintWsTicket` (now a server `/rpc` procedure).
+¹ `api.sonara.fm` still resolves to `server` as a deprecation fallback; the codebase no longer references it. Safe to remove (CF `CNAME api` + `_railway-verify.api` TXT + the Railway custom domain) once you're certain no external integration still hits it.
 
-**Pre-cutover (current live prod):** `sonara.fm` → web service (which used to serve `/api/auth` + the Dodo webhook), `api.sonara.fm` → server (WSS + `/health`). The cutover flips DNS to the gateway and moves secrets web→server.
+Existing service IDs: web `235aa1d4-8c1b-4b7a-989a-099e61807e8c`, server `12262832-9534-4230-b032-c675d87f29b8`. With the gateway in front, the browser only ever talks to `sonara.fm` (gateway) — auth, RPC, upload and WSS (`wss://sonara.fm/ws`) are all same-origin, so cookies are first-party and there's no CORS. The WS still auths with the short-lived HMAC ticket minted by `mintWsTicket` (a server `/rpc` procedure).
 
 ### Cloudflare
 

@@ -64,6 +64,8 @@ See `ARCHITECTURE.md` for the current code tour — data flow, layer-by-layer ma
 
 ## Scope
 
-**Shipped:** text prompts, browser-speech voice → Gemini intent parser, tab-audio / mic capture, AudD-backed song recognition with Apple Music enrichment, WebGL2 renderer with 21 presets + 13 shader primitives, LFO drift, FBO feedback, preset cross-fade, single-frame `streamPreview` per trigger, BYOK fal key, email+password auth (Better Auth) + credit ledger + USDC top-ups on Base.
+**Shipped:** text prompts (single-prompt scene), browser-speech voice → Gemini intent parser, tab-audio / mic capture, AudD-backed song recognition with Apple Music enrichment, WebGL2 renderer with 21 presets + 13 shader primitives + Papari–Kuwahara painterly pass, LFO drift, FBO feedback, preset cross-fade, single-frame `streamPreview` per trigger, image-anchor uploads (3-preset strength), demo image library + decks, BYOK fal key, email+password auth (Better Auth) + credit ledger + Dodo Payments hosted checkout for credit packs, canvas+audio MP4 capture from the HUD, public anon demo without signup, offline service worker.
 
-**Deferred:** OpenAI refine pass (original Phase 2 goal; not started). Fluid-sim preset (additive, not cleanup). See `ARCHITECTURE.md` smell list for the open cleanup items.
+**Parked ideas** (not yet started): see `docs/mood-field-plan.md` (replace preset chip wall with a valence/arousal constellation), `docs/starter-decks.md` (drop the "demo mode" jargon), `docs/story-mode-and-image-library.md` (batch keyframes + persistent gallery), `docs/gesture-camera-input.md` (pointer/MIDI/webcam input), and `PLANS.md` (chat-platform clip sharing).
+
+**Open cleanup items:** see `ARCHITECTURE.md` smell list.

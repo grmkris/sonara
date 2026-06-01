@@ -2,18 +2,18 @@
 
 A code tour for refactoring decisions. Read top-down: data flow first, then a layer-by-layer map with file paths, then an honest list of where complexity has accumulated and what to do about it.
 
-> **Backend unification (May 2026):** the API **server** is now the single source of truth — Better Auth, the oRPC HTTP router (credits, `mintWsTicket`), image upload, and the Dodo webhook all moved out of the Next.js app into `apps/server/src/{auth,rpc,http}/`. A **Caddy gateway** (`apps/gateway`) fronts both and makes everything same-origin (cookies first-party, no CORS). The web app is now a thin frontend — no DB, no secrets. See `AGENTS.md §Quick orient` + `DEPLOY.md §Gateway cutover`. Per-layer paths below that still say `apps/web/src/server/*` now live under `apps/server/`.
+> **Backend unification (May 2026):** the API **server** is the single source of truth — Better Auth, the oRPC HTTP router (credits, `mintWsTicket`), image upload, and the Dodo webhook all moved out of the Next.js app into `apps/server/src/{auth,rpc,http}/`. A **Caddy gateway** (`apps/gateway`) fronts both and makes everything same-origin (cookies first-party, no CORS). The web app is a thin frontend — no DB, no secrets. See `AGENTS.md §Quick orient` + `DEPLOY.md`. Per-layer paths below that say `apps/web/src/server/*` now live under `apps/server/`.
 
-> **Status at last update:**
-> - ✅ CSS fallback renderer deleted (was smell #5).
-> - ✅ Papari–Kuwahara painterly post-pass landed (new `uPainterly` uniform + preset field).
-> - ✅ Three new ink primitives landed (`uSalt`, `uCauliflower`, `uSplatter` — all original code, license-safe).
-> - ✅ `ClientEvent` → oRPC migration complete (new `@sonara/api` package; `SessionSend` + `dispatchSessionAction` in `apps/web/src/lib/session-actions.ts`). Typecheck clean across all 5 packages.
-> - ⚠️ `VoiceController` extraction was reverted — voice handling is back inline in `session.ts`. Smell #1 reopened; session is now 687 lines.
-> - ✅ `session.state()` bootstrap-pull procedure covers the `EventPublisher` race where `init()` publishes land before the client's `events()` subscribe attaches.
-> - ❌ Lygia refactor dropped (Prosperity + Patron license incompatible with proprietary project).
-> - ✅ Morph chain removed (April 2026) — unified single-frame `streamPreview` path for every trigger. Reveal shader stays.
-> - **Tier 1 + Tier 2 closed.** Remaining work is the deferred smell-list items from §4.
+> **Status at last update (2026-06-01):**
+> - ✅ Gateway cutover live in prod — `https://sonara.fm` resolves to the `gateway` service; `via: 1.1 Caddy` on every response.
+> - ✅ Scene state collapsed to a single `prompt` field (`SonaraSceneState` in `packages/shared/src/scene.ts`); song-muse outputs `{ prompt }`; the per-field UI (`field-row.tsx`, `scene-fields.ts`) is deleted.
+> - ✅ Image-anchor upload shipped end-to-end: `apps/server/src/http/upload.ts`, `apps/server/src/generation/anchor-provider.ts`, `setImageAnchor` mutation, `image-anchor-zone.tsx`, third trigger branch in `session.ts`.
+> - ✅ Demo image library + decks; anon sessions pinned to demo-library mode (no fal, no credits).
+> - ✅ Public demo without signup; email allowlist removed.
+> - ✅ Dodo Payments wired (SIWE/Reown/USDC ripped out in `b906ac4`).
+> - ✅ CSS fallback renderer deleted; Papari–Kuwahara painterly pass; `uSalt`/`uCauliflower`/`uSplatter` primitives.
+> - ⚠️ **Smell #1 worse, not better.** `session.ts` is now **1016 lines** (was 687 at last note). Voice handling, image-anchor branch, demo-library branch, and the song-muse hook all accreted there. Worth a focused extraction pass.
+> - ❌ Lygia refactor dropped (license incompatible).
 
 Open cleanup items are tracked in §3 (smell list) below. The visual / shader refactor list — which used to live in `REFACTOR-PLAN.md` — closed out and the file has been retired.
 
