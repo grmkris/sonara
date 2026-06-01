@@ -19,6 +19,7 @@ import { Mark } from "@/components/brand/mark";
 import { DemoRecorder } from "@/components/visualizer/controls/demo-recorder";
 import { ScanSweep } from "@/components/visualizer/canvas/scan-sweep";
 import { NowPlaying } from "@/components/visualizer/controls/now-playing";
+import { StudioActionConsumer } from "@/components/visualizer/studio-action-consumer";
 import { TimelineStrip } from "@/components/visualizer/timeline/timeline-strip";
 import { TimelineToggle } from "@/components/visualizer/timeline/timeline-toggle";
 import { Button } from "@/components/ui/button";
@@ -273,6 +274,11 @@ export default function Page() {
           prerender. */}
       <Suspense fallback={null}>
         <DemoRecorder />
+      </Suspense>
+
+      {/* Consumes ?anchor= / ?prompt= one-shot params left by /studio. */}
+      <Suspense fallback={null}>
+        <StudioActionConsumer send={send} />
       </Suspense>
     </main>
   );

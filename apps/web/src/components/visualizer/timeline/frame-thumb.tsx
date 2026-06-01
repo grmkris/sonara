@@ -2,6 +2,7 @@
 
 import { useCallback } from "react";
 import type { LibraryFrame } from "@sonara/shared";
+import { formatAgo } from "@/lib/format-time";
 import type { SessionSend } from "@/lib/session-actions";
 import { cn } from "@/lib/utils";
 
@@ -68,14 +69,3 @@ export function FrameThumb({ frame, send }: FrameThumbProps) {
   );
 }
 
-function formatAgo(date: Date): string {
-  const now = Date.now();
-  const ms = now - date.getTime();
-  if (ms < 60_000) return "just now";
-  const m = Math.floor(ms / 60_000);
-  if (m < 60) return `${m}m ago`;
-  const h = Math.floor(m / 60);
-  if (h < 24) return `${h}h ago`;
-  const d = Math.floor(h / 24);
-  return `${d}d ago`;
-}
