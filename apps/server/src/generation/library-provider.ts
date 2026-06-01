@@ -36,6 +36,7 @@ export async function pickLibraryFrame(
           `SELECT id::text AS id, url, width, height
              FROM image_library
             WHERE deck = $1
+              AND source = 'seed'
               AND status = 'active'
               AND id <> ALL($2::uuid[])
             ORDER BY random()

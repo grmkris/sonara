@@ -46,6 +46,21 @@ const envSchema = z.object({
   // song-muse (track → prompt synthesis). Not used by voice — voice is
   // direct dictation with no LLM round-trip.
   FAL_LLM_MODEL: z.string().optional(),
+
+  // Railway Bucket (S3-compatible, Tigris-backed). Stores every persisted
+  // generated frame so users can browse their library / timeline. Optional
+  // in dev — when any of these is empty, persistFrame() becomes a no-op and
+  // logs a warning. In prod they're wired via reference variables to the
+  // sonara-frames bucket. Bucket is private; we serve via presigned URLs.
+  S3_BUCKET: z.string().default(""),
+  S3_ACCESS_KEY_ID: z.string().default(""),
+  S3_SECRET_ACCESS_KEY: z.string().default(""),
+  S3_ENDPOINT: z.string().default(""),
+  S3_REGION: z.string().default("auto"),
+  // Presigned read URL TTL. 7 days = 604800. Long enough to survive a tab
+  // left open for a few days; the library.list RPC always returns fresh
+  // URLs so any stale ones just need a refetch.
+  S3_PRESIGN_TTL_SEC: z.coerce.number().int().positive().default(604800),
 });
 
 export const env = envSchema.parse(Bun.env);

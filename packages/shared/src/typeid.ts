@@ -13,6 +13,10 @@ export const idTypesMapNameToPrefix = {
   usageLedger: "usg",
   allowedEmail: "alw",
   imageLibrary: "img",
+  // Visualizer WS session — minted in-memory on each Session construction.
+  // Distinct from `session` (Better Auth's browser session). Used to group
+  // image_library rows by live-play session for the timeline view.
+  liveSession: "lse",
 } as const;
 
 export type IdTypePrefixNames = keyof typeof idTypesMapNameToPrefix;
@@ -68,6 +72,7 @@ export type CreditsId = TypeIdString<"credits">;
 export type UsageLedgerId = TypeIdString<"usageLedger">;
 export type AllowedEmailId = TypeIdString<"allowedEmail">;
 export type ImageLibraryId = TypeIdString<"imageLibrary">;
+export type LiveSessionId = TypeIdString<"liveSession">;
 
 export const UserIdSchema = typeIdValidator("user");
 export const SessionIdSchema = typeIdValidator("session");
@@ -77,3 +82,4 @@ export const CreditsIdSchema = typeIdValidator("credits");
 export const UsageLedgerIdSchema = typeIdValidator("usageLedger");
 export const AllowedEmailIdSchema = typeIdValidator("allowedEmail");
 export const ImageLibraryIdSchema = typeIdValidator("imageLibrary");
+export const LiveSessionIdSchema = typeIdValidator("liveSession");

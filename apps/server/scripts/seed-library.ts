@@ -32,7 +32,7 @@ import {
   type ImageLibraryId,
   typeIdGenerator,
 } from "@sonara/shared/typeid";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import sharp from "sharp";
 import { env } from "../src/env";
 import { buildLibraryManifests } from "./build-library-manifests";
@@ -180,7 +180,12 @@ async function importFromExport(args: Args): Promise<void> {
     const existing = await db
       .select({ id: SCHEMA.imageLibrary.id })
       .from(SCHEMA.imageLibrary)
-      .where(eq(SCHEMA.imageLibrary.promptHash, row.promptHash))
+      .where(
+        and(
+          eq(SCHEMA.imageLibrary.promptHash, row.promptHash),
+          eq(SCHEMA.imageLibrary.source, "seed"),
+        ),
+      )
       .limit(1);
     if (existing.length > 0) {
       skipped++;
@@ -267,7 +272,12 @@ async function main() {
       const existing = await db
         .select({ id: SCHEMA.imageLibrary.id })
         .from(SCHEMA.imageLibrary)
-        .where(eq(SCHEMA.imageLibrary.promptHash, hash))
+        .where(
+          and(
+            eq(SCHEMA.imageLibrary.promptHash, hash),
+            eq(SCHEMA.imageLibrary.source, "seed"),
+          ),
+        )
         .limit(1);
       if (existing.length > 0) {
         skip++;
