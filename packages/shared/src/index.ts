@@ -3,6 +3,7 @@ export * from "./scene-resolved";
 export * from "./audio";
 export * from "./now-playing";
 export * from "./events";
+export * from "./inspector-context";
 export * from "./scene-templates";
 export * from "./visual-presets";
 export * from "./demo";

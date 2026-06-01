@@ -1,5 +1,13 @@
 import { sql } from "drizzle-orm";
-import { index, integer, pgTable, text, uniqueIndex } from "drizzle-orm/pg-core";
+import {
+  index,
+  integer,
+  jsonb,
+  pgTable,
+  text,
+  uniqueIndex,
+} from "drizzle-orm/pg-core";
+import type { InspectorContext } from "@sonara/shared";
 import {
   type ImageLibraryId,
   type LiveSessionId,
@@ -77,6 +85,24 @@ export const imageLibrary = pgTable(
     // served to clients (fal URLs are ephemeral; the bucket copy is
     // canonical).
     sourceUrl: text("source_url"),
+
+    // --- /studio inspector context ---
+    // (All nullable — historical rows pre-/studio carry NULL here and the
+    // inspector renders "no context recorded" for them.)
+
+    // Why trigger() fired: 'periodic' | 'semantic' | 'section' | 'pause' |
+    // 'voice'. Surfaces user intent in the inspector ("you spoke" /
+    // "section change"). Untyped at the DB level — the server's
+    // TriggerSource enum is the source of truth.
+    triggerReason: text("trigger_reason"),
+    // When this frame was anchor-mode: the input image URL (a presigned
+    // bucket URL OR a fal.storage user-upload URL). Null for text-mode.
+    // Display-only; we don't trace back to the source library row in v1.
+    anchorUrl: text("anchor_url"),
+    // jsonb bag of display metadata: audio mood, nowPlaying track, drift
+    // modifier, resolved-scene summary. Schema in
+    // packages/shared/src/inspector-context.ts. Evolves without migrations.
+    inspectorContext: jsonb("inspector_context").$type<InspectorContext>(),
 
     ...baseEntityFields,
   },

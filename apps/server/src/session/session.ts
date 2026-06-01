@@ -148,6 +148,9 @@ export class Session {
   private lastValence = 0.5;
   private lastArousal = 0;
   private lastBpm = 0;
+  // Last seen audio rms. Snapshotted into inspector_context at trigger
+  // time so /studio can show audio mood when the frame landed.
+  private lastRms = 0;
   private silentSinceAt: number | null = null;
   private recognitionInFlight: AbortController | null = null;
 
@@ -346,6 +349,7 @@ export class Session {
     this.lastValence = features.valence;
     this.lastArousal = features.arousal;
     this.lastBpm = features.bpm;
+    this.lastRms = features.rms;
 
     // Silence-clear for nowPlaying. Kept independent of section detection
     // because sectionEnergy is EMA-smoothed and lags actual silence.
@@ -799,6 +803,24 @@ export class Session {
           tMs,
           width: 768,
           height: 768,
+          triggerReason: source,
+          inspectorContext: {
+            audio: {
+              valence: this.lastValence,
+              arousal: this.lastArousal,
+              bpm: this.lastBpm,
+              sectionEnergy: this.lastSectionEnergy,
+              rms: this.lastRms,
+            },
+            nowPlaying: this.scene.nowPlaying,
+            driftModifier: drift ?? undefined,
+            resolvedSummary: {
+              subjects: resolved.subjects.map((s) => s.description),
+              palette: resolved.color_palette,
+              lighting: resolved.lighting,
+              mood: resolved.mood,
+            },
+          },
           logger: this.logger,
         }).then((row) => {
           if (!row) return;
@@ -1016,6 +1038,25 @@ export class Session {
           // flux-pro/v1.1-ultra at aspect_ratio: "1:1" returns 1024².
           width: 1024,
           height: 1024,
+          triggerReason: source,
+          anchorUrl: anchor.url,
+          inspectorContext: {
+            audio: {
+              valence: this.lastValence,
+              arousal: this.lastArousal,
+              bpm: this.lastBpm,
+              sectionEnergy: this.lastSectionEnergy,
+              rms: this.lastRms,
+            },
+            nowPlaying: this.scene.nowPlaying,
+            driftModifier: drift ?? undefined,
+            resolvedSummary: {
+              subjects: resolved.subjects.map((s) => s.description),
+              palette: resolved.color_palette,
+              lighting: resolved.lighting,
+              mood: resolved.mood,
+            },
+          },
           logger: this.logger,
         }).then((row) => {
           if (!row) return;

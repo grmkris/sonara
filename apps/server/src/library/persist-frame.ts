@@ -1,3 +1,4 @@
+import type { InspectorContext } from "@sonara/shared";
 import {
   type ImageLibraryId,
   type LiveSessionId,
@@ -25,6 +26,14 @@ export interface PersistFrameInput {
   tMs: number;
   width: number;
   height: number;
+  // Why trigger() fired ('periodic' | 'semantic' | 'section' | 'pause' |
+  // 'voice'). Surfaces in /studio inspector. Optional for forward-compat
+  // — old call sites pre-/studio would pass undefined.
+  triggerReason?: string;
+  // Anchor input URL when this was an anchor-mode frame. Optional.
+  anchorUrl?: string;
+  // Display-only metadata bag for the inspector. Optional.
+  inspectorContext?: InspectorContext;
   logger: Logger;
 }
 
@@ -106,10 +115,12 @@ export async function persistFrame(
       const result = await client.query<{ created_at: Date }>(
         `INSERT INTO image_library
            (id, deck, prompt, prompt_hash, model, seed, url, width, height,
-            palette, status, source, user_id, session_id, t_ms, source_url)
+            palette, status, source, user_id, session_id, t_ms, source_url,
+            trigger_reason, anchor_url, inspector_context)
          VALUES
            ($1::uuid, $2, $3, $4, $5, $6, $7, $8, $9,
-            $10::text[], 'active', 'generated', $11::uuid, $12, $13, $14)
+            $10::text[], 'active', 'generated', $11::uuid, $12, $13, $14,
+            $15, $16, $17::jsonb)
          RETURNING created_at`,
         [
           frameUuid,
@@ -126,6 +137,9 @@ export async function persistFrame(
           input.sessionId,
           input.tMs,
           input.falUrl,
+          input.triggerReason ?? null,
+          input.anchorUrl ?? null,
+          input.inspectorContext ? JSON.stringify(input.inspectorContext) : null,
         ],
       );
       createdAt = result.rows[0]?.created_at ?? new Date();

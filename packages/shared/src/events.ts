@@ -2,6 +2,7 @@ import { z } from "zod";
 import { SonaraSceneState } from "./scene";
 import { NowPlaying } from "./now-playing";
 import { ResolvedScene } from "./scene-resolved";
+import { InspectorContextSchema } from "./inspector-context";
 import { ImageLibraryIdSchema, LiveSessionIdSchema } from "./typeid";
 import { VISUAL_PRESET_NAMES } from "./visual-presets";
 
@@ -9,6 +10,11 @@ import { VISUAL_PRESET_NAMES } from "./visual-presets";
 // bySession RPCs) and carried by the `library.appended` WS event. The `url`
 // field is a fresh presigned read URL — never store these long-term on the
 // client; refetch via library.list to get current URLs.
+//
+// The `triggerReason`/`anchorUrl`/`inspectorContext` fields are populated
+// for frames generated after Phase 8a; historical rows have null/undefined
+// there. The /studio inspector renders "no context recorded" for null
+// inspectorContext rows.
 export const LibraryFrameSchema = z.object({
   id: ImageLibraryIdSchema,
   url: z.string(),
@@ -20,9 +26,30 @@ export const LibraryFrameSchema = z.object({
   tMs: z.number().int().nonnegative(),
   sessionId: LiveSessionIdSchema,
   createdAt: z.coerce.date(),
+  triggerReason: z.string().nullable().optional(),
+  anchorUrl: z.string().nullable().optional(),
+  inspectorContext: InspectorContextSchema.nullable().optional(),
 });
 
 export type LibraryFrame = z.infer<typeof LibraryFrameSchema>;
+
+// Session-level summary returned by library.sessions. Lightweight — no
+// per-frame data, just the aggregate + a representative sample URL for
+// the sessions sidebar in /studio.
+export const SessionSummarySchema = z.object({
+  sessionId: LiveSessionIdSchema,
+  frameCount: z.number().int().nonnegative(),
+  firstFrameAt: z.coerce.date(),
+  lastFrameAt: z.coerce.date(),
+  // Presigned URL of the newest frame in the session — used as the
+  // sidebar thumbnail. Null only if the session has no rows (defensive).
+  sampleUrl: z.string().nullable(),
+  // Total session duration in ms (lastFrameAt - firstFrameAt). Cheap to
+  // compute server-side; clients avoid a Date math step.
+  durationMs: z.number().int().nonnegative(),
+});
+
+export type SessionSummary = z.infer<typeof SessionSummarySchema>;
 
 // Clients may only patch user-authored fields. version/nowPlaying are
 // server-authoritative; imageAnchor goes through its dedicated mutation
