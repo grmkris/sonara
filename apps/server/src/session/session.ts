@@ -11,8 +11,13 @@ import {
   defaultScene,
   libraryCadenceMs,
 } from "@sonara/shared";
+import {
+  type LiveSessionId,
+  typeIdGenerator,
+} from "@sonara/shared/typeid";
 import { EventPublisher } from "@orpc/server";
 import type { Logger } from "../lib/logger";
+import { env } from "../env";
 import { streamPreview } from "../generation/fal-provider";
 import { streamAnchor } from "../generation/anchor-provider";
 import { serializeResolvedScene } from "../generation/prompt-compiler";
@@ -23,6 +28,7 @@ import {
   refundOnError,
   tryDebitCredit,
 } from "../credits/credit-gate";
+import { persistFrame } from "../library/persist-frame";
 import { recognizeClip } from "../recognition/recognition.service";
 import {
   synthesizeFromTrack,
@@ -147,6 +153,12 @@ export class Session {
 
   private sessionStartAt = Date.now();
   private lastCreditDenialAt = 0;
+
+  // Stable identifier for this live WS session. Stays fixed for the WS
+  // lifetime (reset() does NOT mint a new one — the user's library-row
+  // grouping survives a scene reset). Distinct from Better Auth's
+  // SessionId / opts.id (which is the WS-connection id).
+  readonly liveSessionId: LiveSessionId = typeIdGenerator("liveSession");
 
   // DEMO mode state. Frame-driving is client-side now (use-demo-frame-loop);
   // the server only tracks these to relay in the connect snapshot + anon pinning.
@@ -755,13 +767,54 @@ export class Session {
       onFinal: (url) => {
         if (version !== this.activeVersion) return;
         this.lastGeneratedScene = snapshot;
-        this.send({ type: "frame.final", imageUrl: url, version });
+        const tMs = Date.now() - this.sessionStartAt;
+        const frameId = typeIdGenerator("imageLibrary");
+        this.send({
+          type: "frame.final",
+          imageUrl: url,
+          version,
+          frameId,
+          tMs,
+        });
         this.send({ type: "job.status", status: "idle" });
         this.send({
           type: "generation.completed",
           version,
           durationMs: Date.now() - requestedAt,
           success: true,
+        });
+        // Fire-and-forget persist. Never blocks the rendering hot path;
+        // failures log and skip. Emits library.appended on success so the
+        // client's timeline can append the row without polling.
+        void persistFrame({
+          id: frameId,
+          userId,
+          sessionId: this.liveSessionId,
+          deck: this.lastDeck ?? "live",
+          prompt,
+          model: env.FAL_TEXT_MODEL,
+          seed: this.seed,
+          palette: resolved.color_palette,
+          falUrl: url,
+          tMs,
+          width: 768,
+          height: 768,
+          logger: this.logger,
+        }).then((row) => {
+          if (!row) return;
+          this.send({
+            type: "library.appended",
+            id: row.id,
+            url: row.url,
+            width: row.width,
+            height: row.height,
+            palette: row.palette,
+            deck: row.deck,
+            prompt: row.prompt,
+            tMs: row.tMs,
+            sessionId: row.sessionId,
+            createdAt: row.createdAt,
+          });
         });
       },
       onError: (err) => {
@@ -942,13 +995,55 @@ export class Session {
           this.send({ type: "scene.state", state: this.scene });
         }
         this.lastGeneratedScene = snapshot;
-        this.send({ type: "frame.final", imageUrl: url, version });
+        const tMs = Date.now() - this.sessionStartAt;
+        const frameId = typeIdGenerator("imageLibrary");
+        this.send({
+          type: "frame.final",
+          imageUrl: url,
+          version,
+          frameId,
+          tMs,
+        });
         this.send({ type: "job.status", status: "idle" });
         this.send({
           type: "generation.completed",
           version,
           durationMs: Date.now() - requestedAt,
           success: true,
+        });
+        // Fire-and-forget persist for the generated frame. Note: the
+        // anchor INPUT image (user upload at fal.storage) is NOT
+        // persisted — only the generated output gets a library row.
+        void persistFrame({
+          id: frameId,
+          userId,
+          sessionId: this.liveSessionId,
+          deck: this.lastDeck ?? "live",
+          prompt,
+          model: env.FAL_ANCHOR_MODEL,
+          seed: this.seed,
+          palette: resolved.color_palette,
+          falUrl: url,
+          tMs,
+          // flux-pro/v1.1-ultra at aspect_ratio: "1:1" returns 1024².
+          width: 1024,
+          height: 1024,
+          logger: this.logger,
+        }).then((row) => {
+          if (!row) return;
+          this.send({
+            type: "library.appended",
+            id: row.id,
+            url: row.url,
+            width: row.width,
+            height: row.height,
+            palette: row.palette,
+            deck: row.deck,
+            prompt: row.prompt,
+            tMs: row.tMs,
+            sessionId: row.sessionId,
+            createdAt: row.createdAt,
+          });
         });
       },
       onError: (err) => {

@@ -1,8 +1,6 @@
 import {
   type ImageLibraryId,
   type LiveSessionId,
-  type UserId,
-  typeIdGenerator,
   typeIdToUuid,
 } from "@sonara/shared/typeid";
 import { getPool } from "../db/pool";
@@ -10,7 +8,13 @@ import type { Logger } from "../lib/logger";
 import { isConfigured, presignReadUrl, uploadBytes } from "../storage/bucket";
 
 export interface PersistFrameInput {
-  userId: UserId;
+  // Pre-minted by the caller so the matching frame.final event can carry
+  // the id WITHOUT waiting for the persist round-trip to complete.
+  id: ImageLibraryId;
+  // Raw user uuid (matches the Session.userId shape + credits.service /
+  // library-provider conventions on the server). The library router
+  // converts to typeid at the API boundary.
+  userId: string;
   sessionId: LiveSessionId;
   deck: string;
   prompt: string;
@@ -53,7 +57,9 @@ export async function persistFrame(
     return null;
   }
 
-  const id = typeIdGenerator("imageLibrary");
+  const { id } = input;
+  // Bucket key uses the raw uuid (no `usr_` prefix) so all of one user's
+  // frames live under the same prefix without typeid-encoding overhead.
   const key = `generated/${input.userId}/${id}.webp`;
 
   let bytes: ArrayBuffer;
@@ -91,7 +97,6 @@ export async function persistFrame(
   // per (user, prompt, sessionId, tMs) so the partial-unique seed index
   // is never tickled by live rows.
   const promptHash = `gen:${input.sessionId}:${input.tMs}`;
-  const userUuid = typeIdToUuid(input.userId).uuid;
   const frameUuid = typeIdToUuid(id).uuid;
 
   let createdAt: Date;
@@ -117,7 +122,7 @@ export async function persistFrame(
           input.width,
           input.height,
           input.palette,
-          userUuid,
+          input.userId,
           input.sessionId,
           input.tMs,
           input.falUrl,

@@ -2,6 +2,7 @@ import { z } from "zod";
 import { SonaraSceneState } from "./scene";
 import { NowPlaying } from "./now-playing";
 import { ResolvedScene } from "./scene-resolved";
+import { ImageLibraryIdSchema, LiveSessionIdSchema } from "./typeid";
 import { VISUAL_PRESET_NAMES } from "./visual-presets";
 
 // Clients may only patch user-authored fields. version/nowPlaying are
@@ -29,6 +30,12 @@ export const ServerEvent = z.discriminatedUnion("type", [
     type: z.literal("frame.final"),
     imageUrl: z.string(),
     version: z.number(),
+    // Optional during rollout — older server builds emit without these.
+    // frameId + tMs let the client match this final to a library row
+    // appended via `library.appended`, so the timeline can highlight the
+    // currently-playing frame.
+    frameId: ImageLibraryIdSchema.optional(),
+    tMs: z.number().int().nonnegative().optional(),
   }),
   z.object({
     type: z.literal("job.status"),
@@ -70,6 +77,24 @@ export const ServerEvent = z.discriminatedUnion("type", [
     durationMs: z.number().nonnegative(),
     success: z.boolean(),
     message: z.string().optional(),
+  }),
+  // Emitted after a generated frame is persisted to the bucket + DB. The
+  // client's library slice appends this to its timeline. Only fires for
+  // authed sessions and only when storage is configured; anon sessions
+  // and bucket-misconfigured dev never see it.
+  z.object({
+    type: z.literal("library.appended"),
+    id: ImageLibraryIdSchema,
+    // Presigned bucket read URL — refresh by calling library.list.
+    url: z.string(),
+    width: z.number().int().positive(),
+    height: z.number().int().positive(),
+    palette: z.array(z.string()).nullable(),
+    deck: z.string(),
+    prompt: z.string(),
+    tMs: z.number().int().nonnegative(),
+    sessionId: LiveSessionIdSchema,
+    createdAt: z.date(),
   }),
 ]);
 
