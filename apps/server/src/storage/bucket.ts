@@ -51,3 +51,30 @@ export function presignReadUrl(key: string, ttlSec?: number): string {
   if (!c) throw new Error("bucket not configured");
   return c.presign(key, { expiresIn: ttlSec ?? env.S3_PRESIGN_TTL_SEC });
 }
+
+// If `url` is a (presigned) read URL pointing at OUR bucket, return its bare
+// object key; otherwise null. Format-agnostic: handles both path-style
+// (`<endpoint>/<bucket>/<key>`) and virtual-host style
+// (`<bucket>.<endpoint>/<key>`). Lets persistFrame store a durable key for
+// anchor inputs that came from the bucket, so they can be re-presigned on read
+// instead of rotting when the original presign TTL lapses. External URLs
+// (fal.storage uploads, public /library paths) return null and are kept as-is.
+export function bucketKeyFromUrl(url: string): string | null {
+  if (!env.S3_ENDPOINT || !env.S3_BUCKET) return null;
+  let u: URL;
+  let endpoint: URL;
+  try {
+    u = new URL(url);
+    endpoint = new URL(env.S3_ENDPOINT);
+  } catch {
+    return null;
+  }
+  const hostOk =
+    u.host === endpoint.host || u.host === `${env.S3_BUCKET}.${endpoint.host}`;
+  if (!hostOk) return null;
+  let path = u.pathname.replace(/^\/+/, "");
+  if (path.startsWith(`${env.S3_BUCKET}/`)) {
+    path = path.slice(env.S3_BUCKET.length + 1);
+  }
+  return path || null;
+}

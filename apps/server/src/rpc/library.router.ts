@@ -19,7 +19,6 @@ import {
   lt,
   max,
   min,
-  sql,
 } from "drizzle-orm";
 import { z } from "zod";
 import { presignReadUrl } from "../storage/bucket";
@@ -72,7 +71,14 @@ function rowToFrame(row: FrameRow): LibraryFrame {
     sessionId: (row.sessionId ?? "") as LiveSessionId,
     createdAt: row.createdAt,
     triggerReason: row.triggerReason,
-    anchorUrl: row.anchorUrl,
+    // Bare bucket keys (new rows) get re-presigned for a fresh TTL, mirroring
+    // `url`; absolute URLs (fal uploads, public /library paths, and legacy
+    // rows that stored a full presigned URL) pass through untouched.
+    anchorUrl: row.anchorUrl
+      ? row.anchorUrl.includes("://")
+        ? row.anchorUrl
+        : presignReadUrl(row.anchorUrl)
+      : null,
     inspectorContext: row.inspectorContext,
   };
 }
@@ -195,6 +201,12 @@ export const libraryRouter = {
           frameCount: count(SCHEMA.imageLibrary.id),
           firstFrameAt: min(SCHEMA.imageLibrary.createdAt),
           lastFrameAt: max(SCHEMA.imageLibrary.createdAt),
+          // Session-relative audio offsets — duration is computed from these
+          // (the `tMs` axis) so the sidebar agrees with the timeline, which
+          // also measures in tMs. Wall-clock createdAt would over-count any
+          // paused stretch.
+          minTMs: min(SCHEMA.imageLibrary.tMs),
+          maxTMs: max(SCHEMA.imageLibrary.tMs),
         })
         .from(SCHEMA.imageLibrary)
         .where(and(...conditions))
@@ -219,20 +231,32 @@ export const libraryRouter = {
         .map((g) => g.sessionId)
         .filter((id): id is LiveSessionId => id !== null);
 
+      // DISTINCT ON (sessionId) newest frame per session, via Drizzle so the
+      // typeId column driver converts `userId` (typeid → uuid) automatically —
+      // no hand-written `::uuid` cast. orderBy must lead with the distinct col.
       const sampleRows = sessionIds.length
-        ? await db.execute<{ session_id: string; url: string }>(
-            sql`SELECT DISTINCT ON (session_id) session_id, url
-                  FROM image_library
-                 WHERE user_id = ${userId}::uuid
-                   AND session_id = ANY(${sessionIds})
-                   AND source IN ('generated', 'story')
-                 ORDER BY session_id, created_at DESC`,
-          )
-        : { rows: [] as Array<{ session_id: string; url: string }> };
+        ? await db
+            .selectDistinctOn([SCHEMA.imageLibrary.sessionId], {
+              sessionId: SCHEMA.imageLibrary.sessionId,
+              url: SCHEMA.imageLibrary.url,
+            })
+            .from(SCHEMA.imageLibrary)
+            .where(
+              and(
+                eq(SCHEMA.imageLibrary.userId, userId),
+                inArray(SCHEMA.imageLibrary.sessionId, sessionIds),
+                inArray(SCHEMA.imageLibrary.source, ["generated", "story"]),
+              ),
+            )
+            .orderBy(
+              asc(SCHEMA.imageLibrary.sessionId),
+              desc(SCHEMA.imageLibrary.createdAt),
+            )
+        : [];
 
       const samplesByKey = new Map<string, string>();
-      for (const r of sampleRows.rows) {
-        samplesByKey.set(r.session_id, r.url);
+      for (const r of sampleRows) {
+        if (r.sessionId) samplesByKey.set(r.sessionId, r.url);
       }
 
       const sessions = trimmed.map((g) => {
@@ -246,7 +270,8 @@ export const libraryRouter = {
           firstFrameAt: firstAt,
           lastFrameAt: lastAt,
           sampleUrl: key ? presignReadUrl(key) : null,
-          durationMs: lastAt.getTime() - firstAt.getTime(),
+          // tMs axis (see the aggregate select) — matches the timeline.
+          durationMs: (g.maxTMs ?? 0) - (g.minTMs ?? 0),
         };
       });
 

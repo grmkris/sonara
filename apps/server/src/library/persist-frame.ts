@@ -6,7 +6,12 @@ import {
 } from "@sonara/shared/typeid";
 import { getPool } from "../db/pool";
 import type { Logger } from "../lib/logger";
-import { isConfigured, presignReadUrl, uploadBytes } from "../storage/bucket";
+import {
+  bucketKeyFromUrl,
+  isConfigured,
+  presignReadUrl,
+  uploadBytes,
+} from "../storage/bucket";
 
 export interface PersistFrameInput {
   // Pre-minted by the caller so the matching frame.final event can carry
@@ -138,7 +143,11 @@ export async function persistFrame(
           input.tMs,
           input.falUrl,
           input.triggerReason ?? null,
-          input.anchorUrl ?? null,
+          // Store a durable bucket key when the anchor came from our bucket so
+          // it can be re-presigned on read; keep external/public URLs as-is.
+          input.anchorUrl
+            ? bucketKeyFromUrl(input.anchorUrl) ?? input.anchorUrl
+            : null,
           input.inspectorContext ? JSON.stringify(input.inspectorContext) : null,
         ],
       );
