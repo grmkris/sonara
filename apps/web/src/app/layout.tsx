@@ -57,7 +57,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
       </head>
       <body>
         <SwRegister />
-        <TooltipProvider delayDuration={100}>
+        <TooltipProvider delay={100}>
           {children}
           <Toaster
             position="bottom-center"

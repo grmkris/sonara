@@ -79,9 +79,16 @@ export function DeckPicker({ send }: DeckPickerProps) {
       </div>
 
       <ToggleGroup
-        type="single"
-        value={demoDeck ?? ""}
-        onValueChange={onPickDeck}
+        value={demoDeck ? [demoDeck] : []}
+        onValueChange={(arr) => {
+          // Base UI's ToggleGroup is array-based even in single-select mode
+          // (`multiple={false}` is the default). Collapse to single-select by
+          // taking the most-recently-toggled value. Empty array = deselect
+          // (user clicked the already-active deck) — leave the previous deck
+          // active rather than entering a no-deck state.
+          const next = arr[arr.length - 1];
+          if (next) onPickDeck(next);
+        }}
         spacing={6}
         aria-label="starter deck"
         className="flex flex-wrap justify-start gap-1.5"
@@ -94,7 +101,7 @@ export function DeckPicker({ send }: DeckPickerProps) {
             className={cn(
               "focus-ring font-sans h-auto rounded-sm border border-[color:var(--hairline)]/30 bg-transparent px-1.5 py-0.5 text-[10px] uppercase tracking-[0.14em] text-[color:var(--stone)] shadow-none transition-colors",
               "hover:bg-transparent hover:text-[color:var(--paper)] hover:border-[color:var(--paper)]/60",
-              "data-[state=on]:bg-[color:var(--paper)] data-[state=on]:text-[color:var(--ink)] data-[state=on]:border-[color:var(--paper)]",
+              "data-pressed:bg-[color:var(--paper)] data-pressed:text-[color:var(--ink)] data-pressed:border-[color:var(--paper)]",
             )}
           >
             {d.label}

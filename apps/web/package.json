@@ -12,6 +12,7 @@
     "test": "bun test || echo 'no tests yet'"
   },
   "dependencies": {
+    "@base-ui/react": "^1.4.1",
     "@dodopayments/better-auth": "^1.5.0",
     "@ffmpeg/ffmpeg": "^0.12.15",
     "@orpc/client": "^1.14.0",
@@ -29,7 +30,6 @@
     "next": "^16.2.2",
     "next-themes": "^0.4.6",
     "partysocket": "^1.1.18",
-    "radix-ui": "^1.4.3",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
     "sonner": "^2.0.7",
