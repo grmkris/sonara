@@ -1,0 +1,11 @@
+{
+  "name": "sonara-brand-build",
+  "private": true,
+  "description": "Regenerates the Sonara brand asset package (run: bun build.ts). Also needs cairosvg in a python venv for the PDF step.",
+  "type": "module",
+  "dependencies": {
+    "@resvg/resvg-js": "^2.6.2",
+    "opentype.js": "^1.3.4",
+    "png-to-ico": "^3.0.1"
+  }
+}
