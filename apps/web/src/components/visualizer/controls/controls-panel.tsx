@@ -73,7 +73,7 @@ export function ControlsPanel({ send }: ControlsPanelProps) {
                 "font-serif h-auto flex-none rounded-none px-0 py-1 text-[13px] italic",
                 "border-b border-transparent text-[color:var(--stone)] shadow-none",
                 "hover:text-[color:var(--paper)]/85",
-                "data-[state=active]:border-[color:var(--paper)] data-[state=active]:bg-transparent data-[state=active]:text-[color:var(--paper)] data-[state=active]:shadow-none",
+                "data-active:border-[color:var(--paper)] data-active:bg-transparent data-active:text-[color:var(--paper)] data-active:shadow-none",
                 "after:hidden",
               )}
             >
