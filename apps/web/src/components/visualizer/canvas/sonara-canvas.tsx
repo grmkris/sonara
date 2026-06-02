@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useVisualizerStore } from "@/stores/visualizer";
 import { cn } from "@/lib/utils";
 import { isWebgl2Available } from "@/lib/render/webgl-util";
 import { CanvasGrain } from "@/components/visualizer/audio/canvas-grain";
@@ -43,30 +42,11 @@ export function SonaraCanvas({ dimmed = false }: { dimmed?: boolean }) {
       )}
       style={{ isolation: "isolate" }}
     >
-      <EmptyIdeogram />
       <DisplacementCanvas />
       <CanvasGrain />
       <InkDrops />
       <CanvasOscilloscope />
       <div aria-hidden className="vignette-mask absolute inset-0" />
-    </div>
-  );
-}
-
-function EmptyIdeogram() {
-  const hasFrame = useVisualizerStore(
-    (s) => s.currentFrame !== null || s.previousFrame !== null,
-  );
-  if (hasFrame) return null;
-  return (
-    <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-      <span
-        aria-hidden
-        className="font-serif breath text-[color:var(--paper)] select-none italic tracking-tight"
-        style={{ fontSize: "16vmin", fontWeight: 500, lineHeight: 1 }}
-      >
-        sonara
-      </span>
     </div>
   );
 }

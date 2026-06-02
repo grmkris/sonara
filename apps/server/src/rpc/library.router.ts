@@ -22,6 +22,12 @@ import {
 } from "drizzle-orm";
 import { z } from "zod";
 import { presignReadUrl } from "../storage/bucket";
+import {
+  buildExampleFrames,
+  buildExampleSessions,
+  deckFromExampleSessionId,
+  isExampleSessionId,
+} from "../library/example-sessions";
 import { protectedProcedure } from "./procedures";
 
 // User-scoped library router. Reads persisted generated/story frames for
@@ -152,6 +158,16 @@ export const libraryRouter = {
     .handler(async ({ input, context }) => {
       const { db, userId } = context;
 
+      // Example sessions (studio prefill) are synthesized from seed decks and
+      // never hit the DB — short-circuit before the owned-rows query.
+      if (isExampleSessionId(input.sessionId)) {
+        const frames = await buildExampleFrames(
+          db,
+          deckFromExampleSessionId(input.sessionId),
+        );
+        return { frames };
+      }
+
       const rows = await db
         .select(FRAME_COLUMNS)
         .from(SCHEMA.imageLibrary)
@@ -279,6 +295,15 @@ export const libraryRouter = {
         ? (trimmed[trimmed.length - 1]?.lastFrameAt as Date | undefined)
             ?.toISOString() ?? null
         : null;
+
+      // Studio prefill: a signed-in user with no real sessions gets example
+      // sessions synthesized from the seed decks so the editor lands populated
+      // rather than empty. Only on the first page (no cursor) — paging past
+      // the (empty) real set shouldn't resurface examples.
+      if (sessions.length === 0 && !cursorDate) {
+        const examples = await buildExampleSessions(db);
+        return { sessions: examples, nextCursor: null };
+      }
 
       return { sessions, nextCursor };
     }),

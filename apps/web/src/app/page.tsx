@@ -51,16 +51,29 @@ export default function LandingPage() {
               it listens to whatever you're playing and paints what it hears, as
               it happens.
             </p>
-            {/* Single CTA: /play is fully usable anonymously, and sign-in
-               already lives inside the visualiser (header + left rail), where
-               it surfaces at the moment it matters. No account decision on the
-               landing fold. */}
-            <div className="reveal reveal-2 flex flex-wrap items-center gap-5 pt-2">
+            {/* Two CTAs, deliberately uneven. `play` is the filled, confident
+               action (anon-usable; sign-in surfaces inside the visualiser).
+               `studio` is a quiet serif-italic counterpoint that echoes the
+               headline wordmark — the library editor (gates to sign-in itself). */}
+            <div className="reveal reveal-2 flex flex-wrap items-center gap-6 pt-2">
               <Link
                 href="/play"
-                className="focus-ring font-sans border border-[color:var(--paper)]/70 px-5 py-2.5 text-[11px] uppercase tracking-[0.24em] text-[color:var(--paper)] transition-colors hover:bg-[color:var(--paper)] hover:text-[color:var(--ink)]"
+                className="focus-ring font-sans bg-[color:var(--paper)] px-5 py-2.5 text-[11px] uppercase tracking-[0.24em] text-[color:var(--ink)] transition-colors hover:bg-[color:var(--paper)]/85"
               >
-                open the app
+                play
+              </Link>
+              <Link
+                href="/studio"
+                className="focus-ring group font-serif relative inline-flex items-center gap-1.5 text-[15px] italic text-[color:var(--paper)]/70 transition-colors hover:text-[color:var(--paper)]"
+              >
+                studio
+                <span aria-hidden className="transition-transform duration-300 group-hover:translate-x-0.5">
+                  &rarr;
+                </span>
+                <span
+                  aria-hidden
+                  className="absolute -bottom-0.5 left-0 right-3 h-px origin-left scale-x-0 bg-[color:var(--paper)]/60 transition-transform duration-300 group-hover:scale-x-100"
+                />
               </Link>
             </div>
           </div>

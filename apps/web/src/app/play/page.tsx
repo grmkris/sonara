@@ -13,7 +13,6 @@ import { AudioRibbon } from "@/components/visualizer/audio/audio-ribbon";
 import { ControlsPanel } from "@/components/visualizer/controls/controls-panel";
 import { HideToggle } from "@/components/visualizer/controls/hide-toggle";
 import { FullscreenToggle } from "@/components/visualizer/controls/fullscreen-toggle";
-import { RecordToggle } from "@/components/visualizer/controls/record-toggle";
 import { UserControls } from "@/components/user-controls";
 import { Mark } from "@/components/brand/mark";
 import { DemoRecorder } from "@/components/visualizer/controls/demo-recorder";
@@ -177,7 +176,6 @@ export default function Page() {
         <div className="pointer-events-auto flex items-center gap-3 pt-2 sm:gap-5">
           <NowPlaying />
           <UserControls />
-          <RecordToggle />
           <FullscreenToggle />
           <HideToggle />
           <Sheet>
@@ -211,7 +209,7 @@ export default function Page() {
 
       {/* Collapsible rails — render for everyone. Unauthenticated visitors
          get the same chrome, but live-only affordances (PromptInput,
-         VoiceListen, RecordToggle, NowPlaying) gate themselves on
+         VoiceListen, NowPlaying) gate themselves on
          useSession and hide / disable when there's no user. The server
          pins anon WS sessions to demo-library mode, so the controls that
          remain (deck picker, presets, audio source) behave correctly. */}
