@@ -113,6 +113,18 @@ export default function Page() {
     if (!st.demoDeck) st.setDemoDeck("liquid");
   }, [sessionData, isSignedIn]);
 
+  // Clear the in-memory library on sign-out (signed-in → signed-out), so a
+  // different account signing in on the same tab can't briefly see the
+  // previous user's frames before bootstrap replaces them.
+  const prevSignedInRef = useRef(isSignedIn);
+  useEffect(() => {
+    if (sessionData === undefined) return;
+    if (prevSignedInRef.current && !isSignedIn) {
+      useVisualizerStore.getState().libraryReset();
+    }
+    prevSignedInRef.current = isSignedIn;
+  }, [isSignedIn, sessionData]);
+
   useHotkey(
     HOTKEYS.reset,
     useCallback(() => {

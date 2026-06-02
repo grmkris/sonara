@@ -55,12 +55,25 @@ export const createLibrarySlice: StateCreator<
     set({ libraryLoading: true });
     try {
       const { frames, nextCursor } = await rpcClient.library.list({});
-      set({
-        libraryFrames: frames,
-        libraryCursor: nextCursor,
-        libraryHasMore: nextCursor !== null,
-        libraryBootstrapped: true,
-        libraryLoading: false,
+      set((s) => {
+        // Merge, don't replace: a library.appended event can land during the
+        // await above and prepend a frame. Wholesale replace would drop it.
+        // Dedupe by id, newest-first.
+        const seen = new Set<string>();
+        const merged: LibraryFrame[] = [];
+        for (const f of [...s.libraryFrames, ...frames]) {
+          if (seen.has(f.id)) continue;
+          seen.add(f.id);
+          merged.push(f);
+        }
+        merged.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+        return {
+          libraryFrames: merged,
+          libraryCursor: nextCursor,
+          libraryHasMore: nextCursor !== null,
+          libraryBootstrapped: true,
+          libraryLoading: false,
+        };
       });
     } catch (err) {
       console.warn("[library] bootstrap failed", err);

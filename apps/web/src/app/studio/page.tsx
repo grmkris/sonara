@@ -10,6 +10,7 @@ import { rpcClient } from "@/lib/orpc";
 import { useSession } from "@/lib/auth-client";
 import { AnonCta } from "@/components/studio/anon-cta";
 import { EmptyState } from "@/components/studio/empty-state";
+import { ErrorState } from "@/components/studio/error-state";
 import { FrameInspector } from "@/components/studio/frame-inspector";
 import { FrameInspectorContent } from "@/components/studio/frame-inspector-content";
 import { SessionTimeline } from "@/components/studio/session-timeline";
@@ -56,16 +57,23 @@ function StudioInner() {
   const [sessions, setSessions] = useState<SessionSummary[]>([]);
   const [sessionsLoading, setSessionsLoading] = useState(false);
   const [sessionsBootstrapped, setSessionsBootstrapped] = useState(false);
+  const [sessionsError, setSessionsError] = useState(false);
 
   const [frames, setFrames] = useState<LibraryFrame[]>([]);
   const [framesLoading, setFramesLoading] = useState(false);
+  const [framesError, setFramesError] = useState(false);
   const [loadedSessionId, setLoadedSessionId] = useState<string | null>(null);
+
+  // Retry nonce — bumped by the ErrorState retry button to re-run the fetches.
+  const [reloadNonce, setReloadNonce] = useState(0);
+  const retry = useCallback(() => setReloadNonce((n) => n + 1), []);
 
   // Sessions list bootstrap.
   useEffect(() => {
     if (!isSignedIn) return;
     let cancelled = false;
     setSessionsLoading(true);
+    setSessionsError(false);
     rpcClient.library
       .sessions({})
       .then(({ sessions: s }) => {
@@ -76,13 +84,16 @@ function StudioInner() {
       })
       .catch(() => {
         if (cancelled) return;
+        // Surface the error instead of flipping to a "0 sessions" empty state,
+        // which would read as "you have no library" on a transient failure.
+        setSessionsError(true);
         setSessionsLoading(false);
         setSessionsBootstrapped(true);
       });
     return () => {
       cancelled = true;
     };
-  }, [isSignedIn]);
+  }, [isSignedIn, reloadNonce]);
 
   // Auto-select most recent session when none is selected yet.
   useEffect(() => {
@@ -103,6 +114,7 @@ function StudioInner() {
     if (loadedSessionId === selectedSessionId) return;
     let cancelled = false;
     setFramesLoading(true);
+    setFramesError(false);
     rpcClient.library
       .bySession({ sessionId: selectedSessionId as LiveSessionId })
       .then(({ frames: f }) => {
@@ -113,12 +125,13 @@ function StudioInner() {
       })
       .catch(() => {
         if (cancelled) return;
+        setFramesError(true);
         setFramesLoading(false);
       });
     return () => {
       cancelled = true;
     };
-  }, [isSignedIn, selectedSessionId, loadedSessionId]);
+  }, [isSignedIn, selectedSessionId, loadedSessionId, reloadNonce]);
 
   const selectedFrame = useMemo(
     () => frames.find((f) => f.id === selectedFrameId) ?? null,
@@ -235,15 +248,21 @@ function StudioInner() {
             <div className="px-10 py-16 font-sans text-[10px] uppercase tracking-[0.22em] text-[color:var(--stone)]">
               loading…
             </div>
+          ) : sessionsError ? (
+            <ErrorState onRetry={retry} />
           ) : sessions.length === 0 ? (
             <EmptyState />
           ) : selectedSessionId ? (
-            <SessionTimeline
-              frames={frames}
-              loading={framesLoading}
-              selectedFrameId={selectedFrameId}
-              onSelectFrame={onSelectFrame}
-            />
+            framesError ? (
+              <ErrorState onRetry={retry} />
+            ) : (
+              <SessionTimeline
+                frames={frames}
+                loading={framesLoading}
+                selectedFrameId={selectedFrameId}
+                onSelectFrame={onSelectFrame}
+              />
+            )
           ) : (
             <div className="px-10 py-16 font-sans text-[10px] uppercase tracking-[0.22em] text-[color:var(--stone)]">
               select a session

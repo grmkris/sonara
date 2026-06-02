@@ -1,10 +1,20 @@
 "use client";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { Suspense, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { authClient } from "@/lib/auth-client";
 
 type Mode = "signin" | "signup";
+
+// Only accept same-origin relative paths as a post-login destination, so a
+// crafted `?next=//evil.com` or `?next=https://…` can't turn login into an
+// open redirect. Falls back to /play.
+function safeNext(next: string | null): string {
+  if (next && next.startsWith("/") && !next.startsWith("//") && !next.includes("://")) {
+    return next;
+  }
+  return "/play";
+}
 
 // Maps Better Auth + our APIError(code) values to friendly UI copy.
 function friendlyError(rawMessage: string | undefined): string {
@@ -21,7 +31,16 @@ function friendlyError(rawMessage: string | undefined): string {
 }
 
 export default function LoginPage() {
+  return (
+    <Suspense fallback={null}>
+      <LoginForm />
+    </Suspense>
+  );
+}
+
+function LoginForm() {
   const router = useRouter();
+  const next = safeNext(useSearchParams().get("next"));
   const [mode, setMode] = useState<Mode>("signin");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -55,7 +74,7 @@ export default function LoginPage() {
           return;
         }
       }
-      router.push("/play");
+      router.push(next);
       router.refresh();
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
