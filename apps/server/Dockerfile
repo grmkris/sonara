@@ -27,6 +27,7 @@ COPY apps/server/package.json ./apps/server/
 COPY apps/web/package.json ./apps/web/
 COPY packages/api/package.json ./packages/api/
 COPY packages/db/package.json ./packages/db/
+COPY packages/logger/package.json ./packages/logger/
 COPY packages/shared/package.json ./packages/shared/
 COPY packages/test-utils/package.json ./packages/test-utils/
 
@@ -38,6 +39,7 @@ RUN bun install --no-summary
 COPY apps/server ./apps/server
 COPY packages/api ./packages/api
 COPY packages/db ./packages/db
+COPY packages/logger ./packages/logger
 COPY packages/shared ./packages/shared
 
 # ---- runtime ---------------------------------------------------------------
