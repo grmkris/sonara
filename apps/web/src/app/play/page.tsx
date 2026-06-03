@@ -6,7 +6,6 @@ import { deckLabel } from "@sonara/shared";
 import { toast } from "sonner";
 import { SonaraCanvas } from "@/components/visualizer/canvas/sonara-canvas";
 import { GhostOverlay } from "@/components/visualizer/canvas/ghost-overlay";
-import { PromoOverlay } from "@/components/visualizer/promo-overlay";
 import { PromptInput } from "@/components/visualizer/controls/prompt-input";
 import { MusicSource } from "@/components/visualizer/controls/music-source";
 import { AudioRibbon } from "@/components/visualizer/audio/audio-ribbon";
@@ -144,10 +143,6 @@ export default function Page() {
       {/* Editorial paper grain — fixed, very faint, blended with overlay so it
          tints both the dark background and the generated image consistently. */}
       <div aria-hidden className="grain-overlay" />
-
-      {/* Promotion overlay — persists through the chrome hide toggle so the
-         brand stays on screen during a clean fullscreen show. */}
-      <PromoOverlay />
 
       {/* Corner-reveal trigger: an invisible 200×48 div anchored top-right.
          While the UI is hidden, mousing into it brings the chrome back —
