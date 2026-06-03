@@ -324,4 +324,21 @@ const contact = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 760" 
 writeFileSync(`${dir("png")}/contact-sheet.png`, rasterize(contact, 1400));
 console.log("✓ contact sheet written");
 
+// ===========================================================================
+// 7. App integration — emit the static copies the Next app serves
+// ===========================================================================
+// The web app consumes a few of these assets directly (PWA manifest icons +
+// the static OG/Twitter card). Generate them here too, from the same source, so
+// `bun build.ts` keeps the app and the kit in sync and the checked-in app PNGs
+// aren't orphan files. `tile`, `maskable`, and `og` are defined above.
+const APP_PUBLIC = "/home/kristjan/code/sonara/apps/web/public";
+const APP_DIR = "/home/kristjan/code/sonara/apps/web/src/app";
+writeFileSync(`${APP_PUBLIC}/icon-192.png`, rasterize(tile, 192));
+writeFileSync(`${APP_PUBLIC}/icon-512.png`, rasterize(tile, 512));
+writeFileSync(`${APP_PUBLIC}/maskable-512.png`, rasterize(maskable, 512));
+const ogPng = rasterize(og, 1200);
+writeFileSync(`${APP_DIR}/opengraph-image.png`, ogPng);
+writeFileSync(`${APP_DIR}/twitter-image.png`, ogPng);
+console.log("✓ app integration assets written (public icons + static OG/Twitter)");
+
 console.log("\nDone.");

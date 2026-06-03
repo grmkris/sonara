@@ -1,8 +1,9 @@
 // Single source of truth for the Sonara mark — a sonar "ping": a center dot
 // with concentric rings radiating outward (and fading), echoing the audio
 // ripples the canvas paints. Shared by the static favicon (icon.svg, authored
-// by hand to these numbers), the generated app/OG images (apple-icon.tsx,
-// opengraph-image.tsx), and the in-app <Mark/> component.
+// by hand to these numbers), the generated apple-icon.tsx, the in-app <Mark/>
+// component, and — re-encoded — the brand asset kit (brand/scripts/build.ts,
+// which produces the static opengraph-image.png and PWA icons).
 
 export const INK = "#1a1612";
 export const PAPER = "#ede7d9";
