@@ -4,14 +4,13 @@
 #
 # Build from the repo root (workspace deps need the full context):
 #   docker build -f apps/web/Dockerfile \
-#     --build-arg NEXT_PUBLIC_WS_URL=wss://your-server.up.railway.app/ws \
+#     --build-arg NEXT_PUBLIC_APP_ENV=prod \
 #     -t mv-web .
 #
 # Run (thin frontend — no DB, no secrets; auth/RPC live on the server behind
-# the gateway). Reached internally by the gateway at web.railway.internal:PORT:
-#   docker run --rm -p 4472:4472 -e PORT=4472 \
-#     -e RPC_INTERNAL_URL=http://localhost:4471 \
-#     mv-web
+# the gateway). Reached internally by the gateway at web.railway.internal:PORT.
+# All per-environment URLs are derived from NEXT_PUBLIC_APP_ENV at build time:
+#   docker run --rm -p 4472:4472 -e PORT=4472 mv-web
 #
 # Next.js standalone mode emits a self-contained server at
 # .next/standalone/ — we copy it plus .next/static and public into the
@@ -21,16 +20,13 @@
 FROM oven/bun:1.3.14 AS builder
 WORKDIR /app
 
-# NEXT_PUBLIC_* vars are inlined into the client bundle at build time, so
-# they must be present here. Railway passes them via service build args.
-ARG NEXT_PUBLIC_WS_URL=ws://localhost:4471/ws
-ENV NEXT_PUBLIC_WS_URL=${NEXT_PUBLIC_WS_URL}
-
-# Enables the react-grab dev overlay on a public build (the dev environment).
-# Left empty for prod so the <Script> is never emitted. NODE_ENV=development
-# (local) enables it regardless of this flag.
-ARG NEXT_PUBLIC_ENABLE_DEVTOOLS=
-ENV NEXT_PUBLIC_ENABLE_DEVTOOLS=${NEXT_PUBLIC_ENABLE_DEVTOOLS}
+# NEXT_PUBLIC_* vars are inlined into the client bundle at build time, so they
+# must be present here. Railway passes them via service build args. APP_ENV is
+# the only one: every per-environment URL (WS origin, SSR-internal RPC) and the
+# devtools overlay are derived from it via SERVICE_URLS in @sonara/shared.
+# Defaults to "local" so a bare `docker build` works; Railway sets dev|prod.
+ARG NEXT_PUBLIC_APP_ENV=local
+ENV NEXT_PUBLIC_APP_ENV=${NEXT_PUBLIC_APP_ENV}
 
 # Workspace manifests + lockfile → install once. Cacheable across source
 # edits.

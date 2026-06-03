@@ -116,17 +116,18 @@ openssl rand -base64 32
 
 | Var | Value |
 |---|---|
+| `APP_ENV` | `prod` (drives every per-env URL via `SERVICE_URLS`, the logger mode, and Dodo live/test mode — set `dev` on the dev environment) |
 | `DATABASE_URL` | `${{Postgres.DATABASE_URL}}` |
 | `BETTER_AUTH_SECRET` | output of `openssl rand -base64 32` |
 | `FAL_KEY` | from fal.ai dashboard |
 | `AUDD_API_KEY` | from audd.io |
-| `APP_URL` | `https://sonara.fm` (public gateway origin — Better Auth baseURL + checkout return_url) |
 | `DODO_PAYMENTS_API_KEY` | from Dodo Payments dashboard |
 | `DODO_PAYMENTS_WEBHOOK_SECRET` | from Dodo Payments webhook settings |
-| `DODO_PAYMENTS_MODE` | `test_mode` or `live_mode` |
 | `DODO_PRODUCT_STARTER` / `_PRO` / `_MAX` | Dodo product ids for the credit packs |
 | `LOG_LEVEL` | `info` |
 | `PORT` | `4471` (internal address the gateway proxies to) |
+
+The public origin (Better Auth baseURL/trustedOrigin, checkout return_url) and the Dodo test/live mode are derived from `APP_ENV` via `@sonara/shared` — no `APP_URL` / `DODO_PAYMENTS_MODE` vars.
 
 Leaving the `DODO_*` vars empty silently disables the Dodo plugin + checkout flow; login / anon demo still work. The Dodo webhook is served at `https://sonara.fm/api/auth/dodopayments/webhook`.
 
@@ -134,14 +135,13 @@ Leaving the `DODO_*` vars empty silently disables the Dodo plugin + checkout flo
 
 | Var | Value |
 |---|---|
-| `RPC_INTERNAL_URL` | `http://server.railway.internal:4471` (SSR-only oRPC; no window to read the gateway origin) |
 | `PORT` | `4472` (internal address the gateway proxies to) |
 
 ### `web` build-time (Next.js inlines `NEXT_PUBLIC_*` at build time)
 
 | Var | Value |
 |---|---|
-| `NEXT_PUBLIC_WS_URL` | `wss://sonara.fm/ws` (same-origin through the gateway) |
+| `NEXT_PUBLIC_APP_ENV` | `prod` (`dev` on the dev environment) — the WS origin + SSR-internal RPC URL + devtools overlay all derive from it |
 
 ### `gateway` runtime
 
@@ -155,20 +155,19 @@ Set via CLI:
 
 ```bash
 railway variables --service server \
+  --set 'APP_ENV=prod' \
   --set 'DATABASE_URL=${{Postgres.DATABASE_URL}}' \
   --set "BETTER_AUTH_SECRET=$(openssl rand -base64 32)" \
   --set 'FAL_KEY=...' --set 'AUDD_API_KEY=...' --set 'LOG_LEVEL=info' \
-  --set 'APP_URL=https://sonara.fm' --set 'PORT=4471' \
+  --set 'PORT=4471' \
   --set 'DODO_PAYMENTS_API_KEY=...' \
   --set 'DODO_PAYMENTS_WEBHOOK_SECRET=...' \
-  --set 'DODO_PAYMENTS_MODE=live_mode' \
   --set 'DODO_PRODUCT_STARTER=pdt_...' \
   --set 'DODO_PRODUCT_PRO=pdt_...' \
   --set 'DODO_PRODUCT_MAX=pdt_...'
 
 railway variables --service web \
-  --set 'RPC_INTERNAL_URL=http://server.railway.internal:4471' \
-  --set 'NEXT_PUBLIC_WS_URL=wss://sonara.fm/ws' \
+  --set 'NEXT_PUBLIC_APP_ENV=prod' \
   --set 'PORT=4472'
 
 railway variables --service gateway \
@@ -213,7 +212,7 @@ DevTools → Network → WS — confirm `wss://sonara.fm/ws` returns `101`. No m
 ```bash
 docker build -f apps/server/Dockerfile -t mv-server .
 docker build -f apps/web/Dockerfile \
-  --build-arg NEXT_PUBLIC_WS_URL=ws://localhost:4471/ws \
+  --build-arg NEXT_PUBLIC_APP_ENV=local \
   -t mv-web .
 
 docker run --rm -p 4471:4471 --env-file .env mv-server

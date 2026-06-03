@@ -1,9 +1,15 @@
+import { Environment } from "@sonara/shared";
 import { z } from "zod";
 
 // Startup-time env validation. Required keys fail the parse immediately so
 // the server refuses to boot into a half-configured state. Optional model
 // overrides stay optional because they have sane defaults.
 const envSchema = z.object({
+  // Which environment this is (local | dev | prod). Required — no default, so a
+  // misconfigured deploy fails loudly instead of silently using local URLs.
+  // Drives every per-environment URL via SERVICE_URLS, the logger transport,
+  // and the Dodo mode. (NODE_ENV stays for library behaviour only.)
+  APP_ENV: Environment,
   NODE_ENV: z
     .enum(["development", "test", "production"])
     .default("development"),
@@ -18,17 +24,15 @@ const envSchema = z.object({
   FAL_KEY: z.string().min(1), // image generation + image-anchor upload
   AUDD_API_KEY: z.string().min(1), // song recognition
 
-  // Public origin the browser sees (the Caddy gateway). Better Auth uses it
-  // as baseURL + the only trustedOrigin, and the credits checkout uses it for
-  // the Dodo return_url. Defaults to the local gateway port.
-  APP_URL: z.string().url().default("http://localhost:4470"),
+  // The public origin (Caddy gateway), the WS origin, and the Dodo test/live
+  // mode are all derived from APP_ENV via SERVICE_URLS / dodoModeForEnv in
+  // @sonara/shared — no per-URL env vars.
 
   // Optional in dev — empty values disable the dodopayments plugin and the
   // checkout/webhook flow. Login works without Dodo configured. Required in
   // production deploys (set all via Railway env on the server service).
   DODO_PAYMENTS_API_KEY: z.string().default(""),
   DODO_PAYMENTS_WEBHOOK_SECRET: z.string().default(""),
-  DODO_PAYMENTS_MODE: z.enum(["test_mode", "live_mode"]).default("test_mode"),
   // Dodo product IDs for the credit packs (see packages/shared pricing).
   // Required only when the checkout flow is active.
   DODO_PRODUCT_STARTER: z.string().default(""),

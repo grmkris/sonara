@@ -1,14 +1,20 @@
 import type { Metadata, Viewport } from "next";
 import type { ReactNode } from "react";
 import Script from "next/script";
+import { SERVICE_URLS } from "@sonara/shared";
 import { mono, sans, serif } from "@/lib/fonts";
+import { publicEnv } from "@/env";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Toaster } from "@/components/ui/sonner";
 import { SwRegister } from "@/components/sw-register";
 import "./globals.css";
 
+// Canonical/OG origin tracks the environment (dev.sonara.fm on the dev build,
+// sonara.fm on prod) so link unfurls and canonical URLs are never cross-env.
+const ORIGIN = SERVICE_URLS[publicEnv.NEXT_PUBLIC_APP_ENV].web;
+
 export const metadata: Metadata = {
-  metadataBase: new URL("https://sonara.fm"),
+  metadataBase: new URL(ORIGIN),
   title: {
     default: "sonara — music, made visible",
     template: "%s · sonara",
@@ -27,7 +33,7 @@ export const metadata: Metadata = {
     description:
       "Sonara turns your music into moving art, right in your browser. Play anything and it paints flowing visuals in time with the sound, as it happens.",
     siteName: "sonara",
-    url: "https://sonara.fm",
+    url: ORIGIN,
   },
   twitter: {
     card: "summary_large_image",
@@ -48,8 +54,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
       className={`${serif.variable} ${sans.variable} ${mono.variable}`}
     >
       <head>
-        {(process.env.NODE_ENV === "development" ||
-          process.env.NEXT_PUBLIC_ENABLE_DEVTOOLS === "true") && (
+        {publicEnv.NEXT_PUBLIC_APP_ENV !== "prod" && (
           <Script
             src="//unpkg.com/react-grab/dist/index.global.js"
             crossOrigin="anonymous"

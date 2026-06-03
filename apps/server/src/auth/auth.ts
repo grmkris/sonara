@@ -7,6 +7,7 @@ import {
   typeIdGenerator,
 } from "@sonara/shared/typeid";
 import { createDb, SCHEMA, type Database } from "@sonara/db";
+import { dodoModeForEnv, SERVICE_URLS } from "@sonara/shared";
 import { env } from "../env";
 import { createDodoWebhookHandlers } from "./dodo-webhook";
 
@@ -111,10 +112,10 @@ export function getAuth(): Auth {
   cached = createAuth({
     db,
     secret: env.BETTER_AUTH_SECRET,
-    baseURL: env.APP_URL,
+    baseURL: SERVICE_URLS[env.APP_ENV].web,
     dodoApiKey: env.DODO_PAYMENTS_API_KEY,
     dodoWebhookSecret: env.DODO_PAYMENTS_WEBHOOK_SECRET,
-    dodoMode: env.DODO_PAYMENTS_MODE,
+    dodoMode: dodoModeForEnv(env.APP_ENV),
   });
   return cached;
 }

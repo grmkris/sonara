@@ -4,6 +4,7 @@ import { and, asc, eq } from "drizzle-orm";
 import {
   DECK_KEYS,
   type LibraryFrame,
+  SERVICE_URLS,
   type SessionSummary,
 } from "@sonara/shared";
 import type { LiveSessionId } from "@sonara/shared/typeid";
@@ -63,7 +64,7 @@ interface SeedRow {
 // presigned URL).
 function toAbsoluteUrl(url: string): string {
   if (url.includes("://")) return url;
-  const base = env.APP_URL.replace(/\/+$/, "");
+  const base = SERVICE_URLS[env.APP_ENV].web.replace(/\/+$/, "");
   return `${base}${url.startsWith("/") ? "" : "/"}${url}`;
 }
 

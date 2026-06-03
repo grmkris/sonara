@@ -8,7 +8,7 @@ import {
 } from "@sonara/api/server";
 import { createDb } from "@sonara/db";
 import { runMigrations } from "@sonara/db/migrator";
-import { verifyTicket } from "@sonara/shared";
+import { SERVICE_URLS, verifyTicket } from "@sonara/shared";
 import type { UserId } from "@sonara/shared/typeid";
 import { getAuth } from "./auth/auth";
 import { seedLibraryOnBoot } from "./db/library-boot-seed";
@@ -142,7 +142,10 @@ const server = Bun.serve<WsData, never>({
   },
 });
 
-logger.info({ port, wsUrl: `ws://localhost:${port}/ws` }, "server listening");
+logger.info(
+  { port, appEnv: env.APP_ENV, wsUrl: SERVICE_URLS[env.APP_ENV].ws },
+  "server listening",
+);
 
 process.on("SIGTERM", () => {
   logger.info("SIGTERM received, shutting down");

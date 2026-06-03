@@ -1,5 +1,5 @@
 import { ORPCError } from "@sonara/api/server";
-import { findPack } from "@sonara/shared";
+import { dodoModeForEnv, findPack, SERVICE_URLS } from "@sonara/shared";
 import { and, eq, gte, sum } from "drizzle-orm";
 import DodoPayments from "dodopayments";
 import { z } from "zod";
@@ -12,7 +12,7 @@ function getDodoClient(): DodoPayments {
   if (_dodo) return _dodo;
   _dodo = new DodoPayments({
     bearerToken: env.DODO_PAYMENTS_API_KEY,
-    environment: env.DODO_PAYMENTS_MODE,
+    environment: dodoModeForEnv(env.APP_ENV),
   });
   return _dodo;
 }
@@ -115,7 +115,7 @@ export const creditsRouter = {
           userId,
           packId: pack.id,
         },
-        return_url: `${env.APP_URL}/credits/success`,
+        return_url: `${SERVICE_URLS[env.APP_ENV].web}/credits/success`,
       });
 
       if (!session.checkout_url) {

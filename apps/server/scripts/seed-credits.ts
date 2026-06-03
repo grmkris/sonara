@@ -11,8 +11,8 @@
  * inserts a fresh one. Always appends a `kind: "topup"` ledger row with the
  * exact delta granted, so the seed is auditable alongside real top-ups.
  *
- * Reads DATABASE_URL from `apps/server/.env`. Refuses to run with NODE_ENV=
- * production unless ALLOW_PROD_SEED=1 is set, since this writes real money.
+ * Reads DATABASE_URL from `apps/server/.env`. Refuses to run with APP_ENV=
+ * prod unless ALLOW_PROD_SEED=1 is set, since this writes real money.
  */
 
 import { sql } from "drizzle-orm";
@@ -45,7 +45,7 @@ async function main() {
   const databaseUrl = process.env.DATABASE_URL;
   if (!databaseUrl) fail("DATABASE_URL not set — run from apps/server with .env in place");
 
-  if (process.env.NODE_ENV === "production" && process.env.ALLOW_PROD_SEED !== "1") {
+  if (process.env.APP_ENV === "prod" && process.env.ALLOW_PROD_SEED !== "1") {
     fail("refusing to seed in production — set ALLOW_PROD_SEED=1 to override");
   }
 

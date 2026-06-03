@@ -343,19 +343,19 @@ flowchart LR
 flowchart TB
     subgraph BT["Build time (BEFORE next build)"]
         direction LR
-        N1["NEXT_PUBLIC_WS_URL"]
+        N1["NEXT_PUBLIC_APP_ENV (→ SERVICE_URLS: ws origin, SSR RPC, devtools)"]
     end
 
     subgraph RT["Runtime"]
         direction LR
+        R0["APP_ENV (→ SERVICE_URLS: public origin, logger, Dodo mode)"]
         R1["DATABASE_URL"]
         R2["BETTER_AUTH_SECRET"]
         R3["FAL_KEY"]
         R4["AUDD_API_KEY"]
         R5["LOG_LEVEL"]
-        R6["APP_URL · AUTH_DOMAIN"]
         R7["PORT (Railway-injected)"]
-        R8["DODO_PAYMENTS_API_KEY · DODO_PAYMENTS_WEBHOOK_SECRET · DODO_PAYMENTS_MODE"]
+        R8["DODO_PAYMENTS_API_KEY · DODO_PAYMENTS_WEBHOOK_SECRET"]
         R9["DODO_PRODUCT_STARTER · DODO_PRODUCT_PRO · DODO_PRODUCT_MAX"]
     end
 

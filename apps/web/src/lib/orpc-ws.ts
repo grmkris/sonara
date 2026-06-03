@@ -2,6 +2,8 @@ import ReconnectingWebSocket from "partysocket/ws";
 import { createORPCClient } from "@orpc/client";
 import { RPCLink } from "@orpc/client/websocket";
 import type { SessionRouterClient } from "@sonara/api";
+import { SERVICE_URLS } from "@sonara/shared";
+import { publicEnv } from "../env";
 import { rpcClient } from "./orpc";
 
 // One WebSocket per tab, wrapping an oRPC client that speaks the `session`
@@ -11,8 +13,8 @@ import { rpcClient } from "./orpc";
 // each time without any bespoke reconnect glue.
 
 // Same-origin through the Caddy gateway (4470 locally → /ws proxied to the
-// server). Set NEXT_PUBLIC_WS_URL to the public wss:// origin in production.
-const WS_URL_BASE = process.env.NEXT_PUBLIC_WS_URL ?? "ws://localhost:4470/ws";
+// server). The public wss:// origin is derived from the app environment.
+const WS_URL_BASE = SERVICE_URLS[publicEnv.NEXT_PUBLIC_APP_ENV].ws;
 
 export interface SessionConnection {
   socket: ReconnectingWebSocket;

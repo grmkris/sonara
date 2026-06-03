@@ -231,10 +231,7 @@ async function main() {
   const databaseUrl = env.DATABASE_URL;
   if (!databaseUrl) fail("DATABASE_URL not set");
   if (!env.FAL_KEY && !args.dryRun) fail("FAL_KEY not set");
-  if (
-    process.env.NODE_ENV === "production" &&
-    process.env.ALLOW_PROD_SEED !== "1"
-  ) {
+  if (process.env.APP_ENV === "prod" && process.env.ALLOW_PROD_SEED !== "1") {
     fail("refusing to seed in production — set ALLOW_PROD_SEED=1 to override");
   }
 

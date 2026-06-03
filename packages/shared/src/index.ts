@@ -10,4 +10,5 @@ export * from "./demo";
 export * from "./decks";
 export * from "./library";
 export * from "./pricing";
+export * from "./services";
 export * from "./ws-ticket";
