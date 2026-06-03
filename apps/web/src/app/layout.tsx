@@ -48,7 +48,8 @@ export default function RootLayout({ children }: { children: ReactNode }) {
       className={`${serif.variable} ${sans.variable} ${mono.variable}`}
     >
       <head>
-        {process.env.NODE_ENV === "development" && (
+        {(process.env.NODE_ENV === "development" ||
+          process.env.NEXT_PUBLIC_ENABLE_DEVTOOLS === "true") && (
           <Script
             src="//unpkg.com/react-grab/dist/index.global.js"
             crossOrigin="anonymous"

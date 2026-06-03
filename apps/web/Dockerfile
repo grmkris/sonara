@@ -26,6 +26,12 @@ WORKDIR /app
 ARG NEXT_PUBLIC_WS_URL=ws://localhost:4471/ws
 ENV NEXT_PUBLIC_WS_URL=${NEXT_PUBLIC_WS_URL}
 
+# Enables the react-grab dev overlay on a public build (the dev environment).
+# Left empty for prod so the <Script> is never emitted. NODE_ENV=development
+# (local) enables it regardless of this flag.
+ARG NEXT_PUBLIC_ENABLE_DEVTOOLS=
+ENV NEXT_PUBLIC_ENABLE_DEVTOOLS=${NEXT_PUBLIC_ENABLE_DEVTOOLS}
+
 # Workspace manifests + lockfile → install once. Cacheable across source
 # edits.
 COPY package.json bun.lock turbo.json tsconfig.base.json ./
