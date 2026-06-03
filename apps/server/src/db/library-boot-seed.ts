@@ -27,7 +27,10 @@ interface ExportRow {
 // seed shape (different decks/prompts) the count may already exceed the
 // new seed length while still missing rows we want present (e.g. a newly
 // added deck). Otherwise INSERT ... ON CONFLICT (prompt_hash) DO NOTHING
-// per row heals partial states.
+// per row heals partial states. The conflict target carries the partial
+// index predicate (WHERE source = 'seed') because 0002 narrowed
+// image_library_prompt_hash_idx to seed rows — without it Postgres can't
+// pick the arbiter index and a fresh-DB seed fails with 42P10.
 export async function seedLibraryOnBoot(logger: Logger): Promise<void> {
   const seed = seedRows as ExportRow[];
   if (seed.length === 0) {
@@ -59,7 +62,7 @@ export async function seedLibraryOnBoot(logger: Logger): Promise<void> {
         `INSERT INTO image_library
            (id, deck, prompt, prompt_hash, model, seed, url, width, height, palette, status, created_at, updated_at)
          VALUES ($1::uuid, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, now(), now())
-         ON CONFLICT (prompt_hash) DO NOTHING`,
+         ON CONFLICT (prompt_hash) WHERE source = 'seed' DO NOTHING`,
         [
           idUuid,
           row.deck,
