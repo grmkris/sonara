@@ -37,7 +37,24 @@ Deployed on **Railway** behind **Cloudflare DNS** on the `sonara.fm` zone. Postg
 
 ¹ `api.sonara.fm` still resolves to `server` as a deprecation fallback; the codebase no longer references it. Safe to remove (CF `CNAME api` + `_railway-verify.api` TXT + the Railway custom domain) once you're certain no external integration still hits it.
 
-Existing service IDs: web `235aa1d4-8c1b-4b7a-989a-099e61807e8c`, server `12262832-9534-4230-b032-c675d87f29b8`. With the gateway in front, the browser only ever talks to `sonara.fm` (gateway) — auth, RPC, upload and WSS (`wss://sonara.fm/ws`) are all same-origin, so cookies are first-party and there's no CORS. The WS still auths with the short-lived HMAC ticket minted by `mintWsTicket` (a server `/rpc` procedure).
+Existing service IDs: web `235aa1d4-8c1b-4b7a-989a-099e61807e8c`, server `12262832-9534-4230-b032-c675d87f29b8`, gateway `c97ee875-5b9e-4467-94e8-eef5e8e93b81`, Postgres `a146f6cd-edab-48f5-ba44-c79b34caec32`. With the gateway in front, the browser only ever talks to `sonara.fm` (gateway) — auth, RPC, upload and WSS (`wss://sonara.fm/ws`) are all same-origin, so cookies are first-party and there's no CORS. The WS still auths with the short-lived HMAC ticket minted by `mintWsTicket` (a server `/rpc` procedure).
+
+### Environments — `production` + `dev`
+
+Two Railway environments in the **same** project, each a full stack (gateway/web/server/Postgres). Service IDs are shared across environments; everything else (Postgres data, S3 bucket, variables, the deploy branch) is per-environment.
+
+| Environment | ID | Branch | Public URL | react-grab |
+|---|---|---|---|---|
+| `production` | `258d13bd-38b3-4310-9c39-672d01da9efa` | `main` | https://sonara.fm | off |
+| `dev` | `cab8872e-9c58-411e-bbb6-056d6e963730` | `dev` | https://dev.sonara.fm | **on** |
+
+**Workflow:** push feature work to `dev` → auto-deploys the `dev` env → once stable, **promote by merging `dev` → `main`** (auto-deploys prod). The deploy branch is set per-environment via `railway environment edit -e <env> --service-config <serviceId> source.branch <branch>`.
+
+**Isolation:** the `dev` env was forked with `railway environment new dev --duplicate production`, which copied all variables/secrets but provisioned a **fresh empty Postgres** and a **separate S3 bucket** (`sonara-frames-hlwwxfsgres`) — the `${{Postgres.DATABASE_URL}}` / `${{sonara-frames.*}}` references re-point automatically. Migrations + the boot library-seed run on first server boot, so the fresh DB self-populates.
+
+**Per-env variable deltas in `dev`** (everything else inherited from the fork): `APP_URL=https://dev.sonara.fm`, web build-args `NEXT_PUBLIC_WS_URL=wss://dev.sonara.fm/ws` + `NEXT_PUBLIC_ENABLE_DEVTOOLS=true`, `LOG_LEVEL=debug`, a fresh `BETTER_AUTH_SECRET`, and **Dodo disabled** (`DODO_PAYMENTS_API_KEY=""`, `DODO_PAYMENTS_MODE=test_mode`) so the public dev URL can't take live charges — add test-mode Dodo keys if you need to exercise the credits flow.
+
+**react-grab** (the hover-to-grab element overlay) is gated in `apps/web/src/app/layout.tsx` on `NODE_ENV === "development" || NEXT_PUBLIC_ENABLE_DEVTOOLS === "true"`. `NEXT_PUBLIC_*` is inlined at build time, wired through `apps/web/Dockerfile` as a build arg — so flipping it requires a web **rebuild** (`railway redeploy --service web -e dev`), not just a restart.
 
 ### Cloudflare
 
@@ -47,9 +64,11 @@ Existing service IDs: web `235aa1d4-8c1b-4b7a-989a-099e61807e8c`, server `122628
   - `CNAME @` → `oatvmd0b.up.railway.app` (Railway web)
   - `CNAME www` → `sdb5b4d0.up.railway.app` (Railway web)
   - `CNAME api` → `bgpax7bc.up.railway.app` (Railway server)
+  - `CNAME dev` → `abb5lekq.up.railway.app` (Railway **dev** gateway) — **DNS-only / grey-cloud**, see note below
   - `TXT _railway-verify`, `_railway-verify.www`, `_railway-verify.api` — Railway ownership tokens (required because Railway detects the CF proxy and falls back to TXT verification; do **not** delete)
   - 5x `MX` (email forwarding via Namecheap) + 1x `TXT` SPF — out-of-scope, leave alone
 - **SSL/TLS mode**: Full (strict). Railway issues valid Let's Encrypt certs on custom domains.
+- **Railway custom-domain TLS gotcha**: the prod records predate Railway's current flow — they're proxied + a legacy `_railway-verify` TXT (DNS-01) which Railway no longer issues. New custom domains (e.g. `dev.sonara.fm`) validate purely by **resolving the CNAME to the Railway target**, so they must be **DNS-only (grey-cloud)** for Railway to see the CNAME and issue the cert — a proxied record hides the target and gets stuck at `VALIDATING_OWNERSHIP` (prod `www` is stuck for exactly this reason). DNS-only means CF is out of the path for `dev.sonara.fm` (Railway-terminated TLS); app behaviour is identical. Cert state: `customDomain(id, projectId){ status { certificateStatus } }` via the backboard GraphQL API.
 - **Always Use HTTPS**: on. **Automatic HTTPS Rewrites**: on.
 - **www → apex**: **Page Rule** (not Bulk Redirect) — `www.sonara.fm/*` matches → forwarding URL `https://sonara.fm/$1` (301). Rule id `f5cc5fcde50ff7f29c21950d51259774`.
 
