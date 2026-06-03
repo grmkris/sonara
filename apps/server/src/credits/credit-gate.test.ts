@@ -6,7 +6,7 @@ import {
   expect,
   test,
 } from "bun:test";
-import pino from "pino";
+import { createLogger } from "@sonara/logger";
 import {
   createPgLite,
   pgliteAsPool,
@@ -50,7 +50,7 @@ CREATE TABLE free_tier_ledger (
 
 const USER = "00000000-0000-0000-0000-000000000001";
 const NOW = 1_700_000_000_000;
-const logger = pino({ level: "silent" });
+const logger = createLogger({ name: "test", level: "silent" });
 
 let pg: TestPg;
 
