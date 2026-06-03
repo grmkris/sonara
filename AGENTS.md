@@ -48,7 +48,7 @@ Two Railway environments in the **same** project, each a full stack (gateway/web
 | `production` | `258d13bd-38b3-4310-9c39-672d01da9efa` | `main` | https://sonara.fm | off |
 | `dev` | `cab8872e-9c58-411e-bbb6-056d6e963730` | `dev` | https://dev.sonara.fm | **on** |
 
-**Workflow:** push feature work to `dev` → auto-deploys the `dev` env → once stable, **promote by merging `dev` → `main`** (auto-deploys prod). The deploy branch is set per-environment via `railway environment edit -e <env> --service-config <serviceId> source.branch <branch>`.
+**Workflow:** the machine-wide **dev-flow** (canonical rules in `~/.claude/CLAUDE.md`). Commit directly to `dev` → push auto-deploys the `dev` env (test on dev.sonara.fm, not locally) → **promote to prod only when asked, via a PR `dev` → `main`** the user reviews + merges (merging auto-deploys prod). The deploy branch is set per-environment via `railway environment edit -e <env> --service-config <serviceId> source.branch <branch>`.
 
 **Isolation:** the `dev` env was forked with `railway environment new dev --duplicate production`, which copied all variables/secrets but provisioned a **fresh empty Postgres** and a **separate S3 bucket** (`sonara-frames-hlwwxfsgres`) — the `${{Postgres.DATABASE_URL}}` / `${{sonara-frames.*}}` references re-point automatically. Migrations + the boot library-seed run on first server boot, so the fresh DB self-populates.
 
