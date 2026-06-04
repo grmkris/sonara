@@ -85,17 +85,19 @@ The Cloudflare MCP (`https://mcp.cloudflare.com/mcp`) is registered **globally**
 
 This is "Code Mode" — there are no typed per-domain tools (no `list_dns_records`, etc.). Search the spec, then write the call.
 
-Current token scope (any other op returns `9109 Unauthorized — request is not authorized`):
+Current token — **`claude-code (kristjan-dev)`**, scope *1 Account · All zones* (any ungranted op returns `9109 Unauthorized — request is not authorized`):
 
-- Zone → DNS → Edit
-- Zone → Zone → Read
-- Zone → Zone Settings → Edit
-- Zone → SSL and Certificates → Edit
-- Zone → Page Rules → Edit
-- Zone → Cache Rules → Edit (if added)
-- **NOT** granted: Config Rules / Rulesets, Workers, R2, Tunnel, Account-level. Need a new permission? Edit the token at https://dash.cloudflare.com/profile/api-tokens → token `sonara.fm claude code integration` → Edit → add permission → Save. The token id is the same after edits; the MCP picks it up on the next session (no config change).
+- Zone → DNS → Edit · Zone → Zone → Edit · Zone Settings → Edit · SSL and Certificates → Edit · Page Rules → Edit · Cache Rules → Edit · Workers Routes → Edit
+- **Zone → Analytics → Read** · **Account → Account Analytics → Read** — added 2026-06-04 for visitor stats (see §Analytics below). Account Analytics is **read-only**; there is no Edit variant.
+- Account → Cloudflare Pages → Edit · Workers Scripts → Edit · Account Settings → Edit
+- **NOT** granted: R2, Tunnel, Config Rules / Rulesets. Need a new permission? Edit the token at https://dash.cloudflare.com/profile/api-tokens → token `claude-code (kristjan-dev)` → Edit → add permission → Save. The token **string is unchanged** after edits, so the expanded scope takes effect **immediately** server-side — no new session needed (the MCP keeps sending the same bearer).
 
 `curl` against `https://api.cloudflare.com/client/v4/...` with `Authorization: Bearer <token>` works for ad-hoc debugging when MCP isn't initialised yet.
+
+#### Analytics / visitor stats
+
+- **Traffic / visitor counts** — the legacy REST Zone Analytics API (`/zones/{id}/analytics/dashboard`) is **sunset** (`1015 Zone Analytics API is sunset`). Use the **GraphQL Analytics API**: `cloudflare.request({ method: "POST", path: "/graphql", body: { query } })`. Dataset `httpRequests1dGroups` (daily) or `httpRequests1hGroups` (hourly), filter on `zoneTag` + `date_geq/date_leq`; useful fields `uniq { uniques }`, `sum { requests pageViews countryMap { clientCountryName requests } }`. Edge-measured + **retroactive**, no beacon needed (zone is orange-clouded). ⚠️ Raw `requests` is polluted by bots/scanners (single-country spikes of 1k+); **`uniques` + `pageViews` are the real-human signal**.
+- **Web Analytics (RUM beacon)** — enabled on the zone (site_tag `28bb308f1ed44069badd991698616b13`). CF's edge auto-injection does **not** fire on Next's streamed App-Router SSR, so the beacon is embedded manually in `apps/web/src/app/layout.tsx`, **prod-gated** on `NEXT_PUBLIC_APP_ENV === "prod"` (keeps dev.sonara.fm out of the dashboard). Cookieless, no consent banner. Gives per-page pageviews/referrers/web-vitals going forward; not retroactive — historical/visitor totals come from the GraphQL traffic API above. Dashboard: Analytics & Logs → Web Analytics.
 
 ### CLI (already installed + authenticated locally)
 
