@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { SCENE_TEMPLATES } from "@sonara/shared";
 import type { SessionSend } from "@/lib/session-actions";
 import { flashCommit } from "@/lib/commit-flash";
 import { useVoiceRecognition } from "@/hooks/use-voice-recognition";
@@ -123,18 +122,6 @@ export function PromptInput({ send }: PromptInputProps) {
     [],
   );
 
-  // Scene starters — relocated from the old controls "scene" tab. A click
-  // *fills the draft* (not a direct send) so the user reviews and commits with
-  // Enter, which routes through `commit()` → goLive when on a deck, scene.patch
-  // when already live. (The old SceneTemplatePicker sent scene.patch directly,
-  // which silently no-op'd in demo mode.) Only signed-in users see this —
-  // PromptInput itself is gated; anon gets the AnonPromptPlaceholder instead.
-  const onPickStarter = useCallback((prompt: string) => {
-    lastDraftFromVoiceRef.current = false;
-    setDraft(prompt);
-    textareaRef.current?.focus();
-  }, []);
-
   const onKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
       if (e.key === "Enter" && !e.shiftKey) {
@@ -190,34 +177,6 @@ export function PromptInput({ send }: PromptInputProps) {
           ▼ listening · {liveTranscript || "…"}
         </span>
       )}
-
-      {/* Quiet prompt-starter row. Fills the textarea; Enter commits. */}
-      <div className="flex flex-col gap-1.5">
-        <span className="font-sans text-[9px] uppercase tracking-[0.28em] text-[color:var(--stone)]/70">
-          starters
-        </span>
-        <div className="flex flex-wrap gap-1.5">
-          {SCENE_TEMPLATES.map((t) => {
-            const active = value === t.prompt;
-            return (
-              <button
-                key={t.key}
-                type="button"
-                onClick={() => onPickStarter(t.prompt)}
-                className={cn(
-                  "font-sans text-[10px] uppercase tracking-[0.14em] transition-colors border-b px-1.5 py-0.5",
-                  active
-                    ? "text-[color:var(--paper)] border-[color:var(--paper)]"
-                    : "text-[color:var(--stone)] border-[color:var(--hairline)]/30 hover:text-[color:var(--paper)] hover:border-[color:var(--paper)]/60",
-                )}
-              >
-                {t.label}
-              </button>
-            );
-          })}
-        </div>
-      </div>
-
       <ImageAnchorZone send={send} />
     </div>
   );

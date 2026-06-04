@@ -16,7 +16,6 @@ import {
 } from "./preset-slice";
 import { createSceneSlice } from "./scene-slice";
 import {
-  TIMELINE_OPEN_KEY,
   UI_VISIBLE_KEY,
   createUiSlice,
 } from "./ui-slice";
@@ -48,13 +47,6 @@ export function hydrateUiVisible(): void {
   const raw = window.localStorage.getItem(UI_VISIBLE_KEY);
   if (raw === null) return;
   useVisualizerStore.setState({ uiVisible: raw !== "0" });
-}
-
-export function hydrateTimelineOpen(): void {
-  if (typeof window === "undefined") return;
-  const raw = window.localStorage.getItem(TIMELINE_OPEN_KEY);
-  if (raw === null) return;
-  useVisualizerStore.setState({ timelineOpen: raw === "1" });
 }
 
 // Pulls the last-used preset + mode from localStorage. Matches the
