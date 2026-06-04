@@ -2,20 +2,11 @@
 
 import type { SonaraSceneState } from "@sonara/shared";
 import type { SessionSend } from "@/lib/session-actions";
-import {
-  Tabs,
-  TabsContent,
-  TabsList,
-  TabsTrigger,
-} from "@/components/ui/tabs";
 import { DeckPicker } from "@/components/visualizer/controls/deck-picker";
 import { IntensityDial } from "@/components/visualizer/controls/intensity-dial";
 import { PresetPicker } from "@/components/visualizer/controls/preset-picker";
-import { SceneTemplatePicker } from "@/components/visualizer/controls/scene-template-picker";
-import { GenerationInspector } from "@/components/visualizer/controls/generation-inspector";
 import { SliderRow } from "@/components/visualizer/controls/slider-row";
-import { useVisualizerStore, type ConsoleTab } from "@/stores/visualizer";
-import { cn } from "@/lib/utils";
+import { useVisualizerStore } from "@/stores/visualizer";
 
 interface ControlsPanelProps {
   send: SessionSend;
@@ -30,16 +21,23 @@ const SLIDERS: { key: SliderKey; label: string }[] = [
   { key: "stability",   label: "stable"   },
 ];
 
-const TABS: { id: ConsoleTab; label: string }[] = [
-  { id: "scene",     label: "scene"     },
-  { id: "style",     label: "style"     },
-  { id: "inspector", label: "inspector" },
-];
+// One flat mixer — no tabs. The console used to split into scene / style /
+// inspector tabs, but two of those didn't earn the split:
+//   • "scene" (prompt-starter chips) duplicated "start from a look" and only
+//     worked for signed-in users, so it moved next to the prompt input.
+//   • "inspector" was a read-only debug readout — now /studio territory.
+// What remains is a single top-to-bottom signal chain: pick a look → set how
+// reactive it is (INTENSITY, the master dial) → refine the visual treatment
+// (preset + feel). Hairline rules segment the three movements.
+
+function Divider() {
+  return (
+    <div aria-hidden className="h-px w-full bg-[color:var(--hairline)]/20" />
+  );
+}
 
 export function ControlsPanel({ send }: ControlsPanelProps) {
   const scene = useVisualizerStore((s) => s.scene);
-  const tab = useVisualizerStore((s) => s.consoleTab);
-  const pickTab = useVisualizerStore((s) => s.setConsoleTab);
 
   const patchSlider = (key: SliderKey, value: number) =>
     send({
@@ -49,66 +47,32 @@ export function ControlsPanel({ send }: ControlsPanelProps) {
 
   return (
     <div className="relative flex flex-col gap-5 rounded-sm border border-[color:var(--hairline)]/25 p-4">
+      {/* Source — the look you start from. */}
       <DeckPicker send={send} />
 
-      <div
-        aria-hidden
-        className="h-px w-full bg-[color:var(--hairline)]/20"
-      />
+      <Divider />
 
-      <Tabs
-        value={tab}
-        onValueChange={(v) => pickTab(v as ConsoleTab)}
-        className="gap-4"
-      >
-        <TabsList
-          variant="line"
-          className="h-auto justify-start gap-5 bg-transparent p-0"
-        >
-          {TABS.map((t) => (
-            <TabsTrigger
-              key={t.id}
-              value={t.id}
-              className={cn(
-                "font-serif h-auto flex-none rounded-none px-0 py-1 text-[13px] italic",
-                "border-b border-transparent text-[color:var(--stone)] shadow-none",
-                "hover:text-[color:var(--paper)]/85",
-                "data-active:border-[color:var(--paper)] data-active:bg-transparent data-active:text-[color:var(--paper)] data-active:shadow-none",
-                "after:hidden",
-              )}
-            >
-              {t.label}
-            </TabsTrigger>
+      {/* Energy — the master audio→visual coupling, given room to read as the
+          primary live dial rather than one slider among many. */}
+      <IntensityDial send={send} />
+
+      <Divider />
+
+      {/* Treatment — the render preset (shader filter on top of the source)
+          plus the four image-feel sliders. */}
+      <div className="panel-reveal flex flex-col gap-5">
+        <PresetPicker />
+        <div className="flex flex-col gap-3">
+          {SLIDERS.map((s) => (
+            <SliderRow
+              key={s.key}
+              label={s.label}
+              value={scene[s.key]}
+              onChange={(v) => patchSlider(s.key, v)}
+            />
           ))}
-        </TabsList>
-
-        <TabsContent value="scene" className="panel-reveal flex flex-col gap-5">
-          <SceneTemplatePicker send={send} />
-        </TabsContent>
-
-        <TabsContent value="style" className="panel-reveal flex flex-col gap-5">
-          <PresetPicker />
-          <IntensityDial send={send} />
-          <div className="flex flex-col gap-3">
-            {SLIDERS.map((s) => (
-              <SliderRow
-                key={s.key}
-                label={s.label}
-                value={scene[s.key]}
-                onChange={(v) => patchSlider(s.key, v)}
-              />
-            ))}
-          </div>
-        </TabsContent>
-
-        <TabsContent
-          value="inspector"
-          className="panel-reveal flex flex-col gap-5"
-        >
-          <GenerationInspector />
-        </TabsContent>
-      </Tabs>
+        </div>
+      </div>
     </div>
   );
 }
-

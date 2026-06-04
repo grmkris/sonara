@@ -40,7 +40,6 @@ import { useHotkey } from "@/hooks/use-hotkey";
 import { HOTKEYS } from "@/lib/hotkeys";
 import {
   hydrateAnchorPrefs,
-  hydrateConsoleTab,
   hydrateDemoPrefs,
   hydratePresetPrefs,
   hydrateTimelineOpen,
@@ -96,7 +95,6 @@ export default function Page() {
     hydratePresetPrefs();
     hydrateDemoPrefs();
     hydrateAnchorPrefs();
-    hydrateConsoleTab();
     hydrateTimelineOpen();
   }, []);
 
