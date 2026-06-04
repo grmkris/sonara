@@ -76,7 +76,7 @@ CF runs **DNS + TLS edge only** — no Workers, no rules-engine compute. All com
 
 #### CF MCP — what it is and how to use it
 
-`.mcp.json` registers the Cloudflare MCP (`https://mcp.cloudflare.com/mcp`) via `mcp-remote`, with a bearer API token (gitignored) passed as `--header "Authorization: Bearer ..."`. It exposes exactly **two tools**:
+The Cloudflare MCP (`https://mcp.cloudflare.com/mcp`) is registered **globally** in `~/.claude` (not a repo `.mcp.json` — sonara has none), with a bearer API token passed as an `Authorization: Bearer …` header. It exposes exactly **two tools**:
 
 | Tool | Purpose |
 |---|---|
@@ -101,7 +101,7 @@ Current token scope (any other op returns `9109 Unauthorized — request is not 
 
 ```bash
 railway status                           # current project + service health
-railway logs --service server -n 100     # pino structured logs (server or web)
+railway logs --service server -n 100     # evlog structured logs (server or web)
 railway variables --service server --kv  # env vars set on a service
 railway domain example.sonara.fm --service gateway  # add a custom domain, prints CNAME target
 railway redeploy --service server --yes  # redeploy latest deployment, no rebuild
@@ -111,7 +111,7 @@ railway service Postgres && railway connect  # psql tunnel to the prod DB
 
 Bash invocations of `railway status:*`, `railway logs:*`, `railway variables:*`, `railway whoami`, `railway list`, `railway link:*`, `railway service`, `railway domain:*`, `railway open:*` are pre-approved in `.claude/settings.local.json` — they don't need per-session permission. Destructive commands (`redeploy`, `down`, `delete`, `run -- …`) still gate on user approval.
 
-`.mcp.json` (gitignored) registers `railway`, `cloudflare`, and `shadcn` MCP servers. Future agents pick up `mcp__railway__*` / `mcp__cloudflare__*` tools automatically; CLI is the fallback for Railway when MCP isn't initialized.
+The `railway` and `cloudflare` MCP servers are registered **globally** in `~/.claude` (sonara has no repo `.mcp.json`). Future agents pick up `mcp__railway__*` / `mcp__cloudflare__*` tools automatically; CLI is the fallback for Railway when MCP isn't initialized.
 
 ### Schema migrations
 
@@ -245,5 +245,5 @@ These exist in reference projects (`invok`, `appmisha.com`) and are deliberately
 
 - Create a `Task` for non-trivial work; mark each task complete as you finish it (don't batch).
 - Prefer editing existing files over creating new ones.
-- For UI changes, run the dev server and verify in the browser before claiming done.
+- For UI changes, push to `dev` and verify on dev.sonara.fm — don't run the app locally (dev-flow; see `~/.claude/CLAUDE.md`). Static checks (typecheck/build/lint) before pushing are fine.
 - Don't write new docs unless asked. Update this file when a convention solidifies.

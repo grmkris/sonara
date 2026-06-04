@@ -94,7 +94,7 @@ In the `sonara.fm` zone (id `3c4eff43a369f04340f8f83efb4870db`), add two CNAMEs 
 
 Then in the zone:
 
-- **SSL/TLS** → mode **Full (strict)**
+- **SSL/TLS** → mode **Full** (NOT Full Strict — Strict throws Error 526 during Railway's cert-renewal windows for proxied domains)
 - **SSL/TLS → Edge Certificates** → **Always Use HTTPS** on, **Automatic HTTPS Rewrites** on
 - **Rules → Page Rules** → create one: pattern `www.sonara.fm/*`, action *Forwarding URL*, status `301`, destination `https://sonara.fm/$1`
 
