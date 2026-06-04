@@ -294,7 +294,7 @@ All public traffic enters via the gateway on `https://sonara.fm`. The gateway pa
 | oRPC (credits, ticket mint) | HTTPS | `https://sonara.fm/rpc/*` (gateway → server) | better-auth cookie | Browser ⇄ gateway ⇄ server |
 | Image-anchor upload | HTTPS | `https://sonara.fm/api/upload/image` (gateway → server) | better-auth cookie | Browser ⇄ gateway ⇄ server |
 | Dodo webhook | HTTPS | `https://sonara.fm/api/auth/dodopayments/webhook` (gateway → server, Better Auth plugin) | Dodo signature | Dodo → gateway → server |
-| Healthcheck | HTTPS | `https://api.sonara.fm/health` (legacy fallback; gateway healthcheck via `/` on web is also fine) | none | Railway / curl |
+| Healthcheck | HTTPS | `https://sonara.fm/` (gateway → web); server `/health` is reached internally via the gateway | none | Railway / curl |
 | **Realtime session** | **WSS** | `wss://sonara.fm/ws` (gateway → server) | **HMAC ticket** (single-use, minted via RPC) | Browser ⇄ gateway ⇄ server |
 | DB | TCP/TLS | `${{Postgres.DATABASE_URL}}` | password | server ⇄ Postgres |
 | fal.ai | HTTPS | `https://fal.run/...` | `FAL_KEY` | server → fal |

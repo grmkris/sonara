@@ -32,10 +32,8 @@ Deployed on **Railway** behind **Cloudflare DNS** on the `sonara.fm` zone. Postg
 |---|---|---|---|
 | `gateway` | https://sonara.fm (+ www → 301) | — | Caddy. The only public service. Path-routes to server/web internally. |
 | `web` | — (internal only) | `web.railway.internal:4472` | Next.js standalone; UI + SSR. |
-| `server` | — (internal only)¹ | `server.railway.internal:4471` | Bun + Hono; Better Auth, `/rpc`, upload, WSS `/ws`, `/health`. |
+| `server` | — (internal only) | `server.railway.internal:4471` | Bun + Hono; Better Auth, `/rpc`, upload, WSS `/ws`, `/health`. |
 | `Postgres` | `postgres.railway.internal:5432` (private) | — | auth + credits ledger |
-
-¹ `api.sonara.fm` still resolves to `server` as a deprecation fallback; the codebase no longer references it. Safe to remove (CF `CNAME api` + `_railway-verify.api` TXT + the Railway custom domain) once you're certain no external integration still hits it.
 
 Existing service IDs: web `235aa1d4-8c1b-4b7a-989a-099e61807e8c`, server `12262832-9534-4230-b032-c675d87f29b8`, gateway `c97ee875-5b9e-4467-94e8-eef5e8e93b81`, Postgres `a146f6cd-edab-48f5-ba44-c79b34caec32`. With the gateway in front, the browser only ever talks to `sonara.fm` (gateway) — auth, RPC, upload and WSS (`wss://sonara.fm/ws`) are all same-origin, so cookies are first-party and there's no CORS. The WS still auths with the short-lived HMAC ticket minted by `mintWsTicket` (a server `/rpc` procedure).
 
@@ -105,7 +103,7 @@ Current token scope (any other op returns `9109 Unauthorized — request is not 
 railway status                           # current project + service health
 railway logs --service server -n 100     # pino structured logs (server or web)
 railway variables --service server --kv  # env vars set on a service
-railway domain api.sonara.fm --service server  # add a custom domain, prints CNAME target
+railway domain example.sonara.fm --service gateway  # add a custom domain, prints CNAME target
 railway redeploy --service server --yes  # redeploy latest deployment, no rebuild
 railway run --service web -- <cmd>       # run a local command with Railway env vars injected
 railway service Postgres && railway connect  # psql tunnel to the prod DB
