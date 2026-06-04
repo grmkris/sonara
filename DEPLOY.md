@@ -11,7 +11,7 @@ Public traffic enters via Cloudflare DNS on the `sonara.fm` zone (DNS + TLS edge
 | `server` (Bun + Hono + WS) | `apps/server/Dockerfile` | `server.railway.internal:4471` | Runs `packages/db` migrator on boot, then binds. Healthcheck `/health`. WSS `/ws`. |
 | `Postgres` | Railway Postgres template | `postgres.railway.internal:5432` (private) | Exposed to siblings as `${{Postgres.DATABASE_URL}}`. |
 
-> `api.sonara.fm` still resolves to `server` as a deprecation fallback from the pre-gateway era. The codebase no longer references it. Safe to remove once you confirm no external integration still hits it (CF `CNAME api` + `_railway-verify.api` TXT + the Railway custom domain on `server`).
+> The pre-gateway `api.sonara.fm` fallback has been removed (its Cloudflare `CNAME api` + `_railway-verify.api` TXT are deleted; the orphaned Railway custom domain on `server` can be cleared in the dashboard). All public traffic now enters via the gateway at `sonara.fm`.
 
 ```
                     Browser

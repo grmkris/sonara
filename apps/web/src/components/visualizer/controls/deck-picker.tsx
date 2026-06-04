@@ -1,7 +1,12 @@
 "use client";
 
 import { useCallback } from "react";
-import { DECKS, type DeckKey } from "@sonara/shared";
+import {
+  DECK_LOOK,
+  DECKS,
+  type DeckKey,
+  type SonaraSceneState,
+} from "@sonara/shared";
 import type { SessionSend } from "@/lib/session-actions";
 import { useSession } from "@/lib/auth-client";
 import {
@@ -31,6 +36,7 @@ export function DeckPicker({ send }: DeckPickerProps) {
   const demoDeck = useVisualizerStore((s) => s.demoDeck);
   const setDemoMode = useVisualizerStore((s) => s.setDemoMode);
   const setDemoDeck = useVisualizerStore((s) => s.setDemoDeck);
+  const setPreset = useVisualizerStore((s) => s.setPreset);
   const clearAnchor = useVisualizerStore((s) => s.clearAnchor);
 
   // Anonymous sessions are always on a deck (server-pinned demo mode);
@@ -44,6 +50,21 @@ export function DeckPicker({ send }: DeckPickerProps) {
       const next = deck as DeckKey;
       setDemoDeck(next);
 
+      // Apply the deck's look profile as a unit: render preset + default
+      // reactivity intensity (cadence is read live from DECK_LOOK by the demo
+      // loop). This is what makes Noir actually chill — it swaps the global
+      // `rave` strobe for the no-invert `noir` preset and drops intensity, so
+      // the whole vibe travels with the deck. Decks without a profile are
+      // left as-is.
+      const look = DECK_LOOK[next];
+      if (look) {
+        setPreset(look.preset);
+        send({
+          type: "scene.patch",
+          patch: { intensity: look.intensity } as Partial<SonaraSceneState>,
+        });
+      }
+
       if (isLive) {
         // Click-while-live: switch BACK to deck playback. Clear any live
         // anchor + prompt so the server stops generating, then signal
@@ -56,7 +77,7 @@ export function DeckPicker({ send }: DeckPickerProps) {
       // For anon + already-on-deck signed-in, just push the deck change.
       send({ type: "demo.set", on: true, deck: next });
     },
-    [isLive, send, setDemoDeck, setDemoMode, clearAnchor],
+    [isLive, send, setDemoDeck, setDemoMode, setPreset, clearAnchor],
   );
 
   return (

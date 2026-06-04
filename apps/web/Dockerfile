@@ -35,6 +35,7 @@ COPY apps/server/package.json ./apps/server/
 COPY apps/web/package.json ./apps/web/
 COPY packages/api/package.json ./packages/api/
 COPY packages/db/package.json ./packages/db/
+COPY packages/logger/package.json ./packages/logger/
 COPY packages/shared/package.json ./packages/shared/
 COPY packages/test-utils/package.json ./packages/test-utils/
 
@@ -49,6 +50,7 @@ COPY apps/web ./apps/web
 COPY apps/server ./apps/server
 COPY packages/api ./packages/api
 COPY packages/db ./packages/db
+COPY packages/logger ./packages/logger
 COPY packages/shared ./packages/shared
 
 # Build. next.config.ts sets output: "standalone" so this emits a

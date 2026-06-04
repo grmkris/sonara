@@ -66,7 +66,7 @@ export function useDemoFrameLoop(): void {
         s.pushHero(url);
       }
       const intensity = store.getState().scene.intensity;
-      timer = setTimeout(tick, libraryCadenceMs(intensity));
+      timer = setTimeout(tick, libraryCadenceMs(intensity, demoDeck));
     };
 
     void loadManifest(demoDeck).then((f) => {

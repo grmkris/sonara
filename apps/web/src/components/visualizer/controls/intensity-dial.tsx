@@ -42,7 +42,7 @@ export function IntensityDial({ send }: IntensityDialProps) {
         max={1}
         step={0.01}
         onValueChange={(v) => {
-          const next = v[0];
+          const next = Array.isArray(v) ? v[0] : v;
           if (typeof next === "number") emit(next);
         }}
         onPointerUp={() => emit.flush()}

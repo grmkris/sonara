@@ -1,9 +1,12 @@
 "use client";
 
-import * as SliderPrimitive from "@radix-ui/react-slider";
+import { Slider as SliderPrimitive } from "@base-ui/react/slider";
 import type { ComponentProps } from "react";
 import { cn } from "@/lib/utils";
 
+// Base UI slider. External API matches the old Radix wrapper — array `value`,
+// `onValueChange(number[])`, `min/max/step`, plus any forwarded props (pointer
+// handlers, aria-label) land on Root — so call sites are unchanged.
 export function Slider({
   className,
   ...props
@@ -16,10 +19,12 @@ export function Slider({
       )}
       {...props}
     >
-      <SliderPrimitive.Track className="relative h-px w-full grow bg-[color:var(--hairline)]/50">
-        <SliderPrimitive.Range className="absolute h-full bg-[color:var(--paper)]/70" />
-      </SliderPrimitive.Track>
-      <SliderPrimitive.Thumb className="block h-2 w-2 rounded-full bg-[color:var(--paper)] shadow-[0_0_0_4px_rgba(26,22,18,0.4)] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[color:var(--indigo)]" />
+      <SliderPrimitive.Control className="flex w-full grow items-center">
+        <SliderPrimitive.Track className="relative h-px w-full grow bg-[color:var(--hairline)]/50">
+          <SliderPrimitive.Indicator className="absolute h-full bg-[color:var(--paper)]/70" />
+          <SliderPrimitive.Thumb className="block h-2 w-2 rounded-full bg-[color:var(--paper)] shadow-[0_0_0_4px_rgba(26,22,18,0.4)] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[color:var(--indigo)]" />
+        </SliderPrimitive.Track>
+      </SliderPrimitive.Control>
     </SliderPrimitive.Root>
   );
 }

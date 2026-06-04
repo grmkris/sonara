@@ -1,15 +1,11 @@
-import pino from "pino";
+import { createLogger } from "@sonara/logger";
 import { env } from "../env";
 
-export const logger = pino({
+export const logger = createLogger({
+  name: "sonara-server",
   level: env.LOG_LEVEL,
-  transport:
-    env.APP_ENV === "prod"
-      ? undefined
-      : {
-          target: "pino-pretty",
-          options: { colorize: true, translateTime: "HH:MM:ss" },
-        },
+  pretty: env.APP_ENV !== "prod",
+  env: { service: "sonara-server", environment: env.APP_ENV },
 });
 
 export type Logger = typeof logger;
