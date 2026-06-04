@@ -17,6 +17,7 @@
     "test": "bun test || echo 'no tests yet'",
     "ingest-demo": "bun run src/scripts/ingest-demo.ts",
     "seed:library": "bun run scripts/seed-library.ts",
+    "gen:deck": "bun run scripts/gen-deck-offline.ts",
     "export:library": "bun run scripts/export-library.ts",
     "build:manifests": "bun run scripts/build-library-manifests.ts",
     "seed-credits": "bun run scripts/seed-credits.ts",

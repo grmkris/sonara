@@ -133,6 +133,29 @@ export const PRESETS: Record<PresetName, PresetConfig> = {
     duotoneHi: [0.3, 0.95, 0.98],
   },
 
+  // The anti-rave. Built for the movie-room "Noir" deck: a chill, dark,
+  // low-key nocturne. The single most important difference from `rave` is
+  // `invert: 0` — no kick-gated screen flip, so the beat never strobes the
+  // frame bright. Low bloom + a gentle, longer feedback give smooth dreamy
+  // trails instead of punch; a charcoal-blue→candle-amber duotone keeps the
+  // palette muted and warm; grain + focal vignette read filmic and pull the
+  // eye inward (and darken the edges). Pair with the slow Noir cadence.
+  noir: {
+    ...BASE,
+    bloomMult: 0.7,
+    noiseMult: 0.35,
+    invert: 0,
+    feedbackAmount: 0.45,
+    halation: 0.25,
+    edge: 0.15,
+    grain: 0.22,
+    focal: 0.4,
+    painterly: 0.3,
+    duotoneMix: 0.4,
+    duotoneLo: [0.04, 0.05, 0.08],
+    duotoneHi: [0.82, 0.74, 0.58],
+  },
+
   ember: {
     ...BASE,
     bloomMult: 1.25,
