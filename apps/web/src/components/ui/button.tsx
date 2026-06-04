@@ -1,8 +1,8 @@
 "use client";
 
-import { Slot } from "@radix-ui/react-slot";
+import { Button as ButtonPrimitive } from "@base-ui/react/button";
 import { cva, type VariantProps } from "class-variance-authority";
-import type { ComponentProps } from "react";
+import { isValidElement, type ReactElement } from "react";
 import { cn } from "@/lib/utils";
 
 const buttonVariants = cva(
@@ -31,8 +31,11 @@ const buttonVariants = cva(
 );
 
 interface ButtonProps
-  extends ComponentProps<"button">,
+  extends ButtonPrimitive.Props,
     VariantProps<typeof buttonVariants> {
+  // Preserve the old Radix `asChild` API: when set, render the single child
+  // element (e.g. <Link>/<a>) via Base UI's `render` prop. `render` is also
+  // accepted directly for new call sites.
   asChild?: boolean;
 }
 
@@ -41,14 +44,24 @@ export function Button({
   variant,
   size,
   asChild,
+  render,
+  children,
   ...props
 }: ButtonProps) {
-  const Comp = asChild ? Slot : "button";
+  const renderEl =
+    asChild && isValidElement(children) ? (children as ReactElement) : render;
   return (
-    <Comp
+    <ButtonPrimitive
       className={cn(buttonVariants({ variant, size, className }))}
+      data-slot="button"
+      // When rendering as an anchor/Link (asChild or render), it's not a native
+      // <button>, so disable Base UI's nativeButton behaviour for correct a11y.
+      nativeButton={renderEl == null}
+      render={renderEl}
       {...props}
-    />
+    >
+      {asChild ? undefined : children}
+    </ButtonPrimitive>
   );
 }
 

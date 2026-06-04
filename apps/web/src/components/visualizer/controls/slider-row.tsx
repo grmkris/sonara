@@ -45,7 +45,7 @@ export function SliderRow({ label, value, onChange }: SliderRowProps) {
       step={0.01}
       aria-label={label}
       onValueChange={(v) => {
-        const next = v[0];
+        const next = Array.isArray(v) ? v[0] : v;
         if (typeof next === "number") {
           setLocal(next);
           emit(next);
