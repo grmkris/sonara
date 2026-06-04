@@ -60,15 +60,15 @@ Two Railway environments in the **same** project, each a full stack (gateway/web
 
 - **Zone**: `sonara.fm` — id `3c4eff43a369f04340f8f83efb4870db`
 - **Account**: `Kristjan.grm1@gmail.com's Account` — id `bceaeae4788dce3493514fde194b4a7e`
-- **Records** (all proxied / orange-cloud):
-  - `CNAME @` → `oatvmd0b.up.railway.app` (Railway web)
-  - `CNAME www` → `sdb5b4d0.up.railway.app` (Railway web)
-  - `CNAME api` → `bgpax7bc.up.railway.app` (Railway server)
+- **Records** (all proxied / orange-cloud) — verified live against the CF API:
+  - `CNAME @` → `qvfbf1lq.up.railway.app` (Railway **gateway**)
+  - `CNAME www` → `i7u5rpxc.up.railway.app` (→ 301 to apex via a CF page rule)
   - `CNAME dev` → `abb5lekq.up.railway.app` (Railway **dev** gateway)
-  - `TXT _railway-verify`, `_railway-verify.www`, `_railway-verify.api`, `_railway-verify.dev` — Railway ownership tokens (required because Railway detects the CF proxy and validates via TXT/DNS-01; do **not** delete)
+  - `TXT _railway-verify`, `_railway-verify.www`, `_railway-verify.dev` — Railway ownership tokens (required because Railway detects the CF proxy and validates via TXT/DNS-01; do **not** delete)
   - 5x `MX` (email forwarding via Namecheap) + 1x `TXT` SPF — out-of-scope, leave alone
-- **SSL/TLS mode**: Full (strict). Railway issues valid Let's Encrypt certs on custom domains.
-- **Railway custom-domain TLS procedure (proxied + verify TXT)**: to add a custom domain that stays proxied through CF (the prod pattern), add **both** records: the proxied `CNAME` to the Railway target **and** a `TXT _railway-verify.<sub>` = `railway-verify=<token>`. Railway validates ownership via the TXT (DNS-01), so it never needs to see the proxied CNAME. ⚠️ **The `railway-verify` token is shown only in the Railway dashboard** (Service → Settings → Networking → the custom domain) — the backboard GraphQL `customDomain.status.dnsRecords` returns *only* the traffic-route CNAME, never the TXT, so you must read the token from the dashboard. Without the TXT a proxied domain hangs at `VALIDATING_OWNERSHIP` forever (that's why prod `www` is stuck — it has no verify TXT). Don't bother with the DNS-only workaround; just add the TXT. Lifecycle: `VALIDATING_OWNERSHIP → ISSUING → VALID` (a few min each); poll `customDomain(id, projectId){ status { certificateStatus } }`. Beware Let's Encrypt's ~5-failed-validations/hour/hostname limit — repeated wrong attempts (e.g. proxied with no TXT) throttle issuance for the rest of the hour.
+  - (`api.sonara.fm` was decommissioned — no CNAME/verify TXT; all traffic enters via the gateway. Don't re-add.)
+- **SSL/TLS mode**: **Full — NOT Full (Strict).** Railway requires Full for proxied domains; **Full (Strict) throws Error 526 during Railway's cert-renewal windows** (the CF→origin leg uses Railway's `*.up.railway.app` cert, which Strict over-validates). This bit sonara (intermittent dev outages) until flipped to Full on 2026-06-04. stylelab + invok are also Full. Railway's per-host check shows ⚠️ on the proxied CNAMEs — harmless (cosmetic; certs are TXT-verified + issued).
+- **Railway custom-domain TLS procedure (proxied + verify TXT)**: to add a custom domain that stays proxied through CF (the prod pattern), add **both** records: the proxied `CNAME` to the Railway target **and** a `TXT _railway-verify.<sub>` = `railway-verify=<token>`. Railway validates ownership via the TXT (DNS-01), so it never needs to see the proxied CNAME. ⚠️ **The `railway-verify` token is shown only in the Railway dashboard** (Service → Settings → Networking → the custom domain) — the backboard GraphQL `customDomain.status.dnsRecords` returns *only* the traffic-route CNAME, never the TXT, so you must read the token from the dashboard. Without the TXT a proxied domain hangs at `VALIDATING_OWNERSHIP` forever (`www` had this until its `_railway-verify.www` TXT was added — it now resolves + 301s fine). Don't bother with the DNS-only workaround; just add the TXT. Lifecycle: `VALIDATING_OWNERSHIP → ISSUING → VALID` (a few min each); poll `customDomain(id, projectId){ status { certificateStatus } }`. Beware Let's Encrypt's ~5-failed-validations/hour/hostname limit — repeated wrong attempts (e.g. proxied with no TXT) throttle issuance for the rest of the hour.
 - **Always Use HTTPS**: on. **Automatic HTTPS Rewrites**: on.
 - **www → apex**: **Page Rule** (not Bulk Redirect) — `www.sonara.fm/*` matches → forwarding URL `https://sonara.fm/$1` (301). Rule id `f5cc5fcde50ff7f29c21950d51259774`.
 
