@@ -107,7 +107,7 @@ graph TD
 | Workspace | Role | Key deps |
 |---|---|---|
 | `apps/web` | Next.js standalone build, browser bundle, SSR pages | next 16, react 19, zustand, meyda, partysocket, better-auth, dodopayments |
-| `apps/server` | Bun process: Hono HTTP + Bun.serve WebSocket | hono, @orpc/server, @fal-ai/client, pino, pg |
+| `apps/server` | Bun process: Hono HTTP + Bun.serve WebSocket | hono, @orpc/server, @fal-ai/client, evlog, pg |
 | `packages/shared` | Zod schemas + TS types for every event / state object | zod |
 | `packages/api` | oRPC routers (HTTP `/rpc` + WS `/ws` session surface) | @orpc/server, @orpc/client |
 | `packages/db` | Drizzle schema (`auth.db.ts`, `credits.db.ts`) + `runMigrations()` boot helper | drizzle-orm, node-postgres |
@@ -489,7 +489,7 @@ flowchart LR
 
 | Signal | Source | What it means |
 |---|---|---|
-| `server` Railway logs | pino structured logs | Every trigger / fal call / credit debit |
+| `server` Railway logs | evlog structured logs (JSON on prod, pretty on dev/local) | Every trigger / fal call / credit debit |
 | `server.ts` boot lines | `running database migrations` → `migrations applied` → `server listening` | Migration health on each deploy |
 | `/health` | Hono route | Liveness for Railway healthcheck |
 | `triggerLog` (client store) | events from server | Visible debug trail in dev UI |

@@ -61,6 +61,20 @@ export default function RootLayout({ children }: { children: ReactNode }) {
             strategy="beforeInteractive"
           />
         )}
+        {/*
+          Cloudflare Web Analytics — privacy-first, cookieless visitor stats.
+          The zone has RUM enabled (site_tag below), but CF's edge
+          auto-injection doesn't fire for Next's streamed SSR responses, so we
+          embed the beacon ourselves. Prod-only: dev traffic stays out of the
+          dashboard. View at dash.cloudflare.com → Analytics → Web Analytics.
+        */}
+        {publicEnv.NEXT_PUBLIC_APP_ENV === "prod" && (
+          <Script
+            src="https://static.cloudflareinsights.com/beacon.min.js"
+            strategy="afterInteractive"
+            data-cf-beacon='{"token": "28bb308f1ed44069badd991698616b13"}'
+          />
+        )}
       </head>
       <body>
         <SwRegister />

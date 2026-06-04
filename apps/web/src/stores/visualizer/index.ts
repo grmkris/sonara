@@ -16,11 +16,8 @@ import {
 } from "./preset-slice";
 import { createSceneSlice } from "./scene-slice";
 import {
-  CONSOLE_TAB_KEY,
-  TIMELINE_OPEN_KEY,
   UI_VISIBLE_KEY,
   createUiSlice,
-  type ConsoleTab,
 } from "./ui-slice";
 import { createVoiceSlice } from "./voice-slice";
 import type { VisualizerState } from "./types";
@@ -50,21 +47,6 @@ export function hydrateUiVisible(): void {
   const raw = window.localStorage.getItem(UI_VISIBLE_KEY);
   if (raw === null) return;
   useVisualizerStore.setState({ uiVisible: raw !== "0" });
-}
-
-export function hydrateConsoleTab(): void {
-  if (typeof window === "undefined") return;
-  const raw = window.localStorage.getItem(CONSOLE_TAB_KEY);
-  if (raw === "scene" || raw === "style" || raw === "inspector") {
-    useVisualizerStore.setState({ consoleTab: raw as ConsoleTab });
-  }
-}
-
-export function hydrateTimelineOpen(): void {
-  if (typeof window === "undefined") return;
-  const raw = window.localStorage.getItem(TIMELINE_OPEN_KEY);
-  if (raw === null) return;
-  useVisualizerStore.setState({ timelineOpen: raw === "1" });
 }
 
 // Pulls the last-used preset + mode from localStorage. Matches the
@@ -131,5 +113,4 @@ export type {
 } from "./inspector-slice";
 export type { JobStatus } from "./scene-slice";
 export type { PresetMode } from "./preset-slice";
-export type { ConsoleTab } from "./ui-slice";
 export type { VisualizerState } from "./types";

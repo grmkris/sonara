@@ -192,7 +192,7 @@
     <table>
       <tr><th>Workspace</th><th>Role</th><th>Key tech</th></tr>
       <tr><td><code class="path">apps/web</code> <span class="pill web">web</span></td><td>Next.js standalone — SSR, the visualizer page, Better Auth, the Dodo webhook, <strong>and the image-upload route</strong></td><td>Next.js 16, React 19, Tailwind v4, zustand, Meyda, partysocket</td></tr>
-      <tr><td><code class="path">apps/server</code> <span class="pill srv">server</span></td><td>Bun process — Hono HTTP (<code>/health</code> only) + Bun.serve WebSocket. Owns the live Session, fal calls, recognition, credit debit</td><td>Hono, @orpc/server, @fal-ai/client, pino, pg</td></tr>
+      <tr><td><code class="path">apps/server</code> <span class="pill srv">server</span></td><td>Bun process — Hono HTTP (<code>/health</code> only) + Bun.serve WebSocket. Owns the live Session, fal calls, recognition, credit debit</td><td>Hono, @orpc/server, @fal-ai/client, evlog, pg</td></tr>
       <tr><td><code class="path">packages/shared</code></td><td>Zod schemas + TS types for every event/state object. The <strong>contract</strong> between web, server, and api</td><td>zod</td></tr>
       <tr><td><code class="path">packages/api</code></td><td>oRPC routers — the framework-agnostic <code>sessionRouter</code> that both apps build against</td><td>@orpc/server, @orpc/client</td></tr>
       <tr><td><code class="path">packages/db</code></td><td>Drizzle schema (<code>auth</code>, <code>credits</code>, <code>image-library</code>) + <code>runMigrations()</code> boot helper</td><td>drizzle-orm, node-postgres</td></tr>
@@ -483,11 +483,11 @@
       <tr><td>Better Auth</td><td>HTTPS <code>/api/auth/*</code></td><td>session cookie</td></tr>
       <tr><td>Image upload <span class="pill new">new</span></td><td>HTTPS <code>/api/upload/image</code></td><td>session cookie (Better Auth)</td></tr>
       <tr><td>Credits / ticket mint</td><td>HTTPS oRPC on web</td><td>session cookie</td></tr>
-      <tr><td><strong>Live session</strong></td><td><strong>WSS <code>api.sonara.fm/ws</code></strong></td><td><strong>single-use HMAC ticket</strong></td></tr>
+      <tr><td><strong>Live session</strong></td><td><strong>WSS <code>wss://sonara.fm/ws</code></strong> (same-origin via gateway)</td><td><strong>single-use HMAC ticket</strong></td></tr>
     </table>
     <div class="note jade">
       <span class="lbl">The HMAC ticket trick</span>
-      The WebSocket is the <em>only</em> path that uses a ticket instead of a cookie. The browser RPC-calls <code>mintWsTicket()</code> on web (cookie-authed), gets a short-TTL signed ticket (carrying <code>userId</code> or <code>null</code> for anon), and passes it as a query param on WS upgrade. The server verifies the HMAC. This is exactly what lets <code>api.sonara.fm</code> live on a different origin from <code>sonara.fm</code> with no CORS and no shared cookies — WebSockets are origin-agnostic by construction.
+      The WebSocket is the <em>only</em> path that uses a ticket instead of a cookie. The browser RPC-calls <code>mintWsTicket()</code> (cookie-authed, same-origin via the gateway), gets a short-TTL signed ticket (carrying <code>userId</code> or <code>null</code> for anon), and passes it as a query param on WS upgrade. The server verifies the HMAC. The WS is now same-origin (<code>wss://sonara.fm/ws</code>, gateway → server); the ticket scheme is kept because it cleanly carries identity to the upgrade without parsing cookies at the socket layer.
     </div>
   </section>
 
@@ -591,7 +591,7 @@
 
   <p class="foot">
     Sonara architecture map · generated as a self-contained HTML doc · open directly in any browser, no server needed.<br/>
-    Production: <code>sonara.fm</code> (web) · <code>api.sonara.fm</code> (server WSS) · Railway + Cloudflare DNS.
+    Production: <code>sonara.fm</code> (Caddy gateway → web + server, incl. <code>wss://sonara.fm/ws</code>) · Railway + Cloudflare DNS.
   </p>
 </main>
 </div>

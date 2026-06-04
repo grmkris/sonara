@@ -18,8 +18,6 @@ import { DemoRecorder } from "@/components/visualizer/controls/demo-recorder";
 import { ScanSweep } from "@/components/visualizer/canvas/scan-sweep";
 import { NowPlaying } from "@/components/visualizer/controls/now-playing";
 import { StudioActionConsumer } from "@/components/visualizer/studio-action-consumer";
-import { TimelineStrip } from "@/components/visualizer/timeline/timeline-strip";
-import { TimelineToggle } from "@/components/visualizer/timeline/timeline-toggle";
 import { Button } from "@/components/ui/button";
 import {
   Sheet,
@@ -40,10 +38,8 @@ import { useHotkey } from "@/hooks/use-hotkey";
 import { HOTKEYS } from "@/lib/hotkeys";
 import {
   hydrateAnchorPrefs,
-  hydrateConsoleTab,
   hydrateDemoPrefs,
   hydratePresetPrefs,
-  hydrateTimelineOpen,
   hydrateUiVisible,
   useVisualizerStore,
 } from "@/stores/visualizer";
@@ -96,8 +92,6 @@ export default function Page() {
     hydratePresetPrefs();
     hydrateDemoPrefs();
     hydrateAnchorPrefs();
-    hydrateConsoleTab();
-    hydrateTimelineOpen();
   }, []);
 
   // Anonymous visitors have no server session pinning them to demo mode, and
@@ -235,13 +229,10 @@ export default function Page() {
           </div>
         </section>
 
-        {/* Bottom strip — library timeline + audio ribbon + one tight
-            control row. Timeline strip is collapsible; default closed so
-            the canvas stays the hero. */}
+        {/* Bottom strip — audio ribbon + one tight control row. The library
+            timeline lives in /studio, not here. */}
         <section className="pointer-events-auto relative mb-4 px-4 pt-2 md:mb-6 md:px-10">
           <div aria-hidden className="paper-scrim absolute -inset-x-4 -inset-y-2 -z-10" />
-
-          <TimelineStrip send={send} />
 
           <AudioRibbon height={40} />
 
@@ -257,7 +248,6 @@ export default function Page() {
           <div className="mt-3 flex items-center justify-between gap-3 sm:gap-6">
             <div className="flex items-center gap-3 sm:gap-6">
               <MusicSource source={audioSource} setSource={setAudioSource} />
-              <TimelineToggle />
             </div>
             <Button
               variant="ghost"

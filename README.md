@@ -4,8 +4,8 @@ Browser-based realtime visualizer at [sonara.fm](https://sonara.fm). Text prompt
 
 ## Stack
 
-- **Web** (`apps/web`): Next.js 16, React 19, Tailwind v4, shadcn/ui, zustand, framer-motion, Meyda
-- **Server** (`apps/server`): Bun + Hono + native `Bun.serve` WebSocket, `@fal-ai/client`, pino
+- **Web** (`apps/web`): Next.js 16, React 19, Tailwind v4, Base UI (`@base-ui/react`), zustand, framer-motion, Meyda
+- **Server** (`apps/server`): Bun + Hono + native `Bun.serve` WebSocket, `@fal-ai/client`, evlog (`@sonara/logger`)
 - **Shared** (`packages/shared`): zod schemas + TS types for all events and state
 - **API** (`packages/api`): oRPC routers — HTTP `/rpc` (credits, auth) + WebSocket `/ws` session surface
 - **Test utils** (`packages/test-utils`): pglite helper for db-backed tests

@@ -60,15 +60,15 @@ Two Railway environments in the **same** project, each a full stack (gateway/web
 
 - **Zone**: `sonara.fm` — id `3c4eff43a369f04340f8f83efb4870db`
 - **Account**: `Kristjan.grm1@gmail.com's Account` — id `bceaeae4788dce3493514fde194b4a7e`
-- **Records** (all proxied / orange-cloud):
-  - `CNAME @` → `oatvmd0b.up.railway.app` (Railway web)
-  - `CNAME www` → `sdb5b4d0.up.railway.app` (Railway web)
-  - `CNAME api` → `bgpax7bc.up.railway.app` (Railway server)
+- **Records** (all proxied / orange-cloud) — verified live against the CF API:
+  - `CNAME @` → `qvfbf1lq.up.railway.app` (Railway **gateway**)
+  - `CNAME www` → `i7u5rpxc.up.railway.app` (→ 301 to apex via a CF page rule)
   - `CNAME dev` → `abb5lekq.up.railway.app` (Railway **dev** gateway)
-  - `TXT _railway-verify`, `_railway-verify.www`, `_railway-verify.api`, `_railway-verify.dev` — Railway ownership tokens (required because Railway detects the CF proxy and validates via TXT/DNS-01; do **not** delete)
+  - `TXT _railway-verify`, `_railway-verify.www`, `_railway-verify.dev` — Railway ownership tokens (required because Railway detects the CF proxy and validates via TXT/DNS-01; do **not** delete)
   - 5x `MX` (email forwarding via Namecheap) + 1x `TXT` SPF — out-of-scope, leave alone
-- **SSL/TLS mode**: Full (strict). Railway issues valid Let's Encrypt certs on custom domains.
-- **Railway custom-domain TLS procedure (proxied + verify TXT)**: to add a custom domain that stays proxied through CF (the prod pattern), add **both** records: the proxied `CNAME` to the Railway target **and** a `TXT _railway-verify.<sub>` = `railway-verify=<token>`. Railway validates ownership via the TXT (DNS-01), so it never needs to see the proxied CNAME. ⚠️ **The `railway-verify` token is shown only in the Railway dashboard** (Service → Settings → Networking → the custom domain) — the backboard GraphQL `customDomain.status.dnsRecords` returns *only* the traffic-route CNAME, never the TXT, so you must read the token from the dashboard. Without the TXT a proxied domain hangs at `VALIDATING_OWNERSHIP` forever (that's why prod `www` is stuck — it has no verify TXT). Don't bother with the DNS-only workaround; just add the TXT. Lifecycle: `VALIDATING_OWNERSHIP → ISSUING → VALID` (a few min each); poll `customDomain(id, projectId){ status { certificateStatus } }`. Beware Let's Encrypt's ~5-failed-validations/hour/hostname limit — repeated wrong attempts (e.g. proxied with no TXT) throttle issuance for the rest of the hour.
+  - (`api.sonara.fm` was decommissioned — no CNAME/verify TXT; all traffic enters via the gateway. Don't re-add.)
+- **SSL/TLS mode**: **Full — NOT Full (Strict).** Railway requires Full for proxied domains; **Full (Strict) throws Error 526 during Railway's cert-renewal windows** (the CF→origin leg uses Railway's `*.up.railway.app` cert, which Strict over-validates). This bit sonara (intermittent dev outages) until flipped to Full on 2026-06-04. stylelab + invok are also Full. Railway's per-host check shows ⚠️ on the proxied CNAMEs — harmless (cosmetic; certs are TXT-verified + issued).
+- **Railway custom-domain TLS procedure (proxied + verify TXT)**: to add a custom domain that stays proxied through CF (the prod pattern), add **both** records: the proxied `CNAME` to the Railway target **and** a `TXT _railway-verify.<sub>` = `railway-verify=<token>`. Railway validates ownership via the TXT (DNS-01), so it never needs to see the proxied CNAME. ⚠️ **The `railway-verify` token is shown only in the Railway dashboard** (Service → Settings → Networking → the custom domain) — the backboard GraphQL `customDomain.status.dnsRecords` returns *only* the traffic-route CNAME, never the TXT, so you must read the token from the dashboard. Without the TXT a proxied domain hangs at `VALIDATING_OWNERSHIP` forever (`www` had this until its `_railway-verify.www` TXT was added — it now resolves + 301s fine). Don't bother with the DNS-only workaround; just add the TXT. Lifecycle: `VALIDATING_OWNERSHIP → ISSUING → VALID` (a few min each); poll `customDomain(id, projectId){ status { certificateStatus } }`. Beware Let's Encrypt's ~5-failed-validations/hour/hostname limit — repeated wrong attempts (e.g. proxied with no TXT) throttle issuance for the rest of the hour.
 - **Always Use HTTPS**: on. **Automatic HTTPS Rewrites**: on.
 - **www → apex**: **Page Rule** (not Bulk Redirect) — `www.sonara.fm/*` matches → forwarding URL `https://sonara.fm/$1` (301). Rule id `f5cc5fcde50ff7f29c21950d51259774`.
 
@@ -76,7 +76,7 @@ CF runs **DNS + TLS edge only** — no Workers, no rules-engine compute. All com
 
 #### CF MCP — what it is and how to use it
 
-`.mcp.json` registers the Cloudflare MCP (`https://mcp.cloudflare.com/mcp`) via `mcp-remote`, with a bearer API token (gitignored) passed as `--header "Authorization: Bearer ..."`. It exposes exactly **two tools**:
+The Cloudflare MCP (`https://mcp.cloudflare.com/mcp`) is registered **globally** in `~/.claude` (not a repo `.mcp.json` — sonara has none), with a bearer API token passed as an `Authorization: Bearer …` header. It exposes exactly **two tools**:
 
 | Tool | Purpose |
 |---|---|
@@ -85,23 +85,25 @@ CF runs **DNS + TLS edge only** — no Workers, no rules-engine compute. All com
 
 This is "Code Mode" — there are no typed per-domain tools (no `list_dns_records`, etc.). Search the spec, then write the call.
 
-Current token scope (any other op returns `9109 Unauthorized — request is not authorized`):
+Current token — **`claude-code (kristjan-dev)`**, scope *1 Account · All zones* (any ungranted op returns `9109 Unauthorized — request is not authorized`):
 
-- Zone → DNS → Edit
-- Zone → Zone → Read
-- Zone → Zone Settings → Edit
-- Zone → SSL and Certificates → Edit
-- Zone → Page Rules → Edit
-- Zone → Cache Rules → Edit (if added)
-- **NOT** granted: Config Rules / Rulesets, Workers, R2, Tunnel, Account-level. Need a new permission? Edit the token at https://dash.cloudflare.com/profile/api-tokens → token `sonara.fm claude code integration` → Edit → add permission → Save. The token id is the same after edits; the MCP picks it up on the next session (no config change).
+- Zone → DNS → Edit · Zone → Zone → Edit · Zone Settings → Edit · SSL and Certificates → Edit · Page Rules → Edit · Cache Rules → Edit · Workers Routes → Edit
+- **Zone → Analytics → Read** · **Account → Account Analytics → Read** — added 2026-06-04 for visitor stats (see §Analytics below). Account Analytics is **read-only**; there is no Edit variant.
+- Account → Cloudflare Pages → Edit · Workers Scripts → Edit · Account Settings → Edit
+- **NOT** granted: R2, Tunnel, Config Rules / Rulesets. Need a new permission? Edit the token at https://dash.cloudflare.com/profile/api-tokens → token `claude-code (kristjan-dev)` → Edit → add permission → Save. The token **string is unchanged** after edits, so the expanded scope takes effect **immediately** server-side — no new session needed (the MCP keeps sending the same bearer).
 
 `curl` against `https://api.cloudflare.com/client/v4/...` with `Authorization: Bearer <token>` works for ad-hoc debugging when MCP isn't initialised yet.
+
+#### Analytics / visitor stats
+
+- **Traffic / visitor counts** — the legacy REST Zone Analytics API (`/zones/{id}/analytics/dashboard`) is **sunset** (`1015 Zone Analytics API is sunset`). Use the **GraphQL Analytics API**: `cloudflare.request({ method: "POST", path: "/graphql", body: { query } })`. Dataset `httpRequests1dGroups` (daily) or `httpRequests1hGroups` (hourly), filter on `zoneTag` + `date_geq/date_leq`; useful fields `uniq { uniques }`, `sum { requests pageViews countryMap { clientCountryName requests } }`. Edge-measured + **retroactive**, no beacon needed (zone is orange-clouded). ⚠️ Raw `requests` is polluted by bots/scanners (single-country spikes of 1k+); **`uniques` + `pageViews` are the real-human signal**.
+- **Web Analytics (RUM beacon)** — enabled on the zone (site_tag `28bb308f1ed44069badd991698616b13`). CF's edge auto-injection does **not** fire on Next's streamed App-Router SSR, so the beacon is embedded manually in `apps/web/src/app/layout.tsx`, **prod-gated** on `NEXT_PUBLIC_APP_ENV === "prod"` (keeps dev.sonara.fm out of the dashboard). Cookieless, no consent banner. Gives per-page pageviews/referrers/web-vitals going forward; not retroactive — historical/visitor totals come from the GraphQL traffic API above. Dashboard: Analytics & Logs → Web Analytics.
 
 ### CLI (already installed + authenticated locally)
 
 ```bash
 railway status                           # current project + service health
-railway logs --service server -n 100     # pino structured logs (server or web)
+railway logs --service server -n 100     # evlog structured logs (server or web)
 railway variables --service server --kv  # env vars set on a service
 railway domain example.sonara.fm --service gateway  # add a custom domain, prints CNAME target
 railway redeploy --service server --yes  # redeploy latest deployment, no rebuild
@@ -111,7 +113,7 @@ railway service Postgres && railway connect  # psql tunnel to the prod DB
 
 Bash invocations of `railway status:*`, `railway logs:*`, `railway variables:*`, `railway whoami`, `railway list`, `railway link:*`, `railway service`, `railway domain:*`, `railway open:*` are pre-approved in `.claude/settings.local.json` — they don't need per-session permission. Destructive commands (`redeploy`, `down`, `delete`, `run -- …`) still gate on user approval.
 
-`.mcp.json` (gitignored) registers `railway`, `cloudflare`, and `shadcn` MCP servers. Future agents pick up `mcp__railway__*` / `mcp__cloudflare__*` tools automatically; CLI is the fallback for Railway when MCP isn't initialized.
+The `railway` and `cloudflare` MCP servers are registered **globally** in `~/.claude` (sonara has no repo `.mcp.json`). Future agents pick up `mcp__railway__*` / `mcp__cloudflare__*` tools automatically; CLI is the fallback for Railway when MCP isn't initialized.
 
 ### Schema migrations
 
@@ -245,5 +247,5 @@ These exist in reference projects (`invok`, `appmisha.com`) and are deliberately
 
 - Create a `Task` for non-trivial work; mark each task complete as you finish it (don't batch).
 - Prefer editing existing files over creating new ones.
-- For UI changes, run the dev server and verify in the browser before claiming done.
+- For UI changes, push to `dev` and verify on dev.sonara.fm — don't run the app locally (dev-flow; see `~/.claude/CLAUDE.md`). Static checks (typecheck/build/lint) before pushing are fine.
 - Don't write new docs unless asked. Update this file when a convention solidifies.
