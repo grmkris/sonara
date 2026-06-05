@@ -145,6 +145,25 @@ bun run ci:local       # lint → typecheck → test → build (serial)
 
 Open **`http://localhost:4470`** (the Caddy gateway) — that's the only origin the browser should use. The gateway proxies to web (`:4472`) and server (`:4471`) internally. WS is same-origin: `ws://localhost:4470/ws`. The gateway dev task runs `caddy:2-alpine` via `docker run --network host` (so it needs Docker; it's in `bun run dev`). Hitting `:4472` directly works for the UI but auth/RPC/WS won't (those live on the server behind the gateway).
 
+## Lint & format
+
+oxlint + oxfmt, configured via the **ultracite** preset — the strict, AI-oriented ruleset (~530 rules / 12 plugins incl. `jsx-a11y`), **not** oxlint's light defaults (correctness-only). The sibling repos on this stack (stylelab) share it.
+
+- `oxlint.config.ts` → `extends [ultracite/oxlint/core, react, next]`; `oxfmt.config.ts` → re-exports `ultracite/oxfmt`. `oxlint-tsgolint` (devDep) backs the `--type-aware` flag — without it `bun run check`/`fix` error out.
+- `bun run lint` → `oxlint` (this is what `ci:local`/CI runs). `bun run check` / `fix` / `fix:unsafe` → `ultracite … --type-aware --type-check` (lint + oxfmt in one). **Never run `--unsafe` unattended** — it strips `async` off no-`await` fns (breaks their `Promise` return type) and mangles exhaustive discriminated-union switches.
+- We use ultracite's **lint layer only**. Do **not** run `ultracite init` — it regenerates these configs and injects a generic rules dump into this file + `CLAUDE.md`. The linter is the source of truth; its generic standards aren't vendored here.
+
+**Deliberate carve-outs — don't "fix" these.** ~54 `// oxlint-disable … -- REVIEW: …` comments mark rules that don't fit this codebase (`grep -rn "oxlint-disable.*REVIEW:" apps packages`; full index + dispositions in `docs/lint-disables-review.md`). Leave these alone:
+
+- **fire-and-forget promises** (`prefer-await-to-then`/`-callbacks`) — session `stream*`, credit refund, WS bootstrap, 60 Hz audio tick; awaiting blocks the live hot path.
+- **intentional barrels** (`no-barrel-file`) — package `index.ts` entrypoints.
+- **bitwise** (`no-bitwise`) — constant-time crypto compare (`ws-ticket.ts`) + seed masks.
+- **`sort-keys`** — env / Drizzle schema / preset orderings are curated, not alphabetical.
+- **`complexity`** — DSP / canvas / dispatch loops kept whole (see Don't touch).
+- native `confirm`/`prompt` (`no-alert`), `.onX=` handler assignment (`prefer-add-event-listener`), byte-level `charCodeAt` (`prefer-code-point`), ServiceWorker `postMessage` (no `targetOrigin` param).
+
+Only **3** are genuinely rewritable (flagged 🟢 in the doc): `catch-error-name`, `default-case`, `no-use-before-define`.
+
 ## Database
 
 Schema and migrations live in `packages/db`. The server applies pending migrations on every boot via `runMigrations()` (see `apps/server/src/server.ts`) — there is no manual `db:push` step in dev or prod.
