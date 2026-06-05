@@ -1,4 +1,5 @@
 import type { UserId } from "@sonara/shared/typeid";
+
 import type { SessionRegistry } from "./session-registry";
 
 // Session shape the API expects. Apps construct this from their own auth
@@ -26,12 +27,12 @@ export interface ApiContext<TDb> {
 }
 
 export function buildContext<TDb>(
-  args: CreateContextArgs<TDb>,
+  args: CreateContextArgs<TDb>
 ): ApiContext<TDb> {
   return {
     db: args.db,
+    registry: args.registry,
     session: args.session,
     userId: args.session?.user.id ?? null,
-    registry: args.registry,
   };
 }

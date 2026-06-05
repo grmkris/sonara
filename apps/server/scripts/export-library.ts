@@ -15,7 +15,9 @@
 import { writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+
 import { createDb, SCHEMA } from "@sonara/db";
+
 import { env } from "../src/env";
 
 function fail(msg: string): never {
@@ -24,36 +26,35 @@ function fail(msg: string): never {
 }
 
 async function main() {
-  if (!env.DATABASE_URL) fail("DATABASE_URL not set");
+  if (!env.DATABASE_URL) {
+    fail("DATABASE_URL not set");
+  }
 
   const db = createDb(env.DATABASE_URL);
   const rows = await db
     .select({
-      id: SCHEMA.imageLibrary.id,
       deck: SCHEMA.imageLibrary.deck,
+      height: SCHEMA.imageLibrary.height,
+      id: SCHEMA.imageLibrary.id,
+      model: SCHEMA.imageLibrary.model,
+      palette: SCHEMA.imageLibrary.palette,
       prompt: SCHEMA.imageLibrary.prompt,
       promptHash: SCHEMA.imageLibrary.promptHash,
-      model: SCHEMA.imageLibrary.model,
       seed: SCHEMA.imageLibrary.seed,
+      status: SCHEMA.imageLibrary.status,
       url: SCHEMA.imageLibrary.url,
       width: SCHEMA.imageLibrary.width,
-      height: SCHEMA.imageLibrary.height,
-      palette: SCHEMA.imageLibrary.palette,
-      status: SCHEMA.imageLibrary.status,
     })
     .from(SCHEMA.imageLibrary)
     .orderBy(SCHEMA.imageLibrary.deck, SCHEMA.imageLibrary.promptHash);
 
-  const out = resolve(
-    dirname(fileURLToPath(import.meta.url)),
-    "library-seed.json",
-  );
+  const out = resolve(import.meta.dirname, "library-seed.json");
   await writeFile(out, `${JSON.stringify(rows, null, 2)}\n`);
   console.log(`exported ${rows.length} rows → ${out}`);
   process.exit(0);
 }
 
-main().catch((err) => {
-  console.error("export-library failed:", err);
+main().catch((error) => {
+  console.error("export-library failed:", error);
   process.exit(1);
 });

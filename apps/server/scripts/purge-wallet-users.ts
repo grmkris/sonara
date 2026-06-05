@@ -11,8 +11,8 @@
  *   bun run --filter=server purge-wallet-users
  */
 
-import { eq, like, sql } from "drizzle-orm";
 import { createDb, SCHEMA } from "@sonara/db";
+import { eq, like, sql } from "drizzle-orm";
 
 function fail(msg: string): never {
   console.error(`error: ${msg}`);
@@ -32,7 +32,9 @@ async function main() {
     .delete(SCHEMA.account)
     .where(eq(SCHEMA.account.providerId, "siwe"))
     .returning();
-  console.log(`deleted ${siweAccounts.length} account rows with providerId='siwe'`);
+  console.log(
+    `deleted ${siweAccounts.length} account rows with providerId='siwe'`
+  );
 
   // Wallet-synthetic users. Cascade kills credits/usageLedger/freeTierLedger/
   // session/account rows tied to the user id.
@@ -41,11 +43,13 @@ async function main() {
     .where(like(sql`lower(${SCHEMA.user.email})`, "%@wallet.%"))
     .returning();
   console.log(`deleted ${deleted.length} wallet-synthetic users`);
-  for (const u of deleted) console.log(`  - ${u.email}`);
+  for (const u of deleted) {
+    console.log(`  - ${u.email}`);
+  }
   process.exit(0);
 }
 
-main().catch((err) => {
-  console.error("purge-wallet-users failed:", err);
+main().catch((error) => {
+  console.error("purge-wallet-users failed:", error);
   process.exit(1);
 });

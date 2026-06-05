@@ -1,4 +1,5 @@
 import { typeIdToUuid } from "@sonara/shared/typeid";
+
 import seedRows from "../../scripts/library-seed.json" with { type: "json" };
 import type { Logger } from "../lib/logger";
 import { getPool } from "./pool";
@@ -42,12 +43,12 @@ export async function seedLibraryOnBoot(logger: Logger): Promise<void> {
   const hashes = seed.map((r) => r.promptHash);
   const present = await pool.query<{ prompt_hash: string }>(
     "SELECT prompt_hash FROM image_library WHERE prompt_hash = ANY($1::text[])",
-    [hashes],
+    [hashes]
   );
   if (present.rows.length === seed.length) {
     logger.info(
       { seedSize: seed.length },
-      "library already seeded — skipping import",
+      "library already seeded — skipping import"
     );
     return;
   }
@@ -75,16 +76,19 @@ export async function seedLibraryOnBoot(logger: Logger): Promise<void> {
           row.height,
           row.palette,
           row.status,
-        ],
+        ]
       );
-      if (res.rowCount && res.rowCount > 0) imported++;
-      else skipped++;
+      if (res.rowCount && res.rowCount > 0) {
+        imported++;
+      } else {
+        skipped++;
+      }
     }
   } finally {
     client.release();
   }
   logger.info(
     { imported, skipped, total: seed.length },
-    "library boot-seed complete",
+    "library boot-seed complete"
   );
 }

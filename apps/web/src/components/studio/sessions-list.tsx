@@ -1,7 +1,8 @@
 "use client";
 
-import { useMemo } from "react";
 import type { SessionSummary } from "@sonara/shared";
+import { useMemo } from "react";
+
 import { formatDuration } from "@/lib/format-time";
 import { cn } from "@/lib/utils";
 
@@ -20,17 +21,23 @@ function bandOf(date: Date, now: Date): DateBand {
     date.getFullYear() === now.getFullYear() &&
     date.getMonth() === now.getMonth() &&
     date.getDate() === now.getDate();
-  if (sameDay) return "today";
+  if (sameDay) {
+    return "today";
+  }
   const yesterday = new Date(now);
   yesterday.setDate(now.getDate() - 1);
   const isYesterday =
     date.getFullYear() === yesterday.getFullYear() &&
     date.getMonth() === yesterday.getMonth() &&
     date.getDate() === yesterday.getDate();
-  if (isYesterday) return "yesterday";
+  if (isYesterday) {
+    return "yesterday";
+  }
   const sevenDaysAgo = new Date(now);
   sevenDaysAgo.setDate(now.getDate() - 7);
-  if (date >= sevenDaysAgo) return "this week";
+  if (date >= sevenDaysAgo) {
+    return "this week";
+  }
   return "older";
 }
 
@@ -42,8 +49,8 @@ function formatTime(date: Date): string {
 
 function formatDateLong(date: Date): string {
   return date.toLocaleDateString(undefined, {
-    month: "short",
     day: "numeric",
+    month: "short",
   });
 }
 
@@ -105,7 +112,7 @@ export function SessionsList({
                       "border-b border-[color:var(--hairline)]/20 transition-colors",
                       selected
                         ? "bg-[color:var(--paper)]/10"
-                        : "hover:bg-[color:var(--paper)]/5",
+                        : "hover:bg-[color:var(--paper)]/5"
                     )}
                     aria-current={selected ? "true" : undefined}
                   >
@@ -125,7 +132,7 @@ export function SessionsList({
                           "font-sans text-[11px] uppercase tracking-[0.18em]",
                           selected
                             ? "text-[color:var(--paper)]"
-                            : "text-[color:var(--paper)]/80",
+                            : "text-[color:var(--paper)]/80"
                         )}
                       >
                         {g.band === "older"

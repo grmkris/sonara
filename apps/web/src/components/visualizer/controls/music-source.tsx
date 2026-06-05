@@ -1,14 +1,15 @@
 "use client";
 
+import { FileAudio, Mic, MicOff, MonitorSpeaker } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
-import { FileAudio, Mic, MicOff, MonitorSpeaker } from "lucide-react";
-import type { AudioSource } from "@/hooks/use-audio-features";
+
 import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import type { AudioSource } from "@/hooks/use-audio-features";
 import { cn } from "@/lib/utils";
 
 interface MusicSourceProps {
@@ -19,13 +20,17 @@ interface MusicSourceProps {
 // Safari supports getDisplayMedia for video but silently drops audio tracks.
 // Detect via UA — the usual "Safari but not Chrome/Edge/Android" pattern.
 function isSafariLike(): boolean {
-  if (typeof navigator === "undefined") return false;
+  if (typeof navigator === "undefined") {
+    return false;
+  }
   const ua = navigator.userAgent;
   return /^((?!chrome|android|edg|crios|fxios).)*safari/i.test(ua);
 }
 
 function displayMediaSupported(): boolean {
-  if (typeof navigator === "undefined") return false;
+  if (typeof navigator === "undefined") {
+    return false;
+  }
   return typeof navigator.mediaDevices?.getDisplayMedia === "function";
 }
 
@@ -52,16 +57,17 @@ export function MusicSource({ source, setSource }: MusicSourceProps) {
     if (isSafariLike()) {
       setDisplaySupported(false);
       setDisplayDisabledReason(
-        "safari can't share tab audio — try chrome or edge",
+        "safari can't share tab audio — try chrome or edge"
       );
     }
   }, []);
 
-  useEffect(() => {
-    return () => {
+  useEffect(
+    () => () => {
       if (objectUrlRef.current) URL.revokeObjectURL(objectUrlRef.current);
-    };
-  }, []);
+    },
+    []
+  );
 
   const pickFile = useCallback(() => {
     fileRef.current?.click();
@@ -69,24 +75,35 @@ export function MusicSource({ source, setSource }: MusicSourceProps) {
 
   const onFile = (ev: React.ChangeEvent<HTMLInputElement>) => {
     const file = ev.target.files?.[0];
-    if (!file) return;
-    if (fileRef.current) fileRef.current.value = "";
-    if (objectUrlRef.current) URL.revokeObjectURL(objectUrlRef.current);
+    if (!file) {
+      return;
+    }
+    if (fileRef.current) {
+      fileRef.current.value = "";
+    }
+    if (objectUrlRef.current) {
+      URL.revokeObjectURL(objectUrlRef.current);
+    }
     const url = URL.createObjectURL(file);
     objectUrlRef.current = url;
     setFileName(file.name);
     const el = audioRef.current;
-    if (!el) return;
+    if (!el) {
+      return;
+    }
     el.src = url;
     el.loop = true;
     el.crossOrigin = "anonymous";
-    void el.play().catch(() => undefined);
-    setSource({ type: "element", element: el });
+    void el.play().catch(() => {});
+    setSource({ element: el, type: "element" });
   };
 
   const toggleMic = () => {
-    if (source.type === "mic") setSource({ type: "none" });
-    else setSource({ type: "mic" });
+    if (source.type === "mic") {
+      setSource({ type: "none" });
+    } else {
+      setSource({ type: "mic" });
+    }
   };
 
   const toggleDisplay = () => {
@@ -152,7 +169,7 @@ export function MusicSource({ source, setSource }: MusicSourceProps) {
         controls
         className={cn(
           "h-6 w-full max-w-[220px] opacity-60",
-          fileName ? "block" : "hidden",
+          fileName ? "block" : "hidden"
         )}
       />
     </div>
@@ -168,7 +185,14 @@ interface IconButtonProps {
   icon: React.ReactNode;
 }
 
-function IconButton({ active, disabled, label, title, onClick, icon }: IconButtonProps) {
+function IconButton({
+  active,
+  disabled,
+  label,
+  title,
+  onClick,
+  icon,
+}: IconButtonProps) {
   return (
     <Tooltip>
       <TooltipTrigger asChild>
@@ -183,7 +207,7 @@ function IconButton({ active, disabled, label, title, onClick, icon }: IconButto
               ? "cursor-not-allowed text-[color:var(--stone)]/40"
               : active
                 ? "text-[color:var(--paper)]"
-                : "text-[color:var(--stone)] hover:text-[color:var(--paper)]",
+                : "text-[color:var(--stone)] hover:text-[color:var(--paper)]"
           )}
         >
           {icon}
@@ -192,9 +216,7 @@ function IconButton({ active, disabled, label, title, onClick, icon }: IconButto
           <span
             className={cn(
               "font-sans text-[10px] uppercase tracking-[0.22em] transition-opacity",
-              active
-                ? "opacity-100"
-                : "opacity-0 group-hover:opacity-80",
+              active ? "opacity-100" : "opacity-0 group-hover:opacity-80"
             )}
           >
             {label}
@@ -213,5 +235,5 @@ function IconButton({ active, disabled, label, title, onClick, icon }: IconButto
 }
 
 function truncate(s: string, n: number): string {
-  return s.length > n ? s.slice(0, n - 1) + "…" : s;
+  return s.length > n ? `${s.slice(0, n - 1)}…` : s;
 }

@@ -2,6 +2,7 @@
 
 import { Slider as SliderPrimitive } from "@base-ui/react/slider";
 import type { ComponentProps } from "react";
+
 import { cn } from "@/lib/utils";
 
 // Base UI slider. External API matches the old Radix wrapper — array `value`,
@@ -15,7 +16,7 @@ export function Slider({
     <SliderPrimitive.Root
       className={cn(
         "relative flex w-full touch-none select-none items-center",
-        className,
+        className
       )}
       {...props}
     >

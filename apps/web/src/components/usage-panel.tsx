@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+
 import { TopUpButton } from "@/components/top-up-button";
 import { Button } from "@/components/ui/button";
 import { rpcClient } from "@/lib/orpc";
@@ -50,7 +51,10 @@ export function UsagePanel({ onClose }: { onClose?: () => void }) {
       ) : (
         <div className="flex flex-col gap-2">
           <Row label="frames" value={data.frames.toLocaleString()} />
-          <Row label="frames / month" value={data.monthFrames.toLocaleString()} />
+          <Row
+            label="frames / month"
+            value={data.monthFrames.toLocaleString()}
+          />
           <Row label="spent" value={`$${data.totalSpentUsd.toFixed(2)}`} />
           {data.lowBalance ? (
             <p className="mt-1 font-sans text-[10px] leading-relaxed text-[color:var(--signal)]">

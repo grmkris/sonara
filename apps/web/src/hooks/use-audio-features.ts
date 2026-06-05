@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useRef } from "react";
 import type { AudioFeatures } from "@sonara/shared";
-import type { SessionSend } from "@/lib/session-actions";
+import { useEffect, useRef } from "react";
+
 import { AudioEngine } from "@/lib/audio/analyzer";
 import { createMusicalityGate } from "@/lib/audio/musicality-gate";
+import type { SessionSend } from "@/lib/session-actions";
 import { useVisualizerStore } from "@/stores/visualizer";
 
 const UPSTREAM_HZ = 5;
@@ -28,7 +29,7 @@ export function useAudioFeatures(
   source: AudioSource,
   send: SessionSend,
   onError?: (err: unknown) => void,
-  onSourceLost?: () => void,
+  onSourceLost?: () => void
 ): void {
   const engineRef = useRef<AudioEngine | null>(null);
   const lastSentAtRef = useRef(0);
@@ -56,7 +57,7 @@ export function useAudioFeatures(
         now - lastSentAtRef.current >= UPSTREAM_INTERVAL_MS
       ) {
         lastSentAtRef.current = now;
-        send({ type: "audio.features", features });
+        send({ features, type: "audio.features" });
       }
     };
     engine.onTick(tick);
@@ -67,13 +68,17 @@ export function useAudioFeatures(
     return () => {
       engine.stop();
       engineRef.current = null;
-      if (currentEngine === engine) currentEngine = null;
+      if (currentEngine === engine) {
+        currentEngine = null;
+      }
     };
   }, [send, onSourceLost]);
 
   useEffect(() => {
     const engine = engineRef.current;
-    if (!engine) return;
+    if (!engine) {
+      return;
+    }
     let cancelled = false;
 
     const attach = async () => {
@@ -87,9 +92,11 @@ export function useAudioFeatures(
         } else {
           engine.detachSource();
         }
-        if (cancelled) engine.detachSource();
-      } catch (err) {
-        if (!cancelled) onError?.(err);
+        if (cancelled) {
+          engine.detachSource();
+        }
+      } catch (error) {
+        if (!cancelled) onError?.(error);
       }
     };
 

@@ -18,10 +18,10 @@ export { createEvlog, evlogMiddleware, log, useLogger } from "evlog/next";
  */
 export function createSonaraWebEvlog(appEnv: string) {
   const env: Partial<EnvironmentContext> = {
-    service: "sonara-web",
     environment: appEnv,
+    service: "sonara-web",
   };
-  const common = { service: "sonara-web", env, pretty: appEnv !== "prod" };
+  const common = { env, pretty: appEnv !== "prod", service: "sonara-web" };
   return {
     ...createInstrumentation(common),
     ...createEvlog(common),

@@ -46,12 +46,12 @@ export interface CreateLoggerConfig {
 }
 
 const LEVEL_MAP: Record<Exclude<LogLevel, "silent">, EvlogLevel> = {
-  fatal: "error",
-  error: "error",
-  warn: "warn",
-  info: "info",
   debug: "debug",
+  error: "error",
+  fatal: "error",
+  info: "info",
   trace: "debug",
+  warn: "warn",
 };
 
 type EmitLevel = "info" | "warn" | "debug" | "error";
@@ -87,12 +87,12 @@ function buildLogger(tag: string, bindings: Record<string, unknown>): Logger {
   };
 
   return {
-    info: (objOrMsg: unknown, msg?: string) => emit("info", objOrMsg, msg),
-    warn: (objOrMsg: unknown, msg?: string) => emit("warn", objOrMsg, msg),
-    debug: (objOrMsg: unknown, msg?: string) => emit("debug", objOrMsg, msg),
-    error: (objOrMsg: unknown, msg?: string) => emit("error", objOrMsg, msg),
     child: (extra: Record<string, unknown>) =>
       buildLogger(tag, { ...bindings, ...extra }),
+    debug: (objOrMsg: unknown, msg?: string) => emit("debug", objOrMsg, msg),
+    error: (objOrMsg: unknown, msg?: string) => emit("error", objOrMsg, msg),
+    info: (objOrMsg: unknown, msg?: string) => emit("info", objOrMsg, msg),
+    warn: (objOrMsg: unknown, msg?: string) => emit("warn", objOrMsg, msg),
   } as Logger;
 }
 

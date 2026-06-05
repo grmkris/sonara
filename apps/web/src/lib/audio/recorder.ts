@@ -19,9 +19,13 @@ const PREFERRED_MIME_TYPES = [
 ];
 
 function pickMimeType(): string | undefined {
-  if (typeof MediaRecorder === "undefined") return undefined;
+  if (typeof MediaRecorder === "undefined") {
+    return undefined;
+  }
   for (const mt of PREFERRED_MIME_TYPES) {
-    if (MediaRecorder.isTypeSupported(mt)) return mt;
+    if (MediaRecorder.isTypeSupported(mt)) {
+      return mt;
+    }
   }
   return undefined;
 }
@@ -37,10 +41,12 @@ export interface ClipRecorder {
 export function createClipRecorder(
   ctx: AudioContext,
   source: AudioNode,
-  opts: { windowMs?: number } = {},
+  opts: { windowMs?: number } = {}
 ): ClipRecorder | null {
   const mimeType = pickMimeType();
-  if (!mimeType) return null;
+  if (!mimeType) {
+    return null;
+  }
 
   const windowMs = Math.max(3000, opts.windowMs ?? 6000);
   const maxChunks = Math.ceil(windowMs / TIMESLICE_MS) + 1;
@@ -51,8 +57,8 @@ export function createClipRecorder(
   source.connect(dest);
 
   const recorder = new MediaRecorder(dest.stream, {
-    mimeType,
     audioBitsPerSecond: 64_000,
+    mimeType,
   });
 
   // Chrome's MediaRecorder emits the WebM init segment (EBML + Segment header
@@ -65,19 +71,23 @@ export function createClipRecorder(
   let initChunk: Blob | null = null;
   const ring: Blob[] = [];
   recorder.ondataavailable = (ev) => {
-    if (!ev.data || ev.data.size === 0) return;
+    if (!ev.data || ev.data.size === 0) {
+      return;
+    }
     if (initChunk === null) {
       initChunk = ev.data;
       return;
     }
     ring.push(ev.data);
-    while (ring.length > maxChunks) ring.shift();
+    while (ring.length > maxChunks) {
+      ring.shift();
+    }
   };
 
   try {
     recorder.start(TIMESLICE_MS);
-  } catch (err) {
-    console.warn("[ClipRecorder] start failed", err);
+  } catch (error) {
+    console.warn("[ClipRecorder] start failed", error);
     try {
       source.disconnect(dest);
     } catch {
@@ -89,7 +99,6 @@ export function createClipRecorder(
   let stopped = false;
 
   return {
-    mimeType,
     async grabClip() {
       if (stopped) return null;
       // `requestData` fires an ondataavailable synchronously from the user's
@@ -105,6 +114,7 @@ export function createClipRecorder(
       const blob = new Blob([initChunk, ...ring], { type: mimeType });
       return { blob, mimeType };
     },
+    mimeType,
     stop() {
       if (stopped) return;
       stopped = true;
@@ -130,10 +140,10 @@ export async function blobToBase64(blob: Blob): Promise<string> {
   const bytes = new Uint8Array(buf);
   // btoa needs a binary string. Chunk to avoid call-stack limits on large clips.
   let binary = "";
-  const CHUNK = 0x8000;
+  const CHUNK = 0x80_00;
   for (let i = 0; i < bytes.length; i += CHUNK) {
-    binary += String.fromCharCode(
-      ...bytes.subarray(i, Math.min(i + CHUNK, bytes.length)),
+    binary += String.fromCodePoint(
+      ...bytes.subarray(i, Math.min(i + CHUNK, bytes.length))
     );
   }
   return btoa(binary);

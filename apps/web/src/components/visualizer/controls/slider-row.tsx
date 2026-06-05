@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+
 import { Slider } from "@/components/ui/slider";
 import {
   Tooltip,
@@ -28,7 +29,9 @@ export function SliderRow({ label, value, onChange }: SliderRowProps) {
   const emit = useMemo(() => debounce(onChange, 60), [onChange]);
 
   useEffect(() => {
-    if (!draggingRef.current) setLocal(value);
+    if (!draggingRef.current) {
+      setLocal(value);
+    }
   }, [value]);
 
   const endDrag = () => {

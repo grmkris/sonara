@@ -76,5 +76,5 @@ export function getSceneTemplate(key: string): SceneTemplate | null {
 }
 
 export const SCENE_TEMPLATE_KEYS: readonly string[] = SCENE_TEMPLATES.map(
-  (p) => p.key,
+  (p) => p.key
 );

@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { useEffect, useRef } from "react";
+
 import type { SessionSend } from "@/lib/session-actions";
 import { useVisualizerStore } from "@/stores/visualizer";
 
@@ -36,25 +37,31 @@ export function StudioActionConsumer({ send }: StudioActionConsumerProps) {
   if (snapshotRef.current === null) {
     snapshotRef.current = {
       anchor: params.get("anchor"),
-      strength: params.get("strength"),
       prompt: params.get("prompt"),
+      strength: params.get("strength"),
     };
   }
 
   useEffect(() => {
-    if (!connected) return;
+    if (!connected) {
+      return;
+    }
     const snap = snapshotRef.current;
-    if (!snap) return;
+    if (!snap) {
+      return;
+    }
     const { anchor, strength, prompt } = snap;
-    if (!anchor && !prompt) return;
+    if (!anchor && !prompt) {
+      return;
+    }
 
     // Anchor first — independent of prompt; both can be set at once.
     if (anchor) {
       const strengthNum = strength ? Number(strength) : 0.55;
       send({
+        strength: Number.isFinite(strengthNum) ? strengthNum : 0.55,
         type: "image.anchor.set",
         url: anchor,
-        strength: Number.isFinite(strengthNum) ? strengthNum : 0.55,
       });
     }
 
@@ -63,9 +70,9 @@ export function StudioActionConsumer({ send }: StudioActionConsumerProps) {
     // is the canonical "set scene then run" action.
     if (prompt) {
       send({
-        type: "session.goLive",
         prompt,
         seedFrameUrl: null,
+        type: "session.goLive",
       });
     }
 

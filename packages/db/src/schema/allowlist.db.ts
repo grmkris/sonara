@@ -1,9 +1,7 @@
+import { typeIdGenerator } from "@sonara/shared/typeid";
+import type { AllowedEmailId, UserId } from "@sonara/shared/typeid";
 import { pgTable, text, uniqueIndex } from "drizzle-orm/pg-core";
-import {
-  type AllowedEmailId,
-  type UserId,
-  typeIdGenerator,
-} from "@sonara/shared/typeid";
+
 import { baseEntityFields, typeId } from "../utils";
 import { user } from "./auth.db";
 
@@ -29,5 +27,5 @@ export const allowedEmail = pgTable(
       .$type<UserId>(),
     ...baseEntityFields,
   },
-  (table) => [uniqueIndex("allowed_email_email_idx").on(table.email)],
+  (table) => [uniqueIndex("allowed_email_email_idx").on(table.email)]
 );

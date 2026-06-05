@@ -11,7 +11,7 @@ import type { SonaraSceneState } from "@sonara/shared";
 // continuous score so a noticeable drag still re-triggers.
 export function semanticDiff(
   prev: SonaraSceneState,
-  curr: SonaraSceneState,
+  curr: SonaraSceneState
 ): number {
   let score = 0;
 
@@ -20,7 +20,9 @@ export function semanticDiff(
   // round-trip through the server) doesn't trigger spuriously.
   const a = prev.prompt.trim().toLowerCase();
   const b = curr.prompt.trim().toLowerCase();
-  if (a !== b) score += 1.0;
+  if (a !== b) {
+    score += 1.0;
+  }
 
   // Continuous sliders — delta weighted. Same coefficients as the previous
   // multi-text-field scheme so trigger feel is unchanged for slider drags.

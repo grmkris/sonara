@@ -15,7 +15,9 @@ interface NetworkInformation {
 // decent connection — so "open it once on wifi, then it works in the basement".
 export function SwRegister() {
   useEffect(() => {
-    if (process.env.NODE_ENV !== "production") return;
+    if (process.env.NODE_ENV !== "production") {
+      return;
+    }
     if (typeof navigator === "undefined" || !("serviceWorker" in navigator)) {
       return;
     }
@@ -23,13 +25,19 @@ export function SwRegister() {
       .register("/sw.js")
       .then(() => navigator.serviceWorker.ready)
       .then(() => {
-        if (!navigator.onLine) return;
-        const conn = (navigator as Navigator & {
-          connection?: NetworkInformation;
-        }).connection;
+        if (!navigator.onLine) {
+          return;
+        }
+        const conn = (
+          navigator as Navigator & {
+            connection?: NetworkInformation;
+          }
+        ).connection;
         // Skip the ~30 MB prefetch on metered / very slow links; runtime
         // caching still captures whatever frames actually play.
-        if (conn?.saveData) return;
+        if (conn?.saveData) {
+          return;
+        }
         if (conn?.effectiveType && /(^|-)(2g|slow)/.test(conn.effectiveType)) {
           return;
         }
@@ -47,7 +55,9 @@ export function SwRegister() {
 async function prefetchDeck(): Promise<void> {
   try {
     const res = await fetch(`/library/${PREFETCH_DECK}/manifest.json`);
-    if (!res.ok) return;
+    if (!res.ok) {
+      return;
+    }
     const data = (await res.json()) as { frames?: string[] };
     const urls = Array.isArray(data.frames) ? data.frames : [];
     const ctrl = navigator.serviceWorker.controller;

@@ -1,9 +1,5 @@
-import type {
-  AudioFeatures,
-  ClientScenePatch,
-  DeckKey,
-} from "@sonara/shared";
 import type { SessionRouterClient } from "@sonara/api";
+import type { AudioFeatures, ClientScenePatch, DeckKey } from "@sonara/shared";
 
 // Client-side convenience union for the session surface. Purely local — the
 // wire protocol is orpc per-procedure schemas; this is just a thin dispatch
@@ -30,39 +26,49 @@ export type SessionSend = (action: SessionAction) => void;
 
 export function dispatchSessionAction(
   client: SessionRouterClient,
-  action: SessionAction,
+  action: SessionAction
 ): Promise<unknown> {
   switch (action.type) {
-    case "hello":
+    case "hello": {
       return client.hello();
-    case "scene.patch":
+    }
+    case "scene.patch": {
       return client.scenePatch({ patch: action.patch });
-    case "voice.patch":
+    }
+    case "voice.patch": {
       return client.voicePatch({ patch: action.patch });
-    case "audio.features":
+    }
+    case "audio.features": {
       return client.audioFeatures({ features: action.features });
-    case "session.reset":
+    }
+    case "session.reset": {
       return client.reset();
-    case "demo.set":
+    }
+    case "demo.set": {
       return client.setDemoMode({ on: action.on, deck: action.deck });
-    case "session.goLive":
+    }
+    case "session.goLive": {
       return client.goLive({
         prompt: action.prompt,
         seedFrameUrl: action.seedFrameUrl,
       });
-    case "image.anchor.set":
+    }
+    case "image.anchor.set": {
       return client.setImageAnchor({
         url: action.url,
         strength: action.strength,
       });
-    case "image.anchor.clear":
+    }
+    case "image.anchor.clear": {
       return client.setImageAnchor({ clear: true });
-    case "audio.recognize":
+    }
+    case "audio.recognize": {
       return client.recognize({
         clipBase64: action.clipBase64,
         mimeType: action.mimeType,
         durationMs: action.durationMs,
         trigger: action.trigger,
       });
+    }
   }
 }

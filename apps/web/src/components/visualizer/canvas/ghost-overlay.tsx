@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+
 import { useVisualizerStore } from "@/stores/visualizer";
 
 // Periodic low-opacity overlay of a past "hero" image from the recent-frames
@@ -29,7 +30,9 @@ export function GhostOverlay() {
     // Don't schedule until we have at least two hero frames: the first one is
     // always identical to what's on screen, and ghosting the current frame is
     // pointless.
-    if (bank.length < 2) return;
+    if (bank.length < 2) {
+      return;
+    }
 
     let fadeInTimer: ReturnType<typeof setTimeout> | null = null;
     let holdTimer: ReturnType<typeof setTimeout> | null = null;
@@ -80,22 +83,34 @@ export function GhostOverlay() {
           setGhostUrl(null);
           scheduleNext();
         },
-        FADE_IN_MS + HOLD_MS + FADE_OUT_MS + 100,
+        FADE_IN_MS + HOLD_MS + FADE_OUT_MS + 100
       );
     };
 
     scheduleNext();
 
     return () => {
-      if (fadeInTimer) clearTimeout(fadeInTimer);
-      if (holdTimer) clearTimeout(holdTimer);
-      if (fadeOutTimer) clearTimeout(fadeOutTimer);
-      if (clearTimer) clearTimeout(clearTimer);
-      if (scheduleTimer) clearTimeout(scheduleTimer);
+      if (fadeInTimer) {
+        clearTimeout(fadeInTimer);
+      }
+      if (holdTimer) {
+        clearTimeout(holdTimer);
+      }
+      if (fadeOutTimer) {
+        clearTimeout(fadeOutTimer);
+      }
+      if (clearTimer) {
+        clearTimeout(clearTimer);
+      }
+      if (scheduleTimer) {
+        clearTimeout(scheduleTimer);
+      }
     };
   }, [bank.length >= 2]);
 
-  if (!ghostUrl) return null;
+  if (!ghostUrl) {
+    return null;
+  }
 
   // Soft-light blend so the ghost tints rather than covers the current image.
   // z-index just above canvas but below UI.
@@ -104,9 +119,9 @@ export function GhostOverlay() {
       aria-hidden
       className="pointer-events-none absolute inset-0 z-[1]"
       style={{
+        mixBlendMode: "soft-light",
         opacity,
         transition: `opacity ${FADE_IN_MS}ms ease-in-out`,
-        mixBlendMode: "soft-light",
       }}
     >
       <img

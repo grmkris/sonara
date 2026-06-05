@@ -1,6 +1,7 @@
 "use client";
 
 import { Mail } from "lucide-react";
+
 import { CanvasBackplate } from "@/components/canvas-backplate";
 import { SiteFooter } from "@/components/site-footer";
 
@@ -35,9 +36,10 @@ export default function AboutPage() {
               that listens.
             </h1>
             <p className="reveal reveal-1 font-sans max-w-[44ch] text-[15px] leading-relaxed text-[color:var(--paper)]/85 md:text-[16px]">
-              Sonara turns your music into moving art, right in your web browser.
-              Play anything and it paints pictures that shift and flow along with
-              the sound, as it happens — nothing to download, nothing to set up.
+              Sonara turns your music into moving art, right in your web
+              browser. Play anything and it paints pictures that shift and flow
+              along with the sound, as it happens — nothing to download, nothing
+              to set up.
             </p>
           </div>
         </section>
@@ -59,8 +61,8 @@ export default function AboutPage() {
             <div className="flex flex-col gap-4 font-sans text-[15px] leading-relaxed text-[color:var(--paper)]/80 md:text-[16px]">
               <p>
                 Play a song, sing into your mic, or drop in a track — Sonara
-                listens, and it even recognises what's playing. Or just tell it a
-                mood in your own words, or show it a picture, and the visuals
+                listens, and it even recognises what's playing. Or just tell it
+                a mood in your own words, or show it a picture, and the visuals
                 follow your lead.
               </p>
               <p>
@@ -89,8 +91,8 @@ export default function AboutPage() {
               built by Kristjan Grm.
             </h2>
             <p className="font-sans max-w-[52ch] text-[15px] leading-relaxed text-[color:var(--paper)]/80 md:text-[16px]">
-              An independent developer building playful things where music and AI
-              meet. Say hello, follow along, or peek behind the scenes.
+              An independent developer building playful things where music and
+              AI meet. Say hello, follow along, or peek behind the scenes.
             </p>
             <div className="flex flex-wrap items-center gap-4 pt-2">
               <a

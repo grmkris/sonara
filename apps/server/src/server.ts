@@ -1,15 +1,16 @@
-import { Hono } from "hono";
 import {
   buildContext,
   RPCHandler,
   sessionRouter,
   WsRPCHandler,
-  type SessionContext,
 } from "@sonara/api/server";
+import type { SessionContext } from "@sonara/api/server";
 import { createDb } from "@sonara/db";
 import { runMigrations } from "@sonara/db/migrator";
 import { SERVICE_URLS, verifyTicket } from "@sonara/shared";
 import type { UserId } from "@sonara/shared/typeid";
+import { Hono } from "hono";
+
 import { getAuth } from "./auth/auth";
 import { seedLibraryOnBoot } from "./db/library-boot-seed";
 import { env } from "./env";
@@ -48,9 +49,7 @@ const rpcHandler = new RPCHandler(appRouter);
 const manager = new SessionManager(logger);
 
 app.get("/health", (c) => c.json({ ok: true }));
-app.get("/", (c) =>
-  c.text("sonara server — connect to /ws via WebSocket"),
-);
+app.get("/", (c) => c.text("sonara server — connect to /ws via WebSocket"));
 
 // Better Auth owns every /api/auth/* path (sign-up, session, sign-out, and
 // the Dodo webhook at /api/auth/dodopayments/webhook). Reached from the
@@ -66,14 +65,16 @@ app.all("/rpc/*", async (c) => {
   const session = await auth.api.getSession({ headers: c.req.raw.headers });
   const context = buildContext({
     db,
-    session: session ? { user: { id: session.user.id as UserId } } : null,
     registry: manager,
+    session: session ? { user: { id: session.user.id as UserId } } : null,
   });
   const { matched, response } = await rpcHandler.handle(c.req.raw, {
-    prefix: "/rpc",
     context,
+    prefix: "/rpc",
   });
-  if (matched) return response;
+  if (matched) {
+    return response;
+  }
   return c.notFound();
 });
 
@@ -121,10 +122,11 @@ const server = Bun.serve<WsData, never>({
     return app.fetch(req);
   },
   websocket: {
-    open(ws) {
-      const { sessionId, userId } = ws.data;
-      manager.create(sessionId, userId);
-      logger.info({ sessionId, userId }, "ws opened");
+    close(ws) {
+      const { sessionId } = ws.data;
+      wsHandler.close(ws);
+      manager.destroy(sessionId);
+      logger.info({ sessionId }, "ws closed");
     },
     async message(ws, raw) {
       const { sessionId } = ws.data;
@@ -137,18 +139,17 @@ const server = Bun.serve<WsData, never>({
         context: { session },
       });
     },
-    close(ws) {
-      const { sessionId } = ws.data;
-      wsHandler.close(ws);
-      manager.destroy(sessionId);
-      logger.info({ sessionId }, "ws closed");
+    open(ws) {
+      const { sessionId, userId } = ws.data;
+      manager.create(sessionId, userId);
+      logger.info({ sessionId, userId }, "ws opened");
     },
   },
 });
 
 logger.info(
-  { port, appEnv: env.APP_ENV, wsUrl: SERVICE_URLS[env.APP_ENV].ws },
-  "server listening",
+  { appEnv: env.APP_ENV, port, wsUrl: SERVICE_URLS[env.APP_ENV].ws },
+  "server listening"
 );
 
 process.on("SIGTERM", () => {

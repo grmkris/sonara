@@ -35,7 +35,9 @@ export function createRecorder(slug: string): Recorder {
 
   const listeners = new Set<() => void>();
   const notify = () => {
-    for (const l of listeners) l();
+    for (const l of listeners) {
+      l();
+    }
   };
 
   // Watch the store. Record new frames only while `isRecording` is true AND
@@ -44,7 +46,9 @@ export function createRecorder(slug: string): Recorder {
   // image that was already on screen.
   const unsubStore = useVisualizerStore.subscribe((state) => {
     const url = state.currentFrame;
-    if (url === lastUrl) return;
+    if (url === lastUrl) {
+      return;
+    }
     if (url && isRecording && startedAt !== null) {
       const t = (performance.now() - startedAt) / 1000;
       frames.push({ t, url });
@@ -55,10 +59,17 @@ export function createRecorder(slug: string): Recorder {
 
   // Tick to keep elapsedSec monotonic in the panel display.
   const tickInterval = setInterval(() => {
-    if (isRecording) notify();
+    if (isRecording) {
+      notify();
+    }
   }, 250);
 
   return {
+    dispose() {
+      unsubStore();
+      clearInterval(tickInterval);
+      listeners.clear();
+    },
     getSnapshot() {
       const elapsedSec =
         startedAt === null ? 0 : (performance.now() - startedAt) / 1000;
@@ -70,9 +81,12 @@ export function createRecorder(slug: string): Recorder {
         isRecording,
       };
     },
-    subscribe(l) {
-      listeners.add(l);
-      return () => listeners.delete(l);
+    reset() {
+      isRecording = false;
+      startedAt = null;
+      frames.length = 0;
+      lastUrl = useVisualizerStore.getState().currentFrame;
+      notify();
     },
     start() {
       if (isRecording) return;
@@ -88,17 +102,9 @@ export function createRecorder(slug: string): Recorder {
       isRecording = false;
       notify();
     },
-    reset() {
-      isRecording = false;
-      startedAt = null;
-      frames.length = 0;
-      lastUrl = useVisualizerStore.getState().currentFrame;
-      notify();
-    },
-    dispose() {
-      unsubStore();
-      clearInterval(tickInterval);
-      listeners.clear();
+    subscribe(l) {
+      listeners.add(l);
+      return () => listeners.delete(l);
     },
   };
 }
@@ -111,9 +117,9 @@ export interface CaptureExport {
 
 export function exportCapture(snapshot: CaptureSnapshot): CaptureExport {
   return {
-    slug: snapshot.slug,
     durationSec: snapshot.elapsedSec,
     frames: snapshot.frames,
+    slug: snapshot.slug,
   };
 }
 
@@ -126,7 +132,7 @@ export function downloadCaptureJson(snapshot: CaptureSnapshot): void {
   const url = URL.createObjectURL(blob);
   a.href = url;
   a.download = "capture.json";
-  document.body.appendChild(a);
+  document.body.append(a);
   a.click();
   a.remove();
   setTimeout(() => URL.revokeObjectURL(url), 1000);

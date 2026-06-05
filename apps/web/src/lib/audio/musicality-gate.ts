@@ -17,7 +17,7 @@ export interface MusicalityGate {
 
 export function createMusicalityGate(): MusicalityGate {
   const onsets: number[] = []; // timestamps of onsets within the window
-  let flatnessEma = 1.0;
+  let flatnessEma = 1;
   const flatnessAlpha = 0.05; // ~10 s window at 60 Hz equivalent
 
   let current = false;
@@ -25,19 +25,21 @@ export function createMusicalityGate(): MusicalityGate {
   function computeIsMusic(now: number): boolean {
     // Trim old onsets.
     const cutoff = now - WINDOW_MS;
-    while (onsets.length > 0 && (onsets[0] ?? 0) < cutoff) onsets.shift();
+    while (onsets.length > 0 && (onsets[0] ?? 0) < cutoff) {
+      onsets.shift();
+    }
     const onsetRate = onsets.length / (WINDOW_MS / 1000);
     return flatnessEma < FLATNESS_THRESHOLD && onsetRate > ONSET_RATE_THRESHOLD;
   }
 
   return {
+    isMusic() {
+      return current;
+    },
     update(now, flatness, onset) {
       flatnessEma = flatnessEma + flatnessAlpha * (flatness - flatnessEma);
       if (onset) onsets.push(now);
       current = computeIsMusic(now);
-      return current;
-    },
-    isMusic() {
       return current;
     },
   };

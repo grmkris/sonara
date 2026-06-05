@@ -64,7 +64,7 @@ const envSchema = z.object({
   // Presigned read URL TTL. 7 days = 604800. Long enough to survive a tab
   // left open for a few days; the library.list RPC always returns fresh
   // URLs so any stale ones just need a refetch.
-  S3_PRESIGN_TTL_SEC: z.coerce.number().int().positive().default(604800),
+  S3_PRESIGN_TTL_SEC: z.coerce.number().int().positive().default(604_800),
 });
 
 export const env = envSchema.parse(Bun.env);

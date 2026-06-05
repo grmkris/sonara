@@ -1,9 +1,10 @@
 "use client";
 
 import { useEffect } from "react";
+
 import { SonaraCanvas } from "@/components/visualizer/canvas/sonara-canvas";
-import { useWsSession } from "@/hooks/use-ws-session";
 import { useDemoFrameLoop } from "@/hooks/use-demo-frame-loop";
+import { useWsSession } from "@/hooks/use-ws-session";
 import { useVisualizerStore } from "@/stores/visualizer";
 
 // Shared marketing backplate for the landing + about pages. The same
@@ -25,8 +26,12 @@ export function CanvasBackplate() {
   // override a deck the snapshot already chose).
   useEffect(() => {
     const st = useVisualizerStore.getState();
-    if (!st.demoMode) st.setDemoMode(true);
-    if (!st.demoDeck) st.setDemoDeck("liquid");
+    if (!st.demoMode) {
+      st.setDemoMode(true);
+    }
+    if (!st.demoDeck) {
+      st.setDemoDeck("liquid");
+    }
   }, []);
 
   return (
@@ -35,7 +40,10 @@ export function CanvasBackplate() {
         <SonaraCanvas />
       </div>
       <div aria-hidden className="grain-overlay" />
-      <div aria-hidden className="page-veil pointer-events-none fixed inset-0 z-[2]" />
+      <div
+        aria-hidden
+        className="page-veil pointer-events-none fixed inset-0 z-[2]"
+      />
     </>
   );
 }

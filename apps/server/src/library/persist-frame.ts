@@ -1,9 +1,7 @@
 import type { InspectorContext } from "@sonara/shared";
-import {
-  type ImageLibraryId,
-  type LiveSessionId,
-  typeIdToUuid,
-} from "@sonara/shared/typeid";
+import { typeIdToUuid } from "@sonara/shared/typeid";
+import type { ImageLibraryId, LiveSessionId } from "@sonara/shared/typeid";
+
 import { getPool } from "../db/pool";
 import type { Logger } from "../lib/logger";
 import {
@@ -62,12 +60,15 @@ export interface PersistedFrame {
 // DB insert failed). NEVER throws; the caller fire-and-forgets and the
 // rendering hot path is never blocked.
 export async function persistFrame(
-  input: PersistFrameInput,
+  input: PersistFrameInput
 ): Promise<PersistedFrame | null> {
   const { logger } = input;
 
   if (!isConfigured()) {
-    logger.debug({ sessionId: input.sessionId }, "persist-frame: bucket not configured; skipping");
+    logger.debug(
+      { sessionId: input.sessionId },
+      "persist-frame: bucket not configured; skipping"
+    );
     return null;
   }
 
@@ -82,27 +83,31 @@ export async function persistFrame(
     const res = await fetch(input.falUrl);
     if (!res.ok) {
       logger.warn(
-        { sessionId: input.sessionId, falUrl: input.falUrl, status: res.status },
-        "persist-frame: fal fetch non-200",
+        {
+          falUrl: input.falUrl,
+          sessionId: input.sessionId,
+          status: res.status,
+        },
+        "persist-frame: fal fetch non-200"
       );
       return null;
     }
     contentType = res.headers.get("content-type") ?? contentType;
     bytes = await res.arrayBuffer();
-  } catch (err) {
+  } catch (error) {
     logger.warn(
-      { sessionId: input.sessionId, falUrl: input.falUrl, err: String(err) },
-      "persist-frame: fal fetch threw",
+      { sessionId: input.sessionId, falUrl: input.falUrl, err: String(error) },
+      "persist-frame: fal fetch threw"
     );
     return null;
   }
 
   try {
     await uploadBytes(key, bytes, contentType);
-  } catch (err) {
+  } catch (error) {
     logger.warn(
-      { sessionId: input.sessionId, key, err: String(err) },
-      "persist-frame: bucket upload failed",
+      { sessionId: input.sessionId, key, err: String(error) },
+      "persist-frame: bucket upload failed"
     );
     return null;
   }
@@ -146,33 +151,35 @@ export async function persistFrame(
           // Store a durable bucket key when the anchor came from our bucket so
           // it can be re-presigned on read; keep external/public URLs as-is.
           input.anchorUrl
-            ? bucketKeyFromUrl(input.anchorUrl) ?? input.anchorUrl
+            ? (bucketKeyFromUrl(input.anchorUrl) ?? input.anchorUrl)
             : null,
-          input.inspectorContext ? JSON.stringify(input.inspectorContext) : null,
-        ],
+          input.inspectorContext
+            ? JSON.stringify(input.inspectorContext)
+            : null,
+        ]
       );
       createdAt = result.rows[0]?.created_at ?? new Date();
     } finally {
       client.release();
     }
-  } catch (err) {
+  } catch (error) {
     logger.warn(
-      { sessionId: input.sessionId, key, err: String(err) },
-      "persist-frame: DB insert failed (object orphaned in bucket)",
+      { sessionId: input.sessionId, key, err: String(error) },
+      "persist-frame: DB insert failed (object orphaned in bucket)"
     );
     return null;
   }
 
   return {
+    createdAt,
+    deck: input.deck,
+    height: input.height,
     id,
+    palette: input.palette,
+    prompt: input.prompt,
+    sessionId: input.sessionId,
+    tMs: input.tMs,
     url: presignReadUrl(key),
     width: input.width,
-    height: input.height,
-    palette: input.palette,
-    deck: input.deck,
-    prompt: input.prompt,
-    tMs: input.tMs,
-    sessionId: input.sessionId,
-    createdAt,
   };
 }

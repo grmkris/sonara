@@ -26,11 +26,11 @@
   "dependencies": {
     "@dodopayments/better-auth": "^1.6.3",
     "@fal-ai/client": "^1.10.1",
+    "@orpc/server": "^1.14.4",
     "@sonara/api": "workspace:*",
     "@sonara/db": "workspace:*",
     "@sonara/logger": "workspace:*",
     "@sonara/shared": "workspace:*",
-    "@orpc/server": "^1.14.4",
     "better-auth": "^1.6.14",
     "dodopayments": "^2.35.0",
     "drizzle-orm": "^0.45.2",

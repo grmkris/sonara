@@ -10,12 +10,16 @@ export const PAPER = "#ede7d9";
 
 // All geometry is on a 0 0 32 32 grid, centred at (16,16). Rings fade outward
 // so the mark reads as a ripple dissipating rather than a static target.
-export type Ring = { r: number; w: number; o: number };
+export interface Ring {
+  r: number;
+  w: number;
+  o: number;
+}
 
 export const RINGS: Ring[] = [
-  { r: 6, w: 2, o: 1 },
-  { r: 9.6, w: 1.5, o: 0.55 },
-  { r: 13.2, w: 1, o: 0.28 },
+  { o: 1, r: 6, w: 2 },
+  { o: 0.55, r: 9.6, w: 1.5 },
+  { o: 0.28, r: 13.2, w: 1 },
 ];
 
 export const DOT_R = 2.4;

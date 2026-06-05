@@ -1,11 +1,12 @@
 "use client";
 
-import { useMemo } from "react";
 import type { SonaraSceneState } from "@sonara/shared";
-import type { SessionSend } from "@/lib/session-actions";
+import { useMemo } from "react";
+
 import { Slider } from "@/components/ui/slider";
-import { useVisualizerStore } from "@/stores/visualizer";
 import { debounce } from "@/lib/debounce";
+import type { SessionSend } from "@/lib/session-actions";
+import { useVisualizerStore } from "@/stores/visualizer";
 
 interface IntensityDialProps {
   send: SessionSend;
@@ -23,11 +24,11 @@ export function IntensityDial({ send }: IntensityDialProps) {
     () =>
       debounce((v: number) => {
         send({
-          type: "scene.patch",
           patch: { intensity: v } as Partial<SonaraSceneState>,
+          type: "scene.patch",
         });
       }, 60),
-    [send],
+    [send]
   );
 
   return (
@@ -43,7 +44,9 @@ export function IntensityDial({ send }: IntensityDialProps) {
         step={0.01}
         onValueChange={(v) => {
           const next = Array.isArray(v) ? v[0] : v;
-          if (typeof next === "number") emit(next);
+          if (typeof next === "number") {
+            emit(next);
+          }
         }}
         onPointerUp={() => emit.flush()}
         onPointerLeave={() => emit.flush()}

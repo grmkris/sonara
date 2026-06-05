@@ -1,6 +1,8 @@
 import type { NowPlaying } from "@sonara/shared";
+
 import type { Logger } from "../lib/logger";
-import { recognizeWithAudd, type AuddMatch } from "./audd-provider";
+import { recognizeWithAudd } from "./audd-provider";
+import type { AuddMatch } from "./audd-provider";
 
 // AudD is the only provider. The `return=apple_music` flag bundles genre,
 // album art, ISRC, and release date into the single request, so there is no
@@ -25,7 +27,9 @@ class TrackCache {
   private map = new Map<string, CacheEntry>();
   get(key: string): NowPlaying | null {
     const hit = this.map.get(key);
-    if (!hit) return null;
+    if (!hit) {
+      return null;
+    }
     if (Date.now() - hit.at > CACHE_TTL_MS) {
       this.map.delete(key);
       return null;
@@ -36,10 +40,12 @@ class TrackCache {
     return hit.track;
   }
   set(key: string, track: NowPlaying): void {
-    this.map.set(key, { track, at: Date.now() });
+    this.map.set(key, { at: Date.now(), track });
     while (this.map.size > CACHE_MAX) {
       const first = this.map.keys().next().value;
-      if (!first) break;
+      if (!first) {
+        break;
+      }
       this.map.delete(first);
     }
   }
@@ -55,14 +61,20 @@ function identityKey(match: AuddMatch): string {
 // consumers can request an arbitrary size. We pick a comfortable default
 // that still renders well as a reference image for FLUX.2-edit.
 function expandAppleArtwork(url: string | undefined): string | undefined {
-  if (!url) return undefined;
-  return url.replace(/\{w\}/g, "600").replace(/\{h\}/g, "600");
+  if (!url) {
+    return undefined;
+  }
+  return url.replaceAll(/\{w\}/g, "600").replaceAll(/\{h\}/g, "600");
 }
 
 function extractYear(s?: string): number | undefined {
-  if (!s) return undefined;
+  if (!s) {
+    return undefined;
+  }
   const m = s.match(/^(\d{4})/);
-  if (!m) return undefined;
+  if (!m) {
+    return undefined;
+  }
   const n = Number(m[1]);
   return Number.isFinite(n) ? n : undefined;
 }
@@ -75,28 +87,33 @@ export interface RecognizeOutcome {
 export async function recognizeClip(
   clipBase64: string,
   mimeType: string,
-  logger: Logger,
+  logger: Logger
 ): Promise<RecognizeOutcome> {
   let buf: Buffer;
   try {
     buf = Buffer.from(clipBase64, "base64");
-  } catch (err) {
-    logger.warn({ err }, "recognize: base64 decode failed");
-    return { track: null, source: "audd" };
+  } catch (error) {
+    logger.warn({ error }, "recognize: base64 decode failed");
+    return { source: "audd", track: null };
   }
-  if (buf.byteLength < 4_000) {
-    logger.debug({ size: buf.byteLength }, "recognize: clip too small, skipping");
-    return { track: null, source: "audd" };
+  if (buf.byteLength < 4000) {
+    logger.debug(
+      { size: buf.byteLength },
+      "recognize: clip too small, skipping"
+    );
+    return { source: "audd", track: null };
   }
 
   const match = await recognizeWithAudd(buf, mimeType, logger);
-  if (!match) return { track: null, source: "audd" };
+  if (!match) {
+    return { track: null, source: "audd" };
+  }
 
   const key = identityKey(match);
   const cached = trackCache.get(key);
   if (cached) {
     logger.debug({ key }, "recognize: cache hit");
-    return { track: cached, source: "cache" };
+    return { source: "cache", track: cached };
   }
 
   const apple = match.apple_music;
@@ -104,18 +121,18 @@ export async function recognizeClip(
   const albumArtUrl = expandAppleArtwork(apple?.artwork?.url);
 
   const track: NowPlaying = {
-    title: match.title,
-    artist: match.artist,
     album: match.album || apple?.albumName,
+    albumArtUrl,
+    artist: match.artist,
+    durationMs: apple?.durationInMillis,
     genre,
+    isrc: apple?.isrc,
+    recognizedAt: Date.now(),
     releaseYear:
       extractYear(match.release_date) || extractYear(apple?.releaseDate),
-    albumArtUrl,
-    isrc: apple?.isrc,
-    durationMs: apple?.durationInMillis,
-    recognizedAt: Date.now(),
+    title: match.title,
   };
 
   trackCache.set(key, track);
-  return { track, source: "audd" };
+  return { source: "audd", track };
 }

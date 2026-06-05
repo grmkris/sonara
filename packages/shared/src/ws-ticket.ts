@@ -12,25 +12,34 @@ export interface WsTicketPayload {
   // Server uses non-null as-is in pg queries; null means "skip credits + fal,
   // demo library only" (see apps/server/src/session/session.ts).
   userId: string | null;
-  exp: number;    // epoch ms
-  iat: number;    // epoch ms
+  exp: number; // epoch ms
+  iat: number; // epoch ms
 }
 
-const HEADER = { typ: "ws-ticket", alg: "HS256" } as const;
-const HEADER_B64 = base64UrlEncode(new TextEncoder().encode(JSON.stringify(HEADER)));
+const HEADER = { alg: "HS256", typ: "ws-ticket" } as const;
+const HEADER_B64 = base64UrlEncode(
+  new TextEncoder().encode(JSON.stringify(HEADER))
+);
 const TEXT = new TextEncoder();
 
 function base64UrlEncode(bytes: Uint8Array): string {
   let bin = "";
-  for (const b of bytes) bin += String.fromCharCode(b);
-  return btoa(bin).replaceAll("+", "-").replaceAll("/", "_").replaceAll("=", "");
+  for (const b of bytes) {
+    bin += String.fromCharCode(b);
+  }
+  return btoa(bin)
+    .replaceAll("+", "-")
+    .replaceAll("/", "_")
+    .replaceAll("=", "");
 }
 function base64UrlDecode(s: string): Uint8Array {
   const pad = s.length % 4 === 0 ? "" : "=".repeat(4 - (s.length % 4));
   const b64 = s.replaceAll("-", "+").replaceAll("_", "/") + pad;
   const bin = atob(b64);
   const out = new Uint8Array(bin.length);
-  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+  for (let i = 0; i < bin.length; i++) {
+    out[i] = bin.charCodeAt(i);
+  }
   return out;
 }
 
@@ -38,9 +47,9 @@ async function importKey(secret: string): Promise<CryptoKey> {
   return crypto.subtle.importKey(
     "raw",
     TEXT.encode(secret),
-    { name: "HMAC", hash: "SHA-256" },
+    { hash: "SHA-256", name: "HMAC" },
     false,
-    ["sign", "verify"],
+    ["sign", "verify"]
   );
 }
 
@@ -62,7 +71,7 @@ export async function signTicket({
   ttlMs = 5 * 60 * 1000,
 }: SignTicketArgs): Promise<string> {
   const now = Date.now();
-  const payload: WsTicketPayload = { userId, iat: now, exp: now + ttlMs };
+  const payload: WsTicketPayload = { exp: now + ttlMs, iat: now, userId };
   const payloadB64 = base64UrlEncode(TEXT.encode(JSON.stringify(payload)));
   const sig = await hmac(secret, `${HEADER_B64}.${payloadB64}`);
   return `${HEADER_B64}.${payloadB64}.${sig}`;
@@ -70,22 +79,32 @@ export async function signTicket({
 
 // Constant-time string compare to avoid timing-oracle leaks.
 function constantTimeEqual(a: string, b: string): boolean {
-  if (a.length !== b.length) return false;
+  if (a.length !== b.length) {
+    return false;
+  }
   let diff = 0;
-  for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  for (let i = 0; i < a.length; i++) {
+    diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  }
   return diff === 0;
 }
 
 export async function verifyTicket(
   token: string,
-  secret: string,
+  secret: string
 ): Promise<WsTicketPayload | null> {
   const parts = token.split(".");
-  if (parts.length !== 3) return null;
+  if (parts.length !== 3) {
+    return null;
+  }
   const [headerB64, payloadB64, sig] = parts as [string, string, string];
-  if (headerB64 !== HEADER_B64) return null;
+  if (headerB64 !== HEADER_B64) {
+    return null;
+  }
   const expectedSig = await hmac(secret, `${headerB64}.${payloadB64}`);
-  if (!constantTimeEqual(sig, expectedSig)) return null;
+  if (!constantTimeEqual(sig, expectedSig)) {
+    return null;
+  }
   let payload: WsTicketPayload;
   try {
     const json = new TextDecoder().decode(base64UrlDecode(payloadB64));
@@ -95,7 +114,11 @@ export async function verifyTicket(
   }
   const userIdOk =
     typeof payload.userId === "string" || payload.userId === null;
-  if (!userIdOk || typeof payload.exp !== "number" || Date.now() > payload.exp) {
+  if (
+    !userIdOk ||
+    typeof payload.exp !== "number" ||
+    Date.now() > payload.exp
+  ) {
     return null;
   }
   return payload;

@@ -5,14 +5,14 @@ import { z } from "zod";
 // per-song mood / tempo signals come from the live audio analysis loop
 // (Meyda chroma, spectral flux, onset detection) — not from a catalog API.
 export const NowPlaying = z.object({
-  title: z.string(),
-  artist: z.string(),
   album: z.string().optional(),
-  genre: z.string().optional(),
-  releaseYear: z.number().int().optional(),
   albumArtUrl: z.string().url().optional(),
-  isrc: z.string().optional(),
+  artist: z.string(),
   durationMs: z.number().int().positive().optional(),
+  genre: z.string().optional(),
+  isrc: z.string().optional(),
   recognizedAt: z.number().int().nonnegative(),
+  releaseYear: z.number().int().optional(),
+  title: z.string(),
 });
 export type NowPlaying = z.infer<typeof NowPlaying>;

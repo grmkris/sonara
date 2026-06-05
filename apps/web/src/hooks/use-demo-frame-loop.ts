@@ -1,5 +1,7 @@
+import { libraryCadenceMs } from "@sonara/shared";
+import type { LibraryManifest } from "@sonara/shared";
 import { useEffect } from "react";
-import { libraryCadenceMs, type LibraryManifest } from "@sonara/shared";
+
 import { useVisualizerStore } from "@/stores/visualizer";
 
 const LRU = 10;
@@ -11,10 +13,14 @@ const manifestCache = new Map<string, string[]>();
 
 async function loadManifest(deck: string): Promise<string[]> {
   const cached = manifestCache.get(deck);
-  if (cached) return cached;
+  if (cached) {
+    return cached;
+  }
   try {
     const res = await fetch(`/library/${deck}/manifest.json`);
-    if (!res.ok) return [];
+    if (!res.ok) {
+      return [];
+    }
     const data = (await res.json()) as Partial<LibraryManifest>;
     const frames = Array.isArray(data.frames) ? data.frames : [];
     manifestCache.set(deck, frames);
@@ -43,7 +49,9 @@ export function useDemoFrameLoop(): void {
     // as stale by pushFrame.
     store.getState().resetFrameVersion();
 
-    if (!demoMode || !demoDeck) return;
+    if (!demoMode || !demoDeck) {
+      return;
+    }
 
     let cancelled = false;
     let timer: ReturnType<typeof setTimeout> | null = null;
@@ -52,32 +60,41 @@ export function useDemoFrameLoop(): void {
     let frames: string[] = [];
 
     const tick = () => {
-      if (cancelled) return;
+      if (cancelled) {
+        return;
+      }
       if (frames.length > 0) {
         let candidates = frames.filter((f) => !recent.includes(f));
         // Mirror the server provider's fallback: if the recent-LRU covers the
         // whole (small) deck, allow the full set so it never stalls.
-        if (candidates.length === 0) candidates = frames;
-        const url =
-          candidates[Math.floor(Math.random() * candidates.length)] as string;
+        if (candidates.length === 0) {
+          candidates = frames;
+        }
+        const url = candidates[
+          Math.floor(Math.random() * candidates.length)
+        ] as string;
         recent = [url, ...recent.filter((f) => f !== url)].slice(0, LRU);
         const s = store.getState();
         s.pushFrame(url, ++localVersion);
         s.pushHero(url);
       }
-      const intensity = store.getState().scene.intensity;
+      const { intensity } = store.getState().scene;
       timer = setTimeout(tick, libraryCadenceMs(intensity, demoDeck));
     };
 
     void loadManifest(demoDeck).then((f) => {
-      if (cancelled) return;
+      if (cancelled) {
+        return;
+      }
       frames = f;
       tick(); // fire one frame immediately, then self-schedule
     });
 
     return () => {
       cancelled = true;
-      if (timer) clearTimeout(timer);
+      if (timer) {
+        clearTimeout(timer);
+      }
     };
   }, [demoMode, demoDeck]);
 }

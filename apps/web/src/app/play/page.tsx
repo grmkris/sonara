@@ -1,23 +1,12 @@
 "use client";
 
-import { Suspense, useCallback, useEffect, useRef, useState } from "react";
-import { SlidersHorizontal, Smartphone } from "lucide-react";
 import { deckLabel } from "@sonara/shared";
+import { SlidersHorizontal, Smartphone } from "lucide-react";
+import Link from "next/link";
+import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
-import { SonaraCanvas } from "@/components/visualizer/canvas/sonara-canvas";
-import { GhostOverlay } from "@/components/visualizer/canvas/ghost-overlay";
-import { PromptInput } from "@/components/visualizer/controls/prompt-input";
-import { MusicSource } from "@/components/visualizer/controls/music-source";
-import { AudioRibbon } from "@/components/visualizer/audio/audio-ribbon";
-import { ControlsPanel } from "@/components/visualizer/controls/controls-panel";
-import { HideToggle } from "@/components/visualizer/controls/hide-toggle";
-import { FullscreenToggle } from "@/components/visualizer/controls/fullscreen-toggle";
-import { UserControls } from "@/components/user-controls";
+
 import { Mark } from "@/components/brand/mark";
-import { DemoRecorder } from "@/components/visualizer/controls/demo-recorder";
-import { ScanSweep } from "@/components/visualizer/canvas/scan-sweep";
-import { NowPlaying } from "@/components/visualizer/controls/now-playing";
-import { StudioActionConsumer } from "@/components/visualizer/studio-action-consumer";
 import { Button } from "@/components/ui/button";
 import {
   Sheet,
@@ -25,17 +14,28 @@ import {
   SheetTitle,
   SheetTrigger,
 } from "@/components/ui/sheet";
-import Link from "next/link";
-import { useSession } from "@/lib/auth-client";
-import { useWsSession } from "@/hooks/use-ws-session";
+import { UserControls } from "@/components/user-controls";
+import { AudioRibbon } from "@/components/visualizer/audio/audio-ribbon";
+import { GhostOverlay } from "@/components/visualizer/canvas/ghost-overlay";
+import { ScanSweep } from "@/components/visualizer/canvas/scan-sweep";
+import { SonaraCanvas } from "@/components/visualizer/canvas/sonara-canvas";
+import { ControlsPanel } from "@/components/visualizer/controls/controls-panel";
+import { DemoRecorder } from "@/components/visualizer/controls/demo-recorder";
+import { FullscreenToggle } from "@/components/visualizer/controls/fullscreen-toggle";
+import { HideToggle } from "@/components/visualizer/controls/hide-toggle";
+import { MusicSource } from "@/components/visualizer/controls/music-source";
+import { NowPlaying } from "@/components/visualizer/controls/now-playing";
+import { PromptInput } from "@/components/visualizer/controls/prompt-input";
+import { StudioActionConsumer } from "@/components/visualizer/studio-action-consumer";
+import { useAudioFeatures } from "@/hooks/use-audio-features";
+import type { AudioSource } from "@/hooks/use-audio-features";
 import { useDemoFrameLoop } from "@/hooks/use-demo-frame-loop";
-import {
-  useAudioFeatures,
-  type AudioSource,
-} from "@/hooks/use-audio-features";
-import { useSongRecognition } from "@/hooks/use-song-recognition";
 import { useHotkey } from "@/hooks/use-hotkey";
+import { useSongRecognition } from "@/hooks/use-song-recognition";
+import { useWsSession } from "@/hooks/use-ws-session";
+import { useSession } from "@/lib/auth-client";
 import { HOTKEYS } from "@/lib/hotkeys";
+import { cn } from "@/lib/utils";
 import {
   hydrateAnchorPrefs,
   hydrateDemoPrefs,
@@ -43,7 +43,6 @@ import {
   hydrateUiVisible,
   useVisualizerStore,
 } from "@/stores/visualizer";
-import { cn } from "@/lib/utils";
 
 export default function Page() {
   const send = useWsSession();
@@ -66,11 +65,13 @@ export default function Page() {
         return;
       }
       const label =
-        audioSource.type === "display" ? "audio share failed" : "mic unavailable";
+        audioSource.type === "display"
+          ? "audio share failed"
+          : "mic unavailable";
       toast.error(label, { description: name, duration: 3200 });
       setAudioSource({ type: "none" });
     },
-    [audioSource.type],
+    [audioSource.type]
   );
 
   const onAudioSourceLost = useCallback(() => {
@@ -98,11 +99,19 @@ export default function Page() {
   // offline there's no connect snapshot either — default them into demo so the
   // client-native loop runs. Signed-in users control their own demo toggle.
   useEffect(() => {
-    if (sessionData === undefined) return; // session still resolving
-    if (isSignedIn) return;
+    if (sessionData === undefined) {
+      return;
+    } // session still resolving
+    if (isSignedIn) {
+      return;
+    }
     const st = useVisualizerStore.getState();
-    if (!st.demoMode) st.setDemoMode(true);
-    if (!st.demoDeck) st.setDemoDeck("liquid");
+    if (!st.demoMode) {
+      st.setDemoMode(true);
+    }
+    if (!st.demoDeck) {
+      st.setDemoDeck("liquid");
+    }
   }, [sessionData, isSignedIn]);
 
   // Clear the in-memory library on sign-out (signed-in → signed-out), so a
@@ -110,7 +119,9 @@ export default function Page() {
   // previous user's frames before bootstrap replaces them.
   const prevSignedInRef = useRef(isSignedIn);
   useEffect(() => {
-    if (sessionData === undefined) return;
+    if (sessionData === undefined) {
+      return;
+    }
     if (prevSignedInRef.current && !isSignedIn) {
       useVisualizerStore.getState().libraryReset();
     }
@@ -122,9 +133,8 @@ export default function Page() {
     useCallback(() => {
       setAudioSource({ type: "none" });
       send({ type: "session.reset" });
-    }, [send]),
+    }, [send])
   );
-
 
   const audioConnected = audioSource.type !== "none";
 
@@ -155,7 +165,7 @@ export default function Page() {
       <div
         className={cn(
           "pointer-events-none absolute inset-x-0 top-0 z-30 flex items-start justify-between gap-3 px-4 pt-6 md:px-10 md:pt-8",
-          uiVisible ? "ui-fade-in" : "ui-fade-out",
+          uiVisible ? "ui-fade-in" : "ui-fade-out"
         )}
       >
         <div className="pointer-events-auto flex flex-col gap-3">
@@ -209,7 +219,7 @@ export default function Page() {
       <div
         className={cn(
           "absolute inset-0 z-20 flex flex-col",
-          uiVisible ? "ui-fade-in" : "ui-fade-out",
+          uiVisible ? "ui-fade-in" : "ui-fade-out"
         )}
       >
         {/* Scene rail — left-anchored, top third. */}
@@ -236,7 +246,10 @@ export default function Page() {
         {/* Bottom strip — audio ribbon + one tight control row. The library
             timeline lives in /studio, not here. */}
         <section className="pointer-events-auto relative mb-4 px-4 pt-2 md:mb-6 md:px-10">
-          <div aria-hidden className="paper-scrim absolute -inset-x-4 -inset-y-2 -z-10" />
+          <div
+            aria-hidden
+            className="paper-scrim absolute -inset-x-4 -inset-y-2 -z-10"
+          />
 
           <AudioRibbon height={40} />
 
@@ -313,7 +326,9 @@ function AnonPromptPlaceholder() {
 function LookChip() {
   const demoMode = useVisualizerStore((s) => s.demoMode);
   const demoDeck = useVisualizerStore((s) => s.demoDeck);
-  if (!demoMode || !demoDeck) return null;
+  if (!demoMode || !demoDeck) {
+    return null;
+  }
   return (
     <span className="font-mono pointer-events-none text-[10px] uppercase tracking-[0.22em] text-[color:var(--paper)]/85">
       {deckLabel(demoDeck)}
@@ -346,9 +361,13 @@ function Logotype() {
   // can react at frame rate without re-rendering the React subtree.
   useEffect(() => {
     const unsub = useVisualizerStore.subscribe((s, prev) => {
-      if (s.audio.rms === prev.audio.rms) return;
+      if (s.audio.rms === prev.audio.rms) {
+        return;
+      }
       const el = ref.current;
-      if (!el) return;
+      if (!el) {
+        return;
+      }
       const clamped = Math.max(0, Math.min(1, s.audio.rms));
       el.style.setProperty("--amp", clamped.toFixed(3));
     });
@@ -368,4 +387,3 @@ function Logotype() {
     </span>
   );
 }
-

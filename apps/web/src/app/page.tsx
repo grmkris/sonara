@@ -1,8 +1,9 @@
 "use client";
 
-import { Suspense, useEffect } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
+import { Suspense, useEffect } from "react";
+
 import { CanvasBackplate } from "@/components/canvas-backplate";
 import { SiteFooter } from "@/components/site-footer";
 
@@ -45,9 +46,7 @@ export default function LandingPage() {
               <br />
               made visible.
             </h1>
-            <p
-              className="reveal reveal-1 font-sans max-w-[38ch] text-[15px] leading-relaxed text-[color:var(--paper)]/85 md:text-[16px]"
-            >
+            <p className="reveal reveal-1 font-sans max-w-[38ch] text-[15px] leading-relaxed text-[color:var(--paper)]/85 md:text-[16px]">
               it listens to whatever you're playing and paints what it hears, as
               it happens.
             </p>
@@ -67,7 +66,10 @@ export default function LandingPage() {
                 className="focus-ring group font-serif relative inline-flex items-center gap-1.5 text-[15px] italic text-[color:var(--paper)]/70 transition-colors hover:text-[color:var(--paper)]"
               >
                 studio
-                <span aria-hidden className="transition-transform duration-300 group-hover:translate-x-0.5">
+                <span
+                  aria-hidden
+                  className="transition-transform duration-300 group-hover:translate-x-0.5"
+                >
                   &rarr;
                 </span>
                 <span

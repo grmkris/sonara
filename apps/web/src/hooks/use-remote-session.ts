@@ -1,10 +1,11 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
 import type { LiveSessionId } from "@sonara/shared/typeid";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { AppRouterClient } from "server/rpc";
-import { rpcClient } from "@/lib/orpc";
+
 import { dispatchControlAction } from "@/lib/control-actions";
+import { rpcClient } from "@/lib/orpc";
 import type { SessionSend } from "@/lib/session-actions";
 import { useVisualizerStore } from "@/stores/visualizer";
 
@@ -33,7 +34,7 @@ export interface RemoteSession {
 // hydrates the SAME zustand store from ~1s snapshot polls, so the reused
 // controls read current state exactly as they do on /play.
 export function useRemoteSession(
-  liveSessionId: LiveSessionId | null,
+  liveSessionId: LiveSessionId | null
 ): RemoteSession {
   const [snapshot, setSnapshot] = useState<ControlSnapshot | null>(null);
   const [connected, setConnected] = useState(false);
@@ -56,7 +57,9 @@ export function useRemoteSession(
     const poll = async (): Promise<void> => {
       try {
         const snap = await rpcClient.control.snapshot({ liveSessionId });
-        if (cancelled) return;
+        if (cancelled) {
+          return;
+        }
         setSnapshot(snap);
         setConnected(true);
         // Hydrate the store the controls read from. Demo/anchor are also
@@ -67,37 +70,48 @@ export function useRemoteSession(
         s.setStatus(snap.jobStatus);
         s.setDemoMode(snap.demoMode);
         s.setDemoDeck(snap.demoDeck);
-        if (snap.imageAnchor) s.setAnchorImageUrl(snap.imageAnchor.url);
-        else s.clearAnchor();
+        if (snap.imageAnchor) {
+          s.setAnchorImageUrl(snap.imageAnchor.url);
+        } else {
+          s.clearAnchor();
+        }
       } catch {
         // NOT_FOUND (session gone) / transient error → drop the connected flag;
         // /control re-resolves the live session from liveSessions() and rebinds.
-        if (!cancelled) setConnected(false);
+        if (!cancelled) {
+          setConnected(false);
+        }
       } finally {
-        if (!cancelled) timer = setTimeout(poll, POLL_MS);
+        if (!cancelled) {
+          timer = setTimeout(poll, POLL_MS);
+        }
       }
     };
     void poll();
 
     return () => {
       cancelled = true;
-      if (timer) clearTimeout(timer);
+      if (timer) {
+        clearTimeout(timer);
+      }
     };
   }, [liveSessionId]);
 
   const send = useCallback<SessionSend>((action) => {
     const id = idRef.current;
-    if (!id) return;
+    if (!id) {
+      return;
+    }
     // Optimistic scene merge for slider/prompt patches so the operator's own
     // edit shows immediately rather than waiting for the next poll.
     if (action.type === "scene.patch" || action.type === "voice.patch") {
       const s = useVisualizerStore.getState();
       s.setScene({ ...s.scene, ...action.patch });
     }
-    dispatchControlAction(rpcClient, id, action).catch((err) => {
-      console.warn("[control] dispatch failed", err);
+    dispatchControlAction(rpcClient, id, action).catch((error) => {
+      console.warn("[control] dispatch failed", error);
     });
   }, []);
 
-  return { send, snapshot, connected };
+  return { connected, send, snapshot };
 }

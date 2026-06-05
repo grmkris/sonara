@@ -1,6 +1,8 @@
-import type { StateCreator } from "zustand";
 import type { LibraryFrame } from "@sonara/shared";
+import type { StateCreator } from "zustand";
+
 import { rpcClient } from "@/lib/orpc";
+
 import type { VisualizerState } from "./types";
 
 // The user's persisted timeline. Bootstraps via library.list on WS open;
@@ -37,19 +39,12 @@ export const createLibrarySlice: StateCreator<
   [],
   LibrarySlice
 > = (set, get) => ({
-  libraryFrames: [],
-  libraryCursor: null,
-  libraryLoading: false,
-  libraryBootstrapped: false,
-  libraryHasMore: false,
-
   libraryAppendFromEvent: (frame) => {
     set((s) => {
       if (s.libraryFrames.some((f) => f.id === frame.id)) return {};
       return { libraryFrames: [frame, ...s.libraryFrames] };
     });
   },
-
   libraryBootstrap: async () => {
     if (get().libraryLoading) return;
     set({ libraryLoading: true });
@@ -80,7 +75,10 @@ export const createLibrarySlice: StateCreator<
       set({ libraryLoading: false, libraryBootstrapped: true });
     }
   },
-
+  libraryBootstrapped: false,
+  libraryCursor: null,
+  libraryFrames: [],
+  libraryHasMore: false,
   libraryLoadMore: async () => {
     const { libraryLoading, libraryCursor, libraryHasMore } = get();
     if (libraryLoading || !libraryHasMore || !libraryCursor) return;
@@ -101,7 +99,7 @@ export const createLibrarySlice: StateCreator<
       set({ libraryLoading: false });
     }
   },
-
+  libraryLoading: false,
   libraryReset: () => {
     set({
       libraryFrames: [],

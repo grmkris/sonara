@@ -1,8 +1,9 @@
 "use client";
 
-import * as React from "react";
-import { cva, type VariantProps } from "class-variance-authority";
 import { Tabs as TabsPrimitive } from "@base-ui/react/tabs";
+import { cva } from "class-variance-authority";
+import type { VariantProps } from "class-variance-authority";
+import * as React from "react";
 
 import { cn } from "@/lib/utils";
 
@@ -27,14 +28,14 @@ function Tabs({
 const tabsListVariants = cva(
   "group/tabs-list inline-flex w-fit items-center justify-center rounded-lg p-[3px] text-muted-foreground group-data-[orientation=horizontal]/tabs:h-9 group-data-[orientation=vertical]/tabs:h-fit group-data-[orientation=vertical]/tabs:flex-col data-[variant=line]:rounded-none",
   {
+    defaultVariants: {
+      variant: "default",
+    },
     variants: {
       variant: {
         default: "bg-muted",
         line: "gap-1 bg-transparent",
       },
-    },
-    defaultVariants: {
-      variant: "default",
     },
   }
 );
@@ -56,10 +57,7 @@ function TabsList({
 
 // Public name `TabsTrigger` maps to Base UI's `Tab`. Keeps existing call
 // sites (`<TabsTrigger value="…">`) working unchanged.
-function TabsTrigger({
-  className,
-  ...props
-}: TabsPrimitive.Tab.Props) {
+function TabsTrigger({ className, ...props }: TabsPrimitive.Tab.Props) {
   return (
     <TabsPrimitive.Tab
       data-slot="tabs-trigger"
@@ -76,10 +74,7 @@ function TabsTrigger({
 }
 
 // Public name `TabsContent` maps to Base UI's `Panel`.
-function TabsContent({
-  className,
-  ...props
-}: TabsPrimitive.Panel.Props) {
+function TabsContent({ className, ...props }: TabsPrimitive.Panel.Props) {
   return (
     <TabsPrimitive.Panel
       data-slot="tabs-content"

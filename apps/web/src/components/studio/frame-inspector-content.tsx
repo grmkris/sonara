@@ -1,9 +1,10 @@
 "use client";
 
-import { useCallback } from "react";
-import { useRouter } from "next/navigation";
-import { toast } from "sonner";
 import type { LibraryFrame } from "@sonara/shared";
+import { useRouter } from "next/navigation";
+import { useCallback } from "react";
+import { toast } from "sonner";
+
 import { Button } from "@/components/ui/button";
 import { formatMmSs } from "@/lib/format-time";
 import { cn } from "@/lib/utils";
@@ -43,7 +44,7 @@ export function FrameInspectorContent({ frame }: FrameInspectorContentProps) {
         toast.error("copy failed", {
           description: "clipboard permission denied",
           duration: 2400,
-        }),
+        })
       );
   }, [frame.prompt]);
 
@@ -86,7 +87,12 @@ export function FrameInspectorContent({ frame }: FrameInspectorContentProps) {
           asChild
           className="font-sans text-[10px] uppercase tracking-[0.22em]"
         >
-          <a href={frame.url} download={downloadName} target="_blank" rel="noreferrer">
+          <a
+            href={frame.url}
+            download={downloadName}
+            target="_blank"
+            rel="noreferrer"
+          >
             download
           </a>
         </Button>
@@ -196,7 +202,7 @@ export function FrameInspectorContent({ frame }: FrameInspectorContentProps) {
                           style={{ backgroundColor: hex }}
                           title={hex}
                         />
-                      ),
+                      )
                     )}
                   </div>
                 </div>
@@ -250,7 +256,7 @@ function Field({ label, body, mono, italic }: FieldProps) {
         className={cn(
           "text-[12px] leading-snug text-[color:var(--paper)]/90",
           mono ? "font-mono uppercase tracking-[0.12em]" : "font-sans",
-          italic && "italic",
+          italic && "italic"
         )}
       >
         {body}
@@ -287,7 +293,11 @@ function formatStamp(date: Date): string {
 
 // Friendly name for the fal model. Falls back to whatever the row stores
 // if we don't recognise it.
-function shortModelName(_deck: string, _tMs: number, frame: LibraryFrame): string {
+function shortModelName(
+  _deck: string,
+  _tMs: number,
+  frame: LibraryFrame
+): string {
   // Model isn't in LibraryFrame directly (we omit it from the wire shape
   // since it's mostly noise). The deck + anchorUrl presence are enough
   // hints for the inspector: if anchorUrl is set this was anchor-mode

@@ -1,6 +1,7 @@
 import { createORPCClient, RPCLink } from "@sonara/api/client";
 import { SERVICE_URLS } from "@sonara/shared";
 import type { AppRouterClient } from "server/rpc";
+
 import { publicEnv } from "../env";
 
 // HTTP oRPC client for the server's request/response surface (credits,
@@ -9,13 +10,13 @@ import { publicEnv } from "../env";
 // first-party). During SSR there's no window, so we reach the server
 // directly over the internal network.
 const link = new RPCLink({
+  fetch(url, options) {
+    return fetch(url, { ...options, credentials: "include" });
+  },
   url:
     typeof window === "undefined"
       ? `${SERVICE_URLS[publicEnv.NEXT_PUBLIC_APP_ENV].apiInternal}/rpc`
       : `${window.location.origin}/rpc`,
-  fetch(url, options) {
-    return fetch(url, { ...options, credentials: "include" });
-  },
 });
 
 export const rpcClient: AppRouterClient = createORPCClient(link);

@@ -1,7 +1,8 @@
 "use client";
 
-import { Suspense, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { Suspense, useState } from "react";
+
 import { authClient } from "@/lib/auth-client";
 
 type Mode = "signin" | "signup";
@@ -10,7 +11,12 @@ type Mode = "signin" | "signup";
 // crafted `?next=//evil.com` or `?next=https://…` can't turn login into an
 // open redirect. Falls back to /play.
 function safeNext(next: string | null): string {
-  if (next && next.startsWith("/") && !next.startsWith("//") && !next.includes("://")) {
+  if (
+    next &&
+    next.startsWith("/") &&
+    !next.startsWith("//") &&
+    !next.includes("://")
+  ) {
     return next;
   }
   return "/play";
@@ -18,10 +24,17 @@ function safeNext(next: string | null): string {
 
 // Maps Better Auth + our APIError(code) values to friendly UI copy.
 function friendlyError(rawMessage: string | undefined): string {
-  if (!rawMessage) return "Something went wrong. Try again.";
+  if (!rawMessage) {
+    return "Something went wrong. Try again.";
+  }
   const msg = rawMessage.toLowerCase();
-  if (msg.includes("invalid email or password")) return "Wrong email or password.";
-  if (msg.includes("user already exists") || msg.includes("user_already_exists")) {
+  if (msg.includes("invalid email or password")) {
+    return "Wrong email or password.";
+  }
+  if (
+    msg.includes("user already exists") ||
+    msg.includes("user_already_exists")
+  ) {
     return "An account with this email already exists. Try signing in.";
   }
   if (msg.includes("password") && msg.includes("short")) {
@@ -66,8 +79,8 @@ function LoginForm() {
         }
         const res = await authClient.signUp.email({
           email,
-          password,
           name: name.trim(),
+          password,
         });
         if (res.error) {
           setError(friendlyError(res.error.message));
@@ -76,8 +89,8 @@ function LoginForm() {
       }
       router.push(next);
       router.refresh();
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
       setError(friendlyError(msg));
     } finally {
       setBusy(false);
@@ -161,11 +174,7 @@ function LoginForm() {
             disabled={busy}
             className="w-full mt-2 py-3 border border-white/30 hover:border-white/60 disabled:opacity-40 disabled:cursor-not-allowed font-serif italic text-lg transition-colors"
           >
-            {busy
-              ? "…"
-              : isSignup
-                ? "Create account"
-                : "Sign in"}
+            {busy ? "…" : isSignup ? "Create account" : "Sign in"}
           </button>
         </form>
 
@@ -200,7 +209,6 @@ function LoginForm() {
             </>
           )}
         </div>
-
       </div>
     </main>
   );

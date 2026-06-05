@@ -5,8 +5,8 @@ import type { ReactNode } from "react";
 // client component (it mounts the canvas backplate + WS hooks). With the root
 // template "%s · sonara", this renders <title>About · sonara</title>.
 export const metadata: Metadata = {
-  title: "About",
   description: "What Sonara is, how it works, and who makes it.",
+  title: "About",
 };
 
 export default function AboutLayout({ children }: { children: ReactNode }) {

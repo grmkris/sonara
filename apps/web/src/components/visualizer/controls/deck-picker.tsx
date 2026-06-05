@@ -1,20 +1,14 @@
 "use client";
 
+import { DECK_LOOK, DECKS } from "@sonara/shared";
+import type { DeckKey, SonaraSceneState } from "@sonara/shared";
 import { useCallback } from "react";
-import {
-  DECK_LOOK,
-  DECKS,
-  type DeckKey,
-  type SonaraSceneState,
-} from "@sonara/shared";
-import type { SessionSend } from "@/lib/session-actions";
+
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { useSession } from "@/lib/auth-client";
-import {
-  ToggleGroup,
-  ToggleGroupItem,
-} from "@/components/ui/toggle-group";
-import { useVisualizerStore } from "@/stores/visualizer";
+import type { SessionSend } from "@/lib/session-actions";
 import { cn } from "@/lib/utils";
+import { useVisualizerStore } from "@/stores/visualizer";
 
 interface DeckPickerProps {
   send: SessionSend;
@@ -46,7 +40,9 @@ export function DeckPicker({ send }: DeckPickerProps) {
 
   const onPickDeck = useCallback(
     (deck: string) => {
-      if (!deck) return;
+      if (!deck) {
+        return;
+      }
       const next = deck as DeckKey;
       setDemoDeck(next);
 
@@ -60,8 +56,8 @@ export function DeckPicker({ send }: DeckPickerProps) {
       if (look) {
         setPreset(look.preset);
         send({
-          type: "scene.patch",
           patch: { intensity: look.intensity } as Partial<SonaraSceneState>,
+          type: "scene.patch",
         });
       }
 
@@ -71,13 +67,13 @@ export function DeckPicker({ send }: DeckPickerProps) {
         // demo-on. Mirrors the old `toggle(true)` body.
         clearAnchor();
         send({ type: "image.anchor.clear" });
-        send({ type: "scene.patch", patch: { prompt: "" } });
+        send({ patch: { prompt: "" }, type: "scene.patch" });
         setDemoMode(true);
       }
       // For anon + already-on-deck signed-in, just push the deck change.
-      send({ type: "demo.set", on: true, deck: next });
+      send({ deck: next, on: true, type: "demo.set" });
     },
-    [isLive, send, setDemoDeck, setDemoMode, setPreset, clearAnchor],
+    [isLive, send, setDemoDeck, setDemoMode, setPreset, clearAnchor]
   );
 
   return (
@@ -90,7 +86,7 @@ export function DeckPicker({ send }: DeckPickerProps) {
           <span
             className={cn(
               "ml-auto font-sans rounded-sm border px-1.5 py-0.5 text-[9px] uppercase tracking-[0.18em]",
-              "border-[color:var(--paper)]/60 bg-[color:var(--paper)]/10 text-[color:var(--paper)]",
+              "border-[color:var(--paper)]/60 bg-[color:var(--paper)]/10 text-[color:var(--paper)]"
             )}
             aria-label="live generation active"
           >
@@ -107,8 +103,10 @@ export function DeckPicker({ send }: DeckPickerProps) {
           // taking the most-recently-toggled value. Empty array = deselect
           // (user clicked the already-active deck) — leave the previous deck
           // active rather than entering a no-deck state.
-          const next = arr[arr.length - 1];
-          if (next) onPickDeck(next);
+          const next = arr.at(-1);
+          if (next) {
+            onPickDeck(next);
+          }
         }}
         spacing={6}
         aria-label="starter deck"
@@ -122,7 +120,7 @@ export function DeckPicker({ send }: DeckPickerProps) {
             className={cn(
               "focus-ring font-sans h-auto rounded-sm border border-[color:var(--hairline)]/30 bg-transparent px-1.5 py-0.5 text-[10px] uppercase tracking-[0.14em] text-[color:var(--stone)] shadow-none transition-colors",
               "hover:bg-transparent hover:text-[color:var(--paper)] hover:border-[color:var(--paper)]/60",
-              "data-pressed:bg-[color:var(--paper)] data-pressed:text-[color:var(--ink)] data-pressed:border-[color:var(--paper)]",
+              "data-pressed:bg-[color:var(--paper)] data-pressed:text-[color:var(--ink)] data-pressed:border-[color:var(--paper)]"
             )}
           >
             {d.label}

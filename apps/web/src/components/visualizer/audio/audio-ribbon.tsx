@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
+
 import { getCurrentAudioEngine } from "@/hooks/use-audio-features";
 
 // Seismograph on graph paper. A faint horizontal hairline grid drawn once
@@ -31,16 +32,22 @@ export function AudioRibbon({ height = 40 }: AudioRibbonProps) {
 
   useEffect(() => {
     const canvas = canvasRef.current;
-    if (!canvas) return;
+    if (!canvas) {
+      return;
+    }
     const ctx = canvas.getContext("2d");
-    if (!ctx) return;
+    if (!ctx) {
+      return;
+    }
 
     // Off-screen graph-paper texture so we don't redraw the grid on every
     // animation frame — only when the canvas resizes.
     const grid = document.createElement("canvas");
     gridRef.current = grid;
     const gridCtx = grid.getContext("2d");
-    if (!gridCtx) return;
+    if (!gridCtx) {
+      return;
+    }
 
     const drawGrid = () => {
       const dpr = window.devicePixelRatio || 1;
@@ -71,7 +78,9 @@ export function AudioRibbon({ height = 40 }: AudioRibbonProps) {
     const resize = () => {
       const dpr = window.devicePixelRatio || 1;
       const { clientWidth, clientHeight } = canvas;
-      if (clientWidth === 0 || clientHeight === 0) return;
+      if (clientWidth === 0 || clientHeight === 0) {
+        return;
+      }
       canvas.width = Math.floor(clientWidth * dpr);
       canvas.height = Math.floor(clientHeight * dpr);
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -93,22 +102,14 @@ export function AudioRibbon({ height = 40 }: AudioRibbonProps) {
       const engine = getCurrentAudioEngine();
       const analyser = engine?.getAnalyser() ?? null;
       const { clientWidth: w, clientHeight: h } = canvas;
-      if (w === 0 || h === 0) return;
+      if (w === 0 || h === 0) {
+        return;
+      }
 
       ctx.clearRect(0, 0, w, h);
 
       // Substrate: graph-paper grid.
-      ctx.drawImage(
-        grid,
-        0,
-        0,
-        grid.width,
-        grid.height,
-        0,
-        0,
-        w,
-        h,
-      );
+      ctx.drawImage(grid, 0, 0, grid.width, grid.height, 0, 0, w, h);
 
       if (!analyser) {
         // Idle: faint baseline rule across the centre, no trace.
@@ -141,7 +142,7 @@ export function AudioRibbon({ height = 40 }: AudioRibbonProps) {
         (STROKE_ALPHA_MAX - STROKE_ALPHA_MIN) * Math.min(1, rms * 2.4);
 
       if (rms - lastRms > TRANSIENT_THRESHOLD) {
-        ticks.push({ x: w - 1, life: TICK_DECAY_FRAMES });
+        ticks.push({ life: TICK_DECAY_FRAMES, x: w - 1 });
       }
       lastRms = rms;
 
@@ -157,8 +158,11 @@ export function AudioRibbon({ height = 40 }: AudioRibbonProps) {
         const v = ((waveBuf[i] ?? 128) - 128) / 128; // -1..1
         const y = h / 2 + v * (h / 2) * 0.78;
         const x = i * slice;
-        if (i === 0) ctx.moveTo(x, y);
-        else ctx.lineTo(x, y);
+        if (i === 0) {
+          ctx.moveTo(x, y);
+        } else {
+          ctx.lineTo(x, y);
+        }
       }
       ctx.stroke();
 
@@ -167,14 +171,18 @@ export function AudioRibbon({ height = 40 }: AudioRibbonProps) {
       ctx.lineWidth = 1;
       for (let i = ticks.length - 1; i >= 0; i--) {
         const t = ticks[i];
-        if (!t) continue;
+        if (!t) {
+          continue;
+        }
         ctx.globalAlpha = (t.life / TICK_DECAY_FRAMES) * 0.6;
         ctx.beginPath();
         ctx.moveTo(t.x + 0.5, 0);
         ctx.lineTo(t.x + 0.5, h);
         ctx.stroke();
         t.life--;
-        if (t.life <= 0) ticks.splice(i, 1);
+        if (t.life <= 0) {
+          ticks.splice(i, 1);
+        }
       }
       ctx.globalAlpha = 1;
     };

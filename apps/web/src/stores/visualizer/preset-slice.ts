@@ -1,9 +1,8 @@
 import type { StateCreator } from "zustand";
-import {
-  PRESET_NAMES,
-  type PresetConfig,
-  type PresetName,
-} from "@/lib/render/presets";
+
+import { PRESET_NAMES } from "@/lib/render/presets";
+import type { PresetConfig, PresetName } from "@/lib/render/presets";
+
 import type { VisualizerState } from "./types";
 
 export const PRESET_KEY = "sonara.preset";
@@ -65,13 +64,15 @@ export const createPresetSlice: StateCreator<
     set((s) => {
       // Selecting a built-in always clears any active custom (saved) preset
       // override so the chip UI stays consistent with what's rendering.
-      if (s.preset === name && s.customPreset === null) return {};
+      if (s.preset === name && s.customPreset === null) {
+        return {};
+      }
       if (typeof window !== "undefined") {
         window.localStorage.setItem(PRESET_KEY, name);
       }
       return {
-        preset: name,
         customPreset: null,
+        preset: name,
         presetTick: s.presetTick + 1,
       };
     }),
@@ -81,27 +82,33 @@ export const createPresetSlice: StateCreator<
     }
     set({ presetMode: m });
   },
-  setPresetCycleMs: (ms) => set({ presetCycleMs: Math.max(5_000, ms) }),
+  setPresetCycleMs: (ms) => set({ presetCycleMs: Math.max(5000, ms) }),
   setLastEffective: (cfg) => set({ lastEffective: cfg }),
   snapshotCurrentPreset: (name) =>
     set((s) => {
-      if (!s.lastEffective) return {};
+      if (!s.lastEffective) {
+        return {};
+      }
       const trimmed = name.trim();
-      if (!trimmed) return {};
+      if (!trimmed) {
+        return {};
+      }
       const next = { ...s.savedPresets, [trimmed]: { ...s.lastEffective } };
       if (typeof window !== "undefined") {
         window.localStorage.setItem(SAVED_PRESETS_KEY, JSON.stringify(next));
       }
       return {
-        savedPresets: next,
         customPreset: { ...s.lastEffective },
         presetTick: s.presetTick + 1,
+        savedPresets: next,
       };
     }),
   selectSavedPreset: (name) =>
     set((s) => {
       const cfg = s.savedPresets[name];
-      if (!cfg) return {};
+      if (!cfg) {
+        return {};
+      }
       return {
         customPreset: { ...cfg },
         presetTick: s.presetTick + 1,
@@ -109,7 +116,9 @@ export const createPresetSlice: StateCreator<
     }),
   deleteSavedPreset: (name) =>
     set((s) => {
-      if (!(name in s.savedPresets)) return {};
+      if (!(name in s.savedPresets)) {
+        return {};
+      }
       const next = { ...s.savedPresets };
       delete next[name];
       if (typeof window !== "undefined") {
@@ -121,7 +130,9 @@ export const createPresetSlice: StateCreator<
   // a preview+final pair doesn't store two slots for one generation.
   pushHero: (url) =>
     set((s) => {
-      if (!url || s.heroBank[0] === url) return {};
+      if (!url || s.heroBank[0] === url) {
+        return {};
+      }
       const next = [url, ...s.heroBank.filter((u) => u !== url)].slice(0, 6);
       return { heroBank: next };
     }),

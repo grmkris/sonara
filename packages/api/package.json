@@ -17,9 +17,9 @@
     "test": "bun test || echo 'no tests yet'"
   },
   "dependencies": {
-    "@sonara/shared": "workspace:*",
     "@orpc/client": "^1.14.4",
     "@orpc/server": "^1.14.4",
+    "@sonara/shared": "workspace:*",
     "zod": "^4.4.3"
   },
   "devDependencies": {

@@ -1,12 +1,13 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { cn } from "@/lib/utils";
-import { isWebgl2Available } from "@/lib/render/webgl-util";
+
 import { CanvasGrain } from "@/components/visualizer/audio/canvas-grain";
-import { InkDrops } from "@/components/visualizer/canvas/ink-drops";
-import { DisplacementCanvas } from "@/components/visualizer/canvas/displacement-canvas";
 import { CanvasOscilloscope } from "@/components/visualizer/audio/canvas-oscilloscope";
+import { DisplacementCanvas } from "@/components/visualizer/canvas/displacement-canvas";
+import { InkDrops } from "@/components/visualizer/canvas/ink-drops";
+import { isWebgl2Available } from "@/lib/render/webgl-util";
+import { cn } from "@/lib/utils";
 
 // WebGL2-only renderer. The previous CSS fallback path drifted from the WebGL
 // pipeline (missed reveal, presets, RD, glitch-peek) and was deleted.
@@ -32,13 +33,15 @@ export function SonaraCanvas({ dimmed = false }: { dimmed?: boolean }) {
     setHasWebgl2(isWebgl2Available());
   }, []);
 
-  if (hasWebgl2 === false) return <Webgl2RequiredOverlay />;
+  if (hasWebgl2 === false) {
+    return <Webgl2RequiredOverlay />;
+  }
 
   return (
     <div
       className={cn(
         "absolute inset-0 overflow-hidden bg-[color:var(--ink)] transition-[filter] duration-1000 ease-out",
-        dimmed && "[filter:brightness(0.5)_saturate(0.6)]",
+        dimmed && "[filter:brightness(0.5)_saturate(0.6)]"
       )}
       style={{ isolation: "isolate" }}
     >

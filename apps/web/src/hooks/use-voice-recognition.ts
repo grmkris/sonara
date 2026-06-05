@@ -36,12 +36,12 @@ interface SpeechRecognitionLike {
   stop(): void;
   abort(): void;
 }
-interface SRConstructor {
-  new (): SpeechRecognitionLike;
-}
+type SRConstructor = new () => SpeechRecognitionLike;
 
 function getSR(): SRConstructor | null {
-  if (typeof window === "undefined") return null;
+  if (typeof window === "undefined") {
+    return null;
+  }
   const w = window as unknown as {
     SpeechRecognition?: SRConstructor;
     webkitSpeechRecognition?: SRConstructor;
@@ -75,7 +75,7 @@ export interface VoiceRecognitionState {
  * session buffer so multi-utterance holds don't lose earlier chunks.
  */
 export function useVoiceRecognition(
-  opts: UseVoiceRecognitionOpts,
+  opts: UseVoiceRecognitionOpts
 ): VoiceRecognitionState {
   const [supported, setSupported] = useState(false);
   const [listening, setListening] = useState(false);
@@ -89,9 +89,13 @@ export function useVoiceRecognition(
   }, [opts.onResult]);
 
   const ensureRecognizer = useCallback((): SpeechRecognitionLike | null => {
-    if (recRef.current) return recRef.current;
+    if (recRef.current) {
+      return recRef.current;
+    }
     const Ctor = getSR();
-    if (!Ctor) return null;
+    if (!Ctor) {
+      return null;
+    }
     const rec = new Ctor();
     rec.continuous = true;
     rec.interimResults = true;
@@ -111,7 +115,9 @@ export function useVoiceRecognition(
           ? String((ev as { error: unknown }).error)
           : "error";
       // `no-speech` / `aborted` are routine PTT outcomes — don't surface.
-      if (code !== "no-speech" && code !== "aborted") setError(code);
+      if (code !== "no-speech" && code !== "aborted") {
+        setError(code);
+      }
     };
     rec.onresult = (ev: SREvent) => {
       // Concatenate every result-list entry from the current event. Finalized
@@ -123,7 +129,9 @@ export function useVoiceRecognition(
         const r = ev.results.item(i);
         const alt = r.item(0);
         const text = alt?.transcript?.trim();
-        if (!text) continue;
+        if (!text) {
+          continue;
+        }
         if (r.isFinal) {
           bufferRef.current = bufferRef.current
             ? `${bufferRef.current} ${text}`
@@ -138,11 +146,13 @@ export function useVoiceRecognition(
       const last = ev.results.item(ev.results.length - 1);
       const lastAlt = last?.item(0);
       const confidence =
-        typeof lastAlt?.confidence === "number" ? lastAlt.confidence : undefined;
+        typeof lastAlt?.confidence === "number"
+          ? lastAlt.confidence
+          : undefined;
       onResultRef.current(
         merged,
         last?.isFinal ?? false,
-        ...(typeof confidence === "number" ? ([confidence] as const) : []),
+        ...(typeof confidence === "number" ? ([confidence] as const) : [])
       );
     };
     recRef.current = rec;
@@ -181,7 +191,9 @@ export function useVoiceRecognition(
 
   const stop = useCallback(() => {
     const rec = recRef.current;
-    if (!rec) return;
+    if (!rec) {
+      return;
+    }
     try {
       rec.stop(); // flushes pending final; `abort()` would discard it
     } catch {
@@ -189,5 +201,5 @@ export function useVoiceRecognition(
     }
   }, []);
 
-  return { supported, listening, error, start, stop };
+  return { error, listening, start, stop, supported };
 }

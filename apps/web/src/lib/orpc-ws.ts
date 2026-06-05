@@ -1,8 +1,9 @@
-import ReconnectingWebSocket from "partysocket/ws";
 import { createORPCClient } from "@orpc/client";
 import { RPCLink } from "@orpc/client/websocket";
 import type { SessionRouterClient } from "@sonara/api";
 import { SERVICE_URLS } from "@sonara/shared";
+import ReconnectingWebSocket from "partysocket/ws";
+
 import { publicEnv } from "../env";
 import { rpcClient } from "./orpc";
 
@@ -21,9 +22,7 @@ export interface SessionConnection {
   client: SessionRouterClient;
 }
 
-export function createSessionConnection(
-  sessionId: string,
-): SessionConnection {
+export function createSessionConnection(sessionId: string): SessionConnection {
   const urlProvider = async (): Promise<string> => {
     // mintWsTicket is public: signed-in visitors get a ticket carrying
     // their uuid; everyone else gets an anon ticket (userId: null) which
@@ -48,5 +47,5 @@ export function createSessionConnection(
   });
 
   const client: SessionRouterClient = createORPCClient(link);
-  return { socket, client };
+  return { client, socket };
 }

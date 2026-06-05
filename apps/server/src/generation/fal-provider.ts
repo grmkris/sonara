@@ -1,4 +1,5 @@
 import { createFalClient } from "@fal-ai/client";
+
 import { env } from "../env";
 import type { Logger } from "../lib/logger";
 
@@ -39,10 +40,16 @@ interface FalResult {
 }
 
 function extractImageUrl(ev: unknown): string | undefined {
-  if (!ev || typeof ev !== "object") return undefined;
+  if (!ev || typeof ev !== "object") {
+    return undefined;
+  }
   const e = ev as Partial<FalResult>;
-  if (e.image?.url) return e.image.url;
-  if (Array.isArray(e.images) && e.images[0]?.url) return e.images[0].url;
+  if (e.image?.url) {
+    return e.image.url;
+  }
+  if (Array.isArray(e.images) && e.images[0]?.url) {
+    return e.images[0].url;
+  }
   return undefined;
 }
 
@@ -60,22 +67,24 @@ export async function streamPreview(input: StreamPreviewInput): Promise<void> {
   // Klein/9b accepts any 64-aligned dimensions; 4 steps is the documented
   // minimum (tighter returns a 422).
   const payload: Record<string, unknown> = {
-    prompt: input.prompt,
+    enable_safety_checker: false,
+    image_size: { height: 768, width: 768 },
     num_images: 1,
     num_inference_steps: 4,
-    image_size: { width: 768, height: 768 },
     output_format: "jpeg",
-    enable_safety_checker: false,
+    prompt: input.prompt,
   };
-  if (typeof input.seed === "number") payload.seed = input.seed;
+  if (typeof input.seed === "number") {
+    payload.seed = input.seed;
+  }
 
   input.logger.info({ model }, "fal subscribe start");
 
   try {
     const result = await subscribe(model, {
+      abortSignal: input.signal,
       input: payload,
       logs: false,
-      abortSignal: input.signal,
       onQueueUpdate: (u) => {
         input.logger.debug({ model, status: u.status }, "fal queue update");
       },
@@ -93,13 +102,13 @@ export async function streamPreview(input: StreamPreviewInput): Promise<void> {
     input.onPreview(url);
     input.onFinal(url);
     input.logger.info({ model, url }, "fal subscribe complete");
-  } catch (err) {
+  } catch (error) {
     // Aborts are still routed through onError so the session can refund the
     // paid credit. The session distinguishes abort vs real error by
     // inspecting the controller's signal.
     if (!input.signal.aborted) {
-      input.logger.warn({ err, model }, "fal generation errored");
+      input.logger.warn({ error, model }, "fal generation errored");
     }
-    input.onError(err);
+    input.onError(error);
   }
 }

@@ -1,4 +1,5 @@
 import { S3Client } from "bun";
+
 import { env } from "../env";
 
 // Railway Bucket (Tigris-backed, S3-compatible). Used by persistFrame to
@@ -13,7 +14,9 @@ import { env } from "../env";
 let client: S3Client | null = null;
 
 function getClient(): S3Client | null {
-  if (client) return client;
+  if (client) {
+    return client;
+  }
   if (
     !env.S3_BUCKET ||
     !env.S3_ACCESS_KEY_ID ||
@@ -24,10 +27,10 @@ function getClient(): S3Client | null {
   }
   client = new S3Client({
     accessKeyId: env.S3_ACCESS_KEY_ID,
-    secretAccessKey: env.S3_SECRET_ACCESS_KEY,
-    endpoint: env.S3_ENDPOINT,
     bucket: env.S3_BUCKET,
+    endpoint: env.S3_ENDPOINT,
     region: env.S3_REGION,
+    secretAccessKey: env.S3_SECRET_ACCESS_KEY,
   });
   return client;
 }
@@ -39,16 +42,20 @@ export function isConfigured(): boolean {
 export async function uploadBytes(
   key: string,
   data: ArrayBuffer | Uint8Array | Blob,
-  contentType: string,
+  contentType: string
 ): Promise<void> {
   const c = getClient();
-  if (!c) throw new Error("bucket not configured");
+  if (!c) {
+    throw new Error("bucket not configured");
+  }
   await c.write(key, data, { type: contentType });
 }
 
 export function presignReadUrl(key: string, ttlSec?: number): string {
   const c = getClient();
-  if (!c) throw new Error("bucket not configured");
+  if (!c) {
+    throw new Error("bucket not configured");
+  }
   return c.presign(key, { expiresIn: ttlSec ?? env.S3_PRESIGN_TTL_SEC });
 }
 
@@ -60,7 +67,9 @@ export function presignReadUrl(key: string, ttlSec?: number): string {
 // instead of rotting when the original presign TTL lapses. External URLs
 // (fal.storage uploads, public /library paths) return null and are kept as-is.
 export function bucketKeyFromUrl(url: string): string | null {
-  if (!env.S3_ENDPOINT || !env.S3_BUCKET) return null;
+  if (!env.S3_ENDPOINT || !env.S3_BUCKET) {
+    return null;
+  }
   let u: URL;
   let endpoint: URL;
   try {
@@ -71,7 +80,9 @@ export function bucketKeyFromUrl(url: string): string | null {
   }
   const hostOk =
     u.host === endpoint.host || u.host === `${env.S3_BUCKET}.${endpoint.host}`;
-  if (!hostOk) return null;
+  if (!hostOk) {
+    return null;
+  }
   let path = u.pathname.replace(/^\/+/, "");
   if (path.startsWith(`${env.S3_BUCKET}/`)) {
     path = path.slice(env.S3_BUCKET.length + 1);

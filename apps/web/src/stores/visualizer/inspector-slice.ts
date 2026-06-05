@@ -1,5 +1,6 @@
-import type { StateCreator } from "zustand";
 import type { ResolvedScene } from "@sonara/shared";
+import type { StateCreator } from "zustand";
+
 import type { VisualizerState } from "./types";
 
 export type TriggerReason =
@@ -45,12 +46,12 @@ export interface InspectorSlice {
 
   pushTrigger: (reason: TriggerReason, version: number) => void;
   setInspectorRequested: (
-    entry: Omit<InspectorState, "completedAt" | "durationMs" | "success">,
+    entry: Omit<InspectorState, "completedAt" | "durationMs" | "success">
   ) => void;
   setInspectorCompleted: (
     version: number,
     durationMs: number,
-    success: boolean,
+    success: boolean
   ) => void;
 }
 
@@ -60,9 +61,7 @@ export const createInspectorSlice: StateCreator<
   [],
   InspectorSlice
 > = (set) => ({
-  triggerLog: [],
   inspector: null,
-
   pushTrigger: (reason, version) =>
     set((s) => {
       const entry: TriggerEntry = {
@@ -73,19 +72,10 @@ export const createInspectorSlice: StateCreator<
       };
       return { triggerLog: [entry, ...s.triggerLog].slice(0, TRIGGER_LOG_MAX) };
     }),
-  setInspectorRequested: (entry) =>
-    set({
-      inspector: {
-        ...entry,
-        completedAt: null,
-        durationMs: null,
-        success: null,
-      },
-    }),
   setInspectorCompleted: (version, durationMs, success) =>
     set((s) => {
       const triggerLog = s.triggerLog.map((e) =>
-        e.version === version ? { ...e, durationMs, success } : e,
+        e.version === version ? { ...e, durationMs, success } : e
       );
       // Stale completion arrives after a newer requested — keep the log
       // patch but don't overwrite the live inspector header.
@@ -102,4 +92,14 @@ export const createInspectorSlice: StateCreator<
         },
       };
     }),
+  setInspectorRequested: (entry) =>
+    set({
+      inspector: {
+        ...entry,
+        completedAt: null,
+        durationMs: null,
+        success: null,
+      },
+    }),
+  triggerLog: [],
 });

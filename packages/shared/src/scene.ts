@@ -1,4 +1,5 @@
 import { z } from "zod";
+
 import { NowPlaying } from "./now-playing";
 
 // Image-anchor sub-object — a user-uploaded image that conditions the next
@@ -6,8 +7,8 @@ import { NowPlaying } from "./now-playing";
 // style+subject 0.55, lock-subject 0.8). URL is a fal.storage CDN address;
 // session-bound and dropped on disconnect (no DB row).
 export const ImageAnchor = z.object({
-  url: z.string(),
   strength: z.number().min(0).max(1),
+  url: z.string(),
 });
 export type ImageAnchor = z.infer<typeof ImageAnchor>;
 
@@ -42,11 +43,11 @@ export const SonaraSceneStatePatch = SonaraSceneState.partial();
 export type SonaraSceneStatePatch = z.infer<typeof SonaraSceneStatePatch>;
 
 export const defaultScene: SonaraSceneState = {
+  abstraction: 0.6,
+  intensity: 0.5,
   prompt: "",
   softness: 0.8,
-  surrealness: 0.7,
-  abstraction: 0.6,
   stability: 0.5,
-  intensity: 0.5,
+  surrealness: 0.7,
   version: 0,
 };

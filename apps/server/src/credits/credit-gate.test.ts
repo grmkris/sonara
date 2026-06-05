@@ -6,12 +6,11 @@ import {
   expect,
   test,
 } from "bun:test";
+
 import { createLogger } from "@sonara/logger";
-import {
-  createPgLite,
-  pgliteAsPool,
-  type TestPg,
-} from "@sonara/test-utils";
+import { createPgLite, pgliteAsPool } from "@sonara/test-utils";
+import type { TestPg } from "@sonara/test-utils";
+
 import {
   CREDIT_DENIAL_COOLDOWN_MS,
   COST_PER_FRAME,
@@ -50,7 +49,7 @@ CREATE TABLE free_tier_ledger (
 
 const USER = "00000000-0000-0000-0000-000000000001";
 const NOW = 1_700_000_000_000;
-const logger = createLogger({ name: "test", level: "silent" });
+const logger = createLogger({ level: "silent", name: "test" });
 
 let pg: TestPg;
 
@@ -67,7 +66,7 @@ afterAll(async () => {
 
 beforeEach(async () => {
   await pg.exec(
-    `DELETE FROM usage_ledger; DELETE FROM credits; DELETE FROM free_tier_ledger;`,
+    `DELETE FROM usage_ledger; DELETE FROM credits; DELETE FROM free_tier_ledger;`
   );
 });
 
@@ -75,7 +74,7 @@ async function seedCredits(userId: string, frames: number): Promise<void> {
   await pg.query(
     `INSERT INTO credits (id, user_id, balance_frames)
      VALUES (gen_random_uuid(), $1, $2)`,
-    [userId, frames],
+    [userId, frames]
   );
 }
 
@@ -83,27 +82,31 @@ describe("paid debit", () => {
   test("deducts COST_PER_FRAME and returns paidCost for refund", async () => {
     await seedCredits(USER, 5);
     const r = await tryDebitCredit({
-      userId: USER,
       isUserInitiated: true,
       lastCreditDenialAt: 0,
-      now: NOW,
       logger,
+      now: NOW,
+      userId: USER,
     });
     expect(r.ok).toBe(true);
-    if (r.ok) expect(r.paidCost).toBe(COST_PER_FRAME);
+    if (r.ok) {
+      expect(r.paidCost).toBe(COST_PER_FRAME);
+    }
   });
 
   test("paid success resets nextLastDenialAt to 0", async () => {
     await seedCredits(USER, 5);
     const r = await tryDebitCredit({
-      userId: USER,
       isUserInitiated: false,
       lastCreditDenialAt: NOW - 1000,
-      now: NOW,
       logger,
+      now: NOW,
+      userId: USER,
     });
     expect(r.ok).toBe(true);
-    if (r.ok) expect(r.nextLastDenialAt).toBe(0);
+    if (r.ok) {
+      expect(r.nextLastDenialAt).toBe(0);
+    }
   });
 });
 
@@ -111,11 +114,11 @@ describe("free-tier fallback", () => {
   test("zero balance falls through to free tier", async () => {
     await seedCredits(USER, 0);
     const r = await tryDebitCredit({
-      userId: USER,
       isUserInitiated: false,
       lastCreditDenialAt: 0,
-      now: NOW,
       logger,
+      now: NOW,
+      userId: USER,
     });
     expect(r.ok).toBe(true);
     if (r.ok) {
@@ -129,20 +132,20 @@ describe("free-tier fallback", () => {
     await seedCredits(USER, 0);
     for (let i = 0; i < 3; i++) {
       await tryDebitCredit({
-        userId: USER,
         isUserInitiated: false,
         lastCreditDenialAt: 0,
-        now: NOW,
         logger,
+        now: NOW,
+        userId: USER,
       });
     }
     // Fourth call exceeds the free quota
     const r = await tryDebitCredit({
-      userId: USER,
       isUserInitiated: true,
       lastCreditDenialAt: 0,
-      now: NOW,
       logger,
+      now: NOW,
+      userId: USER,
     });
     expect(r.ok).toBe(false);
     if (!r.ok) {
@@ -161,11 +164,11 @@ describe("cooldown rule", () => {
     await seedCredits(USER, 0);
     for (let i = 0; i < 3; i++) {
       await tryDebitCredit({
-        userId: USER,
         isUserInitiated: false,
         lastCreditDenialAt: 0,
-        now: NOW,
         logger,
+        now: NOW,
+        userId: USER,
       });
     }
   }
@@ -173,11 +176,11 @@ describe("cooldown rule", () => {
   test("first auto-trigger denial emits and stamps the denial timestamp", async () => {
     await drainFreeTier();
     const r = await tryDebitCredit({
-      userId: USER,
       isUserInitiated: false,
       lastCreditDenialAt: 0,
-      now: NOW,
       logger,
+      now: NOW,
+      userId: USER,
     });
     expect(r.ok).toBe(false);
     if (!r.ok) {
@@ -189,11 +192,11 @@ describe("cooldown rule", () => {
   test("second auto-trigger denial inside cooldown window suppresses emit", async () => {
     await drainFreeTier();
     const r = await tryDebitCredit({
-      userId: USER,
       isUserInitiated: false,
       lastCreditDenialAt: NOW - 1000, // 1s ago, well inside cooldown
-      now: NOW,
       logger,
+      now: NOW,
+      userId: USER,
     });
     expect(r.ok).toBe(false);
     if (!r.ok) {
@@ -206,11 +209,11 @@ describe("cooldown rule", () => {
   test("auto-trigger denial AFTER cooldown elapses re-emits", async () => {
     await drainFreeTier();
     const r = await tryDebitCredit({
-      userId: USER,
       isUserInitiated: false,
       lastCreditDenialAt: NOW - CREDIT_DENIAL_COOLDOWN_MS - 1000,
-      now: NOW,
       logger,
+      now: NOW,
+      userId: USER,
     });
     expect(r.ok).toBe(false);
     if (!r.ok) {
@@ -222,11 +225,11 @@ describe("cooldown rule", () => {
   test("user-initiated denial always emits, ignores cooldown", async () => {
     await drainFreeTier();
     const r = await tryDebitCredit({
-      userId: USER,
       isUserInitiated: true,
       lastCreditDenialAt: NOW - 1000, // would suppress an auto trigger
-      now: NOW,
       logger,
+      now: NOW,
+      userId: USER,
     });
     expect(r.ok).toBe(false);
     if (!r.ok) {

@@ -11,8 +11,12 @@ type Handler = (ev: KeyboardEvent) => void;
 export function useHotkey(key: string, handler: Handler): void {
   useEffect(() => {
     const onKey = (ev: KeyboardEvent) => {
-      if (ev.ctrlKey || ev.metaKey || ev.altKey) return;
-      if (ev.key.toLowerCase() !== key.toLowerCase()) return;
+      if (ev.ctrlKey || ev.metaKey || ev.altKey) {
+        return;
+      }
+      if (ev.key.toLowerCase() !== key.toLowerCase()) {
+        return;
+      }
       const target = ev.target as HTMLElement | null;
       if (
         target &&
@@ -21,7 +25,9 @@ export function useHotkey(key: string, handler: Handler): void {
           target.isContentEditable)
       ) {
         // Allow Esc to bubble out of inputs, swallow everything else.
-        if (ev.key !== "Escape") return;
+        if (ev.key !== "Escape") {
+          return;
+        }
       }
       handler(ev);
     };

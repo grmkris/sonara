@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
+
 import { CENTER, DOT_R, RINGS, VIEWBOX } from "@/lib/brand";
 import { useVisualizerStore } from "@/stores/visualizer";
 
@@ -21,11 +22,17 @@ export function Mark({
   const ref = useRef<SVGSVGElement | null>(null);
 
   useEffect(() => {
-    if (!reactive) return;
+    if (!reactive) {
+      return;
+    }
     const unsub = useVisualizerStore.subscribe((s, prev) => {
-      if (s.audio.rms === prev.audio.rms) return;
+      if (s.audio.rms === prev.audio.rms) {
+        return;
+      }
       const el = ref.current;
-      if (!el) return;
+      if (!el) {
+        return;
+      }
       const clamped = Math.max(0, Math.min(1, s.audio.rms));
       el.style.setProperty("--amp", clamped.toFixed(3));
     });

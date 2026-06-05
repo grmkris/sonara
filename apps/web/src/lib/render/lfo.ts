@@ -43,7 +43,7 @@ export function randomWalk(stepPerSec = 0.05): LfoDriver {
   };
 }
 
-export interface DriftMap {
-  // e.g. { bloomMult: {lfo: sineLfo(45), amplitude: 0.1} }
-  [key: string]: { lfo: LfoDriver; amplitude: number } | undefined;
-}
+export type DriftMap = Record<
+  string,
+  { lfo: LfoDriver; amplitude: number } | undefined
+>;

@@ -1,6 +1,5 @@
 import { eventIterator, os } from "@orpc/server";
 import type { RouterClient } from "@orpc/server";
-import { z } from "zod";
 import {
   AudioFeatures,
   ClientScenePatch,
@@ -9,9 +8,9 @@ import {
   SonaraSceneState,
   NowPlaying,
   ServerEvent,
-  type DeckKey,
-  type ImageAnchor as ImageAnchorType,
 } from "@sonara/shared";
+import type { DeckKey, ImageAnchor as ImageAnchorType } from "@sonara/shared";
+import { z } from "zod";
 
 // Structural interface for a live session. apps/server's Session class
 // implements this; the router never imports from apps/server so the package
@@ -23,12 +22,12 @@ export interface SessionLike {
   recognize(
     clipBase64: string,
     mimeType: string,
-    trigger: "auto" | "manual",
+    trigger: "auto" | "manual"
   ): Promise<NowPlaying | null>;
   setDemoMode(on: boolean, deck: DeckKey | null): void;
   goLive(prompt: string, seedFrameUrl: string | null): void;
   setImageAnchor(
-    input: { url: string; strength: number } | { clear: true },
+    input: { url: string; strength: number } | { clear: true }
   ): void;
   reset(): void;
   subscribe(signal?: AbortSignal): AsyncGenerator<ServerEvent>;
@@ -59,8 +58,8 @@ const VoicePatchInput = z.object({
 });
 
 const DemoModeInput = z.object({
-  on: z.boolean(),
   deck: DeckKeySchema.nullable(),
+  on: z.boolean(),
 });
 
 const GoLiveInput = z.object({
@@ -74,16 +73,16 @@ const GoLiveInput = z.object({
 
 const SetImageAnchorInput = z.union([
   z.object({
-    url: z.string().url(),
     strength: z.number().min(0).max(1),
+    url: z.string().url(),
   }),
   z.object({ clear: z.literal(true) }),
 ]);
 
 const RecognizeInput = z.object({
   clipBase64: z.string().min(1).max(400_000),
-  mimeType: z.string().min(1).max(120),
   durationMs: z.number().int().positive(),
+  mimeType: z.string().min(1).max(120),
   trigger: z.enum(["auto", "manual"]),
 });
 
@@ -107,7 +106,7 @@ export const sessionRouter = {
   // frame.final, job.status, now.playing, preset.suggest, generation.*).
   events: sessionOs
     .output(eventIterator(ServerEvent))
-    .handler(async function* ({ context, signal }) {
+    .handler(async function* events({ context, signal }) {
       for await (const event of context.session.subscribe(signal)) {
         yield event;
       }
@@ -117,11 +116,9 @@ export const sessionRouter = {
     context.session.init();
   }),
 
-  scenePatch: sessionOs
-    .input(ScenePatchInput)
-    .handler(({ context, input }) => {
-      context.session.applyPatch(input.patch, "client");
-    }),
+  scenePatch: sessionOs.input(ScenePatchInput).handler(({ context, input }) => {
+    context.session.applyPatch(input.patch, "client");
+  }),
 
   audioFeatures: sessionOs
     .input(AudioFeaturesInput)
@@ -134,30 +131,24 @@ export const sessionRouter = {
   // so the patch is unambiguous — no LLM disambiguation. origin="voice"
   // gives the lower SEMANTIC_THRESHOLD so single-field changes fire
   // immediately.
-  voicePatch: sessionOs
-    .input(VoicePatchInput)
-    .handler(({ context, input }) => {
-      context.session.applyPatch(input.patch, "voice");
-    }),
+  voicePatch: sessionOs.input(VoicePatchInput).handler(({ context, input }) => {
+    context.session.applyPatch(input.patch, "voice");
+  }),
 
   // DEMO mode switch. When on with a deck selected, the session pulls
   // pre-generated images from image_library instead of calling fal. Toggling
   // off resumes the standard fal path on the next trigger.
-  setDemoMode: sessionOs
-    .input(DemoModeInput)
-    .handler(({ context, input }) => {
-      context.session.setDemoMode(input.on, input.deck);
-    }),
+  setDemoMode: sessionOs.input(DemoModeInput).handler(({ context, input }) => {
+    context.session.setDemoMode(input.on, input.deck);
+  }),
 
   // Leave the deck and go live. Flips demo off server-side, applies the typed
   // scene, and (if a seed frame is given) seeds the first frame off it as a
   // one-shot anchor before continuing with cheap text frames. Anon is refused
   // (live generation needs credits) — the client gates this too.
-  goLive: sessionOs
-    .input(GoLiveInput)
-    .handler(({ context, input }) => {
-      context.session.goLive(input.prompt, input.seedFrameUrl);
-    }),
+  goLive: sessionOs.input(GoLiveInput).handler(({ context, input }) => {
+    context.session.goLive(input.prompt, input.seedFrameUrl);
+  }),
 
   // Image-anchor switch. The browser uploaded an image via the web service's
   // /api/upload/image route and got back a fal-hosted URL; this mutation
@@ -174,11 +165,7 @@ export const sessionRouter = {
     .input(RecognizeInput)
     .output(NowPlaying.nullable())
     .handler(({ context, input }) =>
-      context.session.recognize(
-        input.clipBase64,
-        input.mimeType,
-        input.trigger,
-      ),
+      context.session.recognize(input.clipBase64, input.mimeType, input.trigger)
     ),
 
   reset: sessionOs.handler(({ context }) => {
@@ -189,14 +176,12 @@ export const sessionRouter = {
   // on every reconnect) to cover the race where session.init()'s initial
   // publishes land before the events() subscribe has attached. Also useful for
   // post-drift resync later.
-  state: sessionOs
-    .output(StateOutput)
-    .handler(({ context }) => ({
-      scene: context.session.getSnapshot(),
-      demoMode: context.session.isDemoMode(),
-      demoDeck: context.session.getDemoDeck(),
-      imageAnchor: context.session.getImageAnchor(),
-    })),
+  state: sessionOs.output(StateOutput).handler(({ context }) => ({
+    demoDeck: context.session.getDemoDeck(),
+    demoMode: context.session.isDemoMode(),
+    imageAnchor: context.session.getImageAnchor(),
+    scene: context.session.getSnapshot(),
+  })),
 };
 
 export type SessionRouter = typeof sessionRouter;

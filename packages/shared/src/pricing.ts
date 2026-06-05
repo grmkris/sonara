@@ -9,8 +9,8 @@
 // frames OR ~40 anchor frames. The credit gate (apps/server credit-gate.ts)
 // imports these so the server and the UI never disagree.
 export const FRAME_COST_CREDITS = {
-  text: 1,
   anchor: 8,
+  text: 1,
 } as const;
 
 export type FrameMode = keyof typeof FRAME_COST_CREDITS;
@@ -33,13 +33,13 @@ export interface Pack {
 
 export const PACKS: readonly Pack[] = [
   {
-    id: "starter",
-    usd: 10,
     frames: 320,
+    id: "starter",
     productIdEnv: "DODO_PRODUCT_STARTER",
+    usd: 10,
   },
-  { id: "pro", usd: 30, frames: 960, productIdEnv: "DODO_PRODUCT_PRO" },
-  { id: "max", usd: 100, frames: 3200, productIdEnv: "DODO_PRODUCT_MAX" },
+  { frames: 960, id: "pro", productIdEnv: "DODO_PRODUCT_PRO", usd: 30 },
+  { frames: 3200, id: "max", productIdEnv: "DODO_PRODUCT_MAX", usd: 100 },
 ] as const;
 
 export function findPack(id: string): Pack | undefined {
@@ -54,7 +54,7 @@ export function findPack(id: string): Pack | undefined {
  */
 export function resolveDodoProduct(
   productId: string,
-  envMap: Record<DodoProductEnv, string>,
+  envMap: Record<DodoProductEnv, string>
 ): Pack | undefined {
   return PACKS.find((p) => envMap[p.productIdEnv] === productId);
 }

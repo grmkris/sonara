@@ -10,26 +10,24 @@ import { z } from "zod";
 // Lives in shared because it is shipped over the WS event stream
 // (generation.requested) so the client can render it.
 
-const HexColor = z
-  .string()
-  .regex(/^#[0-9a-fA-F]{6}$/, "expected #RRGGBB hex");
+const HexColor = z.string().regex(/^#[0-9a-fA-F]{6}$/, "expected #RRGGBB hex");
 
 export const ResolvedSubjectSchema = z.object({
+  action: z.string().optional(),
   description: z.string().min(1),
   position: z.string().optional(),
-  action: z.string().optional(),
 });
 
 export const ResolvedCameraSchema = z.object({
   angle: z.string(),
-  lens: z.string(),
   depth_of_field: z.string(),
+  lens: z.string(),
 });
 
 export const ResolvedAudioStateSchema = z.object({
+  energyDelta: z.number(),
   intensity: z.number().min(0).max(1),
   section: z.number(),
-  energyDelta: z.number(),
 });
 
 // Core = everything the LLM expander emits. Cached server-side by scene-hash
@@ -55,8 +53,8 @@ export const ResolvedSceneCoreSchema = z.object({
 // `drift_modifiers` are the 1–3 clauses chosen for THIS trigger;
 // `audio_state` is HUD-only and never serialised into the FAL prompt.
 export const ResolvedScene = ResolvedSceneCoreSchema.extend({
-  drift_modifiers: z.array(z.string()),
   audio_state: ResolvedAudioStateSchema,
+  drift_modifiers: z.array(z.string()),
 });
 
 export type ResolvedSubject = z.infer<typeof ResolvedSubjectSchema>;

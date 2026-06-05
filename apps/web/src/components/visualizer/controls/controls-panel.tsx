@@ -1,11 +1,12 @@
 "use client";
 
 import type { SonaraSceneState } from "@sonara/shared";
-import type { SessionSend } from "@/lib/session-actions";
+
 import { DeckPicker } from "@/components/visualizer/controls/deck-picker";
 import { IntensityDial } from "@/components/visualizer/controls/intensity-dial";
 import { PresetPicker } from "@/components/visualizer/controls/preset-picker";
 import { SliderRow } from "@/components/visualizer/controls/slider-row";
+import type { SessionSend } from "@/lib/session-actions";
 import { useVisualizerStore } from "@/stores/visualizer";
 
 interface ControlsPanelProps {
@@ -15,10 +16,10 @@ interface ControlsPanelProps {
 type SliderKey = "softness" | "surrealness" | "abstraction" | "stability";
 
 const SLIDERS: { key: SliderKey; label: string }[] = [
-  { key: "softness",    label: "soft"     },
-  { key: "surrealness", label: "unreal"   },
+  { key: "softness", label: "soft" },
+  { key: "surrealness", label: "unreal" },
   { key: "abstraction", label: "abstract" },
-  { key: "stability",   label: "stable"   },
+  { key: "stability", label: "stable" },
 ];
 
 // One flat mixer — no tabs. The console used to split into scene / style /
@@ -41,8 +42,8 @@ export function ControlsPanel({ send }: ControlsPanelProps) {
 
   const patchSlider = (key: SliderKey, value: number) =>
     send({
-      type: "scene.patch",
       patch: { [key]: value } as Partial<SonaraSceneState>,
+      type: "scene.patch",
     });
 
   return (

@@ -1,8 +1,10 @@
 "use client";
 
+import { PACKS } from "@sonara/shared";
+import type { Pack } from "@sonara/shared";
 import { useState } from "react";
 import { toast } from "sonner";
-import { PACKS, type Pack } from "@sonara/shared";
+
 import { rpcClient } from "@/lib/orpc";
 
 interface TopUpButtonProps {
@@ -26,9 +28,9 @@ export function TopUpButton({ onCredited: _ }: TopUpButtonProps) {
         packId: pack.id,
       });
       window.location.href = checkoutUrl;
-    } catch (err) {
+    } catch (error) {
       setBusy(null);
-      toast.error(err instanceof Error ? err.message : "checkout failed");
+      toast.error(error instanceof Error ? error.message : "checkout failed");
     }
   };
 

@@ -1,27 +1,27 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import {
-  markImageLoaded,
-  useVisualizerStore,
-} from "@/stores/visualizer";
+
 import {
   intensityCoefficients,
   targetsFromAudio,
 } from "@/lib/render/map-audio-to-visuals";
-import { createVuEnvelope, type VuEnvelope } from "@/lib/render/vu";
+import { resolveAudio } from "@/lib/render/preset-audio-routing";
 import {
   BASE,
   PRESETS,
   PRESET_NAMES,
   lerpPreset,
   makeDriftForPreset,
-  type PresetConfig,
-  type PresetDrift,
-  type PresetName,
 } from "@/lib/render/presets";
-import { resolveAudio } from "@/lib/render/preset-audio-routing";
+import type {
+  PresetConfig,
+  PresetDrift,
+  PresetName,
+} from "@/lib/render/presets";
 import { RDLayer } from "@/lib/render/rd-layer";
+import { createVuEnvelope } from "@/lib/render/vu";
+import type { VuEnvelope } from "@/lib/render/vu";
 import {
   createFbo,
   createProgram,
@@ -32,8 +32,10 @@ import {
   resizeCanvasToDisplay,
   resizeFbo,
   uploadImageToTexture,
-  type Fbo,
 } from "@/lib/render/webgl-util";
+import type { Fbo } from "@/lib/render/webgl-util";
+import { markImageLoaded, useVisualizerStore } from "@/stores/visualizer";
+
 import {
   BLIT_FRAGMENT_SHADER,
   FRAGMENT_SHADER,
@@ -66,23 +68,23 @@ interface EnvelopeBundle {
 // Carry prior value/peak so intensity-driven rebuilds don't snap to 0.
 function buildEnvelopes(
   intensity: number,
-  prev?: EnvelopeBundle,
+  prev?: EnvelopeBundle
 ): EnvelopeBundle {
   const c = intensityCoefficients(intensity);
   const make = (p?: VuEnvelope) =>
     createVuEnvelope({
       attackMs: c.vuAttackMs,
-      releaseMs: c.vuReleaseMs,
+      initialPeak: p?.peak,
+      initialValue: p?.value,
+      overshoot: c.peakOvershoot,
       peakAttackMs: 10,
       peakReleaseMs: 1500,
-      overshoot: c.peakOvershoot,
-      initialValue: p?.value,
-      initialPeak: p?.peak,
+      releaseMs: c.vuReleaseMs,
     });
   return {
-    rms: make(prev?.rms),
     bass: make(prev?.bass),
     mids: make(prev?.mids),
+    rms: make(prev?.rms),
     treble: make(prev?.treble),
   };
 }
@@ -103,17 +105,21 @@ interface DropLayer {
 // gradient covers dark→light without dropping detail when the LLM returns
 // only 3 colours or 7. Always returns exactly 4 #RRGGBB strings.
 function padPaletteToFour(colors: string[]): [string, string, string, string] {
-  if (colors.length === 0) return ["#000000", "#444444", "#aaaaaa", "#ffffff"];
+  if (colors.length === 0) {
+    return ["#000000", "#444444", "#aaaaaa", "#ffffff"];
+  }
   if (colors.length >= 4) {
     return [
       colors[0]!,
       colors[Math.floor(colors.length / 3)]!,
       colors[Math.floor((2 * colors.length) / 3)]!,
-      colors[colors.length - 1]!,
+      colors.at(-1)!,
     ];
   }
   const out = [...colors];
-  while (out.length < 4) out.push(colors[colors.length - 1]!);
+  while (out.length < 4) {
+    out.push(colors[colors.length - 1]!);
+  }
   return [out[0]!, out[1]!, out[2]!, out[3]!];
 }
 
@@ -137,7 +143,12 @@ function randomDropLayers(): DropLayers {
     l1: {
       ab: [aX, aY, rand(), rand()],
       cd: [rand(), rand(), rand(), rand()],
-      delays: [0, rand() * 0.25 + 0.05, rand() * 0.35 + 0.1, rand() * 0.4 + 0.15],
+      delays: [
+        0,
+        rand() * 0.25 + 0.05,
+        rand() * 0.35 + 0.1,
+        rand() * 0.4 + 0.15,
+      ],
     },
     l2: {
       ab: [rand(), rand(), rand(), rand()],
@@ -171,18 +182,22 @@ interface DabPositions {
 
 function rollDab(
   kind: "kick" | "snare" | "hat" | "vocal",
-  centroid: number,
+  centroid: number
 ): [number, number] {
   const r = Math.random;
   switch (kind) {
-    case "kick":
+    case "kick": {
       return [0.2 + r() * 0.6, 0.6 + r() * 0.25];
-    case "snare":
+    }
+    case "snare": {
       return [0.2 + r() * 0.6, 0.4 + r() * 0.2];
-    case "hat":
+    }
+    case "hat": {
       return [0.15 + r() * 0.7, 0.1 + r() * 0.25];
-    case "vocal":
+    }
+    case "vocal": {
       return [0.25 + centroid * 0.5 + (r() - 0.5) * 0.15, 0.3 + r() * 0.4];
+    }
   }
 }
 
@@ -191,17 +206,17 @@ function rollDab(
 function applyDrift(
   base: PresetConfig,
   drift: PresetDrift,
-  tSec: number,
+  tSec: number
 ): PresetConfig {
   const d = { ...base };
   if (drift.bloomMult) {
     d.bloomMult = Math.max(
       0,
-      d.bloomMult + drift.bloomMult.lfo.sample(tSec) * drift.bloomMult.amplitude,
+      d.bloomMult + drift.bloomMult.lfo.sample(tSec) * drift.bloomMult.amplitude
     );
   }
   if (drift.polarWarp) {
-    d.polarWarp = d.polarWarp + drift.polarWarp.lfo.sample(tSec) * drift.polarWarp.amplitude;
+    d.polarWarp += drift.polarWarp.lfo.sample(tSec) * drift.polarWarp.amplitude;
   }
   if (drift.feedbackAmount) {
     d.feedbackAmount = Math.max(
@@ -209,14 +224,14 @@ function applyDrift(
       Math.min(
         0.85,
         d.feedbackAmount +
-          drift.feedbackAmount.lfo.sample(tSec) * drift.feedbackAmount.amplitude,
-      ),
+          drift.feedbackAmount.lfo.sample(tSec) * drift.feedbackAmount.amplitude
+      )
     );
   }
   if (drift.noiseMult) {
     d.noiseMult = Math.max(
       0,
-      d.noiseMult + drift.noiseMult.lfo.sample(tSec) * drift.noiseMult.amplitude,
+      d.noiseMult + drift.noiseMult.lfo.sample(tSec) * drift.noiseMult.amplitude
     );
   }
   return d;
@@ -227,14 +242,18 @@ export function DisplacementCanvas() {
 
   useEffect(() => {
     const canvas = canvasRef.current;
-    if (!canvas) return;
+    if (!canvas) {
+      return;
+    }
     currentCanvas = canvas;
     const gl = canvas.getContext("webgl2", {
-      premultipliedAlpha: false,
-      antialias: false,
       alpha: false,
+      antialias: false,
+      premultipliedAlpha: false,
     });
-    if (!gl) return;
+    if (!gl) {
+      return;
+    }
 
     // Main shader program (displacement + effects deck).
     let program: WebGLProgram;
@@ -248,8 +267,8 @@ export function DisplacementCanvas() {
       gl.deleteShader(vs);
       gl.deleteShader(fsMain);
       gl.deleteShader(fsBlit);
-    } catch (err) {
-      console.error("[DisplacementCanvas] shader build failed:", err);
+    } catch (error) {
+      console.error("[DisplacementCanvas] shader build failed:", error);
       return;
     }
 
@@ -348,14 +367,14 @@ export function DisplacementCanvas() {
     const rdLayer = new RDLayer(gl, { vao });
 
     const slotA: TextureSlot = {
-      tex: createTexture(gl),
-      size: [1, 1],
       loaded: false,
+      size: [1, 1],
+      tex: createTexture(gl),
     };
     const slotB: TextureSlot = {
-      tex: createTexture(gl),
-      size: [1, 1],
       loaded: false,
+      size: [1, 1],
+      tex: createTexture(gl),
     };
     let currIsA = true;
     const getCurr = (): TextureSlot => (currIsA ? slotA : slotB);
@@ -390,12 +409,14 @@ export function DisplacementCanvas() {
 
       const target = getInactive();
       img.onload = () => {
-        if (pendingImg !== img) return;
+        if (pendingImg !== img) {
+          return;
+        }
         pendingImg = null;
         try {
           uploadImageToTexture(gl, target.tex, img);
-        } catch (err) {
-          console.warn("[DisplacementCanvas] texImage2D failed:", err);
+        } catch (error) {
+          console.warn("[DisplacementCanvas] texImage2D failed:", error);
           return;
         }
         target.size = [img.naturalWidth, img.naturalHeight];
@@ -405,14 +426,15 @@ export function DisplacementCanvas() {
         markImageLoaded();
       };
       img.onerror = () => {
-        if (pendingImg !== img) return;
+        if (pendingImg !== img) {
+          return;
+        }
         pendingImg = null;
-        const stillCurrent =
-          useVisualizerStore.getState().currentFrame === url;
+        const stillCurrent = useVisualizerStore.getState().currentFrame === url;
         if (attempt < 3 && stillCurrent) {
           retryTimer = setTimeout(
             () => loadFrame(url, attempt + 1),
-            300 * (attempt + 1),
+            300 * (attempt + 1)
           );
         } else {
           console.warn("[DisplacementCanvas] image load failed:", url);
@@ -423,7 +445,9 @@ export function DisplacementCanvas() {
 
     const unsubFrame = useVisualizerStore.subscribe((state) => {
       const url = state.currentFrame;
-      if (!url || url === lastLoadedUrl) return;
+      if (!url || url === lastLoadedUrl) {
+        return;
+      }
       lastLoadedUrl = url;
       if (retryTimer) {
         clearTimeout(retryTimer);
@@ -441,14 +465,16 @@ export function DisplacementCanvas() {
         pendingImg = img;
         const target = getInactive();
         img.onload = () => {
-          if (pendingImg !== img) return;
+          if (pendingImg !== img) {
+            return;
+          }
           pendingImg = null;
           try {
             uploadImageToTexture(gl, target.tex, img);
-          } catch (err) {
+          } catch (error) {
             console.warn(
               "[DisplacementCanvas] initial texImage2D failed:",
-              err,
+              error
             );
             return;
           }
@@ -459,7 +485,9 @@ export function DisplacementCanvas() {
           markImageLoaded();
         };
         img.onerror = () => {
-          if (pendingImg === img) pendingImg = null;
+          if (pendingImg === img) {
+            pendingImg = null;
+          }
         };
         img.src = seed;
       }
@@ -522,7 +550,9 @@ export function DisplacementCanvas() {
       const stops = padPaletteToFour(hexes);
       for (let i = 0; i < 4; i++) {
         const stop = stops[i];
-        if (!stop) continue;
+        if (!stop) {
+          continue;
+        }
         const [r, g, b] = hexToRgb(stop);
         targetPalette[i * 3] = r;
         targetPalette[i * 3 + 1] = g;
@@ -531,13 +561,15 @@ export function DisplacementCanvas() {
       targetPaletteAmount = 1;
     };
     setPaletteTarget(
-      useVisualizerStore.getState().inspector?.resolvedScene.color_palette ?? [],
+      useVisualizerStore.getState().inspector?.resolvedScene.color_palette ?? []
     );
 
     const unsubPalette = useVisualizerStore.subscribe((state, prev) => {
       const cur = state.inspector?.resolvedScene.color_palette ?? [];
       const prv = prev.inspector?.resolvedScene.color_palette ?? [];
-      if (cur.length === prv.length && cur.every((c, i) => c === prv[i])) return;
+      if (cur.length === prv.length && cur.every((c, i) => c === prv[i])) {
+        return;
+      }
       setPaletteTarget(cur);
     });
 
@@ -561,12 +593,12 @@ export function DisplacementCanvas() {
 
     let envelopes = buildEnvelopes(1);
     let lastIntensity = -1;
-    const impulses = { kick: 0, snare: 0, hat: 0, vocal: 0 };
-    const ages = { kick: 99, snare: 99, hat: 99, vocal: 99 };
+    const impulses = { hat: 0, kick: 0, snare: 0, vocal: 0 };
+    const ages = { hat: 99, kick: 99, snare: 99, vocal: 99 };
     const dabs: DabPositions = {
+      hat: [0.5, 0.22],
       kick: [0.5, 0.72],
       snare: [0.5, 0.5],
-      hat: [0.5, 0.22],
       vocal: [0.5, 0.48],
     };
     let lastOnset = false;
@@ -582,7 +614,7 @@ export function DisplacementCanvas() {
       const dtMs = Math.max(1, now - lastTick);
       lastTick = now;
 
-      const intensity = state.scene.intensity;
+      const { intensity } = state.scene;
       if (Math.abs(intensity - lastIntensity) > 0.03) {
         envelopes = buildEnvelopes(intensity, envelopes);
         lastIntensity = intensity;
@@ -600,28 +632,33 @@ export function DisplacementCanvas() {
       lastOnset = state.audio.onset;
       if (rising) {
         switch (state.audio.onsetType) {
-          case "kick":
+          case "kick": {
             impulses.kick = 1;
             ages.kick = 0;
             dabs.kick = rollDab("kick", state.audio.centroid);
             break;
-          case "snare":
+          }
+          case "snare": {
             impulses.snare = 1;
             ages.snare = 0;
             dabs.snare = rollDab("snare", state.audio.centroid);
             break;
-          case "hat":
+          }
+          case "hat": {
             impulses.hat = 1;
             ages.hat = 0;
             dabs.hat = rollDab("hat", state.audio.centroid);
             break;
-          case "vocal":
+          }
+          case "vocal": {
             impulses.vocal = 1;
             ages.vocal = 0;
             dabs.vocal = rollDab("vocal", state.audio.centroid);
             break;
-          default:
+          }
+          default: {
             break;
+          }
         }
       }
       const halfLife = 300 - 150 * intensity;
@@ -640,7 +677,8 @@ export function DisplacementCanvas() {
       const slowPan = Math.sin(driftT * 0.05) * 12;
       const slowYaw = Math.cos(driftT * 0.07) * 1.2;
       const breath = 1 + Math.sin(driftT * 0.2) * 0.008;
-      const zoomLevel = (targets.zoom ?? 1) + envelopes.bass.peak * 0.04 * intensity;
+      const zoomLevel =
+        (targets.zoom ?? 1) + envelopes.bass.peak * 0.04 * intensity;
       const kickBoost = impulses.kick * coef.zoomImpulseGain;
       const jitter = kickBoost * 6;
       const jitterX = jitter * (Math.random() - 0.5);
@@ -648,7 +686,7 @@ export function DisplacementCanvas() {
       canvas.style.transform = `scale(${(zoomLevel * breath).toFixed(4)}) translate3d(${(
         slowPan + jitterX
       ).toFixed(2)}px, ${(-slowPan * 0.4 + jitterY).toFixed(
-        2,
+        2
       )}px, 0) rotate(${slowYaw.toFixed(3)}deg)`;
 
       const currSlot = getCurr();
@@ -661,7 +699,7 @@ export function DisplacementCanvas() {
             : 0
           : Math.min(
               1,
-              (now - state.crossfadeStartedAt) / (hasPrev ? BLEED_MS : FADE_MS),
+              (now - state.crossfadeStartedAt) / (hasPrev ? BLEED_MS : FADE_MS)
             );
 
       resizeCanvasToDisplay(canvas, gl);
@@ -674,26 +712,25 @@ export function DisplacementCanvas() {
       let fadeT = 1;
       if (fadeInFlight) {
         fadeT = Math.min(1, (now - fadeStartAt) / PRESET_CROSSFADE_MS);
-        if (fadeT >= 1) fadeInFlight = false;
+        if (fadeT >= 1) {
+          fadeInFlight = false;
+        }
       }
       // easeOutBack — linear t is jarring; overshoot makes the switch feel
       // like a flip-card settling, not a dissolve.
-      const s = 1.70158;
+      const s = 1.701_58;
       const u = fadeT - 1;
       const easedT = u * u * ((s + 1) * u + s) + 1;
       const blended = lerpPreset(fromCfg, toCfg, easedT);
       let effective = applyDrift(
         blended,
         currentDrift,
-        (now - mountedAt) / 1000,
+        (now - mountedAt) / 1000
       );
 
       // Session progress drives glitch-peek cadence (shorter gaps late in the
       // session), feedback trail depth, and a subtle palette temp shift.
-      const sessionProgress = Math.min(
-        1,
-        (now - mountedAt) / SESSION_ARC_MS,
-      );
+      const sessionProgress = Math.min(1, (now - mountedAt) / SESSION_ARC_MS);
       // As progress → 1, peek interval halves: 30s→15s min, 30s→15s jitter.
       const peekIntervalMinNow = peekIntervalMin * (1 - 0.5 * sessionProgress);
       const peekIntervalJitterNow =
@@ -721,8 +758,7 @@ export function DisplacementCanvas() {
           nextPeekAt =
             now + peekIntervalMinNow + Math.random() * peekIntervalJitterNow;
         } else {
-          const peekT =
-            p < 0.4 ? p / 0.4 : p < 0.6 ? 1 : 1 - (p - 0.6) / 0.4;
+          const peekT = p < 0.4 ? p / 0.4 : p < 0.6 ? 1 : 1 - (p - 0.6) / 0.4;
           effective = lerpPreset(effective, peekCfg, peekT);
         }
       }
@@ -738,8 +774,8 @@ export function DisplacementCanvas() {
         effective.rd > 0.001
           ? rdLayer.update({
               feed: effective.rdFeed,
-              kill: effective.rdKill,
               kickImpulse: impulses.kick,
+              kill: effective.rdKill,
               rms: envelopes.rms.value,
             })
           : rdLayer.getTexture();
@@ -768,14 +804,14 @@ export function DisplacementCanvas() {
       // rmsPeak is always the raw value — it's the master "peak" channel
       // and isn't semantically remappable.
       const routedAudio = resolveAudio(currentPresetName, {
+        bass: envelopes.bass.value,
+        hat: impulses.hat,
+        kick: impulses.kick,
+        mids: envelopes.mids.value,
         rms: envelopes.rms.value,
         rmsPeak: envelopes.rms.peak,
-        bass: envelopes.bass.value,
-        mids: envelopes.mids.value,
-        treble: envelopes.treble.value,
-        kick: impulses.kick,
         snare: impulses.snare,
-        hat: impulses.hat,
+        treble: envelopes.treble.value,
         vocal: impulses.vocal,
       });
       gl.uniform1f(uni.uBass, routedAudio.bass);
@@ -800,7 +836,7 @@ export function DisplacementCanvas() {
         ages.kick,
         ages.snare,
         ages.hat,
-        ages.vocal,
+        ages.vocal
       );
       gl.uniform1f(uni.uWarp, targets.warp ?? 0);
       gl.uniform1f(uni.uMotionEnergy, targets.motionEnergy ?? 0);
@@ -810,34 +846,62 @@ export function DisplacementCanvas() {
         dabs.kick[0],
         dabs.kick[1],
         dabs.snare[0],
-        dabs.snare[1],
+        dabs.snare[1]
       );
       gl.uniform4f(
         uni.uDabPosHV,
         dabs.hat[0],
         dabs.hat[1],
         dabs.vocal[0],
-        dabs.vocal[1],
+        dabs.vocal[1]
       );
 
       const { l1, l2, l3 } = drops;
       gl.uniform4f(uni.uDropsL1A, l1.ab[0], l1.ab[1], l1.ab[2], l1.ab[3]);
       gl.uniform4f(uni.uDropsL1B, l1.cd[0], l1.cd[1], l1.cd[2], l1.cd[3]);
-      gl.uniform4f(uni.uDropDelaysL1, l1.delays[0], l1.delays[1], l1.delays[2], l1.delays[3]);
+      gl.uniform4f(
+        uni.uDropDelaysL1,
+        l1.delays[0],
+        l1.delays[1],
+        l1.delays[2],
+        l1.delays[3]
+      );
       gl.uniform4f(uni.uDropsL2A, l2.ab[0], l2.ab[1], l2.ab[2], l2.ab[3]);
       gl.uniform4f(uni.uDropsL2B, l2.cd[0], l2.cd[1], l2.cd[2], l2.cd[3]);
-      gl.uniform4f(uni.uDropDelaysL2, l2.delays[0], l2.delays[1], l2.delays[2], l2.delays[3]);
+      gl.uniform4f(
+        uni.uDropDelaysL2,
+        l2.delays[0],
+        l2.delays[1],
+        l2.delays[2],
+        l2.delays[3]
+      );
       gl.uniform4f(uni.uDropsL3A, l3.ab[0], l3.ab[1], l3.ab[2], l3.ab[3]);
       gl.uniform4f(uni.uDropsL3B, l3.cd[0], l3.cd[1], l3.cd[2], l3.cd[3]);
-      gl.uniform4f(uni.uDropDelaysL3, l3.delays[0], l3.delays[1], l3.delays[2], l3.delays[3]);
+      gl.uniform4f(
+        uni.uDropDelaysL3,
+        l3.delays[0],
+        l3.delays[1],
+        l3.delays[2],
+        l3.delays[3]
+      );
 
       // Effects-deck uniforms from the blended+drifted preset.
       gl.uniform1f(uni.uKaleidoSegments, effective.kaleidoSegments);
       gl.uniform1f(uni.uPolarWarp, effective.polarWarp);
       gl.uniform1f(uni.uPosterizeAlways, effective.posterizeAlways);
       gl.uniform1f(uni.uDuotoneMix, effective.duotoneMix);
-      gl.uniform3f(uni.uDuotoneLo, effective.duotoneLo[0], effective.duotoneLo[1], effective.duotoneLo[2]);
-      gl.uniform3f(uni.uDuotoneHi, effective.duotoneHi[0], effective.duotoneHi[1], effective.duotoneHi[2]);
+      gl.uniform3f(
+        uni.uDuotoneLo,
+        effective.duotoneLo[0],
+        effective.duotoneLo[1],
+        effective.duotoneLo[2]
+      );
+      gl.uniform3f(
+        uni.uDuotoneHi,
+        effective.duotoneHi[0],
+        effective.duotoneHi[1],
+        effective.duotoneHi[2]
+      );
       gl.uniform1f(uni.uEdge, effective.edge);
       gl.uniform1f(uni.uInvert, effective.invert);
       gl.uniform1f(uni.uFeedbackAmount, effective.feedbackAmount);
@@ -870,9 +934,11 @@ export function DisplacementCanvas() {
       // Frame-rate independent (alpha derived from dtMs).
       const palAlpha = 1 - Math.exp(-dtMs / 1500);
       for (let i = 0; i < 12; i++) {
-        currentPalette[i]! += palAlpha * (targetPalette[i]! - currentPalette[i]!);
+        currentPalette[i]! +=
+          palAlpha * (targetPalette[i]! - currentPalette[i]!);
       }
-      currentPaletteAmount += palAlpha * (targetPaletteAmount - currentPaletteAmount);
+      currentPaletteAmount +=
+        palAlpha * (targetPaletteAmount - currentPaletteAmount);
       gl.uniform3fv(uni.uPalette, currentPalette);
       gl.uniform1f(uni.uPaletteAmount, currentPaletteAmount);
 
@@ -898,12 +964,16 @@ export function DisplacementCanvas() {
       unsubFrame();
       unsubPreset();
       unsubPalette();
-      if (retryTimer) clearTimeout(retryTimer);
+      if (retryTimer) {
+        clearTimeout(retryTimer);
+      }
       if (pendingImg) {
         pendingImg.onload = null;
         pendingImg.onerror = null;
       }
-      if (currentCanvas === canvas) currentCanvas = null;
+      if (currentCanvas === canvas) {
+        currentCanvas = null;
+      }
       gl.deleteProgram(program);
       gl.deleteProgram(blitProgram);
       gl.deleteTexture(slotA.tex);

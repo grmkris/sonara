@@ -1,9 +1,5 @@
-import {
-  type IdTypePrefixNames,
-  type TypeIdString,
-  typeIdFromUuid,
-  typeIdToUuid,
-} from "@sonara/shared/typeid";
+import { typeIdFromUuid, typeIdToUuid } from "@sonara/shared/typeid";
+import type { IdTypePrefixNames, TypeIdString } from "@sonara/shared/typeid";
 import { customType, timestamp } from "drizzle-orm/pg-core";
 
 // Postgres `uuid` storage; app-side typeid string. Driver translates on read
@@ -11,7 +7,7 @@ import { customType, timestamp } from "drizzle-orm/pg-core";
 // space.
 export const typeId = <const T extends IdTypePrefixNames>(
   prefix: T,
-  columnName: string,
+  columnName: string
 ) =>
   customType<{
     data: TypeIdString<T>;
@@ -29,8 +25,10 @@ export const typeId = <const T extends IdTypePrefixNames>(
   })(columnName);
 
 export const createTimestampField = (name?: string) => {
-  if (!name) return timestamp({ withTimezone: true, mode: "date" });
-  return timestamp(name, { withTimezone: true, mode: "date" });
+  if (!name) {
+    return timestamp({ withTimezone: true, mode: "date" });
+  }
+  return timestamp(name, { mode: "date", withTimezone: true });
 };
 
 // Spread onto every table that wants standard created_at / updated_at

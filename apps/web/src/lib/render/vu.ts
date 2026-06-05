@@ -42,10 +42,12 @@ export function createVuEnvelope(opts: VuOptions): VuEnvelope {
   let rising = false;
 
   return {
+    get peak() {
+      return peak;
+    },
     update(raw, dtMs) {
       if (dtMs <= 0) return;
-      const tauValue =
-        raw > value ? opts.attackMs : opts.releaseMs;
+      const tauValue = raw > value ? opts.attackMs : opts.releaseMs;
       const tauPeak = raw > peak ? peakAttackMs : peakReleaseMs;
 
       // First-order low-pass; alpha = 1 - exp(-dt/tau).
@@ -72,9 +74,6 @@ export function createVuEnvelope(opts: VuOptions): VuEnvelope {
     },
     get value() {
       return value;
-    },
-    get peak() {
-      return peak;
     },
   };
 }

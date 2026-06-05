@@ -73,7 +73,9 @@ input::placeholder {
   color: var(--paper);
 }
 
-.hairline        { background-color: var(--hairline); }
+.hairline {
+  background-color: var(--hairline);
+}
 
 /* Thin paper-tinted scrim behind clusters of UI text, so text stays legible
    against any hallucinated frame without becoming a card. */
@@ -109,24 +111,55 @@ input::placeholder {
 /* Edge vignette for the image so edge-anchored UI stays readable. */
 .vignette-mask {
   background:
-    linear-gradient(to right, color-mix(in srgb, var(--ink) 72%, transparent), transparent 22%, transparent 78%, color-mix(in srgb, var(--ink) 70%, transparent)),
-    linear-gradient(to bottom, color-mix(in srgb, var(--ink) 55%, transparent), transparent 18%, transparent 78%, color-mix(in srgb, var(--ink) 75%, transparent));
+    linear-gradient(
+      to right,
+      color-mix(in srgb, var(--ink) 72%, transparent),
+      transparent 22%,
+      transparent 78%,
+      color-mix(in srgb, var(--ink) 70%, transparent)
+    ),
+    linear-gradient(
+      to bottom,
+      color-mix(in srgb, var(--ink) 55%, transparent),
+      transparent 18%,
+      transparent 78%,
+      color-mix(in srgb, var(--ink) 75%, transparent)
+    );
   pointer-events: none;
 }
 
 /* Breathing pulse for the empty-state wordmark. */
 @keyframes breath {
-  0%,   100% { opacity: 0.09; transform: scale(1.0);  }
-  50%        { opacity: 0.16; transform: scale(1.015); }
+  0%,
+  100% {
+    opacity: 0.09;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.16;
+    transform: scale(1.015);
+  }
 }
-.breath { animation: breath 4.5s ease-in-out infinite; }
+.breath {
+  animation: breath 4.5s ease-in-out infinite;
+}
 
 /* Ink sweep: 1 px brush stroke drawn horizontally across the top of the viewport. */
 @keyframes ink-sweep {
-  0%   { transform: translate3d(-100%, 0, 0); opacity: 0;    }
-  8%   {                                      opacity: 0.75; }
-  90%  {                                      opacity: 0.55; }
-  100% { transform: translate3d(100%, 0, 0);  opacity: 0;    }
+  0% {
+    transform: translate3d(-100%, 0, 0);
+    opacity: 0;
+  }
+  8% {
+    opacity: 0.75;
+  }
+  90% {
+    opacity: 0.55;
+  }
+  100% {
+    transform: translate3d(100%, 0, 0);
+    opacity: 0;
+  }
 }
 .ink-sweep {
   position: absolute;
@@ -134,37 +167,79 @@ input::placeholder {
   top: 18px;
   height: 1px;
   width: 40vw;
-  background: linear-gradient(90deg, transparent, var(--paper) 50%, transparent);
+  background: linear-gradient(
+    90deg,
+    transparent,
+    var(--paper) 50%,
+    transparent
+  );
   animation: ink-sweep 720ms cubic-bezier(0.25, 0.9, 0.25, 1) forwards;
   pointer-events: none;
 }
 
 /* Commit stamp — print-mark press animation. */
 @keyframes stamp-press {
-  0%   { transform: scale(0.1) rotate(-4deg); opacity: 0;    }
-  20%  { transform: scale(1.15) rotate(-6deg); opacity: 0.95; }
-  35%  { transform: scale(0.98) rotate(-3deg); opacity: 0.98; }
-  80%  { transform: scale(1.0)  rotate(-3deg); opacity: 0.90; }
-  100% { transform: scale(1.05) rotate(-2deg); opacity: 0;    }
+  0% {
+    transform: scale(0.1) rotate(-4deg);
+    opacity: 0;
+  }
+  20% {
+    transform: scale(1.15) rotate(-6deg);
+    opacity: 0.95;
+  }
+  35% {
+    transform: scale(0.98) rotate(-3deg);
+    opacity: 0.98;
+  }
+  80% {
+    transform: scale(1) rotate(-3deg);
+    opacity: 0.9;
+  }
+  100% {
+    transform: scale(1.05) rotate(-2deg);
+    opacity: 0;
+  }
 }
-.stamp-press { animation: stamp-press 1100ms cubic-bezier(0.2, 0.9, 0.2, 1) forwards; }
+.stamp-press {
+  animation: stamp-press 1100ms cubic-bezier(0.2, 0.9, 0.2, 1) forwards;
+}
 
 /* Red tick that lingers by the version counter after commit. */
 @keyframes commit-tick {
-  0%,  40% { opacity: 1; }
-  100%     { opacity: 0; }
+  0%,
+  40% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
 }
-.commit-tick { animation: commit-tick 2000ms linear forwards; }
+.commit-tick {
+  animation: commit-tick 2000ms linear forwards;
+}
 
 /* Utility: fade UI when hidden. */
-.ui-fade-in  { transition: opacity 240ms ease; opacity: 1; }
-.ui-fade-out { transition: opacity 240ms ease; opacity: 0; pointer-events: none; }
+.ui-fade-in {
+  transition: opacity 240ms ease;
+  opacity: 1;
+}
+.ui-fade-out {
+  transition: opacity 240ms ease;
+  opacity: 0;
+  pointer-events: none;
+}
 
 /* Suggestion chips reveal — slide-down + fade, in keeping with the
    editorial ink-bloom feel. */
 @keyframes chips-reveal {
-  0%   { opacity: 0; transform: translateY(-3px); }
-  100% { opacity: 1; transform: translateY(0);    }
+  0% {
+    opacity: 0;
+    transform: translateY(-3px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 .chips-reveal {
   animation: chips-reveal 220ms cubic-bezier(0.2, 0.7, 0.2, 1) both;
@@ -172,23 +247,41 @@ input::placeholder {
 
 /* Console panel tab-content reveal. */
 @keyframes panel-reveal {
-  0%   { opacity: 0; }
-  100% { opacity: 1; }
+  0% {
+    opacity: 0;
+  }
+  100% {
+    opacity: 1;
+  }
 }
-.panel-reveal { animation: panel-reveal 200ms ease both; }
+.panel-reveal {
+  animation: panel-reveal 200ms ease both;
+}
 
 /* Polaroid-develop: page-wide softness when a scene field commits. The
    whole document dims to 92% and brightens back over 320ms, giving the
    visualiser a single coherent "thing happened" gesture. Triggered by
    `flashCommit()` (lib/commit-flash.ts). */
 @keyframes polaroid-develop {
-  0%, 100% { opacity: 1; filter: brightness(1); }
-  35%      { opacity: 0.92; filter: brightness(0.94); }
+  0%,
+  100% {
+    opacity: 1;
+    filter: brightness(1);
+  }
+  35% {
+    opacity: 0.92;
+    filter: brightness(0.94);
+  }
 }
-.commit-flash { animation: polaroid-develop 320ms ease-out; }
+.commit-flash {
+  animation: polaroid-develop 320ms ease-out;
+}
 
 /* Tabular numerals for anything telemetric. */
-.nums { font-variant-numeric: tabular-nums; font-feature-settings: "tnum" on; }
+.nums {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" on;
+}
 
 /* Consistent focus ring for custom <button> elements that don't go through
    the shadcn Button variant (which currently sets only `outline-none`). */
@@ -233,15 +326,31 @@ input::placeholder {
 
 /* Trigger-log line fade-in. */
 @keyframes log-fade {
-  0%   { opacity: 0; transform: translateY(4px); }
-  100% { opacity: 1; transform: translateY(0);   }
+  0% {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 /* Ink field commit stroke — 1px line paints beneath a committed input. */
 @keyframes field-sweep {
-  0%   { transform: scaleX(0);   opacity: 0;    transform-origin: left; }
-  20%  {                          opacity: 0.9;                         }
-  100% { transform: scaleX(1);   opacity: 0;    transform-origin: left; }
+  0% {
+    transform: scaleX(0);
+    opacity: 0;
+    transform-origin: left;
+  }
+  20% {
+    opacity: 0.9;
+  }
+  100% {
+    transform: scaleX(1);
+    opacity: 0;
+    transform-origin: left;
+  }
 }
 .field-sweep {
   position: absolute;
@@ -249,7 +358,13 @@ input::placeholder {
   right: 0;
   bottom: -4px;
   height: 1px;
-  background: linear-gradient(90deg, transparent, var(--paper) 30%, var(--paper) 70%, transparent);
+  background: linear-gradient(
+    90deg,
+    transparent,
+    var(--paper) 30%,
+    var(--paper) 70%,
+    transparent
+  );
   animation: field-sweep 720ms cubic-bezier(0.25, 0.9, 0.25, 1) forwards;
   pointer-events: none;
 }
@@ -257,14 +372,24 @@ input::placeholder {
 /* Landing fold settle — hero cluster rises into place once on load.
    Staggered via .reveal-1/.reveal-2 delays; same easing as the ink sweeps. */
 @keyframes rise {
-  0%   { opacity: 0; transform: translateY(10px); }
-  100% { opacity: 1; transform: translateY(0);    }
+  0% {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 .reveal {
   animation: rise 760ms cubic-bezier(0.25, 0.9, 0.25, 1) both;
 }
-.reveal-1 { animation-delay: 110ms; }
-.reveal-2 { animation-delay: 220ms; }
+.reveal-1 {
+  animation-delay: 110ms;
+}
+.reveal-2 {
+  animation-delay: 220ms;
+}
 
 @media (prefers-reduced-motion: reduce) {
   .breath,
@@ -273,9 +398,19 @@ input::placeholder {
   .field-sweep,
   .chips-reveal,
   .panel-reveal,
-  .reveal { animation: none !important; }
-  .commit-tick { animation-duration: 1ms !important; }
-  .commit-flash { animation: none !important; }
-  .grain-overlay { display: none; }
-  .wordmark::after { transition: none; }
+  .reveal {
+    animation: none !important;
+  }
+  .commit-tick {
+    animation-duration: 1ms !important;
+  }
+  .commit-flash {
+    animation: none !important;
+  }
+  .grain-overlay {
+    display: none;
+  }
+  .wordmark::after {
+    transition: none;
+  }
 }

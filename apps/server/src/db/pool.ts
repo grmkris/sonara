@@ -1,4 +1,5 @@
 import pg from "pg";
+
 import { env } from "../env";
 
 // Shared singleton pg.Pool used by credits.service and library-provider.
@@ -9,13 +10,13 @@ export interface PoolLike {
   connect(): Promise<{
     query<T = unknown>(
       sql: string,
-      params?: readonly unknown[],
+      params?: readonly unknown[]
     ): Promise<{ rows: T[]; rowCount: number | null }>;
     release(): void;
   }>;
   query<T = unknown>(
     sql: string,
-    params?: readonly unknown[],
+    params?: readonly unknown[]
   ): Promise<{ rows: T[]; rowCount: number | null }>;
   end?(): Promise<void>;
 }

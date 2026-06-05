@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+
 import { Mark } from "@/components/brand/mark";
 
 // Shared footer for the marketing pages (landing + about). No opaque panel /

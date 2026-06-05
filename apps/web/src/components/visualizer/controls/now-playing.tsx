@@ -1,8 +1,8 @@
 "use client";
 
 import { useSession } from "@/lib/auth-client";
-import { useVisualizerStore } from "@/stores/visualizer";
 import { cn } from "@/lib/utils";
+import { useVisualizerStore } from "@/stores/visualizer";
 
 // Small chip showing the identified track (with a "refresh" action) OR — when
 // nothing is known yet — a minimal "identify" button. Without the always-
@@ -22,7 +22,9 @@ export function NowPlaying() {
   const requestIdentify = useVisualizerStore((s) => s.requestIdentify);
   const recognizing = useVisualizerStore((s) => s.recognizing);
 
-  if (!sessionData?.session) return null;
+  if (!sessionData?.session) {
+    return null;
+  }
 
   if (!track) {
     return (
@@ -33,16 +35,12 @@ export function NowPlaying() {
         className={cn(
           "focus-ring pointer-events-auto flex items-center gap-2 rounded-sm border border-[color:var(--hairline)]/40 bg-black/20 px-2 py-1 backdrop-blur-sm",
           "font-mono text-[10px] uppercase tracking-[0.2em] text-[color:var(--stone)] transition",
-          "hover:text-[color:var(--paper)] disabled:opacity-60",
+          "hover:text-[color:var(--paper)] disabled:opacity-60"
         )}
         title={recognizing ? "recognising…" : "identify music playing now"}
         aria-label={recognizing ? "recognising" : "identify music playing now"}
       >
-        {recognizing ? (
-          <SpinnerIcon />
-        ) : (
-          <RefreshIcon />
-        )}
+        {recognizing ? <SpinnerIcon /> : <RefreshIcon />}
         <span className="hidden sm:inline">
           {recognizing ? "listening…" : "identify"}
         </span>
@@ -66,7 +64,7 @@ export function NowPlaying() {
         <span
           className={cn(
             "truncate font-serif text-[11px] italic",
-            "text-[color:var(--paper)]/90",
+            "text-[color:var(--paper)]/90"
           )}
           title={`${track.title} — ${track.artist}`}
         >

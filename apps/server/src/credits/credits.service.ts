@@ -1,4 +1,5 @@
 import { typeIdGenerator, typeIdToUuid } from "@sonara/shared/typeid";
+
 import { closePool as closeSharedPool, getPool } from "../db/pool";
 import type { Logger } from "../lib/logger";
 
@@ -31,7 +32,7 @@ function newLedgerId(): string {
 export async function debitFrame(
   userId: string,
   cost: number,
-  logger?: Logger,
+  logger?: Logger
 ): Promise<number | null> {
   const client = await getPool().connect();
   try {
@@ -41,7 +42,7 @@ export async function debitFrame(
          SET balance_frames = balance_frames - $2, updated_at = now()
          WHERE user_id = $1 AND balance_frames >= $2
          RETURNING balance_frames AS balance`,
-      [userId, cost],
+      [userId, cost]
     );
     if (upd.rowCount === 0) {
       await client.query("ROLLBACK");
@@ -50,14 +51,14 @@ export async function debitFrame(
     await client.query(
       `INSERT INTO usage_ledger (id, user_id, kind, delta, created_at)
        VALUES ($1, $2, 'frame', $3, now())`,
-      [newLedgerId(), userId, -cost],
+      [newLedgerId(), userId, -cost]
     );
     await client.query("COMMIT");
     return upd.rows[0]?.balance ?? 0;
-  } catch (err) {
+  } catch (error) {
     await client.query("ROLLBACK").catch(() => {});
-    logger?.error({ err, userId, cost }, "debitFrame failed");
-    throw err;
+    logger?.error({ error, userId, cost }, "debitFrame failed");
+    throw error;
   } finally {
     client.release();
   }
@@ -74,7 +75,7 @@ export async function debitFrame(
 export async function refundFrame(
   userId: string,
   cost: number,
-  logger?: Logger,
+  logger?: Logger
 ): Promise<number | null> {
   const client = await getPool().connect();
   try {
@@ -84,7 +85,7 @@ export async function refundFrame(
          SET balance_frames = balance_frames + $2, updated_at = now()
          WHERE user_id = $1
          RETURNING balance_frames AS balance`,
-      [userId, cost],
+      [userId, cost]
     );
     if (upd.rowCount === 0) {
       await client.query("ROLLBACK");
@@ -93,14 +94,14 @@ export async function refundFrame(
     await client.query(
       `INSERT INTO usage_ledger (id, user_id, kind, delta, created_at)
        VALUES ($1, $2, 'refund', $3, now())`,
-      [newLedgerId(), userId, cost],
+      [newLedgerId(), userId, cost]
     );
     await client.query("COMMIT");
     return upd.rows[0]?.balance ?? 0;
-  } catch (err) {
+  } catch (error) {
     await client.query("ROLLBACK").catch(() => {});
-    logger?.error({ err, userId, cost }, "refundFrame failed");
-    throw err;
+    logger?.error({ error, userId, cost }, "refundFrame failed");
+    throw error;
   } finally {
     client.release();
   }
@@ -120,7 +121,7 @@ export async function refundFrame(
 export async function tryConsumeFreeTier(
   userId: string,
   limitPerHour = 3,
-  logger?: Logger,
+  logger?: Logger
 ): Promise<boolean> {
   const res = await getPool().query<{ usage_count: number }>(
     `INSERT INTO free_tier_ledger (user_id, window_start, usage_count)
@@ -129,20 +130,24 @@ export async function tryConsumeFreeTier(
        DO UPDATE SET usage_count = free_tier_ledger.usage_count + 1
          WHERE free_tier_ledger.usage_count < $2
      RETURNING usage_count`,
-    [userId, limitPerHour],
+    [userId, limitPerHour]
   );
-  if (res.rowCount === 0) return false;
+  if (res.rowCount === 0) {
+    return false;
+  }
   const count = res.rows[0]?.usage_count ?? 0;
-  if (count > limitPerHour) return false;
+  if (count > limitPerHour) {
+    return false;
+  }
   // Append a 'free' row to the ledger for consistent usage analytics.
   try {
     await getPool().query(
       `INSERT INTO usage_ledger (id, user_id, kind, delta, created_at)
        VALUES ($1, $2, 'free', -1, now())`,
-      [newLedgerId(), userId],
+      [newLedgerId(), userId]
     );
-  } catch (err) {
-    logger?.warn({ err, userId }, "failed to append free-tier ledger row");
+  } catch (error) {
+    logger?.warn({ error, userId }, "failed to append free-tier ledger row");
   }
   return true;
 }
@@ -150,9 +155,11 @@ export async function tryConsumeFreeTier(
 export async function getBalance(userId: string): Promise<{ frames: number }> {
   const res = await getPool().query<{ balance_frames: number }>(
     `SELECT balance_frames FROM credits WHERE user_id = $1`,
-    [userId],
+    [userId]
   );
-  if (res.rowCount === 0) return { frames: 0 };
+  if (res.rowCount === 0) {
+    return { frames: 0 };
+  }
   return { frames: res.rows[0]!.balance_frames };
 }
 

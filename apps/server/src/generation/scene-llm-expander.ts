@@ -1,9 +1,7 @@
 import { createFalClient } from "@fal-ai/client";
-import {
-  type SonaraSceneState,
-  ResolvedSceneCoreSchema,
-  type ResolvedSceneCore,
-} from "@sonara/shared";
+import { ResolvedSceneCoreSchema } from "@sonara/shared";
+import type { SonaraSceneState, ResolvedSceneCore } from "@sonara/shared";
+
 import { env } from "../env";
 import type { Logger } from "../lib/logger";
 
@@ -78,9 +76,13 @@ interface AnyLlmResult {
 }
 
 function extractOutput(data: unknown): string | null {
-  if (!data || typeof data !== "object") return null;
+  if (!data || typeof data !== "object") {
+    return null;
+  }
   const r = data as AnyLlmResult;
-  if (typeof r.output === "string") return r.output;
+  if (typeof r.output === "string") {
+    return r.output;
+  }
   return null;
 }
 
@@ -88,7 +90,9 @@ function stripFences(text: string): string {
   let out = text.trim();
   const fence = /^```(?:json)?\s*\n?([\s\S]*?)\n?```$/;
   const m = out.match(fence);
-  if (m?.[1]) out = m[1].trim();
+  if (m?.[1]) {
+    out = m[1].trim();
+  }
   return out;
 }
 
@@ -98,7 +102,9 @@ function stripFences(text: string): string {
 // with a better choice on its hot-path completion.
 function anchorFromPrompt(prompt: string): string {
   const trimmed = prompt.trim();
-  if (trimmed.length === 0) return "abstract form";
+  if (trimmed.length === 0) {
+    return "abstract form";
+  }
   const words = trimmed.split(/\s+/);
   return words.slice(0, 5).join(" ");
 }
@@ -112,37 +118,51 @@ function anchorFromPrompt(prompt: string): string {
 export function deterministicResolve(s: SonaraSceneState): ResolvedSceneCore {
   const anchor = anchorFromPrompt(s.prompt);
   const compositionParts: string[] = [];
-  if (s.surrealness > 0.7) compositionParts.push("surreal fluid composition");
-  if (s.abstraction > 0.6) compositionParts.push("dissolving edges");
-  if (s.stability < 0.4) compositionParts.push("off-balance, shifting");
-  if (compositionParts.length === 0) compositionParts.push("centered traditional");
+  if (s.surrealness > 0.7) {
+    compositionParts.push("surreal fluid composition");
+  }
+  if (s.abstraction > 0.6) {
+    compositionParts.push("dissolving edges");
+  }
+  if (s.stability < 0.4) {
+    compositionParts.push("off-balance, shifting");
+  }
+  if (compositionParts.length === 0) {
+    compositionParts.push("centered traditional");
+  }
 
   const styleParts: string[] = ["sumi-e ink wash"];
-  if (s.surrealness > 0.7) styleParts.push("fluid transformations");
+  if (s.surrealness > 0.7) {
+    styleParts.push("fluid transformations");
+  }
 
   const lightingParts: string[] = ["soft ambient"];
-  if (s.softness > 0.7) lightingParts.push("diffuse gossamer light");
+  if (s.softness > 0.7) {
+    lightingParts.push("diffuse gossamer light");
+  }
 
   const moodParts: string[] = ["contemplative"];
-  if (s.abstraction > 0.6) moodParts.push("luminous ambiguity");
+  if (s.abstraction > 0.6) {
+    moodParts.push("luminous ambiguity");
+  }
 
   return {
-    scene: anchor,
-    subjects: [{ description: anchor }],
-    style: styleParts.join(", "),
-    color_palette: [],
-    palette_text: "",
-    lighting: lightingParts.join(", "),
-    mood: moodParts.join(", "),
     background: "negative space",
-    composition: compositionParts.join(", "),
     camera: {
       angle: "eye level",
-      lens: "50mm normal",
       depth_of_field:
         s.softness > 0.7 ? "shallow, soft falloff" : "moderate focus",
+      lens: "50mm normal",
     },
+    color_palette: [],
+    composition: compositionParts.join(", "),
     drift_candidates: [],
+    lighting: lightingParts.join(", "),
+    mood: moodParts.join(", "),
+    palette_text: "",
+    scene: anchor,
+    style: styleParts.join(", "),
+    subjects: [{ description: anchor }],
   };
 }
 
@@ -153,24 +173,26 @@ export interface ExpandSceneOpts {
 
 export async function expandScene(
   scene: SonaraSceneState,
-  opts: ExpandSceneOpts,
+  opts: ExpandSceneOpts
 ): Promise<ResolvedSceneCore> {
   const model = env.FAL_LLM_MODEL ?? DEFAULT_MODEL;
   const scoped = createFalClient({ credentials: env.FAL_KEY });
 
   try {
     const result = await scoped.subscribe("fal-ai/any-llm", {
+      abortSignal: opts.signal,
       input: {
-        model,
-        system_prompt: buildSystemPrompt(),
-        prompt: buildUserPrompt(scene),
         max_tokens: MAX_OUTPUT_TOKENS,
+        model,
         priority: "latency",
+        prompt: buildUserPrompt(scene),
+        system_prompt: buildSystemPrompt(),
       },
       logs: false,
-      abortSignal: opts.signal,
     });
-    if (opts.signal?.aborted) return deterministicResolve(scene);
+    if (opts.signal?.aborted) {
+      return deterministicResolve(scene);
+    }
 
     const output = extractOutput(result?.data);
     if (!output) {
@@ -182,10 +204,10 @@ export async function expandScene(
     let parsed: unknown;
     try {
       parsed = JSON.parse(stripped);
-    } catch (err) {
+    } catch (error) {
       opts.logger.warn(
-        { err, output: stripped },
-        "scene-expander: JSON parse failed",
+        { error, output: stripped },
+        "scene-expander: JSON parse failed"
       );
       return deterministicResolve(scene);
     }
@@ -194,15 +216,15 @@ export async function expandScene(
     if (!validated.success) {
       opts.logger.warn(
         { issues: validated.error.issues, parsed },
-        "scene-expander: schema validation failed",
+        "scene-expander: schema validation failed"
       );
       return deterministicResolve(scene);
     }
 
     return validated.data;
-  } catch (err) {
+  } catch (error) {
     if (opts.signal?.aborted) return deterministicResolve(scene);
-    opts.logger.warn({ err }, "scene-expander: fal any-llm error");
+    opts.logger.warn({ error }, "scene-expander: fal any-llm error");
     return deterministicResolve(scene);
   }
 }

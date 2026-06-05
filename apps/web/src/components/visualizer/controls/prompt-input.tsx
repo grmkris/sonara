@@ -1,11 +1,13 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { SessionSend } from "@/lib/session-actions";
-import { flashCommit } from "@/lib/commit-flash";
+
 import { useVoiceRecognition } from "@/hooks/use-voice-recognition";
-import { useVisualizerStore } from "@/stores/visualizer";
+import { flashCommit } from "@/lib/commit-flash";
+import type { SessionSend } from "@/lib/session-actions";
 import { cn } from "@/lib/utils";
+import { useVisualizerStore } from "@/stores/visualizer";
+
 import { ImageAnchorZone } from "./image-anchor-zone";
 
 interface PromptInputProps {
@@ -43,7 +45,9 @@ export function PromptInput({ send }: PromptInputProps) {
   // value we last sent (not strict equality with scene.prompt) so server
   // normalisation doesn't leave the draft stuck.
   useEffect(() => {
-    if (draft === null) return;
+    if (draft === null) {
+      return;
+    }
     const sent = lastSentRef.current;
     if (sent !== null && scene.prompt !== undefined) {
       // Any echo with a defined prompt clears the draft.
@@ -61,7 +65,7 @@ export function PromptInput({ send }: PromptInputProps) {
       setDraft(text);
       setLiveTranscript(text);
     },
-    [setLiveTranscript],
+    [setLiveTranscript]
   );
 
   const { supported, start, stop } = useVoiceRecognition({
@@ -69,7 +73,9 @@ export function PromptInput({ send }: PromptInputProps) {
   });
 
   const onMicToggle = useCallback(() => {
-    if (!supported) return;
+    if (!supported) {
+      return;
+    }
     if (isListening) {
       stop();
       setIsListening(false);
@@ -86,9 +92,15 @@ export function PromptInput({ send }: PromptInputProps) {
   const commit = useCallback(
     (value: string) => {
       const next = value.trim();
-      if (next.length === 0) return;
-      if (next === scene.prompt) return;
-      if (lastSentRef.current === next) return;
+      if (next.length === 0) {
+        return;
+      }
+      if (next === scene.prompt) {
+        return;
+      }
+      if (lastSentRef.current === next) {
+        return;
+      }
       lastSentRef.current = next;
 
       if (demoMode) {
@@ -102,25 +114,22 @@ export function PromptInput({ send }: PromptInputProps) {
           : null;
         setDemoMode(false);
         setDemoDeck(null);
-        send({ type: "session.goLive", prompt: next, seedFrameUrl });
+        send({ prompt: next, seedFrameUrl, type: "session.goLive" });
       } else {
         const messageType: "voice.patch" | "scene.patch" =
           lastDraftFromVoiceRef.current ? "voice.patch" : "scene.patch";
-        send({ type: messageType, patch: { prompt: next } });
+        send({ patch: { prompt: next }, type: messageType });
       }
       lastDraftFromVoiceRef.current = false;
       flashCommit();
     },
-    [scene.prompt, send, demoMode, setDemoMode, setDemoDeck],
+    [scene.prompt, send, demoMode, setDemoMode, setDemoDeck]
   );
 
-  const onChange = useCallback(
-    (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-      lastDraftFromVoiceRef.current = false;
-      setDraft(e.target.value);
-    },
-    [],
-  );
+  const onChange = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    lastDraftFromVoiceRef.current = false;
+    setDraft(e.target.value);
+  }, []);
 
   const onKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -130,7 +139,7 @@ export function PromptInput({ send }: PromptInputProps) {
         commit(value);
       }
     },
-    [draft, scene.prompt, commit],
+    [draft, scene.prompt, commit]
   );
 
   const value = draft ?? scene.prompt ?? "";
@@ -150,7 +159,7 @@ export function PromptInput({ send }: PromptInputProps) {
               "font-sans text-[10px] uppercase tracking-[0.18em] px-2 py-0.5 border-b transition-colors",
               isListening
                 ? "text-[color:var(--signal)] border-[color:var(--signal)] animate-pulse"
-                : "text-[color:var(--stone)] border-[color:var(--hairline)]/30 hover:text-[color:var(--paper)] hover:border-[color:var(--paper)]/60",
+                : "text-[color:var(--stone)] border-[color:var(--hairline)]/30 hover:text-[color:var(--paper)] hover:border-[color:var(--paper)]/60"
             )}
             aria-label={isListening ? "stop dictation" : "start dictation"}
           >
@@ -169,7 +178,7 @@ export function PromptInput({ send }: PromptInputProps) {
           "w-full resize-none bg-transparent border border-[color:var(--hairline)]/40 px-3 py-2",
           "font-serif text-[14px] leading-[1.4] text-[color:var(--paper)] placeholder:text-[color:var(--stone)]/50",
           "focus:outline-none focus:border-[color:var(--paper)]/60 transition-colors",
-          isRunning && "opacity-90",
+          isRunning && "opacity-90"
         )}
       />
       {isListening && (

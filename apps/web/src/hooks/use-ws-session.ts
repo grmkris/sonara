@@ -1,16 +1,15 @@
 "use client";
 
+import type { ServerEvent } from "@sonara/shared";
 import { useCallback, useEffect, useRef } from "react";
 import { toast } from "sonner";
-import type { ServerEvent } from "@sonara/shared";
+
 import { createSessionConnection } from "@/lib/orpc-ws";
-import {
-  dispatchSessionAction,
-  type SessionAction,
-  type SessionSend,
-} from "@/lib/session-actions";
+import { PRESET_NAMES } from "@/lib/render/presets";
+import type { PresetName } from "@/lib/render/presets";
+import { dispatchSessionAction } from "@/lib/session-actions";
+import type { SessionAction, SessionSend } from "@/lib/session-actions";
 import { useVisualizerStore } from "@/stores/visualizer";
-import { PRESET_NAMES, type PresetName } from "@/lib/render/presets";
 
 function isKnownPreset(name: string): name is PresetName {
   return (PRESET_NAMES as readonly string[]).includes(name);
@@ -32,18 +31,21 @@ export function useWsSession(): SessionSend {
     const handleEvent = (event: ServerEvent): void => {
       const s = store.getState();
       switch (event.type) {
-        case "scene.state":
+        case "scene.state": {
           s.setScene(event.state);
           break;
-        case "frame.preview":
+        }
+        case "frame.preview": {
           s.pushFrame(event.imageUrl, event.version);
           break;
-        case "frame.final":
+        }
+        case "frame.final": {
           s.pushFrame(event.imageUrl, event.version);
           // Settled images go into the ghost callback ring; previews don't.
           s.pushHero(event.imageUrl);
           break;
-        case "job.status":
+        }
+        case "job.status": {
           s.setStatus(event.status, event.message);
           if (event.status === "running" && event.reason) {
             s.pushTrigger(event.reason, s.scene.version);
@@ -55,7 +57,8 @@ export function useWsSession(): SessionSend {
             });
           }
           break;
-        case "preset.suggest":
+        }
+        case "preset.suggest": {
           // Server (LLM) suggests a visual preset. Only apply when the user
           // has opted into LLM mode — otherwise respect manual / cycle /
           // section selections.
@@ -63,7 +66,8 @@ export function useWsSession(): SessionSend {
             s.setPreset(event.name);
           }
           break;
-        case "now.playing":
+        }
+        case "now.playing": {
           s.setNowPlaying(event.track);
           // Clear the manual-trigger spinner on every manual response,
           // whether AudD matched or not. Auto triggers never set it.
@@ -76,7 +80,8 @@ export function useWsSession(): SessionSend {
             toast("couldn't identify the song", { duration: 2200 });
           }
           break;
-        case "generation.requested":
+        }
+        case "generation.requested": {
           s.setInspectorRequested({
             reason: event.reason,
             version: event.version,
@@ -87,18 +92,21 @@ export function useWsSession(): SessionSend {
             nextKeyframeAt: event.nextKeyframeAt,
           });
           break;
-        case "generation.completed":
+        }
+        case "generation.completed": {
           s.setInspectorCompleted(
             event.version,
             event.durationMs,
-            event.success,
+            event.success
           );
           break;
-        case "library.appended":
+        }
+        case "library.appended": {
           // Newly persisted frame — prepend to the timeline. Dedupes on id
           // so the brief race with library.bootstrap can't double-insert.
           s.libraryAppendFromEvent(event.frame);
           break;
+        }
       }
     };
 
@@ -107,14 +115,16 @@ export function useWsSession(): SessionSend {
       // ticket, anon callers get a userId:null ticket and the server pins
       // their session to demo-library mode. No upfront probe; partysocket
       // opens the WS directly.
-      if (cancelled) return;
+      if (cancelled) {
+        return;
+      }
 
       conn = createSessionConnection(sessionId);
       const { socket, client } = conn;
 
       sendRef.current = (action: SessionAction) => {
-        dispatchSessionAction(client, action).catch((err) => {
-          console.warn("[ws] dispatch failed", err);
+        dispatchSessionAction(client, action).catch((error) => {
+          console.warn("[ws] dispatch failed", error);
         });
       };
 
@@ -168,20 +178,26 @@ export function useWsSession(): SessionSend {
               // RPC is protected so it errors with UNAUTHORIZED for anon
               // sessions — catch + ignore that case. The slice is idempotent
               // (libraryReset wipes it on signout; bootstrap dedupes).
-              void store.getState().libraryBootstrap().catch(() => {
-                // anon or transient error — leave the slice empty
-              });
-            } catch (err) {
-              const msg = err instanceof Error ? err.message : String(err);
+              void store
+                .getState()
+                .libraryBootstrap()
+                .catch(() => {
+                  // anon or transient error — leave the slice empty
+                });
+            } catch (error) {
+              const msg =
+                error instanceof Error ? error.message : String(error);
               console.warn("[ws] state snapshot failed:", msg);
             }
             for await (const event of iter) {
-              if (cancelled) return;
+              if (cancelled) {
+                return;
+              }
               handleEvent(event);
             }
-          } catch (err) {
+          } catch (error) {
             if (cancelled) return;
-            const msg = err instanceof Error ? err.message : String(err);
+            const msg = error instanceof Error ? error.message : String(error);
             console.warn("[ws] events iterator dropped, restarting:", msg);
           }
           // Backoff before reopening — covers reconnect windows.

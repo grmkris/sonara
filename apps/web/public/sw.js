@@ -10,7 +10,7 @@ const ASSET_CACHE = `sonara-assets-${VERSION}`;
 // Library images are content-addressed + immutable — keep across deploys so a
 // web deploy never wipes the (large) cached deck.
 const LIB_CACHE = "sonara-library";
-const KEEP = [NAV_CACHE, ASSET_CACHE, LIB_CACHE];
+const KEEP = new Set([NAV_CACHE, ASSET_CACHE, LIB_CACHE]);
 
 self.addEventListener("install", () => {
   self.skipWaiting();
@@ -22,20 +22,24 @@ self.addEventListener("activate", (event) => {
       const keys = await caches.keys();
       await Promise.all(
         keys
-          .filter((k) => k.startsWith("sonara-") && !KEEP.includes(k))
-          .map((k) => caches.delete(k)),
+          .filter((k) => k.startsWith("sonara-") && !KEEP.has(k))
+          .map((k) => caches.delete(k))
       );
       await self.clients.claim();
-    })(),
+    })()
   );
 });
 
 async function cacheFirst(req, cacheName) {
   const cache = await caches.open(cacheName);
   const hit = await cache.match(req);
-  if (hit) return hit;
+  if (hit) {
+    return hit;
+  }
   const res = await fetch(req);
-  if (res.ok) cache.put(req, res.clone());
+  if (res.ok) {
+    cache.put(req, res.clone());
+  }
   return res;
 }
 
@@ -44,7 +48,9 @@ async function staleWhileRevalidate(req, cacheName) {
   const hit = await cache.match(req);
   const fetching = fetch(req)
     .then((res) => {
-      if (res.ok) cache.put(req, res.clone());
+      if (res.ok) {
+        cache.put(req, res.clone());
+      }
       return res;
     })
     .catch(() => hit);
@@ -55,27 +61,33 @@ async function networkFirst(req, cacheName) {
   const cache = await caches.open(cacheName);
   try {
     const res = await fetch(req);
-    if (res.ok) cache.put(req, res.clone());
+    if (res.ok) {
+      cache.put(req, res.clone());
+    }
     return res;
-  } catch (err) {
+  } catch (error) {
     const hit = await cache.match(req);
     if (hit) return hit;
     const fallback = await cache.match("/play");
     if (fallback) return fallback;
-    throw err;
+    throw error;
   }
 }
 
 self.addEventListener("fetch", (event) => {
   const req = event.request;
-  if (req.method !== "GET") return;
+  if (req.method !== "GET") {
+    return;
+  }
   let url;
   try {
     url = new URL(req.url);
   } catch {
     return;
   }
-  if (url.origin !== self.location.origin) return;
+  if (url.origin !== self.location.origin) {
+    return;
+  }
   const p = url.pathname;
   // Never intercept realtime / API — let them hit the network and fail
   // gracefully offline (the demo loop is client-native and doesn't need them).
@@ -91,7 +103,7 @@ self.addEventListener("fetch", (event) => {
     event.respondWith(
       p.endsWith("manifest.json")
         ? staleWhileRevalidate(req, LIB_CACHE)
-        : cacheFirst(req, LIB_CACHE),
+        : cacheFirst(req, LIB_CACHE)
     );
     return;
   }
@@ -105,7 +117,7 @@ self.addEventListener("fetch", (event) => {
 // in small batches so a slow link isn't saturated. Frames already cached are
 // skipped, so the live demo's misses don't get re-fetched.
 self.addEventListener("message", (event) => {
-  const data = event.data;
+  const { data } = event;
   if (!data || data.type !== "PREFETCH_DECK" || !Array.isArray(data.urls)) {
     return;
   }
@@ -116,18 +128,24 @@ async function prefetchUrls(urls) {
   const cache = await caches.open(LIB_CACHE);
   const BATCH = 6;
   for (let i = 0; i < urls.length; i += BATCH) {
-    if (self.navigator && self.navigator.onLine === false) return;
+    if (self.navigator && self.navigator.onLine === false) {
+      return;
+    }
     const batch = urls.slice(i, i + BATCH);
     await Promise.all(
       batch.map(async (u) => {
         try {
-          if (await cache.match(u)) return;
+          if (await cache.match(u)) {
+            return;
+          }
           const res = await fetch(u, { cache: "no-store" });
-          if (res.ok) await cache.put(u, res.clone());
+          if (res.ok) {
+            await cache.put(u, res.clone());
+          }
         } catch {
           /* ignore individual frame failures */
         }
-      }),
+      })
     );
   }
 }

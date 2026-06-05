@@ -22,18 +22,16 @@ import { createHash } from "node:crypto";
 import { mkdir, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+
 import { createFalClient } from "@fal-ai/client";
 import { createDb, SCHEMA } from "@sonara/db";
-import {
-  DECK_KEYS,
-  type DeckKey,
-} from "@sonara/shared";
-import {
-  type ImageLibraryId,
-  typeIdGenerator,
-} from "@sonara/shared/typeid";
+import { DECK_KEYS } from "@sonara/shared";
+import type { DeckKey } from "@sonara/shared";
+import { typeIdGenerator } from "@sonara/shared/typeid";
+import type { ImageLibraryId } from "@sonara/shared/typeid";
 import { and, eq } from "drizzle-orm";
 import sharp from "sharp";
+
 import { env } from "../src/env";
 import { buildLibraryManifests } from "./build-library-manifests";
 
@@ -86,11 +84,15 @@ function parseArgs(): Args {
       deck = v as DeckKey;
     } else if (a === "--limit") {
       const v = Number(argv[++i]);
-      if (!Number.isInteger(v) || v <= 0) fail("--limit must be a positive integer");
+      if (!Number.isInteger(v) || v <= 0) {
+        fail("--limit must be a positive integer");
+      }
       limit = v;
     } else if (a === "--model") {
       const v = argv[++i];
-      if (!v) fail("--model requires a value");
+      if (!v) {
+        fail("--model requires a value");
+      }
       model = v;
     } else if (a === "--dry-run") {
       dryRun = true;
@@ -100,7 +102,7 @@ function parseArgs(): Args {
       fail(`unknown arg: ${a}`);
     }
   }
-  return { deck, limit, model, dryRun, fromExport };
+  return { deck, dryRun, fromExport, limit, model };
 }
 
 function promptHash(deck: string, prompt: string): string {
@@ -111,7 +113,7 @@ function promptHash(deck: string, prompt: string): string {
 // image (modulo fal's nondeterminism on the same seed across model revs).
 function promptSeed(prompt: string): number {
   const h = createHash("sha256").update(prompt).digest();
-  return h.readUInt32BE(0) & 0x7fff_ffff;
+  return h.readUInt32BE(0) & 0x7f_ff_ff_ff;
 }
 
 interface FalImage {
@@ -126,15 +128,21 @@ interface FalData {
 
 function pickImage(result: unknown): FalImage | null {
   const data = (result as { data?: FalData } | undefined)?.data;
-  if (!data) return null;
-  if (data.image?.url) return data.image;
-  if (data.images && data.images[0]?.url) return data.images[0];
+  if (!data) {
+    return null;
+  }
+  if (data.image?.url) {
+    return data.image;
+  }
+  if (data.images && data.images[0]?.url) {
+    return data.images[0];
+  }
   return null;
 }
 
 // apps/server/scripts/seed-library.ts -> repo root -> apps/web/public/library
 function publicLibraryDir(): string {
-  const here = dirname(fileURLToPath(import.meta.url));
+  const here = import.meta.dirname;
   return resolve(here, "../../web/public/library");
 }
 
@@ -154,19 +162,18 @@ async function downloadAndEncode(url: string): Promise<{
     .toBuffer({ resolveWithObject: true });
   return {
     buffer: transformed.data,
-    width: transformed.info.width,
     height: transformed.info.height,
+    width: transformed.info.width,
   };
 }
 
 async function importFromExport(args: Args): Promise<void> {
   const databaseUrl = env.DATABASE_URL;
-  if (!databaseUrl) fail("DATABASE_URL not set");
+  if (!databaseUrl) {
+    fail("DATABASE_URL not set");
+  }
 
-  const exportPath = resolve(
-    dirname(fileURLToPath(import.meta.url)),
-    "library-seed.json",
-  );
+  const exportPath = resolve(import.meta.dirname, "library-seed.json");
   const raw = await Bun.file(exportPath).text();
   const rows = JSON.parse(raw) as ExportRow[];
   const filtered = args.deck ? rows.filter((r) => r.deck === args.deck) : rows;
@@ -183,8 +190,8 @@ async function importFromExport(args: Args): Promise<void> {
       .where(
         and(
           eq(SCHEMA.imageLibrary.promptHash, row.promptHash),
-          eq(SCHEMA.imageLibrary.source, "seed"),
-        ),
+          eq(SCHEMA.imageLibrary.source, "seed")
+        )
       )
       .limit(1);
     if (existing.length > 0) {
@@ -193,28 +200,30 @@ async function importFromExport(args: Args): Promise<void> {
     }
     try {
       await db.insert(SCHEMA.imageLibrary).values({
-        id: row.id,
         deck: row.deck,
+        height: row.height,
+        id: row.id,
+        model: row.model,
+        palette: row.palette,
         prompt: row.prompt,
         promptHash: row.promptHash,
-        model: row.model,
         seed: row.seed,
+        status: row.status,
         url: row.url,
         width: row.width,
-        height: row.height,
-        palette: row.palette,
-        status: row.status,
       });
       imported++;
-      console.log(`  + ${row.deck}/${row.id}.webp  "${row.prompt.slice(0, 60)}"`);
-    } catch (err) {
-      console.error(`[fail] ${row.deck} "${row.prompt}":`, err);
+      console.log(
+        `  + ${row.deck}/${row.id}.webp  "${row.prompt.slice(0, 60)}"`
+      );
+    } catch (error) {
+      console.error(`[fail] ${row.deck} "${row.prompt}":`, error);
       failed++;
     }
   }
 
   console.log(
-    `\nfrom-export: ${imported} imported, ${skipped} skipped, ${failed} failed (out of ${filtered.length})`,
+    `\nfrom-export: ${imported} imported, ${skipped} skipped, ${failed} failed (out of ${filtered.length})`
   );
   await buildLibraryManifests();
   process.exit(failed > 0 ? 1 : 0);
@@ -229,23 +238,26 @@ async function main() {
   }
 
   const databaseUrl = env.DATABASE_URL;
-  if (!databaseUrl) fail("DATABASE_URL not set");
-  if (!env.FAL_KEY && !args.dryRun) fail("FAL_KEY not set");
+  if (!databaseUrl) {
+    fail("DATABASE_URL not set");
+  }
+  if (!env.FAL_KEY && !args.dryRun) {
+    fail("FAL_KEY not set");
+  }
   if (process.env.APP_ENV === "prod" && process.env.ALLOW_PROD_SEED !== "1") {
     fail("refusing to seed in production — set ALLOW_PROD_SEED=1 to override");
   }
 
-  const manifestPath = resolve(
-    dirname(fileURLToPath(import.meta.url)),
-    "library-manifest.json",
-  );
+  const manifestPath = resolve(import.meta.dirname, "library-manifest.json");
   const manifestRaw = await Bun.file(manifestPath).text();
   const manifest = JSON.parse(manifestRaw) as ManifestEntry[];
 
   const decks = args.deck
     ? manifest.filter((m) => m.deck === args.deck)
     : manifest;
-  if (decks.length === 0) fail(`no decks matched filter (--deck ${args.deck})`);
+  if (decks.length === 0) {
+    fail(`no decks matched filter (--deck ${args.deck})`);
+  }
 
   const db = createDb(databaseUrl);
   const fal = createFalClient({ credentials: env.FAL_KEY });
@@ -257,7 +269,9 @@ async function main() {
   let totalFail = 0;
 
   for (const entry of decks) {
-    const prompts = args.limit ? entry.prompts.slice(0, args.limit) : entry.prompts;
+    const prompts = args.limit
+      ? entry.prompts.slice(0, args.limit)
+      : entry.prompts;
     let gen = 0;
     let skip = 0;
     let fail_ = 0;
@@ -272,8 +286,8 @@ async function main() {
         .where(
           and(
             eq(SCHEMA.imageLibrary.promptHash, hash),
-            eq(SCHEMA.imageLibrary.source, "seed"),
-          ),
+            eq(SCHEMA.imageLibrary.source, "seed")
+          )
         )
         .limit(1);
       if (existing.length > 0) {
@@ -293,12 +307,12 @@ async function main() {
       try {
         const result = await fal.subscribe(args.model, {
           input: {
-            prompt,
+            enable_safety_checker: false,
+            image_size: "square_hd",
             num_images: 1,
             num_inference_steps: 4,
-            image_size: "square_hd",
             output_format: "jpeg",
-            enable_safety_checker: false,
+            prompt,
             seed,
           },
           logs: false,
@@ -317,28 +331,28 @@ async function main() {
 
         const url = `/library/${entry.deck}/${filename}`;
         await db.insert(SCHEMA.imageLibrary).values({
-          id,
           deck: entry.deck,
+          height,
+          id,
+          model: args.model,
           prompt,
           promptHash: hash,
-          model: args.model,
           seed,
+          status: "active",
           url,
           width,
-          height,
-          status: "active",
         });
 
         gen++;
         console.log(`  + ${entry.deck}/${filename}  "${prompt.slice(0, 60)}"`);
-      } catch (err) {
-        console.error(`[fail] ${entry.deck} "${prompt}":`, err);
+      } catch (error) {
+        console.error(`[fail] ${entry.deck} "${prompt}":`, error);
         fail_++;
       }
     }
 
     console.log(
-      `${entry.deck}: ${gen} generated, ${skip} skipped, ${fail_} failed`,
+      `${entry.deck}: ${gen} generated, ${skip} skipped, ${fail_} failed`
     );
     totalGen += gen;
     totalSkip += skip;
@@ -346,13 +360,15 @@ async function main() {
   }
 
   console.log(
-    `\ntotal: ${totalGen} generated, ${totalSkip} skipped, ${totalFail} failed`,
+    `\ntotal: ${totalGen} generated, ${totalSkip} skipped, ${totalFail} failed`
   );
-  if (!args.dryRun) await buildLibraryManifests();
+  if (!args.dryRun) {
+    await buildLibraryManifests();
+  }
   process.exit(totalFail > 0 ? 1 : 0);
 }
 
-main().catch((err) => {
-  console.error("seed-library failed:", err);
+main().catch((error) => {
+  console.error("seed-library failed:", error);
   process.exit(1);
 });

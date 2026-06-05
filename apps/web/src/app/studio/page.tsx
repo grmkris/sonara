@@ -1,13 +1,12 @@
 "use client";
 
-import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
-import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
-import { ChevronLeft } from "lucide-react";
 import type { LibraryFrame, SessionSummary } from "@sonara/shared";
 import type { LiveSessionId } from "@sonara/shared/typeid";
-import { rpcClient } from "@/lib/orpc";
-import { useSession } from "@/lib/auth-client";
+import { ChevronLeft } from "lucide-react";
+import Link from "next/link";
+import { useRouter, useSearchParams } from "next/navigation";
+import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
+
 import { AnonCta } from "@/components/studio/anon-cta";
 import { EmptyState } from "@/components/studio/empty-state";
 import { ErrorState } from "@/components/studio/error-state";
@@ -15,11 +14,9 @@ import { FrameInspector } from "@/components/studio/frame-inspector";
 import { FrameInspectorContent } from "@/components/studio/frame-inspector-content";
 import { SessionTimeline } from "@/components/studio/session-timeline";
 import { SessionsList } from "@/components/studio/sessions-list";
-import {
-  Sheet,
-  SheetContent,
-  SheetTitle,
-} from "@/components/ui/sheet";
+import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
+import { useSession } from "@/lib/auth-client";
+import { rpcClient } from "@/lib/orpc";
 import { cn } from "@/lib/utils";
 
 // /studio — the user's library editor. Browse past sessions, scrub a
@@ -70,20 +67,26 @@ function StudioInner() {
 
   // Sessions list bootstrap.
   useEffect(() => {
-    if (!isSignedIn) return;
+    if (!isSignedIn) {
+      return;
+    }
     let cancelled = false;
     setSessionsLoading(true);
     setSessionsError(false);
     rpcClient.library
       .sessions({})
       .then(({ sessions: s }) => {
-        if (cancelled) return;
+        if (cancelled) {
+          return;
+        }
         setSessions(s);
         setSessionsLoading(false);
         setSessionsBootstrapped(true);
       })
       .catch(() => {
-        if (cancelled) return;
+        if (cancelled) {
+          return;
+        }
         // Surface the error instead of flipping to a "0 sessions" empty state,
         // which would read as "you have no library" on a transient failure.
         setSessionsError(true);
@@ -97,34 +100,46 @@ function StudioInner() {
 
   // Auto-select most recent session when none is selected yet.
   useEffect(() => {
-    if (!sessionsBootstrapped) return;
-    if (selectedSessionId) return;
-    if (sessions.length === 0) return;
+    if (!sessionsBootstrapped) {
+      return;
+    }
+    if (selectedSessionId) {
+      return;
+    }
+    if (sessions.length === 0) {
+      return;
+    }
     const newest = sessions[0];
     if (newest) {
-      router.replace(
-        `/studio?session=${encodeURIComponent(newest.sessionId)}`,
-      );
+      router.replace(`/studio?session=${encodeURIComponent(newest.sessionId)}`);
     }
   }, [sessionsBootstrapped, selectedSessionId, sessions, router]);
 
   // Load frames when the session selection changes.
   useEffect(() => {
-    if (!isSignedIn || !selectedSessionId) return;
-    if (loadedSessionId === selectedSessionId) return;
+    if (!isSignedIn || !selectedSessionId) {
+      return;
+    }
+    if (loadedSessionId === selectedSessionId) {
+      return;
+    }
     let cancelled = false;
     setFramesLoading(true);
     setFramesError(false);
     rpcClient.library
       .bySession({ sessionId: selectedSessionId as LiveSessionId })
       .then(({ frames: f }) => {
-        if (cancelled) return;
+        if (cancelled) {
+          return;
+        }
         setFrames(f);
         setLoadedSessionId(selectedSessionId);
         setFramesLoading(false);
       })
       .catch(() => {
-        if (cancelled) return;
+        if (cancelled) {
+          return;
+        }
         setFramesError(true);
         setFramesLoading(false);
       });
@@ -135,24 +150,26 @@ function StudioInner() {
 
   const selectedFrame = useMemo(
     () => frames.find((f) => f.id === selectedFrameId) ?? null,
-    [frames, selectedFrameId],
+    [frames, selectedFrameId]
   );
 
   const onSelectSession = useCallback(
     (sessionId: string) => {
       router.push(`/studio?session=${encodeURIComponent(sessionId)}`);
     },
-    [router],
+    [router]
   );
 
   const onSelectFrame = useCallback(
     (frameId: string) => {
-      if (!selectedSessionId) return;
+      if (!selectedSessionId) {
+        return;
+      }
       router.push(
-        `/studio?session=${encodeURIComponent(selectedSessionId)}&frame=${encodeURIComponent(frameId)}`,
+        `/studio?session=${encodeURIComponent(selectedSessionId)}&frame=${encodeURIComponent(frameId)}`
       );
     },
-    [router, selectedSessionId],
+    [router, selectedSessionId]
   );
 
   const onCloseInspector = useCallback(() => {
@@ -169,8 +186,12 @@ function StudioInner() {
 
   // Auth gate. Wait for the session resolution; show anon CTA when
   // confirmed unauthenticated.
-  if (isPending) return <StudioFallback />;
-  if (!isSignedIn) return <AnonCta />;
+  if (isPending) {
+    return <StudioFallback />;
+  }
+  if (!isSignedIn) {
+    return <AnonCta />;
+  }
 
   const totalFrames = sessions.reduce((sum, s) => sum + s.frameCount, 0);
   const showInspectorOnDesktop = !!selectedFrame;
@@ -194,8 +215,8 @@ function StudioInner() {
         </div>
         {sessionsBootstrapped && sessions.length > 0 && (
           <span className="font-sans text-[10px] uppercase tracking-[0.22em] text-[color:var(--stone)]">
-            {totalFrames} frame{totalFrames !== 1 ? "s" : ""} · {sessions.length}{" "}
-            session{sessions.length !== 1 ? "s" : ""}
+            {totalFrames} frame{totalFrames !== 1 ? "s" : ""} ·{" "}
+            {sessions.length} session{sessions.length !== 1 ? "s" : ""}
           </span>
         )}
       </header>
@@ -209,7 +230,7 @@ function StudioInner() {
             // Desktop: always visible at 280px.
             "hidden md:block md:w-[280px]",
             // Mobile: takes the full width when no session is selected.
-            !showMobileTimeline && "block w-full md:w-[280px]",
+            !showMobileTimeline && "block w-full md:w-[280px]"
           )}
         >
           <SessionsList
@@ -226,7 +247,7 @@ function StudioInner() {
           className={cn(
             "flex-1 overflow-hidden",
             // Mobile: hide when no session selected (sidebar takes over).
-            !showMobileTimeline && "hidden md:block",
+            !showMobileTimeline && "hidden md:block"
           )}
         >
           {/* Mobile back link */}
@@ -283,7 +304,9 @@ function StudioInner() {
       <Sheet
         open={!!selectedFrame}
         onOpenChange={(open) => {
-          if (!open) onCloseInspector();
+          if (!open) {
+            onCloseInspector();
+          }
         }}
       >
         <SheetContent

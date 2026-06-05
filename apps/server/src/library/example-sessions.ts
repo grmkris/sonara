@@ -1,13 +1,10 @@
 import type { Database } from "@sonara/db";
 import { SCHEMA } from "@sonara/db";
-import { and, asc, eq } from "drizzle-orm";
-import {
-  DECK_KEYS,
-  type LibraryFrame,
-  SERVICE_URLS,
-  type SessionSummary,
-} from "@sonara/shared";
+import { DECK_KEYS, SERVICE_URLS } from "@sonara/shared";
+import type { LibraryFrame, SessionSummary } from "@sonara/shared";
 import type { LiveSessionId } from "@sonara/shared/typeid";
+import { and, asc, eq } from "drizzle-orm";
+
 import { env } from "../env";
 
 // Example sessions for /studio. When a signed-in user has no generated/story
@@ -63,7 +60,9 @@ interface SeedRow {
 // fetch (which needs an absolute URL, exactly like a real generated frame's
 // presigned URL).
 function toAbsoluteUrl(url: string): string {
-  if (url.includes("://")) return url;
+  if (url.includes("://")) {
+    return url;
+  }
   const base = SERVICE_URLS[env.APP_ENV].web.replace(/\/+$/, "");
   return `${base}${url.startsWith("/") ? "" : "/"}${url}`;
 }
@@ -73,61 +72,74 @@ async function fetchSeedRows(db: Database, deck?: string): Promise<SeedRow[]> {
     eq(SCHEMA.imageLibrary.source, "seed"),
     eq(SCHEMA.imageLibrary.status, "active"),
   ];
-  if (deck) conditions.push(eq(SCHEMA.imageLibrary.deck, deck));
+  if (deck) {
+    conditions.push(eq(SCHEMA.imageLibrary.deck, deck));
+  }
 
-  return db
-    .select({
-      id: SCHEMA.imageLibrary.id,
-      url: SCHEMA.imageLibrary.url,
-      width: SCHEMA.imageLibrary.width,
-      height: SCHEMA.imageLibrary.height,
-      palette: SCHEMA.imageLibrary.palette,
-      deck: SCHEMA.imageLibrary.deck,
-      prompt: SCHEMA.imageLibrary.prompt,
-    })
-    .from(SCHEMA.imageLibrary)
-    .where(and(...conditions))
-    // Stable ordering so the synthetic timeline is deterministic per deck.
-    .orderBy(asc(SCHEMA.imageLibrary.deck), asc(SCHEMA.imageLibrary.id));
+  return (
+    db
+      .select({
+        deck: SCHEMA.imageLibrary.deck,
+        height: SCHEMA.imageLibrary.height,
+        id: SCHEMA.imageLibrary.id,
+        palette: SCHEMA.imageLibrary.palette,
+        prompt: SCHEMA.imageLibrary.prompt,
+        url: SCHEMA.imageLibrary.url,
+        width: SCHEMA.imageLibrary.width,
+      })
+      .from(SCHEMA.imageLibrary)
+      .where(and(...conditions))
+      // Stable ordering so the synthetic timeline is deterministic per deck.
+      .orderBy(asc(SCHEMA.imageLibrary.deck), asc(SCHEMA.imageLibrary.id))
+  );
 }
 
 // Maps one deck's seed rows to a synthetic, chronologically-ordered frame set.
-function rowsToFrames(deck: string, rows: SeedRow[], now: number): LibraryFrame[] {
+function rowsToFrames(
+  deck: string,
+  rows: SeedRow[],
+  now: number
+): LibraryFrame[] {
   const deckIndex = Math.max(0, DECK_KEYS.indexOf(deck as never));
   const capped = rows.slice(0, MAX_FRAMES_PER_DECK);
   const sessionEnd = now - deckIndex * SESSION_STAGGER_MS;
   const sessionStart = sessionEnd - (capped.length - 1) * FRAME_SPACING_MS;
 
   return capped.map((row, i) => ({
+    anchorUrl: null,
+    createdAt: new Date(sessionStart + i * FRAME_SPACING_MS),
+    deck: row.deck,
+    height: row.height,
     id: row.id,
+    inspectorContext: null,
+    palette: row.palette,
+    prompt: row.prompt,
+    sessionId: exampleSessionId(deck),
+    tMs: i * FRAME_SPACING_MS,
+    triggerReason: null,
     url: toAbsoluteUrl(row.url),
     width: row.width,
-    height: row.height,
-    palette: row.palette,
-    deck: row.deck,
-    prompt: row.prompt,
-    tMs: i * FRAME_SPACING_MS,
-    sessionId: exampleSessionId(deck),
-    createdAt: new Date(sessionStart + i * FRAME_SPACING_MS),
-    triggerReason: null,
-    anchorUrl: null,
-    inspectorContext: null,
   }));
 }
 
 // One example session per non-empty seed deck, in DECKS order. Used as the
 // sessions() fallback when the user has no real sessions.
 export async function buildExampleSessions(
-  db: Database,
+  db: Database
 ): Promise<SessionSummary[]> {
   const rows = await fetchSeedRows(db);
-  if (rows.length === 0) return [];
+  if (rows.length === 0) {
+    return [];
+  }
 
   const byDeck = new Map<string, SeedRow[]>();
   for (const row of rows) {
     const bucket = byDeck.get(row.deck);
-    if (bucket) bucket.push(row);
-    else byDeck.set(row.deck, [row]);
+    if (bucket) {
+      bucket.push(row);
+    } else {
+      byDeck.set(row.deck, [row]);
+    }
   }
 
   const now = Date.now();
@@ -135,18 +147,22 @@ export async function buildExampleSessions(
   // Iterate in DECKS order so the sidebar reads in a curated sequence.
   for (const deck of DECK_KEYS) {
     const deckRows = byDeck.get(deck);
-    if (!deckRows || deckRows.length === 0) continue;
+    if (!deckRows || deckRows.length === 0) {
+      continue;
+    }
     const frames = rowsToFrames(deck, deckRows, now);
     const first = frames[0];
-    const last = frames[frames.length - 1];
-    if (!first || !last) continue;
+    const last = frames.at(-1);
+    if (!first || !last) {
+      continue;
+    }
     summaries.push({
-      sessionId: exampleSessionId(deck),
-      frameCount: frames.length,
+      durationMs: (frames.length - 1) * FRAME_SPACING_MS,
       firstFrameAt: first.createdAt,
+      frameCount: frames.length,
       lastFrameAt: last.createdAt,
       sampleUrl: last.url,
-      durationMs: (frames.length - 1) * FRAME_SPACING_MS,
+      sessionId: exampleSessionId(deck),
     });
   }
   return summaries;
@@ -156,9 +172,11 @@ export async function buildExampleSessions(
 // when the requested sessionId is an example id.
 export async function buildExampleFrames(
   db: Database,
-  deck: string,
+  deck: string
 ): Promise<LibraryFrame[]> {
   const rows = await fetchSeedRows(db, deck);
-  if (rows.length === 0) return [];
+  if (rows.length === 0) {
+    return [];
+  }
   return rowsToFrames(deck, rows, Date.now());
 }

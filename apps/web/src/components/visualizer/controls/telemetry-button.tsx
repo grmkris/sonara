@@ -1,9 +1,13 @@
 "use client";
 
 import type { ComponentProps, ReactNode } from "react";
+
 import { cn } from "@/lib/utils";
 
-interface TelemetryButtonProps extends Omit<ComponentProps<"button">, "children"> {
+interface TelemetryButtonProps extends Omit<
+  ComponentProps<"button">,
+  "children"
+> {
   icon: ReactNode;
   label: ReactNode;
   // When true, hides the label below sm — useful for icon-only mobile mode.
@@ -25,12 +29,14 @@ export function TelemetryButton({
       type="button"
       className={cn(
         "focus-ring pointer-events-auto flex items-center gap-1.5 font-sans text-[10px] uppercase tracking-[0.28em] text-[color:var(--stone)] transition-colors hover:text-[color:var(--paper)]",
-        className,
+        className
       )}
       {...rest}
     >
       {icon}
-      <span className={cn(hideLabelOnMobile && "hidden sm:inline")}>{label}</span>
+      <span className={cn(hideLabelOnMobile && "hidden sm:inline")}>
+        {label}
+      </span>
     </button>
   );
 }

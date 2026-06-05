@@ -3,11 +3,11 @@
 // Push-to-talk codes live in `lib/scene-fields.ts` instead because they
 // belong to the field definitions.
 export const HOTKEYS = {
-  record: "r",
   fullscreen: "f",
-  toggleUi: "h",
   hideUi: "Escape",
+  record: "r",
   reset: "Backspace",
+  toggleUi: "h",
 } as const;
 
 export type HotkeyName = keyof typeof HOTKEYS;

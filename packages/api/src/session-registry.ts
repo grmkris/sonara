@@ -40,7 +40,7 @@ export interface ControllableSession {
   goLive(prompt: string, seedFrameUrl: string | null): void;
   setDemoMode(on: boolean, deck: DeckKey | null): void;
   setImageAnchor(
-    input: { url: string; strength: number } | { clear: true },
+    input: { url: string; strength: number } | { clear: true }
   ): void;
   reset(): void;
   getControlSnapshot(): ControlSnapshot;

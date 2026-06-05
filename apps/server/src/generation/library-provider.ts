@@ -1,8 +1,6 @@
-import {
-  type ImageLibraryId,
-  typeIdFromUuid,
-  typeIdToUuid,
-} from "@sonara/shared/typeid";
+import { typeIdFromUuid, typeIdToUuid } from "@sonara/shared/typeid";
+import type { ImageLibraryId } from "@sonara/shared/typeid";
+
 import { getPool } from "../db/pool";
 import type { Logger } from "../lib/logger";
 
@@ -20,7 +18,7 @@ export interface LibraryPick {
 export async function pickLibraryFrame(
   deck: string,
   excludeIds: readonly ImageLibraryId[],
-  logger: Logger,
+  logger: Logger
 ): Promise<LibraryPick | null> {
   const excludeUuids = excludeIds.map((id) => typeIdToUuid(id).uuid);
   const client = await getPool().connect();
@@ -41,7 +39,7 @@ export async function pickLibraryFrame(
               AND id <> ALL($2::uuid[])
             ORDER BY random()
             LIMIT 1`,
-          [deck, exclude],
+          [deck, exclude]
         )
       ).rows[0];
 
@@ -59,10 +57,10 @@ export async function pickLibraryFrame(
       return null;
     }
     return {
+      height: row.height,
       id: typeIdFromUuid("imageLibrary", row.id),
       url: row.url,
       width: row.width,
-      height: row.height,
     };
   } finally {
     client.release();

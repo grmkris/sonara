@@ -1,23 +1,25 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import Link from "next/link";
-import { deckLabel, type DeckKey } from "@sonara/shared";
+import { deckLabel } from "@sonara/shared";
+import type { DeckKey } from "@sonara/shared";
+import type { SonaraSceneState } from "@sonara/shared";
 import type { LiveSessionId } from "@sonara/shared/typeid";
+import Link from "next/link";
+import { useEffect, useState } from "react";
 import type { AppRouterClient } from "server/rpc";
-import { rpcClient } from "@/lib/orpc";
-import { useSession } from "@/lib/auth-client";
-import { useRemoteSession } from "@/hooks/use-remote-session";
-import { PromptInput } from "@/components/visualizer/controls/prompt-input";
-import { DeckPicker } from "@/components/visualizer/controls/deck-picker";
-import { IntensityDial } from "@/components/visualizer/controls/intensity-dial";
-import { SliderRow } from "@/components/visualizer/controls/slider-row";
+
 import { Mark } from "@/components/brand/mark";
 import { Button } from "@/components/ui/button";
-import { useVisualizerStore } from "@/stores/visualizer";
-import type { SonaraSceneState } from "@sonara/shared";
+import { DeckPicker } from "@/components/visualizer/controls/deck-picker";
+import { IntensityDial } from "@/components/visualizer/controls/intensity-dial";
+import { PromptInput } from "@/components/visualizer/controls/prompt-input";
+import { SliderRow } from "@/components/visualizer/controls/slider-row";
+import { useRemoteSession } from "@/hooks/use-remote-session";
+import { useSession } from "@/lib/auth-client";
+import { rpcClient } from "@/lib/orpc";
 import type { SessionSend } from "@/lib/session-actions";
 import { cn } from "@/lib/utils";
+import { useVisualizerStore } from "@/stores/visualizer";
 
 // /control — the operator remote. A signed-in user drives one of THEIR OWN
 // currently-live sessions (the projector) from a second device while the
@@ -32,13 +34,15 @@ type LiveSessionSummary = Awaited<
 
 const SESSIONS_POLL_MS = 3000;
 
-const SLIDERS: { key: "softness" | "surrealness" | "abstraction" | "stability"; label: string }[] =
-  [
-    { key: "softness", label: "soft" },
-    { key: "surrealness", label: "unreal" },
-    { key: "abstraction", label: "abstract" },
-    { key: "stability", label: "stable" },
-  ];
+const SLIDERS: {
+  key: "softness" | "surrealness" | "abstraction" | "stability";
+  label: string;
+}[] = [
+  { key: "softness", label: "soft" },
+  { key: "surrealness", label: "unreal" },
+  { key: "abstraction", label: "abstract" },
+  { key: "stability", label: "stable" },
+];
 
 export default function ControlPage() {
   const { data: sessionData, isPending } = useSession();
@@ -50,23 +54,31 @@ export default function ControlPage() {
   // Discover the caller's live sessions, and keep re-resolving — the projector's
   // liveSessionId is reminted on every reconnect, so we never pin a stale id.
   useEffect(() => {
-    if (!isSignedIn) return;
+    if (!isSignedIn) {
+      return;
+    }
     let cancelled = false;
     let timer: ReturnType<typeof setTimeout> | null = null;
     const poll = async (): Promise<void> => {
       try {
         const { sessions: next } = await rpcClient.control.liveSessions();
-        if (!cancelled) setSessions(next);
+        if (!cancelled) {
+          setSessions(next);
+        }
       } catch {
         // transient — keep the last list, try again next tick
       } finally {
-        if (!cancelled) timer = setTimeout(poll, SESSIONS_POLL_MS);
+        if (!cancelled) {
+          timer = setTimeout(poll, SESSIONS_POLL_MS);
+        }
       }
     };
     void poll();
     return () => {
       cancelled = true;
-      if (timer) clearTimeout(timer);
+      if (timer) {
+        clearTimeout(timer);
+      }
     };
   }, [isSignedIn]);
 
@@ -75,8 +87,12 @@ export default function ControlPage() {
   // live now.
   useEffect(() => {
     setSelectedId((cur) => {
-      if (sessions.length === 0) return null;
-      if (cur && sessions.some((s) => s.liveSessionId === cur)) return cur;
+      if (sessions.length === 0) {
+        return null;
+      }
+      if (cur && sessions.some((s) => s.liveSessionId === cur)) {
+        return cur;
+      }
       return sessions[0]?.liveSessionId ?? null;
     });
   }, [sessions]);
@@ -115,8 +131,8 @@ export default function ControlPage() {
             no live session yet.
           </p>
           <p className="font-sans text-[11px] leading-relaxed tracking-[0.06em] text-[color:var(--stone)]">
-            open the visualizer on your projector and sign in with this account —
-            it&apos;ll show up here, and you can drive it from this screen.
+            open the visualizer on your projector and sign in with this account
+            — it&apos;ll show up here, and you can drive it from this screen.
           </p>
           <Button asChild variant="ghost" size="sm">
             <Link
@@ -181,7 +197,9 @@ function Header({ connected }: { connected: boolean }) {
       <span
         className={cn(
           "flex items-center gap-1.5 font-mono text-[9px] uppercase tracking-[0.22em]",
-          connected ? "text-[color:var(--paper)]/70" : "text-[color:var(--stone)]",
+          connected
+            ? "text-[color:var(--paper)]/70"
+            : "text-[color:var(--stone)]"
         )}
       >
         <span
@@ -190,7 +208,7 @@ function Header({ connected }: { connected: boolean }) {
             "size-1.5 rounded-full",
             connected
               ? "bg-[color:var(--signal)]"
-              : "bg-[color:var(--stone)]/60",
+              : "bg-[color:var(--stone)]/60"
           )}
         />
         {connected ? "linked" : "reconnecting…"}
@@ -226,7 +244,7 @@ function SessionSwitcher({
               "focus-ring rounded-sm border px-2 py-1 font-sans text-[10px] uppercase tracking-[0.14em] transition-colors",
               active
                 ? "border-[color:var(--paper)] bg-[color:var(--paper)] text-[color:var(--ink)]"
-                : "border-[color:var(--hairline)]/30 text-[color:var(--stone)] hover:text-[color:var(--paper)]",
+                : "border-[color:var(--hairline)]/30 text-[color:var(--stone)] hover:text-[color:var(--paper)]"
             )}
           >
             {label}
@@ -280,8 +298,7 @@ function PreviewCard({
           on screen
         </span>
         <p className="mt-1 line-clamp-2 font-serif text-[13px] leading-snug text-[color:var(--paper)]/85">
-          {prompt.trim() ||
-            (demoMode ? "playing a deck" : "—")}
+          {prompt.trim() || (demoMode ? "playing a deck" : "—")}
         </p>
       </div>
     </div>
@@ -310,7 +327,7 @@ function StatusPill({
     <span
       className={cn(
         "rounded-sm border bg-[color:var(--ink)]/70 px-1.5 py-0.5 font-sans text-[9px] uppercase tracking-[0.18em] backdrop-blur-sm",
-        tone,
+        tone
       )}
     >
       {status === "running" && !demoMode ? "● " : ""}
@@ -324,8 +341,8 @@ function ControlSurface({ send }: { send: SessionSend }) {
 
   const patchSlider = (key: (typeof SLIDERS)[number]["key"], value: number) =>
     send({
-      type: "scene.patch",
       patch: { [key]: value } as Partial<SonaraSceneState>,
+      type: "scene.patch",
     });
 
   return (

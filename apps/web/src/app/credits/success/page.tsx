@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
+
 import { rpcClient } from "@/lib/orpc";
 
 // Poll cadence + ceiling. Dodo webhook delivery is async — the user lands
@@ -13,7 +14,7 @@ const POLL_TIMEOUT_MS = 20_000;
 export default function CheckoutSuccessPage() {
   const router = useRouter();
   const [status, setStatus] = useState<"waiting" | "credited" | "timeout">(
-    "waiting",
+    "waiting"
   );
   const initialFrames = useRef<number | null>(null);
 
@@ -24,14 +25,18 @@ export default function CheckoutSuccessPage() {
     const poll = async (): Promise<void> => {
       try {
         const { frames } = await rpcClient.credits.getBalance();
-        if (cancelled) return;
+        if (cancelled) {
+          return;
+        }
         if (initialFrames.current === null) {
           initialFrames.current = frames;
         } else if (frames > initialFrames.current) {
           setStatus("credited");
           toast.success(`+${frames - initialFrames.current} frames credited`);
           setTimeout(() => {
-            if (!cancelled) router.push("/play");
+            if (!cancelled) {
+              router.push("/play");
+            }
           }, 1200);
           return;
         }
@@ -39,7 +44,9 @@ export default function CheckoutSuccessPage() {
         // ignore transient errors; keep polling
       }
       if (Date.now() - startedAt > POLL_TIMEOUT_MS) {
-        if (!cancelled) setStatus("timeout");
+        if (!cancelled) {
+          setStatus("timeout");
+        }
         return;
       }
       setTimeout(poll, POLL_INTERVAL_MS);

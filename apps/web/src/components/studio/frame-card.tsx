@@ -1,7 +1,8 @@
 "use client";
 
-import { useCallback } from "react";
 import type { LibraryFrame } from "@sonara/shared";
+import { useCallback } from "react";
+
 import { formatMmSs } from "@/lib/format-time";
 import { cn } from "@/lib/utils";
 
@@ -48,13 +49,13 @@ export function FrameCard({
         "hover:z-10 hover:scale-[1.08]",
         selected
           ? "z-10 border-[color:var(--paper)] ring-2 ring-[color:var(--paper)]/40"
-          : "border-[color:var(--hairline)]/40 hover:border-[color:var(--paper)]/80",
+          : "border-[color:var(--hairline)]/40 hover:border-[color:var(--paper)]/80"
       )}
       style={{
-        left: `${leftPct}%`,
-        width: size,
         height: size,
+        left: `${leftPct}%`,
         transform: `translateX(-50%) translateY(${stackIdx * (size + 4)}px)`,
+        width: size,
       }}
     >
       <img
@@ -71,7 +72,7 @@ export function FrameCard({
           "px-1 py-0.5 font-mono text-[8px] uppercase tracking-[0.14em]",
           "text-[color:var(--paper)]/90 opacity-0 transition-opacity",
           "group-hover:opacity-100",
-          selected && "opacity-100",
+          selected && "opacity-100"
         )}
       >
         {tMsLabel}
@@ -79,4 +80,3 @@ export function FrameCard({
     </button>
   );
 }
-

@@ -1,4 +1,5 @@
 import { fal } from "@fal-ai/client";
+
 import { getAuth } from "../auth/auth";
 import { env } from "../env";
 
@@ -16,7 +17,9 @@ const ALLOWED_MIME = new Set(["image/jpeg", "image/png", "image/webp"]);
 
 let configured = false;
 function configureFal(): void {
-  if (configured) return;
+  if (configured) {
+    return;
+  }
   fal.config({ credentials: env.FAL_KEY });
   configured = true;
 }
@@ -44,13 +47,13 @@ export async function uploadImage(req: Request): Promise<Response> {
   if (!ALLOWED_MIME.has(file.type)) {
     return Response.json(
       { error: "unsupported_mime", got: file.type },
-      { status: 422 },
+      { status: 422 }
     );
   }
   if (file.size > MAX_BYTES) {
     return Response.json(
       { error: "file_too_large", maxBytes: MAX_BYTES },
-      { status: 422 },
+      { status: 422 }
     );
   }
 
@@ -59,11 +62,11 @@ export async function uploadImage(req: Request): Promise<Response> {
   try {
     const url = await fal.storage.upload(file);
     return Response.json({ url });
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
     console.error("upload/image: fal.storage.upload failed", {
-      userId: session.user?.id,
       message,
+      userId: session.user?.id,
     });
     return Response.json({ error: "upload_failed", message }, { status: 502 });
   }

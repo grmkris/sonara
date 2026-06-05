@@ -1,5 +1,7 @@
+import { defaultScene } from "@sonara/shared";
+import type { SonaraSceneState } from "@sonara/shared";
 import type { StateCreator } from "zustand";
-import { type SonaraSceneState, defaultScene } from "@sonara/shared";
+
 import type { VisualizerState } from "./types";
 
 export type JobStatus = "idle" | "running" | "cancelled" | "error";
@@ -38,21 +40,25 @@ export const createSceneSlice: StateCreator<
 
   setScene: (state) => set({ scene: state }),
   pushFrame: (url, version) => {
-    if (version < get().latestVersion) return;
+    if (version < get().latestVersion) {
+      return;
+    }
     // Deliberately do NOT reset crossfadeStartedAt here. If we null it, the
     // renderer branches to bleedT=1 until the new image actually decodes —
     // which guillotines any in-progress bleed the instant a new URL arrives.
     // markImageLoaded() is the sole writer, fired when the texture is actually
     // ready. Until then, the old bleed continues gracefully.
     set((s) => ({
-      previousFrame: s.currentFrame,
       currentFrame: url,
       latestVersion: version,
+      previousFrame: s.currentFrame,
     }));
   },
   setStatus: (status, message) => {
     set({ status, statusMessage: message ?? null });
-    if (status === "running") set((s) => ({ sweepPulse: s.sweepPulse + 1 }));
+    if (status === "running") {
+      set((s) => ({ sweepPulse: s.sweepPulse + 1 }));
+    }
   },
   setConnected: (c) => set({ connected: c }),
   // Zero the monotonic frame guard. Called when the frame *producer* changes

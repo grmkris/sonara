@@ -1,9 +1,10 @@
-import {
-  type SonaraSceneState,
-  type ResolvedScene,
-  type ResolvedSceneCore,
-  type ResolvedAudioState,
+import type {
+  SonaraSceneState,
+  ResolvedScene,
+  ResolvedSceneCore,
+  ResolvedAudioState,
 } from "@sonara/shared";
+
 import type { Logger } from "../lib/logger";
 import { expandScene, deterministicResolve } from "./scene-llm-expander";
 
@@ -37,7 +38,9 @@ function hashScene(s: SonaraSceneState): string {
 
 function getCached(hash: string): ResolvedSceneCore | null {
   const hit = cache.get(hash);
-  if (!hit) return null;
+  if (!hit) {
+    return null;
+  }
   if (Date.now() - hit.at > CACHE_TTL_MS) {
     cache.delete(hash);
     return null;
@@ -58,7 +61,7 @@ export interface ResolveOpts {
 // while still warming the cache.
 export function resolveScene(
   scene: SonaraSceneState,
-  opts: ResolveOpts,
+  opts: ResolveOpts
 ): ResolvedScene {
   const hash = hashScene(scene);
   const cached = getCached(hash);
@@ -69,25 +72,28 @@ export function resolveScene(
       signal: opts.signal,
     })
       .then((core) => {
-        cache.set(hash, { core, at: Date.now() });
+        cache.set(hash, { at: Date.now(), core });
         opts.logger.debug(
           {
+            driftCandidates: core.drift_candidates.length,
             hash,
             paletteLen: core.color_palette.length,
             subjectsLen: core.subjects.length,
-            driftCandidates: core.drift_candidates.length,
           },
-          "scene-resolver: cache filled",
+          "scene-resolver: cache filled"
         );
         return core;
       })
-      .catch((err) => {
-        opts.logger.warn({ err, hash }, "scene-resolver: expand failed");
+      .catch((error) => {
+        opts.logger.warn({ error, hash }, "scene-resolver: expand failed");
         const fallback = deterministicResolve(scene);
         // Cache the fallback briefly so we don't re-call the LLM on every
         // subsequent trigger while the upstream is unhealthy. Short TTL so
         // recovery is quick once the LLM comes back.
-        cache.set(hash, { core: fallback, at: Date.now() - CACHE_TTL_MS + 30_000 });
+        cache.set(hash, {
+          at: Date.now() - CACHE_TTL_MS + 30_000,
+          core: fallback,
+        });
         return fallback;
       })
       .finally(() => {
@@ -99,8 +105,8 @@ export function resolveScene(
   const core = cached ?? deterministicResolve(scene);
   return {
     ...core,
-    drift_modifiers: opts.driftModifiers,
     audio_state: opts.audio,
+    drift_modifiers: opts.driftModifiers,
   };
 }
 
@@ -109,7 +115,7 @@ export function resolveScene(
 // the cache and the in-flight dedupe.
 export async function resolveSceneAwaited(
   scene: SonaraSceneState,
-  opts: ResolveOpts,
+  opts: ResolveOpts
 ): Promise<ResolvedScene> {
   const hash = hashScene(scene);
   let core = getCached(hash);
@@ -123,7 +129,7 @@ export async function resolveSceneAwaited(
         signal: opts.signal,
       })
         .then((c) => {
-          cache.set(hash, { core: c, at: Date.now() });
+          cache.set(hash, { at: Date.now(), core: c });
           return c;
         })
         .finally(() => {
@@ -135,8 +141,8 @@ export async function resolveSceneAwaited(
   }
   return {
     ...core,
-    drift_modifiers: opts.driftModifiers,
     audio_state: opts.audio,
+    drift_modifiers: opts.driftModifiers,
   };
 }
 

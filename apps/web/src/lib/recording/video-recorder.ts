@@ -1,7 +1,7 @@
 "use client";
 
-import { getCurrentAudioEngine } from "@/hooks/use-audio-features";
 import { getCurrentDisplacementCanvas } from "@/components/visualizer/canvas/displacement-canvas";
+import { getCurrentAudioEngine } from "@/hooks/use-audio-features";
 
 // Real-time A/V capture for the visualizer canvas. Video track is pulled
 // straight off the WebGL canvas via captureStream(); audio is tapped off
@@ -24,9 +24,13 @@ const PREFERRED_MIME_TYPES = [
 ];
 
 function pickMimeType(): string | undefined {
-  if (typeof MediaRecorder === "undefined") return undefined;
+  if (typeof MediaRecorder === "undefined") {
+    return undefined;
+  }
   for (const mt of PREFERRED_MIME_TYPES) {
-    if (MediaRecorder.isTypeSupported(mt)) return mt;
+    if (MediaRecorder.isTypeSupported(mt)) {
+      return mt;
+    }
   }
   return undefined;
 }
@@ -42,31 +46,41 @@ export function isRecordingSupported(): boolean {
   return pickMimeType() !== undefined;
 }
 
-export function startRecording(opts: { withAudio: boolean }): VideoRecorderHandle {
+export function startRecording(opts: {
+  withAudio: boolean;
+}): VideoRecorderHandle {
   const canvas = getCurrentDisplacementCanvas();
-  if (!canvas) throw new Error("visualizer canvas not ready");
+  if (!canvas) {
+    throw new Error("visualizer canvas not ready");
+  }
   const mimeType = pickMimeType();
-  if (!mimeType) throw new Error("MediaRecorder is not supported in this browser");
+  if (!mimeType) {
+    throw new Error("MediaRecorder is not supported in this browser");
+  }
 
   const videoStream = canvas.captureStream(FPS);
   const videoTrack = videoStream.getVideoTracks()[0];
-  if (!videoTrack) throw new Error("canvas.captureStream produced no video track");
+  if (!videoTrack) {
+    throw new Error("canvas.captureStream produced no video track");
+  }
 
   const audioTap = opts.withAudio
-    ? getCurrentAudioEngine()?.createRecordingStream() ?? null
+    ? (getCurrentAudioEngine()?.createRecordingStream() ?? null)
     : null;
   const audioTracks = audioTap?.stream.getAudioTracks() ?? [];
 
   const combined = new MediaStream([videoTrack, ...audioTracks]);
   const recorder = new MediaRecorder(combined, {
+    audioBitsPerSecond: AUDIO_BITRATE,
     mimeType,
     videoBitsPerSecond: VIDEO_BITRATE,
-    audioBitsPerSecond: AUDIO_BITRATE,
   });
 
   const chunks: Blob[] = [];
   recorder.ondataavailable = (ev) => {
-    if (ev.data && ev.data.size > 0) chunks.push(ev.data);
+    if (ev.data && ev.data.size > 0) {
+      chunks.push(ev.data);
+    }
   };
 
   const startedAt = performance.now();
@@ -74,13 +88,15 @@ export function startRecording(opts: { withAudio: boolean }): VideoRecorderHandl
 
   const cleanup = () => {
     audioTap?.dispose();
-    for (const t of videoStream.getTracks()) t.stop();
+    for (const t of videoStream.getTracks()) {
+      t.stop();
+    }
   };
 
   return {
-    mimeType,
-    hasAudio: audioTracks.length > 0,
     getDuration: () => performance.now() - startedAt,
+    hasAudio: audioTracks.length > 0,
+    mimeType,
     stop() {
       return new Promise((resolve, reject) => {
         const finish = () => {
@@ -90,7 +106,10 @@ export function startRecording(opts: { withAudio: boolean }): VideoRecorderHandl
         recorder.onstop = finish;
         recorder.onerror = (ev) => {
           cleanup();
-          reject((ev as unknown as { error?: Error }).error ?? new Error("MediaRecorder error"));
+          reject(
+            (ev as unknown as { error?: Error }).error ??
+              new Error("MediaRecorder error")
+          );
         };
         if (recorder.state === "inactive") finish();
         else recorder.stop();
@@ -108,10 +127,10 @@ export function downloadBlob(blob: Blob, filename: string): void {
   const a = document.createElement("a");
   a.href = url;
   a.download = filename;
-  document.body.appendChild(a);
+  document.body.append(a);
   a.click();
   a.remove();
-  setTimeout(() => URL.revokeObjectURL(url), 5_000);
+  setTimeout(() => URL.revokeObjectURL(url), 5000);
 }
 
 export function buildFilename(extension: "mp4" | "webm"): string {

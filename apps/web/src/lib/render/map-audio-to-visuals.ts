@@ -16,17 +16,19 @@ export interface IntensityCoefficients {
   onsetRefractoryMs: number;
 }
 
-export function intensityCoefficients(intensity: number): IntensityCoefficients {
+export function intensityCoefficients(
+  intensity: number
+): IntensityCoefficients {
   const I = Math.max(0, Math.min(1, intensity));
   return {
+    grainSwellGain: lerp(0.3, 1.5, I),
+    huePumpRange: lerp(3, 18, I),
+    onsetImpulseGain: lerp(0, 2, I),
+    onsetRefractoryMs: lerp(180, 100, I),
+    peakOvershoot: lerp(0, 0.03, I),
     vuAttackMs: lerp(500, 80, I),
     vuReleaseMs: lerp(1800, 400, I),
-    peakOvershoot: lerp(0, 0.03, I),
-    onsetImpulseGain: lerp(0, 2, I),
-    huePumpRange: lerp(3, 18, I),
     zoomImpulseGain: lerp(0, 2, I),
-    grainSwellGain: lerp(0.3, 1.5, I),
-    onsetRefractoryMs: lerp(180, 100, I),
   };
 }
 
@@ -44,7 +46,7 @@ export interface VisualTargets {
 
 export function targetsFromAudio(
   audio: AudioFeatures,
-  intensity: number,
+  intensity: number
 ): VisualTargets {
   const coef = intensityCoefficients(intensity);
   const huePumpNorm = coef.huePumpRange / 18; // 0..1, scales centroid→palette

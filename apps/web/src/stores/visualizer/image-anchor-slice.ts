@@ -1,4 +1,5 @@
 import type { StateCreator } from "zustand";
+
 import type { VisualizerState } from "./types";
 
 // User-uploaded image-anchor state. Holds the fal-hosted URL (set after
@@ -12,15 +13,15 @@ export const ANCHOR_CLICKWRAP_KEY = "viz_anchor_clickwrap";
 export type StrengthPreset = "style-only" | "style-subject" | "lock-subject";
 
 export const STRENGTH_PRESET_VALUES: Record<StrengthPreset, number> = {
+  "lock-subject": 0.8,
   "style-only": 0.3,
   "style-subject": 0.55,
-  "lock-subject": 0.8,
 };
 
 export const STRENGTH_PRESET_LABELS: Record<StrengthPreset, string> = {
+  "lock-subject": "lock subject",
   "style-only": "style only",
   "style-subject": "style + subject",
-  "lock-subject": "lock subject",
 };
 
 export type UploadState = "idle" | "uploading" | "error";
@@ -52,31 +53,32 @@ export const createImageAnchorSlice: StateCreator<
   [],
   ImageAnchorSlice
 > = (set) => ({
-  anchorImageUrl: null,
-  anchorLocalPreview: null,
-  strengthPreset: "style-subject",
-  clickwrapAccepted: false,
-  uploadState: "idle",
-
-  setAnchorImageUrl: (url) => set({ anchorImageUrl: url }),
-  setAnchorLocalPreview: (url) => set({ anchorLocalPreview: url }),
-  setStrengthPreset: (preset) => set({ strengthPreset: preset }),
   acceptClickwrap: () => {
     set({ clickwrapAccepted: true });
     if (typeof window !== "undefined") {
       window.localStorage.setItem(ANCHOR_CLICKWRAP_KEY, "1");
     }
   },
-  setUploadState: (s) => set({ uploadState: s }),
+  anchorImageUrl: null,
+  anchorLocalPreview: null,
   clearAnchor: () =>
     set({
       anchorImageUrl: null,
       anchorLocalPreview: null,
       uploadState: "idle",
     }),
+  clickwrapAccepted: false,
+  setAnchorImageUrl: (url) => set({ anchorImageUrl: url }),
+  setAnchorLocalPreview: (url) => set({ anchorLocalPreview: url }),
+  setStrengthPreset: (preset) => set({ strengthPreset: preset }),
+  setUploadState: (s) => set({ uploadState: s }),
+  strengthPreset: "style-subject",
+  uploadState: "idle",
 });
 
 export function readClickwrapAccepted(): boolean {
-  if (typeof window === "undefined") return false;
+  if (typeof window === "undefined") {
+    return false;
+  }
   return window.localStorage.getItem(ANCHOR_CLICKWRAP_KEY) === "1";
 }

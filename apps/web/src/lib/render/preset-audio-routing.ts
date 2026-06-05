@@ -77,163 +77,169 @@ export interface ResolvedAudio {
 export const AUDIO_ROUTING: Partial<Record<PresetName, PresetAudioRouting>> = {
   // Hard techno ear: lean into the drums so the beat slams the visuals.
   rave: {
-    kick: { src: "kick", gain: 1.6 },
-    snare: { src: "snare", gain: 1.4 },
-    bass: { src: "bass", gain: 1.3 },
-    treble: { src: "treble", gain: 1.4 },
+    bass: { gain: 1.3, src: "bass" },
+    kick: { gain: 1.6, src: "kick" },
+    snare: { gain: 1.4, src: "snare" },
+    treble: { gain: 1.4, src: "treble" },
   },
   // Contemplative: treat percussion as sustained loudness so nothing twitches.
   dust: {
-    kick: { src: "rms", gain: 0.4 },
-    snare: { src: "rms", gain: 0.3 },
     bass: { src: "rms" },
-    treble: { src: "rms", gain: 0.6 },
+    kick: { gain: 0.4, src: "rms" },
+    snare: { gain: 0.3, src: "rms" },
+    treble: { gain: 0.6, src: "rms" },
   },
   frost: {
-    kick: { src: "rms", gain: 0.3 },
-    snare: { src: "rms", gain: 0.25 },
-    bass: { src: "rms", gain: 0.7 },
+    bass: { gain: 0.7, src: "rms" },
+    kick: { gain: 0.3, src: "rms" },
+    snare: { gain: 0.25, src: "rms" },
   },
   salt_flat: {
-    kick: { src: "rms", gain: 0.3 },
-    snare: { src: "rms", gain: 0.3 },
-    bass: { src: "rms", gain: 0.5 },
-    treble: { src: "treble", gain: 0.5 },
+    bass: { gain: 0.5, src: "rms" },
+    kick: { gain: 0.3, src: "rms" },
+    snare: { gain: 0.3, src: "rms" },
+    treble: { gain: 0.5, src: "treble" },
   },
   ash_field: {
-    kick: { src: "rms", gain: 0.5 },
-    snare: { src: "rms", gain: 0.3 },
     bass: { src: "rms" },
+    kick: { gain: 0.5, src: "rms" },
+    snare: { gain: 0.3, src: "rms" },
   },
 
   // Percussive: lean into hits.
   ember: {
-    bass: { src: "bass", gain: 1.25 },
-    kick: { src: "kick", gain: 1.3 },
-    treble: { src: "treble", gain: 0.6 },
+    bass: { gain: 1.25, src: "bass" },
+    kick: { gain: 1.3, src: "kick" },
+    treble: { gain: 0.6, src: "treble" },
   },
   storm: {
-    bass: { src: "bass", gain: 1.3 },
-    kick: { src: "kick", gain: 1.4 },
-    snare: { src: "snare", gain: 1.2 },
-    treble: { src: "treble", gain: 0.8 },
+    bass: { gain: 1.3, src: "bass" },
+    kick: { gain: 1.4, src: "kick" },
+    snare: { gain: 1.2, src: "snare" },
+    treble: { gain: 0.8, src: "treble" },
   },
   knife_cut: {
-    kick: { src: "kick", gain: 1.5 },
-    snare: { src: "snare", gain: 1.4 },
-    bass: { src: "bass", gain: 0.9 },
+    bass: { gain: 0.9, src: "bass" },
+    kick: { gain: 1.5, src: "kick" },
+    snare: { gain: 1.4, src: "snare" },
   },
 
   // Treble-forward: shimmer and edge.
   neon_line: {
-    bass: { src: "treble", gain: 0.5 },
-    kick: { src: "snare", gain: 1.2 },
-    snare: { src: "snare", gain: 1.3 },
-    treble: { src: "treble", gain: 1.4 },
+    bass: { gain: 0.5, src: "treble" },
+    kick: { gain: 1.2, src: "snare" },
+    snare: { gain: 1.3, src: "snare" },
+    treble: { gain: 1.4, src: "treble" },
   },
   cut_crystal: {
-    bass: { src: "treble", gain: 0.6 },
-    treble: { src: "treble", gain: 1.3 },
-    kick: { src: "hat", gain: 1.2 },
-    snare: { src: "hat", gain: 1.0 },
+    bass: { gain: 0.6, src: "treble" },
+    kick: { gain: 1.2, src: "hat" },
+    snare: { gain: 1.0, src: "hat" },
+    treble: { gain: 1.3, src: "treble" },
   },
   copper_wire: {
-    bass: { src: "bass", gain: 1.0 },
-    treble: { src: "treble", gain: 1.3 },
-    kick: { src: "kick", gain: 1.1 },
+    bass: { gain: 1.0, src: "bass" },
+    kick: { gain: 1.1, src: "kick" },
+    treble: { gain: 1.3, src: "treble" },
   },
 
   // Textural / painterly: flatten hits, breathe on rms.
   paper_rain: {
-    kick: { src: "rms", gain: 0.4 },
-    snare: { src: "hat", gain: 0.6 },
     bass: { src: "rms" },
+    kick: { gain: 0.4, src: "rms" },
+    snare: { gain: 0.6, src: "hat" },
   },
   bone_china: {
-    kick: { src: "rms", gain: 0.35 },
-    snare: { src: "rms", gain: 0.25 },
-    bass: { src: "rms", gain: 0.6 },
-    treble: { src: "treble", gain: 0.8 },
+    bass: { gain: 0.6, src: "rms" },
+    kick: { gain: 0.35, src: "rms" },
+    snare: { gain: 0.25, src: "rms" },
+    treble: { gain: 0.8, src: "treble" },
   },
   worn_linen: {
-    kick: { src: "rms", gain: 0.45 },
-    snare: { src: "rms", gain: 0.3 },
-    bass: { src: "rms", gain: 0.7 },
+    bass: { gain: 0.7, src: "rms" },
+    kick: { gain: 0.45, src: "rms" },
+    snare: { gain: 0.3, src: "rms" },
   },
   long_exposure: {
     // Extreme flattening — long exposure shouldn't twitch on transients
-    kick: { src: "rms", gain: 0.25 },
-    snare: { src: "rms", gain: 0.2 },
-    bass: { src: "rms", gain: 0.8 },
-    treble: { src: "rms", gain: 0.5 },
+    kick: { gain: 0.25, src: "rms" },
+    snare: { gain: 0.2, src: "rms" },
+    bass: { gain: 0.8, src: "rms" },
+    treble: { gain: 0.5, src: "rms" },
   },
 
   // Vocal-forward (mandala-like symmetry with voice emphasis).
   mandala: {
-    bass: { src: "vocal", gain: 0.9 },
-    mids: { src: "vocal", gain: 1.1 },
-    kick: { src: "kick", gain: 1.0 },
+    bass: { gain: 0.9, src: "vocal" },
+    kick: { gain: 1.0, src: "kick" },
+    mids: { gain: 1.1, src: "vocal" },
   },
   lacquer_screen: {
-    kick: { src: "kick", gain: 1.1 },
-    snare: { src: "vocal", gain: 0.9 },
-    bass: { src: "bass", gain: 1.1 },
+    bass: { gain: 1.1, src: "bass" },
+    kick: { gain: 1.1, src: "kick" },
+    snare: { gain: 0.9, src: "vocal" },
   },
 
   // Tide pool / struck bell — harmonic-resolving presets ride on mids/rms.
   tide_pool: {
-    kick: { src: "rms", gain: 0.4 },
-    snare: { src: "rms", gain: 0.3 },
-    mids: { src: "mids", gain: 1.2 },
-    bass: { src: "rms", gain: 0.8 },
+    bass: { gain: 0.8, src: "rms" },
+    kick: { gain: 0.4, src: "rms" },
+    mids: { gain: 1.2, src: "mids" },
+    snare: { gain: 0.3, src: "rms" },
   },
   struck_bell: {
-    kick: { src: "kick", gain: 1.1 },
-    snare: { src: "hat", gain: 0.8 },
-    treble: { src: "treble", gain: 1.2 },
+    kick: { gain: 1.1, src: "kick" },
+    snare: { gain: 0.8, src: "hat" },
+    treble: { gain: 1.2, src: "treble" },
   },
 
   // Silent-film: posterize-heavy; bass drives snare-ish flicker.
   silent_film: {
-    snare: { src: "kick", gain: 0.8 },
-    bass: { src: "rms", gain: 0.9 },
-    treble: { src: "treble", gain: 0.7 },
+    bass: { gain: 0.9, src: "rms" },
+    snare: { gain: 0.8, src: "kick" },
+    treble: { gain: 0.7, src: "treble" },
   },
 
   // Transfer paper: misregister — swap bass/treble partially.
   transfer_paper: {
-    bass: { src: "treble", gain: 0.7 },
-    treble: { src: "bass", gain: 0.7 },
-    kick: { src: "kick", gain: 0.9 },
+    bass: { gain: 0.7, src: "treble" },
+    kick: { gain: 0.9, src: "kick" },
+    treble: { gain: 0.7, src: "bass" },
   },
 };
 
 function applyRoute(
   route: Route | AudioSource | undefined,
   defaultSrc: AudioSource,
-  sources: AudioSourceBundle,
+  sources: AudioSourceBundle
 ): number {
-  if (route === undefined) return sources[defaultSrc];
+  if (route === undefined) {
+    return sources[defaultSrc];
+  }
   const r: Route = typeof route === "string" ? { src: route } : route;
   let v = sources[r.src] ?? 0;
-  if (r.curve === "pow2") v = v * v;
-  else if (r.curve === "sqrt") v = Math.sqrt(Math.max(0, v));
-  if (r.gain !== undefined) v *= r.gain;
+  if (r.curve === "pow2") v *= v;
+  else if (r.curve === "sqrt") {
+    v = Math.sqrt(Math.max(0, v));
+  }
+  if (r.gain !== undefined) {
+    v *= r.gain;
+  }
   return v;
 }
 
 export function resolveAudio(
   preset: PresetName,
-  sources: AudioSourceBundle,
+  sources: AudioSourceBundle
 ): ResolvedAudio {
   const routing = AUDIO_ROUTING[preset];
   return {
     bass: applyRoute(routing?.bass, "bass", sources),
-    mids: applyRoute(routing?.mids, "mids", sources),
-    treble: applyRoute(routing?.treble, "treble", sources),
-    rms: applyRoute(routing?.rms, "rms", sources),
     kick: applyRoute(routing?.kick, "kick", sources),
+    mids: applyRoute(routing?.mids, "mids", sources),
+    rms: applyRoute(routing?.rms, "rms", sources),
     snare: applyRoute(routing?.snare, "snare", sources),
+    treble: applyRoute(routing?.treble, "treble", sources),
     vocal: applyRoute(routing?.vocal, "vocal", sources),
   };
 }

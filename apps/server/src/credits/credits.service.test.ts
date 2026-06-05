@@ -6,11 +6,10 @@ import {
   expect,
   test,
 } from "bun:test";
-import {
-  createPgLite,
-  pgliteAsPool,
-  type TestPg,
-} from "@sonara/test-utils";
+
+import { createPgLite, pgliteAsPool } from "@sonara/test-utils";
+import type { TestPg } from "@sonara/test-utils";
+
 import {
   __setPoolForTests,
   debitFrame,
@@ -66,7 +65,7 @@ afterAll(async () => {
 
 beforeEach(async () => {
   await pg.exec(
-    `DELETE FROM usage_ledger; DELETE FROM credits; DELETE FROM free_tier_ledger;`,
+    `DELETE FROM usage_ledger; DELETE FROM credits; DELETE FROM free_tier_ledger;`
   );
 });
 
@@ -74,13 +73,13 @@ async function seedCredits(userId: string, frames: number): Promise<void> {
   await pg.query(
     `INSERT INTO credits (id, user_id, balance_frames)
      VALUES (gen_random_uuid(), $1, $2)`,
-    [userId, frames],
+    [userId, frames]
   );
 }
 
 async function ledgerCount(): Promise<number> {
   const res = await pg.query<{ count: string }>(
-    `SELECT COUNT(*)::text AS count FROM usage_ledger`,
+    `SELECT COUNT(*)::text AS count FROM usage_ledger`
   );
   return Number(res.rows[0]?.count ?? 0);
 }
@@ -142,7 +141,7 @@ describe("tryConsumeFreeTier", () => {
       `UPDATE free_tier_ledger
          SET window_start = window_start - interval '1 hour'
          WHERE user_id = $1`,
-      [USER],
+      [USER]
     );
     expect(await tryConsumeFreeTier(USER, 1)).toBe(true);
   });
@@ -151,7 +150,7 @@ describe("tryConsumeFreeTier", () => {
     expect(await tryConsumeFreeTier(USER, 3)).toBe(true);
     const res = await pg.query<{ kind: string; delta: number }>(
       `SELECT kind, delta FROM usage_ledger WHERE user_id = $1`,
-      [USER],
+      [USER]
     );
     expect(res.rows.length).toBe(1);
     expect(res.rows[0]?.kind).toBe("free");
@@ -165,7 +164,7 @@ describe("refundFrame", () => {
     expect(await refundFrame(USER, 1)).toBe(5);
     const res = await pg.query<{ kind: string; delta: number }>(
       `SELECT kind, delta FROM usage_ledger WHERE user_id = $1`,
-      [USER],
+      [USER]
     );
     expect(res.rows.length).toBe(1);
     expect(res.rows[0]?.kind).toBe("refund");
@@ -188,7 +187,7 @@ describe("refundFrame", () => {
     expect(await refundFrame(USER, 1)).toBe(10);
     const res = await pg.query<{ sum: string }>(
       `SELECT COALESCE(SUM(delta), 0)::text AS sum FROM usage_ledger WHERE user_id = $1`,
-      [USER],
+      [USER]
     );
     expect(Number(res.rows[0]?.sum ?? 0)).toBe(0);
   });

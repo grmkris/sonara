@@ -1,13 +1,7 @@
-import {
-  type InspectorContext,
-  type LibraryFrame,
-} from "@sonara/shared";
-import {
-  type ImageLibraryId,
-  type LiveSessionId,
-  LiveSessionIdSchema,
-} from "@sonara/shared/typeid";
 import { SCHEMA } from "@sonara/db";
+import type { InspectorContext, LibraryFrame } from "@sonara/shared";
+import { LiveSessionIdSchema } from "@sonara/shared/typeid";
+import type { ImageLibraryId, LiveSessionId } from "@sonara/shared/typeid";
 import {
   and,
   asc,
@@ -21,13 +15,14 @@ import {
   min,
 } from "drizzle-orm";
 import { z } from "zod";
-import { presignReadUrl } from "../storage/bucket";
+
 import {
   buildExampleFrames,
   buildExampleSessions,
   deckFromExampleSessionId,
   isExampleSessionId,
 } from "../library/example-sessions";
+import { presignReadUrl } from "../storage/bucket";
 import { protectedProcedure } from "./procedures";
 
 // User-scoped library router. Reads persisted generated/story frames for
@@ -90,22 +85,57 @@ function rowToFrame(row: FrameRow): LibraryFrame {
 }
 
 const FRAME_COLUMNS = {
+  anchorUrl: SCHEMA.imageLibrary.anchorUrl,
+  createdAt: SCHEMA.imageLibrary.createdAt,
+  deck: SCHEMA.imageLibrary.deck,
+  height: SCHEMA.imageLibrary.height,
   id: SCHEMA.imageLibrary.id,
+  inspectorContext: SCHEMA.imageLibrary.inspectorContext,
+  palette: SCHEMA.imageLibrary.palette,
+  prompt: SCHEMA.imageLibrary.prompt,
+  sessionId: SCHEMA.imageLibrary.sessionId,
+  tMs: SCHEMA.imageLibrary.tMs,
+  triggerReason: SCHEMA.imageLibrary.triggerReason,
   url: SCHEMA.imageLibrary.url,
   width: SCHEMA.imageLibrary.width,
-  height: SCHEMA.imageLibrary.height,
-  palette: SCHEMA.imageLibrary.palette,
-  deck: SCHEMA.imageLibrary.deck,
-  prompt: SCHEMA.imageLibrary.prompt,
-  tMs: SCHEMA.imageLibrary.tMs,
-  sessionId: SCHEMA.imageLibrary.sessionId,
-  createdAt: SCHEMA.imageLibrary.createdAt,
-  triggerReason: SCHEMA.imageLibrary.triggerReason,
-  anchorUrl: SCHEMA.imageLibrary.anchorUrl,
-  inspectorContext: SCHEMA.imageLibrary.inspectorContext,
 } as const;
 
 export const libraryRouter = {
+  /**
+   * All frames from a single live session, in chronological order. Used by
+   * the /play timeline strip's per-session view AND by the /studio session
+   * timeline. Lighter than `list` because one session is bounded.
+   */
+  bySession: protectedProcedure
+    .input(z.object({ sessionId: LiveSessionIdSchema }))
+    .handler(async ({ input, context }) => {
+      const { db, userId } = context;
+
+      // Example sessions (studio prefill) are synthesized from seed decks and
+      // never hit the DB — short-circuit before the owned-rows query.
+      if (isExampleSessionId(input.sessionId)) {
+        const frames = await buildExampleFrames(
+          db,
+          deckFromExampleSessionId(input.sessionId)
+        );
+        return { frames };
+      }
+
+      const rows = await db
+        .select(FRAME_COLUMNS)
+        .from(SCHEMA.imageLibrary)
+        .where(
+          and(
+            eq(SCHEMA.imageLibrary.userId, userId),
+            eq(SCHEMA.imageLibrary.sessionId, input.sessionId),
+            inArray(SCHEMA.imageLibrary.source, ["generated", "story"])
+          )
+        )
+        .orderBy(asc(SCHEMA.imageLibrary.tMs));
+
+      return { frames: rows.map(rowToFrame) };
+    }),
+
   /**
    * Paged all-time gallery, newest first. Cursor is the `createdAt` ISO
    * string of the last row from the previous page; next page is strictly
@@ -116,7 +146,7 @@ export const libraryRouter = {
       z.object({
         limit: z.number().int().min(1).max(LIST_MAX_LIMIT).optional(),
         cursor: z.string().datetime().optional(),
-      }),
+      })
     )
     .handler(async ({ input, context }) => {
       const { db, userId } = context;
@@ -142,45 +172,10 @@ export const libraryRouter = {
       const trimmed = hasMore ? rows.slice(0, limit) : rows;
       const frames = trimmed.map(rowToFrame);
       const nextCursor = hasMore
-        ? trimmed[trimmed.length - 1]?.createdAt.toISOString() ?? null
+        ? (trimmed[trimmed.length - 1]?.createdAt.toISOString() ?? null)
         : null;
 
       return { frames, nextCursor };
-    }),
-
-  /**
-   * All frames from a single live session, in chronological order. Used by
-   * the /play timeline strip's per-session view AND by the /studio session
-   * timeline. Lighter than `list` because one session is bounded.
-   */
-  bySession: protectedProcedure
-    .input(z.object({ sessionId: LiveSessionIdSchema }))
-    .handler(async ({ input, context }) => {
-      const { db, userId } = context;
-
-      // Example sessions (studio prefill) are synthesized from seed decks and
-      // never hit the DB — short-circuit before the owned-rows query.
-      if (isExampleSessionId(input.sessionId)) {
-        const frames = await buildExampleFrames(
-          db,
-          deckFromExampleSessionId(input.sessionId),
-        );
-        return { frames };
-      }
-
-      const rows = await db
-        .select(FRAME_COLUMNS)
-        .from(SCHEMA.imageLibrary)
-        .where(
-          and(
-            eq(SCHEMA.imageLibrary.userId, userId),
-            eq(SCHEMA.imageLibrary.sessionId, input.sessionId),
-            inArray(SCHEMA.imageLibrary.source, ["generated", "story"]),
-          ),
-        )
-        .orderBy(asc(SCHEMA.imageLibrary.tMs));
-
-      return { frames: rows.map(rowToFrame) };
     }),
 
   /**
@@ -194,7 +189,7 @@ export const libraryRouter = {
       z.object({
         limit: z.number().int().min(1).max(SESSIONS_MAX_LIMIT).optional(),
         cursor: z.string().datetime().optional(),
-      }),
+      })
     )
     .handler(async ({ input, context }) => {
       const { db, userId } = context;
@@ -231,7 +226,7 @@ export const libraryRouter = {
         .having(
           cursorDate
             ? lt(max(SCHEMA.imageLibrary.createdAt), cursorDate)
-            : undefined,
+            : undefined
         )
         .orderBy(desc(max(SCHEMA.imageLibrary.createdAt)))
         .limit(limit + 1);
@@ -261,12 +256,12 @@ export const libraryRouter = {
               and(
                 eq(SCHEMA.imageLibrary.userId, userId),
                 inArray(SCHEMA.imageLibrary.sessionId, sessionIds),
-                inArray(SCHEMA.imageLibrary.source, ["generated", "story"]),
-              ),
+                inArray(SCHEMA.imageLibrary.source, ["generated", "story"])
+              )
             )
             .orderBy(
               asc(SCHEMA.imageLibrary.sessionId),
-              desc(SCHEMA.imageLibrary.createdAt),
+              desc(SCHEMA.imageLibrary.createdAt)
             )
         : [];
 
@@ -292,8 +287,9 @@ export const libraryRouter = {
       });
 
       const nextCursor = hasMore
-        ? (trimmed[trimmed.length - 1]?.lastFrameAt as Date | undefined)
-            ?.toISOString() ?? null
+        ? ((
+            trimmed[trimmed.length - 1]?.lastFrameAt as Date | undefined
+          )?.toISOString() ?? null)
         : null;
 
       // Studio prefill: a signed-in user with no real sessions gets example

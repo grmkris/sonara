@@ -1,7 +1,8 @@
 "use client";
 
-import { X } from "lucide-react";
 import type { LibraryFrame } from "@sonara/shared";
+import { X } from "lucide-react";
+
 import { FrameInspectorContent } from "./frame-inspector-content";
 
 interface FrameInspectorProps {

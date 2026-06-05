@@ -9,11 +9,17 @@
 export function formatAgo(date: Date): string {
   const now = Date.now();
   const ms = now - date.getTime();
-  if (ms < 60_000) return "just now";
+  if (ms < 60_000) {
+    return "just now";
+  }
   const m = Math.floor(ms / 60_000);
-  if (m < 60) return `${m}m ago`;
+  if (m < 60) {
+    return `${m}m ago`;
+  }
   const h = Math.floor(m / 60);
-  if (h < 24) return `${h}h ago`;
+  if (h < 24) {
+    return `${h}h ago`;
+  }
   const d = Math.floor(h / 24);
   return `${d}d ago`;
 }
@@ -39,6 +45,8 @@ export function formatDuration(ms: number): string {
   const totalSec = Math.floor(ms / 1000);
   const m = Math.floor(totalSec / 60);
   const s = totalSec % 60;
-  if (m === 0) return `${s}s`;
+  if (m === 0) {
+    return `${s}s`;
+  }
   return `${m}m ${s.toString().padStart(2, "0")}s`;
 }

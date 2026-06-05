@@ -8,9 +8,7 @@
 builder = "DOCKERFILE"
 dockerfilePath = "apps/gateway/Dockerfile"
 # Caddy has no turbo package; rebuild on any gateway source change.
-watchPatterns = [
-  "apps/gateway/**",
-]
+watchPatterns = ["apps/gateway/**"]
 
 [deploy]
 # Caddy reads PORT + SERVER_URL + WEB_URL from the env (see Caddyfile).

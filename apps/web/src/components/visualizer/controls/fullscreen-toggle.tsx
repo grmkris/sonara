@@ -1,10 +1,11 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
 import { Maximize2, Minimize2 } from "lucide-react";
+import { useCallback, useEffect, useState } from "react";
+
+import { TelemetryButton } from "@/components/visualizer/controls/telemetry-button";
 import { useHotkey } from "@/hooks/use-hotkey";
 import { HOTKEYS } from "@/lib/hotkeys";
-import { TelemetryButton } from "@/components/visualizer/controls/telemetry-button";
 
 export function FullscreenToggle() {
   const [isFs, setIsFs] = useState(false);

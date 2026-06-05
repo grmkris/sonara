@@ -26,10 +26,14 @@ import { createHash } from "node:crypto";
 import { mkdir, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+
 import { createFalClient } from "@fal-ai/client";
-import { DECK_KEYS, type DeckKey } from "@sonara/shared";
-import { type ImageLibraryId, typeIdGenerator } from "@sonara/shared/typeid";
+import { DECK_KEYS } from "@sonara/shared";
+import type { DeckKey } from "@sonara/shared";
+import { typeIdGenerator } from "@sonara/shared/typeid";
+import type { ImageLibraryId } from "@sonara/shared/typeid";
 import sharp from "sharp";
+
 import { env } from "../src/env";
 import { buildLibraryManifests } from "./build-library-manifests";
 
@@ -81,11 +85,15 @@ function parseArgs(): Args {
       deck = v as DeckKey;
     } else if (a === "--limit") {
       const v = Number(argv[++i]);
-      if (!Number.isInteger(v) || v <= 0) fail("--limit must be a positive integer");
+      if (!Number.isInteger(v) || v <= 0) {
+        fail("--limit must be a positive integer");
+      }
       limit = v;
     } else if (a === "--model") {
       const v = argv[++i];
-      if (!v) fail("--model requires a value");
+      if (!v) {
+        fail("--model requires a value");
+      }
       model = v;
     } else if (a === "--dry-run") {
       dryRun = true;
@@ -93,8 +101,10 @@ function parseArgs(): Args {
       fail(`unknown arg: ${a}`);
     }
   }
-  if (!deck) fail("--deck is required");
-  return { deck, limit, model, dryRun };
+  if (!deck) {
+    fail("--deck is required");
+  }
+  return { deck, dryRun, limit, model };
 }
 
 function promptHash(deck: string, prompt: string): string {
@@ -104,7 +114,7 @@ function promptHash(deck: string, prompt: string): string {
 // Deterministic seed so re-generating a prompt yields a similar image.
 function promptSeed(prompt: string): number {
   const h = createHash("sha256").update(prompt).digest();
-  return h.readUInt32BE(0) & 0x7fff_ffff;
+  return h.readUInt32BE(0) & 0x7f_ff_ff_ff;
 }
 
 interface FalImage {
@@ -119,14 +129,20 @@ interface FalData {
 
 function pickImage(result: unknown): FalImage | null {
   const data = (result as { data?: FalData } | undefined)?.data;
-  if (!data) return null;
-  if (data.image?.url) return data.image;
-  if (data.images && data.images[0]?.url) return data.images[0];
+  if (!data) {
+    return null;
+  }
+  if (data.image?.url) {
+    return data.image;
+  }
+  if (data.images && data.images[0]?.url) {
+    return data.images[0];
+  }
   return null;
 }
 
 function scriptDir(): string {
-  return dirname(fileURLToPath(import.meta.url));
+  return import.meta.dirname;
 }
 
 // apps/server/scripts -> apps/web/public/library
@@ -135,7 +151,7 @@ function publicLibraryDir(): string {
 }
 
 async function downloadAndEncode(
-  url: string,
+  url: string
 ): Promise<{ buffer: Buffer; width: number; height: number }> {
   const res = await fetch(url);
   if (!res.ok) {
@@ -146,21 +162,25 @@ async function downloadAndEncode(
     .resize(1024, 1024, { fit: "cover" })
     .webp({ quality: 70 })
     .toBuffer({ resolveWithObject: true });
-  return { buffer: out.data, width: out.info.width, height: out.info.height };
+  return { buffer: out.data, height: out.info.height, width: out.info.width };
 }
 
 async function main() {
   const args = parseArgs();
-  if (!env.FAL_KEY && !args.dryRun) fail("FAL_KEY not set");
+  if (!env.FAL_KEY && !args.dryRun) {
+    fail("FAL_KEY not set");
+  }
 
   const manifestPath = resolve(scriptDir(), "library-manifest.json");
   const seedPath = resolve(scriptDir(), "library-seed.json");
 
   const manifest = JSON.parse(
-    await Bun.file(manifestPath).text(),
+    await Bun.file(manifestPath).text()
   ) as ManifestEntry[];
   const entry = manifest.find((m) => m.deck === args.deck);
-  if (!entry) fail(`no deck "${args.deck}" in library-manifest.json`);
+  if (!entry) {
+    fail(`no deck "${args.deck}" in library-manifest.json`);
+  }
 
   const seed = JSON.parse(await Bun.file(seedPath).text()) as ExportRow[];
   const existing = new Set(seed.map((r) => r.promptHash));
@@ -195,12 +215,12 @@ async function main() {
     try {
       const result = await fal.subscribe(args.model, {
         input: {
-          prompt,
+          enable_safety_checker: false,
+          image_size: "square_hd",
           num_images: 1,
           num_inference_steps: 4,
-          image_size: "square_hd",
           output_format: "jpeg",
-          enable_safety_checker: false,
+          prompt,
           seed: s,
         },
         logs: false,
@@ -216,17 +236,17 @@ async function main() {
       await writeFile(resolve(deckDir, filename), buffer);
       const url = `/library/${args.deck}/${filename}`;
       const row: ExportRow = {
-        id,
         deck: args.deck as string,
+        height,
+        id,
+        model: args.model,
+        palette: null,
         prompt,
         promptHash: hash,
-        model: args.model,
         seed: s,
+        status: "active",
         url,
         width,
-        height,
-        palette: null,
-        status: "active",
       };
       seed.push(row);
       existing.add(hash);
@@ -234,18 +254,22 @@ async function main() {
       await writeFile(seedPath, `${JSON.stringify(seed, null, 2)}\n`);
       gen++;
       console.log(`  + ${args.deck}/${filename}  "${prompt.slice(0, 60)}"`);
-    } catch (err) {
-      console.error(`[fail] ${args.deck} "${prompt}":`, err);
+    } catch (error) {
+      console.error(`[fail] ${args.deck} "${prompt}":`, error);
       failed++;
     }
   }
 
-  console.log(`\n${args.deck}: ${gen} generated, ${skip} skipped, ${failed} failed`);
-  if (!args.dryRun) await buildLibraryManifests();
+  console.log(
+    `\n${args.deck}: ${gen} generated, ${skip} skipped, ${failed} failed`
+  );
+  if (!args.dryRun) {
+    await buildLibraryManifests();
+  }
   process.exit(failed > 0 ? 1 : 0);
 }
 
-main().catch((err) => {
-  console.error("gen-deck-offline failed:", err);
+main().catch((error) => {
+  console.error("gen-deck-offline failed:", error);
   process.exit(1);
 });

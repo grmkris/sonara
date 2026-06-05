@@ -6,11 +6,11 @@ Manifest schema: `packages/shared/src/demo.ts` → `DemoManifest`.
 
 ## Current packs
 
-| Slot | Track | Duration | Preset | Artist |
-|---|---|---|---|---|
-| `koto` | In the place far away | 2:52 | `wet_ink` | harumachimusic |
-| `epic` | Epic Cinematic Drama | 2:58 | `storm` | grand_project |
-| `lofi` | Lofi Hip Hop Beat | 2:51 | `dust` | tunetank |
+| Slot   | Track                 | Duration | Preset    | Artist         |
+| ------ | --------------------- | -------- | --------- | -------------- |
+| `koto` | In the place far away | 2:52     | `wet_ink` | harumachimusic |
+| `epic` | Epic Cinematic Drama  | 2:58     | `storm`   | grand_project  |
+| `lofi` | Lofi Hip Hop Beat     | 2:51     | `dust`    | tunetank       |
 
 Audio license: Pixabay Content License — commercial use permitted, no attribution required. No on-screen credits are rendered.
 
@@ -19,14 +19,17 @@ Audio license: Pixabay Content License — commercial use permitted, no attribut
 Capture a live playthrough, then ingest the result into the manifest. Run once per demo — the browser recorder + bun ingest CLI only exist for this one-off job.
 
 1. Start the full stack:
+
    ```
    bun run dev
    ```
 
 2. In the browser, open the page with the `?record=<slug>` flag:
+
    ```
    http://localhost:3000/?record=koto
    ```
+
    A floating panel labeled `rec · slug koto` appears at the bottom-center.
 
 3. Switch the music source to "file" and select `apps/web/public/demos/koto/audio.mp3`. Wait for the first fal keyframe to render.
@@ -36,14 +39,17 @@ Capture a live playthrough, then ingest the result into the manifest. Run once p
 5. Let the track play to the end. Click **stop**, then **download** — the browser saves `capture.json`.
 
 6. Move the download into the demo directory:
+
    ```
    mv ~/Downloads/capture.json apps/web/public/demos/koto/
    ```
 
 7. Run the ingest CLI:
+
    ```
    bun run --cwd apps/server ingest-demo koto
    ```
+
    This fetches every fal URL, saves them as `001.jpg`, `002.jpg`, …, rewrites `manifest.json` with local paths + real `durationSec`, validates against the zod schema, and deletes `capture.json`.
 
 8. Commit the new image files + finalized manifest.

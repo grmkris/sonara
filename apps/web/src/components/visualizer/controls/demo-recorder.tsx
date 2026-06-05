@@ -1,13 +1,11 @@
 "use client";
 
-import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { useSearchParams } from "next/navigation";
-import {
-  createRecorder,
-  downloadCaptureJson,
-  type Recorder,
-} from "@/lib/demo/recorder";
+import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
+
 import { Button } from "@/components/ui/button";
+import { createRecorder, downloadCaptureJson } from "@/lib/demo/recorder";
+import type { Recorder } from "@/lib/demo/recorder";
 
 // Dev-time floating panel. Only mounts when `?record=<slug>` is in the URL.
 // Captures every `currentFrame` transition while recording, then downloads a
@@ -16,7 +14,9 @@ import { Button } from "@/components/ui/button";
 export function DemoRecorder() {
   const params = useSearchParams();
   const slug = params.get("record");
-  if (!slug) return null;
+  if (!slug) {
+    return null;
+  }
   return <RecorderPanel slug={slug} />;
 }
 
@@ -28,13 +28,15 @@ function RecorderPanel({ slug }: { slug: string }) {
   const snapshot = useSyncExternalStore(
     recorder.subscribe,
     recorder.getSnapshot,
-    recorder.getSnapshot,
+    recorder.getSnapshot
   );
 
   // Shield against SSR hydration mismatches — only render after mount.
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
-  if (!mounted) return null;
+  if (!mounted) {
+    return null;
+  }
 
   const elapsed = `${snapshot.elapsedSec.toFixed(1)}s`;
   const count = snapshot.frames.length;

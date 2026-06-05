@@ -29,35 +29,33 @@ export const typeIdGenerator = <const T extends IdTypePrefixNames>(prefix: T) =>
 
 export const typeIdFromUuid = <const T extends IdTypePrefixNames>(
   prefix: T,
-  uuid: string,
+  uuid: string
 ) => {
   const actualPrefix = idTypesMapNameToPrefix[prefix];
   return TypeID.fromUUID(actualPrefix, uuid).toString() as TypeIdString<T>;
 };
 
 export const typeIdToUuid = <const T extends IdTypePrefixNames>(
-  input: TypeIdString<T>,
+  input: TypeIdString<T>
 ) => {
   const id = fromString(input);
   return {
-    uuid: toUUID(id).toString(),
     prefix: getType(id),
+    uuid: toUUID(id).toString(),
   };
 };
 
 // Zod validator for an entity's typeid. Usable directly in RPC input schemas
 // so wrong-prefix ids are rejected at the boundary.
 export const typeIdValidator = <const T extends IdTypePrefixNames>(
-  prefix: T,
+  prefix: T
 ) => {
   const expected = idTypesMapNameToPrefix[prefix];
   return z
     .string()
     .refine(
-      (v) =>
-        v.startsWith(`${expected}_`) &&
-        v.length > expected.length + 1,
-      { message: `Expected a ${prefix} id (prefix "${expected}_")` },
+      (v) => v.startsWith(`${expected}_`) && v.length > expected.length + 1,
+      { message: `Expected a ${prefix} id (prefix "${expected}_")` }
     )
     .transform((v) => v as TypeIdString<T>);
 };

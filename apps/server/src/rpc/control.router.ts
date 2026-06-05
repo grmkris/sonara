@@ -1,12 +1,10 @@
 import { ORPCError } from "@sonara/api/server";
 import type { ControllableSession } from "@sonara/api/server";
 import { ClientScenePatch, DeckKeySchema } from "@sonara/shared";
-import {
-  LiveSessionIdSchema,
-  typeIdToUuid,
-  type UserId,
-} from "@sonara/shared/typeid";
+import { LiveSessionIdSchema, typeIdToUuid } from "@sonara/shared/typeid";
+import type { UserId } from "@sonara/shared/typeid";
 import { z } from "zod";
+
 import { protectedProcedure } from "./procedures";
 
 // Operator remote control plane. A signed-in user drives ONE OF THEIR OWN
@@ -25,13 +23,13 @@ const ByLiveSession = z.object({ liveSessionId: LiveSessionIdSchema });
 const ScenePatchInput = ByLiveSession.extend({ patch: ClientScenePatch });
 const GoLiveInput = ByLiveSession.extend({ prompt: z.string() });
 const SetDemoModeInput = ByLiveSession.extend({
-  on: z.boolean(),
   deck: DeckKeySchema.nullable(),
+  on: z.boolean(),
 });
 const SetImageAnchorInput = z.union([
   ByLiveSession.extend({
-    url: z.string().url(),
     strength: z.number().min(0).max(1),
+    url: z.string().url(),
   }),
   ByLiveSession.extend({ clear: z.literal(true) }),
 ]);
@@ -43,7 +41,7 @@ const SetImageAnchorInput = z.union([
 function resolveOwnedSession(
   registry: { getByLiveSessionId(id: string): ControllableSession | undefined },
   userId: UserId,
-  liveSessionId: string,
+  liveSessionId: string
 ): ControllableSession {
   const session = registry.getByLiveSessionId(liveSessionId);
   if (!session) {
@@ -67,14 +65,14 @@ export const controlRouter = {
     const sessions = context.registry.listByUserId(rawUuid).map((s) => {
       const snap = s.getControlSnapshot();
       return {
-        liveSessionId: snap.liveSessionId,
-        startedAt: snap.startedAt,
-        demoMode: snap.demoMode,
         demoDeck: snap.demoDeck,
+        demoMode: snap.demoMode,
         jobStatus: snap.jobStatus,
-        prompt: snap.scene.prompt,
         lastFrameUrl: snap.lastFrameUrl,
+        liveSessionId: snap.liveSessionId,
         nowPlaying: snap.nowPlaying,
+        prompt: snap.scene.prompt,
+        startedAt: snap.startedAt,
       };
     });
     // Newest session first so the projector you just opened leads the list.
@@ -91,8 +89,8 @@ export const controlRouter = {
       resolveOwnedSession(
         context.registry,
         context.userId,
-        input.liveSessionId,
-      ).getControlSnapshot(),
+        input.liveSessionId
+      ).getControlSnapshot()
     ),
 
   scenePatch: protectedProcedure
@@ -101,7 +99,7 @@ export const controlRouter = {
       resolveOwnedSession(
         context.registry,
         context.userId,
-        input.liveSessionId,
+        input.liveSessionId
       ).applyPatch(input.patch, "client");
     }),
 
@@ -114,7 +112,7 @@ export const controlRouter = {
       const session = resolveOwnedSession(
         context.registry,
         context.userId,
-        input.liveSessionId,
+        input.liveSessionId
       );
       session.goLive(input.prompt, session.getControlSnapshot().lastFrameUrl);
     }),
@@ -125,7 +123,7 @@ export const controlRouter = {
       resolveOwnedSession(
         context.registry,
         context.userId,
-        input.liveSessionId,
+        input.liveSessionId
       ).setDemoMode(input.on, input.deck);
     }),
 
@@ -135,12 +133,12 @@ export const controlRouter = {
       const session = resolveOwnedSession(
         context.registry,
         context.userId,
-        input.liveSessionId,
+        input.liveSessionId
       );
       session.setImageAnchor(
         "clear" in input
           ? { clear: true }
-          : { url: input.url, strength: input.strength },
+          : { strength: input.strength, url: input.url }
       );
     }),
 
@@ -150,7 +148,7 @@ export const controlRouter = {
       resolveOwnedSession(
         context.registry,
         context.userId,
-        input.liveSessionId,
+        input.liveSessionId
       ).reset();
     }),
 };

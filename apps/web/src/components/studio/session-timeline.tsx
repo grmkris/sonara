@@ -1,8 +1,10 @@
 "use client";
 
-import { useMemo } from "react";
 import type { LibraryFrame } from "@sonara/shared";
+import { useMemo } from "react";
+
 import { formatDuration, formatMmSs } from "@/lib/format-time";
+
 import { FrameCard } from "./frame-card";
 
 interface SessionTimelineProps {
@@ -48,10 +50,7 @@ export function SessionTimeline({
     );
   }
 
-  const maxStack = layout.frames.reduce(
-    (m, f) => Math.max(m, f.stackIdx),
-    0,
-  );
+  const maxStack = layout.frames.reduce((m, f) => Math.max(m, f.stackIdx), 0);
   const trackHeight = FRAME_SIZE_DESKTOP * (maxStack + 1) + maxStack * 4;
 
   return (
@@ -117,16 +116,16 @@ interface LayoutEntry {
 
 interface Layout {
   frames: LayoutEntry[];
-  ticks: Array<{ ms: number; pct: number; label: string }>;
+  ticks: { ms: number; pct: number; label: string }[];
   durationMs: number;
 }
 
 function computeLayout(frames: LibraryFrame[]): Layout {
   if (frames.length === 0) {
-    return { frames: [], ticks: [], durationMs: 0 };
+    return { durationMs: 0, frames: [], ticks: [] };
   }
   // Frames arrive ordered by tMs ASC per library.bySession.
-  const lastTMs = frames[frames.length - 1]?.tMs ?? 0;
+  const lastTMs = frames.at(-1)?.tMs ?? 0;
   // Guard: at least 1s of timeline so a single frame still positions.
   const durationMs = Math.max(lastTMs, 1000);
 
@@ -150,29 +149,23 @@ function computeLayout(frames: LibraryFrame[]): Layout {
   }
 
   const ticks = computeTicks(durationMs);
-  return { frames: entries, ticks, durationMs };
+  return { durationMs, frames: entries, ticks };
 }
 
 function computeTicks(
-  durationMs: number,
-): Array<{ ms: number; pct: number; label: string }> {
+  durationMs: number
+): { ms: number; pct: number; label: string }[] {
   // Adaptive interval: every 30s up to 5min, every 1min up to 30min,
   // every 5min beyond.
   const minutes = durationMs / 60_000;
-  const intervalMs =
-    minutes < 5
-      ? 30_000
-      : minutes < 30
-        ? 60_000
-        : 5 * 60_000;
-  const ticks: Array<{ ms: number; pct: number; label: string }> = [];
+  const intervalMs = minutes < 5 ? 30_000 : minutes < 30 ? 60_000 : 5 * 60_000;
+  const ticks: { ms: number; pct: number; label: string }[] = [];
   for (let ms = 0; ms <= durationMs; ms += intervalMs) {
     ticks.push({
+      label: formatMmSs(ms),
       ms,
       pct: (ms / durationMs) * 100,
-      label: formatMmSs(ms),
     });
   }
   return ticks;
 }
-

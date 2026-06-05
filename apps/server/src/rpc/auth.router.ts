@@ -1,6 +1,8 @@
 import { ORPCError } from "@sonara/api/server";
 import { signTicket } from "@sonara/shared";
-import { typeIdToUuid, type UserId } from "@sonara/shared/typeid";
+import { typeIdToUuid } from "@sonara/shared/typeid";
+import type { UserId } from "@sonara/shared/typeid";
+
 import { env } from "../env";
 import { publicProcedure } from "./procedures";
 
@@ -21,8 +23,8 @@ export const authRouter = {
       ? typeIdToUuid(context.session.user.id as UserId).uuid
       : null;
     const token = await signTicket({
-      userId,
       secret: env.BETTER_AUTH_SECRET,
+      userId,
     });
     return { token };
   }),

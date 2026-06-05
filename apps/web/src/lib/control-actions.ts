@@ -1,5 +1,6 @@
 import type { LiveSessionId } from "@sonara/shared/typeid";
 import type { AppRouterClient } from "server/rpc";
+
 import type { SessionAction } from "./session-actions";
 
 // Remote (operator) counterpart to dispatchSessionAction. Maps the same
@@ -13,33 +14,40 @@ import type { SessionAction } from "./session-actions";
 export function dispatchControlAction(
   client: AppRouterClient,
   liveSessionId: LiveSessionId,
-  action: SessionAction,
+  action: SessionAction
 ): Promise<unknown> {
   const c = client.control;
   switch (action.type) {
     case "scene.patch":
-    case "voice.patch":
+    case "voice.patch": {
       // No remote voice path — both fold onto scenePatch (the operator types).
       return c.scenePatch({ liveSessionId, patch: action.patch });
-    case "session.reset":
+    }
+    case "session.reset": {
       return c.reset({ liveSessionId });
-    case "demo.set":
+    }
+    case "demo.set": {
       return c.setDemoMode({ liveSessionId, on: action.on, deck: action.deck });
-    case "session.goLive":
+    }
+    case "session.goLive": {
       // The operator has no canvas, so there's no on-screen frame to seed
       // from — control.goLive seeds from the server's last frame instead.
       return c.goLive({ liveSessionId, prompt: action.prompt });
-    case "image.anchor.set":
+    }
+    case "image.anchor.set": {
       return c.setImageAnchor({
         liveSessionId,
         url: action.url,
         strength: action.strength,
       });
-    case "image.anchor.clear":
+    }
+    case "image.anchor.clear": {
       return c.setImageAnchor({ liveSessionId, clear: true });
+    }
     case "hello":
     case "audio.features":
-    case "audio.recognize":
+    case "audio.recognize": {
       return Promise.resolve();
+    }
   }
 }

@@ -11,7 +11,9 @@ const CORE_BASE = "https://unpkg.com/@ffmpeg/core@0.12.10/dist/umd";
 let cached: FFmpeg | null = null;
 
 async function loadFfmpeg(): Promise<FFmpeg> {
-  if (cached) return cached;
+  if (cached) {
+    return cached;
+  }
   const { FFmpeg: FFmpegCtor } = await import("@ffmpeg/ffmpeg");
   const instance = new FFmpegCtor();
   await instance.load({
@@ -24,7 +26,7 @@ async function loadFfmpeg(): Promise<FFmpeg> {
 
 export async function transcodeToMp4(
   webm: Blob,
-  opts: { hasAudio: boolean; onProgress?: (ratio: number) => void },
+  opts: { hasAudio: boolean; onProgress?: (ratio: number) => void }
 ): Promise<Blob> {
   const ffmpeg = await loadFfmpeg();
 
@@ -40,17 +42,25 @@ export async function transcodeToMp4(
     await ffmpeg.writeFile(inputName, new Uint8Array(await webm.arrayBuffer()));
 
     const args = [
-      "-i", inputName,
-      "-c:v", "libx264",
-      "-preset", "veryfast",
-      "-crf", "23",
-      "-pix_fmt", "yuv420p",
-      "-movflags", "+faststart",
+      "-i",
+      inputName,
+      "-c:v",
+      "libx264",
+      "-preset",
+      "veryfast",
+      "-crf",
+      "23",
+      "-pix_fmt",
+      "yuv420p",
+      "-movflags",
+      "+faststart",
       ...(opts.hasAudio ? ["-c:a", "aac", "-b:a", "128k"] : ["-an"]),
       outputName,
     ];
     const code = await ffmpeg.exec(args);
-    if (code !== 0) throw new Error(`ffmpeg exited with code ${code}`);
+    if (code !== 0) {
+      throw new Error(`ffmpeg exited with code ${code}`);
+    }
 
     const out = (await ffmpeg.readFile(outputName)) as Uint8Array;
     // Copy into a fresh ArrayBuffer — ffmpeg.wasm hands back a view into WASM
@@ -58,7 +68,7 @@ export async function transcodeToMp4(
     return new Blob([new Uint8Array(out)], { type: "video/mp4" });
   } finally {
     ffmpeg.off("progress", handleProgress);
-    await ffmpeg.deleteFile(inputName).catch(() => undefined);
-    await ffmpeg.deleteFile(outputName).catch(() => undefined);
+    await ffmpeg.deleteFile(inputName).catch(() => {});
+    await ffmpeg.deleteFile(outputName).catch(() => {});
   }
 }

@@ -1,5 +1,6 @@
 import { fal } from "@fal-ai/client";
 import type { NowPlaying } from "@sonara/shared";
+
 import { env } from "../env";
 import type { Logger } from "../lib/logger";
 
@@ -78,7 +79,9 @@ interface AnyLlmResult {
 }
 
 function extractOutput(data: unknown): string | null {
-  if (!data || typeof data !== "object") return null;
+  if (!data || typeof data !== "object") {
+    return null;
+  }
   const r = data as AnyLlmResult;
   return typeof r.output === "string" ? r.output : null;
 }
@@ -86,20 +89,28 @@ function extractOutput(data: unknown): string | null {
 function stripFences(text: string): string {
   let out = text.trim();
   const m = out.match(/^```(?:json)?\s*\n?([\s\S]*?)\n?```$/);
-  if (m?.[1]) out = m[1].trim();
+  if (m?.[1]) {
+    out = m[1].trim();
+  }
   return out;
 }
 
 function coerce(raw: unknown): SongMusePatch | null {
-  if (!raw || typeof raw !== "object") return null;
+  if (!raw || typeof raw !== "object") {
+    return null;
+  }
   const o = raw as Record<string, unknown>;
-  if (typeof o.prompt !== "string") return null;
+  if (typeof o.prompt !== "string") {
+    return null;
+  }
   const cleaned = o.prompt
     .trim()
-    .replace(/^["']|["']$/g, "")
+    .replaceAll(/^["']|["']$/g, "")
     .replace(/\.+$/, "")
     .trim();
-  if (cleaned.length === 0) return null;
+  if (cleaned.length === 0) {
+    return null;
+  }
   // Hard cap so a runaway LLM can't dump a paragraph into the prompt slot.
   const capped =
     cleaned.length > MAX_PROMPT_CHARS
@@ -110,7 +121,7 @@ function coerce(raw: unknown): SongMusePatch | null {
 
 export async function synthesizeFromTrack(
   input: SongMuseInput,
-  opts: SongMuseOpts,
+  opts: SongMuseOpts
 ): Promise<SongMusePatch | null> {
   if (!env.FAL_KEY) {
     opts.logger.debug("song-muse: FAL_KEY not set, skipping");
@@ -120,17 +131,19 @@ export async function synthesizeFromTrack(
 
   try {
     const result = await fal.subscribe("fal-ai/any-llm", {
+      abortSignal: opts.signal,
       input: {
-        model,
-        system_prompt: buildSystemPrompt(),
-        prompt: buildUserPrompt(input),
         max_tokens: MAX_OUTPUT_TOKENS,
+        model,
         priority: "latency",
+        prompt: buildUserPrompt(input),
+        system_prompt: buildSystemPrompt(),
       },
       logs: false,
-      abortSignal: opts.signal,
     });
-    if (opts.signal.aborted) return null;
+    if (opts.signal.aborted) {
+      return null;
+    }
 
     const output = extractOutput(result?.data);
     if (!output) {
@@ -141,8 +154,11 @@ export async function synthesizeFromTrack(
     let parsed: unknown;
     try {
       parsed = JSON.parse(stripped);
-    } catch (err) {
-      opts.logger.warn({ err, output: stripped }, "song-muse: JSON parse failed");
+    } catch (error) {
+      opts.logger.warn(
+        { error, output: stripped },
+        "song-muse: JSON parse failed"
+      );
       return null;
     }
     const patch = coerce(parsed);
@@ -151,9 +167,9 @@ export async function synthesizeFromTrack(
       return null;
     }
     return patch;
-  } catch (err) {
+  } catch (error) {
     if (opts.signal.aborted) return null;
-    opts.logger.warn({ err }, "song-muse: fal any-llm error");
+    opts.logger.warn({ error }, "song-muse: fal any-llm error");
     return null;
   }
 }

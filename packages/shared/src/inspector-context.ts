@@ -1,4 +1,5 @@
 import { z } from "zod";
+
 import { NowPlaying } from "./now-playing";
 
 // Display-only metadata captured at trigger-time and persisted alongside
@@ -8,28 +9,28 @@ import { NowPlaying } from "./now-playing";
 // mood) rather than persisting the full structured object.
 
 export const FrameAudioSnapshotSchema = z.object({
-  valence: z.number(),
   arousal: z.number(),
   bpm: z.number(),
-  sectionEnergy: z.number(),
   rms: z.number(),
+  sectionEnergy: z.number(),
+  valence: z.number(),
 });
 
 export type FrameAudioSnapshot = z.infer<typeof FrameAudioSnapshotSchema>;
 
 export const ResolvedSummarySchema = z.object({
-  subjects: z.array(z.string()),
-  palette: z.array(z.string()),
   lighting: z.string().optional(),
   mood: z.string().optional(),
+  palette: z.array(z.string()),
+  subjects: z.array(z.string()),
 });
 
 export type ResolvedSummary = z.infer<typeof ResolvedSummarySchema>;
 
 export const InspectorContextSchema = z.object({
   audio: FrameAudioSnapshotSchema.optional(),
-  nowPlaying: NowPlaying.optional(),
   driftModifier: z.string().optional(),
+  nowPlaying: NowPlaying.optional(),
   resolvedSummary: ResolvedSummarySchema.optional(),
 });
 
