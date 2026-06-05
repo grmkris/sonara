@@ -29,7 +29,7 @@ export const useWsSession = (): SessionSend => {
     let cancelled = false;
     let conn: ReturnType<typeof createSessionConnection> | null = null;
 
-    // oxlint-disable-next-line complexity -- flat per-event-type dispatch switch; splitting would obscure it
+    // oxlint-disable-next-line complexity -- REVIEW: flat per-event-type dispatch switch; splitting would obscure it
     const handleEvent = (event: ServerEvent): void => {
       const s = store.getState();
       switch (event.type) {
@@ -117,7 +117,7 @@ export const useWsSession = (): SessionSend => {
       }
     };
 
-    // oxlint-disable-next-line require-await -- async signature kept; awaits live in the inner runEvents loop it spawns
+    // oxlint-disable-next-line require-await -- REVIEW: async signature kept; awaits live in the inner runEvents loop it spawns
     const connect = async (): Promise<void> => {
       // mintWsTicket is now public — signed-in callers get a uuid-bearing
       // ticket, anon callers get a userId:null ticket and the server pins
@@ -131,7 +131,7 @@ export const useWsSession = (): SessionSend => {
       const { socket, client } = conn;
 
       sendRef.current = (action: SessionAction) => {
-        // oxlint-disable-next-line prefer-await-to-then, prefer-await-to-callbacks -- SessionSend is sync fire-and-forget; cannot await here
+        // oxlint-disable-next-line prefer-await-to-then, prefer-await-to-callbacks -- REVIEW: SessionSend is sync fire-and-forget; cannot await here
         dispatchSessionAction(client, action).catch((error) => {
           console.warn("[ws] dispatch failed", error);
         });
@@ -157,7 +157,7 @@ export const useWsSession = (): SessionSend => {
       // init()'s initial publishes land before our subscribe attached — and to
       // re-hydrate scene after reconnect.
       const runEvents = async (): Promise<void> => {
-        // oxlint-disable-next-line no-unmodified-loop-condition -- `cancelled` is flipped by the effect cleanup closure
+        // oxlint-disable-next-line no-unmodified-loop-condition -- REVIEW: `cancelled` is flipped by the effect cleanup closure
         while (!cancelled) {
           try {
             const iter = await client.events();
@@ -192,7 +192,7 @@ export const useWsSession = (): SessionSend => {
               void store
                 .getState()
                 .libraryBootstrap()
-                // oxlint-disable-next-line prefer-await-to-then -- intentional fire-and-forget; cannot await without blocking the loop
+                // oxlint-disable-next-line prefer-await-to-then -- REVIEW: intentional fire-and-forget; cannot await without blocking the loop
                 .catch(() => {
                   // anon or transient error — leave the slice empty
                 });
@@ -215,7 +215,7 @@ export const useWsSession = (): SessionSend => {
             console.warn("[ws] events iterator dropped, restarting:", msg);
           }
           // Backoff before reopening — covers reconnect windows.
-          // oxlint-disable-next-line avoid-new -- delay primitive; there is no library-provided promise to await here
+          // oxlint-disable-next-line avoid-new -- REVIEW: delay primitive; there is no library-provided promise to await here
           await new Promise<void>((resolve) => {
             setTimeout(resolve, 500);
           });

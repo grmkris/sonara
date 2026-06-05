@@ -96,14 +96,14 @@ export const startRecording = (opts: {
     hasAudio: audioTracks.length > 0,
     mimeType,
     stop() {
-      // oxlint-disable-next-line avoid-new -- bridging MediaRecorder's event callbacks (onstop/onerror) into a promise has no async/await equivalent
+      // oxlint-disable-next-line avoid-new -- REVIEW: bridging MediaRecorder's event callbacks (onstop/onerror) into a promise has no async/await equivalent
       return new Promise((resolve, reject) => {
         const finish = () => {
           cleanup();
           resolve({ blob: new Blob(chunks, { type: mimeType }), mimeType });
         };
         recorder.onstop = finish;
-        // oxlint-disable-next-line unicorn/prefer-add-event-listener -- MediaRecorder fires onstop/onerror exactly once for this one-shot stop; on-handler assignment is intentional and matched to onstop above
+        // oxlint-disable-next-line unicorn/prefer-add-event-listener -- REVIEW: MediaRecorder fires onstop/onerror exactly once for this one-shot stop; on-handler assignment is intentional and matched to onstop above
         recorder.onerror = (ev) => {
           cleanup();
           reject(

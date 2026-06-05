@@ -64,7 +64,7 @@ const toAbsoluteUrl = (url: string): string => {
   return `${base}${url.startsWith("/") ? "" : "/"}${url}`;
 };
 
-// oxlint-disable-next-line require-await -- returns a drizzle thenable query builder; keep async so the declared Promise<SeedRow[]> return type holds
+// oxlint-disable-next-line require-await -- REVIEW: returns a drizzle thenable query builder; keep async so the declared Promise<SeedRow[]> return type holds
 const fetchSeedRows = async (
   db: Database,
   deck?: string

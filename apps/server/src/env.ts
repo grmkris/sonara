@@ -4,7 +4,7 @@ import { z } from "zod";
 // Startup-time env validation. Required keys fail the parse immediately so
 // the server refuses to boot into a half-configured state. Optional model
 // overrides stay optional because they have sane defaults.
-// oxlint-disable-next-line sort-keys -- keys are grouped logically (required vs optional) with per-key documentation; alphabetic reorder would scramble the doc-comment associations
+// oxlint-disable-next-line sort-keys -- REVIEW: keys are grouped logically (required vs optional) with per-key documentation; alphabetic reorder would scramble the doc-comment associations
 const envSchema = z.object({
   // Which environment this is (local | dev | prod). Required — no default, so a
   // misconfigured deploy fails loudly instead of silently using local URLs.

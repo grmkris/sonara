@@ -280,7 +280,7 @@ export const DisplacementCanvas = () => {
 
     gl.useProgram(program);
 
-    // oxlint-disable-next-line sort-keys -- uniform-location map is grouped by render concern (effects-deck block) with explanatory comments; alphabetising would scatter that structure
+    // oxlint-disable-next-line sort-keys -- REVIEW: uniform-location map is grouped by render concern (effects-deck block) with explanatory comments; alphabetising would scatter that structure
     const uni = {
       uCurr: gl.getUniformLocation(program, "uCurr"),
       uPrev: gl.getUniformLocation(program, "uPrev"),
@@ -406,9 +406,9 @@ export const DisplacementCanvas = () => {
     // frame supersedes this URL.
     const loadFrame = (url: string, attempt: number) => {
       if (pendingImg) {
-        // oxlint-disable-next-line unicorn/prefer-add-event-listener -- detaching the prior pending image's handlers; addEventListener has no nulling equivalent
+        // oxlint-disable-next-line unicorn/prefer-add-event-listener -- REVIEW: detaching the prior pending image's handlers; addEventListener has no nulling equivalent
         pendingImg.onload = null;
-        // oxlint-disable-next-line unicorn/prefer-add-event-listener -- detaching the prior pending image's handlers
+        // oxlint-disable-next-line unicorn/prefer-add-event-listener -- REVIEW: detaching the prior pending image's handlers
         pendingImg.onerror = null;
         pendingImg = null;
       }
@@ -417,7 +417,7 @@ export const DisplacementCanvas = () => {
       pendingImg = img;
 
       const target = getInactive();
-      // oxlint-disable-next-line unicorn/prefer-add-event-listener -- onload assignment is paired with onload=null detach elsewhere; keep assignment semantics
+      // oxlint-disable-next-line unicorn/prefer-add-event-listener -- REVIEW: onload assignment is paired with onload=null detach elsewhere; keep assignment semantics
       img.onload = () => {
         if (pendingImg !== img) {
           return;
@@ -435,7 +435,7 @@ export const DisplacementCanvas = () => {
         drops = randomDropLayers();
         markImageLoaded();
       };
-      // oxlint-disable-next-line unicorn/prefer-add-event-listener -- onerror assignment is paired with onerror=null detach elsewhere; keep assignment semantics
+      // oxlint-disable-next-line unicorn/prefer-add-event-listener -- REVIEW: onerror assignment is paired with onerror=null detach elsewhere; keep assignment semantics
       img.onerror = () => {
         if (pendingImg !== img) {
           return;
@@ -475,7 +475,7 @@ export const DisplacementCanvas = () => {
         img.crossOrigin = "anonymous";
         pendingImg = img;
         const target = getInactive();
-        // oxlint-disable-next-line unicorn/prefer-add-event-listener -- onload assignment paired with onload=null detach; keep assignment semantics
+        // oxlint-disable-next-line unicorn/prefer-add-event-listener -- REVIEW: onload assignment paired with onload=null detach; keep assignment semantics
         img.onload = () => {
           if (pendingImg !== img) {
             return;
@@ -496,7 +496,7 @@ export const DisplacementCanvas = () => {
           drops = randomDropLayers();
           markImageLoaded();
         };
-        // oxlint-disable-next-line unicorn/prefer-add-event-listener -- onerror assignment paired with onerror=null detach; keep assignment semantics
+        // oxlint-disable-next-line unicorn/prefer-add-event-listener -- REVIEW: onerror assignment paired with onerror=null detach; keep assignment semantics
         img.onerror = () => {
           if (pendingImg === img) {
             pendingImg = null;
@@ -620,7 +620,7 @@ export const DisplacementCanvas = () => {
     const mountedAt = performance.now();
 
     let raf = 0;
-    // oxlint-disable-next-line complexity -- single per-frame render loop; splitting it would add per-frame closure/allocation overhead and obscure the linear GPU uniform-upload sequence
+    // oxlint-disable-next-line complexity -- REVIEW: single per-frame render loop; splitting it would add per-frame closure/allocation overhead and obscure the linear GPU uniform-upload sequence
     const tick = () => {
       raf = requestAnimationFrame(tick);
       const state = useVisualizerStore.getState();
@@ -989,9 +989,9 @@ export const DisplacementCanvas = () => {
         clearTimeout(retryTimer);
       }
       if (pendingImg) {
-        // oxlint-disable-next-line unicorn/prefer-add-event-listener -- detaching handlers on unmount; addEventListener has no nulling equivalent
+        // oxlint-disable-next-line unicorn/prefer-add-event-listener -- REVIEW: detaching handlers on unmount; addEventListener has no nulling equivalent
         pendingImg.onload = null;
-        // oxlint-disable-next-line unicorn/prefer-add-event-listener -- detaching handlers on unmount
+        // oxlint-disable-next-line unicorn/prefer-add-event-listener -- REVIEW: detaching handlers on unmount
         pendingImg.onerror = null;
       }
       if (currentCanvas === canvas) {

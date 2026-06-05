@@ -108,7 +108,7 @@ export const useRemoteSession = (
       const s = useVisualizerStore.getState();
       s.setScene({ ...s.scene, ...action.patch });
     }
-    // oxlint-disable-next-line prefer-await-to-then, prefer-await-to-callbacks -- send is a synchronous fire-and-forget SessionSend; awaiting here would change its contract
+    // oxlint-disable-next-line prefer-await-to-then, prefer-await-to-callbacks -- REVIEW: send is a synchronous fire-and-forget SessionSend; awaiting here would change its contract
     dispatchControlAction(rpcClient, id, action).catch((error) => {
       console.warn("[control] dispatch failed", error);
     });

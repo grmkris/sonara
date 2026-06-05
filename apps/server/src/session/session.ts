@@ -933,7 +933,7 @@ export class Session implements ControllableSession {
       prompt,
       seed: this.seed,
       signal: controller.signal,
-      // oxlint-disable-next-line promise/prefer-await-to-then, promise/prefer-await-to-callbacks -- fire-and-forget: streamPreview must stream in the background; awaiting would block trigger() on the live hot path. streamPreview's onError/onFinal/onPreview are its callback API contract.
+      // oxlint-disable-next-line promise/prefer-await-to-then, promise/prefer-await-to-callbacks -- REVIEW: fire-and-forget: streamPreview must stream in the background; awaiting would block trigger() on the live hot path. streamPreview's onError/onFinal/onPreview are its callback API contract.
     }).catch((error) => {
       if (!controller.signal.aborted) {
         this.logger.error({ error }, "streamPreview unhandled");
@@ -1219,7 +1219,7 @@ export class Session implements ControllableSession {
       seed: this.seed,
       signal: controller.signal,
       strength: anchor.strength,
-      // oxlint-disable-next-line promise/prefer-await-to-then, promise/prefer-await-to-callbacks -- fire-and-forget: streamAnchor must stream in the background; awaiting would block triggerAnchor() on the live hot path. streamAnchor's onError/onFinal/onPreview are its callback API contract.
+      // oxlint-disable-next-line promise/prefer-await-to-then, promise/prefer-await-to-callbacks -- REVIEW: fire-and-forget: streamAnchor must stream in the background; awaiting would block triggerAnchor() on the live hot path. streamAnchor's onError/onFinal/onPreview are its callback API contract.
     }).catch((error) => {
       if (!controller.signal.aborted) {
         this.logger.error({ error }, "streamAnchor unhandled");

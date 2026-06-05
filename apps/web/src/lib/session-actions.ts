@@ -28,7 +28,7 @@ export const dispatchSessionAction = (
   client: SessionRouterClient,
   action: SessionAction
 ): Promise<unknown> => {
-  // oxlint-disable-next-line default-case -- exhaustive over the SessionAction discriminated union; a default would defeat TS exhaustiveness checks
+  // oxlint-disable-next-line default-case -- REVIEW: exhaustive over the SessionAction discriminated union; a default would defeat TS exhaustiveness checks
   switch (action.type) {
     case "hello": {
       return client.hello();

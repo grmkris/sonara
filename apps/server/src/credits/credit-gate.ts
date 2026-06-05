@@ -121,7 +121,7 @@ export const refundOnError = (
   // Intentionally fire-and-forget: this is a synchronous void helper called
   // from non-async error paths; awaiting would change its contract and the
   // caller's control flow. Errors are swallowed here by design.
-  // oxlint-disable-next-line prefer-await-to-then, prefer-await-to-callbacks -- fire-and-forget void helper
+  // oxlint-disable-next-line prefer-await-to-then, prefer-await-to-callbacks -- REVIEW: fire-and-forget void helper
   refundFrame(userId, paidCost, logger).catch((error) => {
     logger.error(
       { cost: paidCost, error },

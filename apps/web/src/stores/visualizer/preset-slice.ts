@@ -58,7 +58,7 @@ export const createPresetSlice: StateCreator<
         return {};
       }
       const next = { ...s.savedPresets };
-      // oxlint-disable-next-line no-dynamic-delete -- savedPresets is a JSON-serialized record keyed by arbitrary user preset names; a Map would break persistence shape
+      // oxlint-disable-next-line no-dynamic-delete -- REVIEW: savedPresets is a JSON-serialized record keyed by arbitrary user preset names; a Map would break persistence shape
       delete next[name];
       if (typeof window !== "undefined") {
         window.localStorage.setItem(SAVED_PRESETS_KEY, JSON.stringify(next));

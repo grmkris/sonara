@@ -109,7 +109,7 @@ export const useVoiceRecognition = (
     rec.onend = () => {
       setListening(false);
     };
-    // oxlint-disable-next-line prefer-add-event-listener -- SpeechRecognitionLike exposes only on* handler props, no addEventListener
+    // oxlint-disable-next-line prefer-add-event-listener -- REVIEW: SpeechRecognitionLike exposes only on* handler props, no addEventListener
     rec.onerror = (ev: unknown) => {
       const code =
         typeof ev === "object" && ev && "error" in ev

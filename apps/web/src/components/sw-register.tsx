@@ -21,7 +21,7 @@ const prefetchDeck = async (): Promise<void> => {
     const ctrl = navigator.serviceWorker.controller;
     if (urls.length > 0 && ctrl) {
       // ServiceWorker.postMessage takes (message, transfer) — no targetOrigin.
-      // oxlint-disable-next-line unicorn/require-post-message-target-origin -- ServiceWorker.postMessage has no targetOrigin param
+      // oxlint-disable-next-line unicorn/require-post-message-target-origin -- REVIEW: ServiceWorker.postMessage has no targetOrigin param
       ctrl.postMessage({ type: "PREFETCH_DECK", urls });
     }
   } catch {

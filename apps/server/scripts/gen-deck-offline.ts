@@ -115,7 +115,7 @@ const promptHash = (deck: string, prompt: string): string =>
 // Deterministic seed so re-generating a prompt yields a similar image.
 const promptSeed = (prompt: string): number => {
   const h = createHash("sha256").update(prompt).digest();
-  // oxlint-disable-next-line no-bitwise -- mask to a 31-bit positive seed
+  // oxlint-disable-next-line no-bitwise -- REVIEW: mask to a 31-bit positive seed
   return h.readUInt32BE(0) & 0x7f_ff_ff_ff;
 };
 

@@ -114,7 +114,7 @@ const promptHash = (deck: string, prompt: string): string =>
 // image (modulo fal's nondeterminism on the same seed across model revs).
 const promptSeed = (prompt: string): number => {
   const h = createHash("sha256").update(prompt).digest();
-  // oxlint-disable-next-line no-bitwise -- mask top bit to keep seed non-negative (mod 2^31)
+  // oxlint-disable-next-line no-bitwise -- REVIEW: mask top bit to keep seed non-negative (mod 2^31)
   return h.readUInt32BE(0) & 0x7f_ff_ff_ff;
 };
 

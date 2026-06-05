@@ -134,7 +134,7 @@ export const BASE: PresetConfig = {
 
 // Preset registry. Order roughly "closest to baseline" → "most distinct".
 // Keys MUST match `VISUAL_PRESET_NAMES` in `packages/shared/src/visual-presets.ts`.
-// oxlint-disable sort-keys -- intentional preset ordering (baseline→distinct) and
+// oxlint-disable sort-keys -- REVIEW: intentional preset ordering (baseline→distinct) and
 // grouped per-preset uniform ordering are author-curated and load-bearing for readability
 export const PRESETS: Record<PresetName, PresetConfig> = {
   wet_ink: {

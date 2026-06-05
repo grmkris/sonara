@@ -41,7 +41,7 @@ const base64UrlDecode = (s: string): Uint8Array => {
   const bin = atob(b64);
   const out = new Uint8Array(bin.length);
   for (let i = 0; i < bin.length; i += 1) {
-    // oxlint-disable-next-line unicorn/prefer-code-point -- byte-level decode of a binary string; charCodeAt (UTF-16 unit, always defined) is the correct primitive here
+    // oxlint-disable-next-line unicorn/prefer-code-point -- REVIEW: byte-level decode of a binary string; charCodeAt (UTF-16 unit, always defined) is the correct primitive here
     out[i] = bin.charCodeAt(i);
   }
   return out;
@@ -88,7 +88,7 @@ const constantTimeEqual = (a: string, b: string): boolean => {
   }
   let diff = 0;
   for (let i = 0; i < a.length; i += 1) {
-    // oxlint-disable-next-line no-bitwise, unicorn/prefer-code-point -- constant-time compare needs bitwise OR/XOR; charCodeAt (always defined) is correct over codePointAt
+    // oxlint-disable-next-line no-bitwise, unicorn/prefer-code-point -- REVIEW: constant-time compare needs bitwise OR/XOR; charCodeAt (always defined) is correct over codePointAt
     diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
   }
   return diff === 0;

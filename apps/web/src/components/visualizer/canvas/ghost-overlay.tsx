@@ -42,7 +42,7 @@ export const GhostOverlay = () => {
 
     const scheduleNext = () => {
       const delay = INTERVAL_MIN_MS + Math.random() * INTERVAL_JITTER_MS;
-      // oxlint-disable-next-line no-use-before-define -- fire and scheduleNext are mutually recursive; reference is deferred inside setTimeout
+      // oxlint-disable-next-line no-use-before-define -- REVIEW: fire and scheduleNext are mutually recursive; reference is deferred inside setTimeout
       scheduleTimer = setTimeout(fire, delay);
     };
 

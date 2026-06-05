@@ -19,12 +19,12 @@ export const FullscreenToggle = () => {
 
   const toggle = useCallback(() => {
     if (document.fullscreenElement) {
-      // oxlint-disable-next-line prefer-await-to-then -- fire-and-forget inside a sync callback; awaiting would change control flow
+      // oxlint-disable-next-line prefer-await-to-then -- REVIEW: fire-and-forget inside a sync callback; awaiting would change control flow
       document.exitFullscreen().catch(() => {
         // noop — ignore fullscreen rejection
       });
     } else {
-      // oxlint-disable-next-line prefer-await-to-then -- fire-and-forget inside a sync callback; awaiting would change control flow
+      // oxlint-disable-next-line prefer-await-to-then -- REVIEW: fire-and-forget inside a sync callback; awaiting would change control flow
       document.documentElement.requestFullscreen().catch(() => {
         // noop — ignore fullscreen rejection
       });

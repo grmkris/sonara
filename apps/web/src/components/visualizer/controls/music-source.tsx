@@ -163,7 +163,7 @@ export const MusicSource = ({ source, setSource }: MusicSourceProps) => {
     el.crossOrigin = "anonymous";
     // play() may reject when autoplay is blocked; ignore and proceed without
     // awaiting so setSource fires synchronously regardless of playback start.
-    // oxlint-disable-next-line prefer-await-to-then -- must not await; setSource runs unconditionally
+    // oxlint-disable-next-line prefer-await-to-then -- REVIEW: must not await; setSource runs unconditionally
     void el.play().catch(() => {
       // noop — autoplay rejection is non-fatal
     });

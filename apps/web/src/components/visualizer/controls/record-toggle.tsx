@@ -55,7 +55,7 @@ export const RecordToggle = () => {
         tickRef.current = null;
       }
       if (handleRef.current) {
-        // oxlint-disable-next-line prefer-await-to-then -- sync effect cleanup; fire-and-forget stop, cannot await
+        // oxlint-disable-next-line prefer-await-to-then -- REVIEW: sync effect cleanup; fire-and-forget stop, cannot await
         handleRef.current.stop().catch(() => {
           // noop
         });

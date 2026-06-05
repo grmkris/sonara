@@ -152,7 +152,7 @@ export const PresetPicker = () => {
               onClick={() => selectSavedPreset(name)}
               onContextMenu={(ev) => {
                 ev.preventDefault();
-                // oxlint-disable-next-line no-alert -- native confirm is the intended lightweight delete guard
+                // oxlint-disable-next-line no-alert -- REVIEW: native confirm is the intended lightweight delete guard
                 if (window.confirm(`Delete saved preset "${name}"?`)) {
                   deleteSavedPreset(name);
                 }
@@ -174,7 +174,7 @@ export const PresetPicker = () => {
         <button
           type="button"
           onClick={() => {
-            // oxlint-disable-next-line no-alert -- native prompt is the intended lightweight name capture
+            // oxlint-disable-next-line no-alert -- REVIEW: native prompt is the intended lightweight name capture
             const name = window.prompt("name this mid-state")?.trim();
             if (name) {
               snapshotCurrentPreset(name);

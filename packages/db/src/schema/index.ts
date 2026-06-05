@@ -5,7 +5,7 @@
 //                     verification). Drizzle adapter reads these.
 //   credits.db.ts     credit balance + usage ledger + free-tier quota.
 //   allowlist.db.ts   email allowlist gating emailAndPassword signup.
-// oxlint-disable-next-line no-barrel-file -- public schema surface for @sonara/db/schema; re-exports are intentional, splitting would break the package API
+// oxlint-disable-next-line no-barrel-file -- REVIEW: public schema surface for @sonara/db/schema; re-exports are intentional, splitting would break the package API
 export * from "./allowlist.db";
 export * from "./auth.db";
 export * from "./credits.db";

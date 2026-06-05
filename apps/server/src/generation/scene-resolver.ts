@@ -69,7 +69,7 @@ export const resolveScene = (
     // Fire-and-forget background fill: the chain is intentionally NOT awaited
     // so the hot path stays synchronous; the promise is stashed in `inFlight`
     // for dedupe. Rewriting to await would block the trigger path.
-    /* oxlint-disable prefer-await-to-then, prefer-await-to-callbacks -- background fill must stay a non-awaited promise chain */
+    /* oxlint-disable prefer-await-to-then, prefer-await-to-callbacks -- REVIEW: background fill must stay a non-awaited promise chain */
     const promise = expandScene(scene, {
       logger: opts.logger,
       signal: opts.signal,
@@ -132,7 +132,7 @@ export const resolveSceneAwaited = async (
       // it is awaited; the chain must stay a promise so concurrent callers
       // share the same in-flight expansion. Rewriting to await would defeat
       // the dedupe.
-      /* oxlint-disable prefer-await-to-then -- promise must be shared via inFlight before awaiting */
+      /* oxlint-disable prefer-await-to-then -- REVIEW: promise must be shared via inFlight before awaiting */
       const promise = expandScene(scene, {
         logger: opts.logger,
         signal: opts.signal,

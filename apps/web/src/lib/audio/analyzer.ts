@@ -348,7 +348,7 @@ export class AudioEngine {
     });
   }
 
-  // oxlint-disable-next-line prefer-await-to-callbacks -- event-style registration API; a one-shot promise can't model a repeatable source-lost notification
+  // oxlint-disable-next-line prefer-await-to-callbacks -- REVIEW: event-style registration API; a one-shot promise can't model a repeatable source-lost notification
   onSourceLost(cb: () => void): void {
     this.sourceLostCb = cb;
   }
@@ -396,7 +396,7 @@ export class AudioEngine {
     }
   }
 
-  // oxlint-disable-next-line prefer-await-to-callbacks -- per-frame tick subscription; fires ~60x/s, not a one-shot promise
+  // oxlint-disable-next-line prefer-await-to-callbacks -- REVIEW: per-frame tick subscription; fires ~60x/s, not a one-shot promise
   onTick(cb: TickCallback): void {
     this.callback = cb;
     if (this.rafId === null) {
@@ -414,7 +414,7 @@ export class AudioEngine {
   // Grab the most recent ~6s of audio from the clip-recorder ring buffer,
   // base64-encoded and ready to ship over WS for song recognition. Null if
   // no source is attached or MediaRecorder isn't available.
-  // oxlint-disable-next-line require-await -- async keeps the return type a Promise on both the null and delegated paths
+  // oxlint-disable-next-line require-await -- REVIEW: async keeps the return type a Promise on both the null and delegated paths
   async grabClip(): Promise<{
     blob: Blob;
     mimeType: string;
@@ -465,7 +465,7 @@ export class AudioEngine {
     this.rafId = null;
     this.detachSource();
     if (this.ctx) {
-      // oxlint-disable-next-line prefer-await-to-then -- stop() is sync; closing the context is fire-and-forget
+      // oxlint-disable-next-line prefer-await-to-then -- REVIEW: stop() is sync; closing the context is fire-and-forget
       this.ctx.close().catch(() => {
         // noop
       });
@@ -578,7 +578,7 @@ export class AudioEngine {
     }
   }
 
-  // oxlint-disable-next-line complexity -- single per-frame DSP pipeline; splitting it would add per-call overhead at 60Hz and obscure the data flow
+  // oxlint-disable-next-line complexity -- REVIEW: single per-frame DSP pipeline; splitting it would add per-call overhead at 60Hz and obscure the data flow
   private loop = (): void => {
     this.rafId = requestAnimationFrame(this.loop);
     if (

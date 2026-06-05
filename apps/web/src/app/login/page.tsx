@@ -81,7 +81,7 @@ const LoginForm = () => {
       }
       router.push(next);
       router.refresh();
-      // oxlint-disable-next-line catch-error-name -- `error` would shadow the outer error state; renamed to `err`
+      // oxlint-disable-next-line catch-error-name -- REVIEW: `error` would shadow the outer error state; renamed to `err`
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       setError(friendlyError(msg));

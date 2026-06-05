@@ -111,7 +111,7 @@ export const createClipRecorder = (
       } catch {
         // some browsers complain if state != "recording"; ignore
       }
-      // oxlint-disable-next-line promise/avoid-new -- setTimeout delay has no library-promise equivalent
+      // oxlint-disable-next-line promise/avoid-new -- REVIEW: setTimeout delay has no library-promise equivalent
       await new Promise<void>((resolve) => {
         setTimeout(resolve, 60);
       });
