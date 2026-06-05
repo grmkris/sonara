@@ -36,7 +36,7 @@ export class AudioEngine {
   // they don't stall at 0 if Meyda's script processor fails to start.
   private flatnessFromMeyda = 0;
   private rolloffFromMeyda = 0;
-  private chromaFromMeyda: number[] = new Array(12).fill(0);
+  private chromaFromMeyda: number[] = Array.from({ length: 12 }, () => 0);
   // Local spectral flux carried across ticks so the arousal EMA has a fresh
   // value before this tick recomputes it. Meyda's own spectralFlux extractor
   // was removed — it throws inside its ScriptProcessorNode callback at ~90Hz
@@ -638,7 +638,7 @@ function detectKey(
   let bestTonic = 0;
   let bestMode: "major" | "minor" = "major";
   let bestCorr = -Infinity;
-  const rotated: number[] = new Array(12);
+  const rotated: number[] = Array.from({ length: 12 }, () => 0);
   for (let tonic = 0; tonic < 12; tonic++) {
     // rotate the profile so index 0 corresponds to this tonic
     for (let i = 0; i < 12; i++) {
