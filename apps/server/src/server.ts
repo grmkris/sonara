@@ -42,6 +42,11 @@ const auth = getAuth();
 const db = createDb(env.DATABASE_URL);
 const rpcHandler = new RPCHandler(appRouter);
 
+// Live in-memory sessions. Created/destroyed by the WS lifecycle below, and
+// also threaded into the HTTP context so the authed `control` router can find
+// a user's own live session from a second device (the operator remote).
+const manager = new SessionManager(logger);
+
 app.get("/health", (c) => c.json({ ok: true }));
 app.get("/", (c) =>
   c.text("sonara server — connect to /ws via WebSocket"),
@@ -62,6 +67,7 @@ app.all("/rpc/*", async (c) => {
   const context = buildContext({
     db,
     session: session ? { user: { id: session.user.id as UserId } } : null,
+    registry: manager,
   });
   const { matched, response } = await rpcHandler.handle(c.req.raw, {
     prefix: "/rpc",
@@ -70,8 +76,6 @@ app.all("/rpc/*", async (c) => {
   if (matched) return response;
   return c.notFound();
 });
-
-const manager = new SessionManager(logger);
 
 // One oRPC handler for the whole session surface. Bun's websocket hooks
 // delegate message/close routing to this handler; the per-connection

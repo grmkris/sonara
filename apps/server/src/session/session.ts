@@ -15,6 +15,7 @@ import {
   type LiveSessionId,
   typeIdGenerator,
 } from "@sonara/shared/typeid";
+import type { ControllableSession, ControlSnapshot } from "@sonara/api/server";
 import { EventPublisher } from "@orpc/server";
 import type { Logger } from "../lib/logger";
 import { env } from "../env";
@@ -118,7 +119,7 @@ function cadenceFromIntensity(i: number): { periodicMs: number; pauseMs: number 
   };
 }
 
-export class Session {
+export class Session implements ControllableSession {
   readonly id: string;
   readonly userId: string | null;
   private scene: SonaraSceneState;
@@ -131,7 +132,15 @@ export class Session {
   private readonly publisher = new EventPublisher<{ event: ServerEvent }>();
   private readonly logger: Logger;
 
+  // Mirror of the last frame.final URL and job.status the session emitted.
+  // Tracked here (the single send() chokepoint) so the operator remote can
+  // read them via getControlSnapshot() without subscribing to the stream.
+  private lastFrameUrl: string | null = null;
+  private lastJobStatus: ControlSnapshot["jobStatus"] = "idle";
+
   private send(event: ServerEvent): void {
+    if (event.type === "frame.final") this.lastFrameUrl = event.imageUrl;
+    else if (event.type === "job.status") this.lastJobStatus = event.status;
     this.publisher.publish("event", event);
   }
 
@@ -237,6 +246,24 @@ export class Session {
 
   getImageAnchor(): ImageAnchor | null {
     return this.scene.imageAnchor ?? null;
+  }
+
+  // Read-only window for the operator remote (apps/web /control), pulled over
+  // HTTP by the authed `control` router. The Display still owns the WS event
+  // stream; this lets a second device show the current prompt / thumbnail /
+  // status while it drives the same session. See SessionRegistry.
+  getControlSnapshot(): ControlSnapshot {
+    return {
+      liveSessionId: this.liveSessionId,
+      scene: this.scene,
+      demoMode: this.demoMode,
+      demoDeck: this.demoDeck,
+      imageAnchor: this.scene.imageAnchor ?? null,
+      nowPlaying: this.scene.nowPlaying ?? null,
+      jobStatus: this.lastJobStatus,
+      lastFrameUrl: this.lastFrameUrl,
+      startedAt: this.sessionStartAt,
+    };
   }
 
   // Set or clear the live session's image anchor. Setting clears demoMode

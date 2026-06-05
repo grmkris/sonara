@@ -1,5 +1,6 @@
 import type { RouterClient } from "@orpc/server";
 import { authRouter } from "./auth.router";
+import { controlRouter } from "./control.router";
 import { creditsRouter } from "./credits.router";
 import { libraryRouter } from "./library.router";
 import { publicProcedure } from "./procedures";
@@ -14,6 +15,7 @@ export const appRouter = {
   auth: authRouter,
   credits: creditsRouter,
   library: libraryRouter,
+  control: controlRouter,
 };
 
 export type AppRouter = typeof appRouter;

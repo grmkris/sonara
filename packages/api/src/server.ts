@@ -17,3 +17,9 @@ export {
   type SessionRouter,
 } from "./routers/session.router";
 export { buildContext, type ApiContext, type ApiSession } from "./context";
+export {
+  type ControllableSession,
+  type ControlSnapshot,
+  type JobStatus,
+  type SessionRegistry,
+} from "./session-registry";

@@ -1,7 +1,7 @@
 "use client";
 
 import { Suspense, useCallback, useEffect, useRef, useState } from "react";
-import { SlidersHorizontal } from "lucide-react";
+import { SlidersHorizontal, Smartphone } from "lucide-react";
 import { deckLabel } from "@sonara/shared";
 import { toast } from "sonner";
 import { SonaraCanvas } from "@/components/visualizer/canvas/sonara-canvas";
@@ -164,6 +164,10 @@ export default function Page() {
         </div>
         <div className="pointer-events-auto flex items-center gap-3 pt-2 sm:gap-5">
           <NowPlaying />
+          {/* Operator remote: drive this session from a phone so the projector
+              stays a clean canvas (hide the HUD with the toggle beside this).
+              Signed-in only — control needs an owned live session. */}
+          {isSignedIn && <RemoteLink />}
           <UserControls />
           <FullscreenToggle />
           <HideToggle />
@@ -314,6 +318,24 @@ function LookChip() {
     <span className="font-mono pointer-events-none text-[10px] uppercase tracking-[0.22em] text-[color:var(--paper)]/85">
       {deckLabel(demoDeck)}
     </span>
+  );
+}
+
+// Discreet link to the operator remote (/control). Opens in a new tab so the
+// projector keeps playing; in practice you open /control on a second device,
+// but the link makes the feature discoverable from the projector too.
+function RemoteLink() {
+  return (
+    <Link
+      href="/control"
+      target="_blank"
+      rel="noopener"
+      aria-label="open operator remote"
+      title="control from your phone"
+      className="focus-ring flex items-center text-[color:var(--stone)] transition-colors hover:text-[color:var(--paper)]"
+    >
+      <Smartphone className="size-4" strokeWidth={1.5} />
+    </Link>
   );
 }
 
