@@ -24,8 +24,7 @@
 
 import { createHash } from "node:crypto";
 import { mkdir, writeFile } from "node:fs/promises";
-import { dirname, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
+import { resolve } from "node:path";
 
 import { createFalClient } from "@fal-ai/client";
 import { DECK_KEYS } from "@sonara/shared";
@@ -64,33 +63,36 @@ interface Args {
   dryRun: boolean;
 }
 
-function fail(msg: string): never {
+const fail = (msg: string): never => {
   console.error(`error: ${msg}`);
   process.exit(1);
-}
+};
 
-function parseArgs(): Args {
+const parseArgs = (): Args => {
   const argv = process.argv.slice(2);
   let deck: DeckKey | null = null;
   let limit: number | null = null;
   let model = env.FAL_TEXT_MODEL;
   let dryRun = false;
-  for (let i = 0; i < argv.length; i++) {
+  for (let i = 0; i < argv.length; i += 1) {
     const a = argv[i];
     if (a === "--deck") {
-      const v = argv[++i];
+      i += 1;
+      const v = argv[i];
       if (!v || !(DECK_KEYS as readonly string[]).includes(v)) {
         fail(`--deck must be one of: ${DECK_KEYS.join(", ")}`);
       }
       deck = v as DeckKey;
     } else if (a === "--limit") {
-      const v = Number(argv[++i]);
+      i += 1;
+      const v = Number(argv[i]);
       if (!Number.isInteger(v) || v <= 0) {
         fail("--limit must be a positive integer");
       }
       limit = v;
     } else if (a === "--model") {
-      const v = argv[++i];
+      i += 1;
+      const v = argv[i];
       if (!v) {
         fail("--model requires a value");
       }
@@ -105,17 +107,17 @@ function parseArgs(): Args {
     fail("--deck is required");
   }
   return { deck, dryRun, limit, model };
-}
+};
 
-function promptHash(deck: string, prompt: string): string {
-  return createHash("sha256").update(`${deck}::${prompt}`).digest("hex");
-}
+const promptHash = (deck: string, prompt: string): string =>
+  createHash("sha256").update(`${deck}::${prompt}`).digest("hex");
 
 // Deterministic seed so re-generating a prompt yields a similar image.
-function promptSeed(prompt: string): number {
+const promptSeed = (prompt: string): number => {
   const h = createHash("sha256").update(prompt).digest();
+  // oxlint-disable-next-line no-bitwise -- mask to a 31-bit positive seed
   return h.readUInt32BE(0) & 0x7f_ff_ff_ff;
-}
+};
 
 interface FalImage {
   url: string;
@@ -127,7 +129,7 @@ interface FalData {
   image?: FalImage;
 }
 
-function pickImage(result: unknown): FalImage | null {
+const pickImage = (result: unknown): FalImage | null => {
   const data = (result as { data?: FalData } | undefined)?.data;
   if (!data) {
     return null;
@@ -139,20 +141,17 @@ function pickImage(result: unknown): FalImage | null {
     return data.images[0];
   }
   return null;
-}
+};
 
-function scriptDir(): string {
-  return import.meta.dirname;
-}
+const scriptDir = (): string => import.meta.dirname;
 
 // apps/server/scripts -> apps/web/public/library
-function publicLibraryDir(): string {
-  return resolve(scriptDir(), "../../web/public/library");
-}
+const publicLibraryDir = (): string =>
+  resolve(scriptDir(), "../../web/public/library");
 
-async function downloadAndEncode(
+const downloadAndEncode = async (
   url: string
-): Promise<{ buffer: Buffer; width: number; height: number }> {
+): Promise<{ buffer: Buffer; width: number; height: number }> => {
   const res = await fetch(url);
   if (!res.ok) {
     throw new Error(`fetch ${url} failed: ${res.status} ${res.statusText}`);
@@ -163,9 +162,9 @@ async function downloadAndEncode(
     .webp({ quality: 70 })
     .toBuffer({ resolveWithObject: true });
   return { buffer: out.data, height: out.info.height, width: out.info.width };
-}
+};
 
-async function main() {
+const main = async () => {
   const args = parseArgs();
   if (!env.FAL_KEY && !args.dryRun) {
     fail("FAL_KEY not set");
@@ -200,13 +199,13 @@ async function main() {
   for (const prompt of prompts) {
     const hash = promptHash(args.deck as string, prompt);
     if (existing.has(hash)) {
-      skip++;
+      skip += 1;
       continue;
     }
 
     if (args.dryRun) {
       console.log(`[dry-run] ${args.deck}: ${prompt}`);
-      gen++;
+      gen += 1;
       continue;
     }
 
@@ -228,7 +227,7 @@ async function main() {
       const img = pickImage(result);
       if (!img) {
         console.warn(`[warn] ${args.deck} "${prompt}": no image from fal`);
-        failed++;
+        failed += 1;
         continue;
       }
       const { buffer, width, height } = await downloadAndEncode(img.url);
@@ -252,11 +251,11 @@ async function main() {
       existing.add(hash);
       // Persist after every image so a crash/cancel never loses generated work.
       await writeFile(seedPath, `${JSON.stringify(seed, null, 2)}\n`);
-      gen++;
+      gen += 1;
       console.log(`  + ${args.deck}/${filename}  "${prompt.slice(0, 60)}"`);
     } catch (error) {
       console.error(`[fail] ${args.deck} "${prompt}":`, error);
-      failed++;
+      failed += 1;
     }
   }
 
@@ -267,9 +266,11 @@ async function main() {
     await buildLibraryManifests();
   }
   process.exit(failed > 0 ? 1 : 0);
-}
+};
 
-main().catch((error) => {
+try {
+  await main();
+} catch (error) {
   console.error("gen-deck-offline failed:", error);
   process.exit(1);
-});
+}

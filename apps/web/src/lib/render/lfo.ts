@@ -8,7 +8,10 @@ export interface LfoDriver {
 
 // Sine LFO in range [-1, 1]. Phase randomised per-instance so two of the
 // same shape don't move in lockstep.
-export function sineLfo(periodSec: number, phase0 = Math.random()): LfoDriver {
+export const sineLfo = (
+  periodSec: number,
+  phase0 = Math.random()
+): LfoDriver => {
   const omega = (Math.PI * 2) / Math.max(0.1, periodSec);
   const phi = phase0 * Math.PI * 2;
   return {
@@ -16,12 +19,12 @@ export function sineLfo(periodSec: number, phase0 = Math.random()): LfoDriver {
       return Math.sin(t * omega + phi);
     },
   };
-}
+};
 
 // Smoothed random walk in range ≈ [-1, 1]. Each call advances by `step * dt`
 // toward a new random target when the previous target is reached. Good for
 // slow hue / tempo drift where sine would feel mechanical.
-export function randomWalk(stepPerSec = 0.05): LfoDriver {
+export const randomWalk = (stepPerSec = 0.05): LfoDriver => {
   let lastT: number | null = null;
   let value = 0;
   let target = (Math.random() - 0.5) * 2;
@@ -41,7 +44,7 @@ export function randomWalk(stepPerSec = 0.05): LfoDriver {
       return Math.max(-1, Math.min(1, value));
     },
   };
-}
+};
 
 export type DriftMap = Record<
   string,

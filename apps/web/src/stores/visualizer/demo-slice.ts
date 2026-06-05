@@ -26,8 +26,11 @@ export const createDemoSlice: StateCreator<
   setDemoDeck: (deck) => {
     set({ demoDeck: deck });
     if (typeof window !== "undefined") {
-      if (deck) window.localStorage.setItem(DEMO_DECK_KEY, deck);
-      else window.localStorage.removeItem(DEMO_DECK_KEY);
+      if (deck) {
+        window.localStorage.setItem(DEMO_DECK_KEY, deck);
+      } else {
+        window.localStorage.removeItem(DEMO_DECK_KEY);
+      }
     }
   },
   setDemoMode: (on) => {
@@ -38,16 +41,16 @@ export const createDemoSlice: StateCreator<
   },
 });
 
-export function readDemoPrefs(): {
+export const readDemoPrefs = (): {
   demoMode: boolean;
   demoDeck: DeckKey | null;
-} {
+} => {
   if (typeof window === "undefined") {
-    return { demoMode: false, demoDeck: null };
+    return { demoDeck: null, demoMode: false };
   }
   const m = window.localStorage.getItem(DEMO_MODE_KEY);
   const d = window.localStorage.getItem(DEMO_DECK_KEY);
   const deck =
     d && (DECK_KEYS as readonly string[]).includes(d) ? (d as DeckKey) : null;
   return { demoDeck: deck, demoMode: m === "1" };
-}
+};

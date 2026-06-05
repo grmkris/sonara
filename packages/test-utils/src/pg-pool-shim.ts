@@ -24,7 +24,7 @@ export interface PoolShim {
   ): Promise<{ rows: T[]; rowCount: number | null }>;
 }
 
-export function pgliteAsPool(db: PGlite): PoolShim {
+export const pgliteAsPool = (db: PGlite): PoolShim => {
   const run = async <T>(
     sql: string,
     params?: readonly unknown[]
@@ -41,12 +41,13 @@ export function pgliteAsPool(db: PGlite): PoolShim {
     };
   };
   return {
-    connect: async () => ({
-      query: run,
-      release: () => {
-        // no-op — PGlite is single-connection
-      },
-    }),
+    connect: () =>
+      Promise.resolve({
+        query: run,
+        release: () => {
+          // no-op — PGlite is single-connection
+        },
+      }),
     query: run,
   };
-}
+};

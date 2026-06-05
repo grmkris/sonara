@@ -7,7 +7,7 @@ import { TelemetryButton } from "@/components/visualizer/controls/telemetry-butt
 import { useHotkey } from "@/hooks/use-hotkey";
 import { HOTKEYS } from "@/lib/hotkeys";
 
-export function FullscreenToggle() {
+export const FullscreenToggle = () => {
   const [isFs, setIsFs] = useState(false);
 
   useEffect(() => {
@@ -19,9 +19,15 @@ export function FullscreenToggle() {
 
   const toggle = useCallback(() => {
     if (document.fullscreenElement) {
-      document.exitFullscreen().catch(() => {});
+      // oxlint-disable-next-line prefer-await-to-then -- fire-and-forget inside a sync callback; awaiting would change control flow
+      document.exitFullscreen().catch(() => {
+        // noop — ignore fullscreen rejection
+      });
     } else {
-      document.documentElement.requestFullscreen().catch(() => {});
+      // oxlint-disable-next-line prefer-await-to-then -- fire-and-forget inside a sync callback; awaiting would change control flow
+      document.documentElement.requestFullscreen().catch(() => {
+        // noop — ignore fullscreen rejection
+      });
     }
   }, []);
 
@@ -37,4 +43,4 @@ export function FullscreenToggle() {
       label={isFs ? "exit" : "fullscreen"}
     />
   );
-}
+};

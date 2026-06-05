@@ -29,16 +29,11 @@ export const createSceneSlice: StateCreator<
   [],
   SceneSlice
 > = (set, get) => ({
-  scene: { ...defaultScene },
-  previousFrame: null,
-  currentFrame: null,
-  crossfadeStartedAt: null,
-  status: "idle",
-  statusMessage: null,
   connected: false,
+  crossfadeStartedAt: null,
+  currentFrame: null,
   latestVersion: 0,
-
-  setScene: (state) => set({ scene: state }),
+  previousFrame: null,
   pushFrame: (url, version) => {
     if (version < get().latestVersion) {
       return;
@@ -54,15 +49,19 @@ export const createSceneSlice: StateCreator<
       previousFrame: s.currentFrame,
     }));
   },
+  // Zero the monotonic frame guard. Called when the frame *producer* changes
+  // (client demo loop ↔ server live-gen, toggled via demo mode) so the new
+  // producer's next frame is never rejected as "stale" by pushFrame's guard.
+  resetFrameVersion: () => set({ latestVersion: 0 }),
+  scene: { ...defaultScene },
+  setConnected: (c) => set({ connected: c }),
+  setScene: (state) => set({ scene: state }),
   setStatus: (status, message) => {
     set({ status, statusMessage: message ?? null });
     if (status === "running") {
       set((s) => ({ sweepPulse: s.sweepPulse + 1 }));
     }
   },
-  setConnected: (c) => set({ connected: c }),
-  // Zero the monotonic frame guard. Called when the frame *producer* changes
-  // (client demo loop ↔ server live-gen, toggled via demo mode) so the new
-  // producer's next frame is never rejected as "stale" by pushFrame's guard.
-  resetFrameVersion: () => set({ latestVersion: 0 }),
+  status: "idle",
+  statusMessage: null,
 });

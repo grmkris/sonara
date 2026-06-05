@@ -33,7 +33,7 @@ interface FalResult {
   image?: FalImage;
 }
 
-function extractImageUrl(ev: unknown): string | undefined {
+const extractImageUrl = (ev: unknown): string | undefined => {
   if (!ev || typeof ev !== "object") {
     return undefined;
   }
@@ -45,9 +45,9 @@ function extractImageUrl(ev: unknown): string | undefined {
     return e.images[0].url;
   }
   return undefined;
-}
+};
 
-export async function streamAnchor(input: StreamAnchorInput): Promise<void> {
+export const streamAnchor = async (input: StreamAnchorInput): Promise<void> => {
   // Per-call scoped client (same reasoning as fal-provider — avoid global
   // credential races under hot reload / parallel sessions).
   const scoped = createFalClient({
@@ -114,4 +114,4 @@ export async function streamAnchor(input: StreamAnchorInput): Promise<void> {
     }
     input.onError(error);
   }
-}
+};

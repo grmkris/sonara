@@ -59,30 +59,32 @@ interface FrameRow {
 // Maps a DB row to the wire shape, presigning the stored bucket key. Rows
 // whose tMs or sessionId is null (shouldn't happen for source='generated'
 // rows, but defensive) get sensible defaults so the client never sees nulls.
-function rowToFrame(row: FrameRow): LibraryFrame {
+const rowToFrame = (row: FrameRow): LibraryFrame => {
+  // Bare bucket keys (new rows) get re-presigned for a fresh TTL, mirroring
+  // `url`; absolute URLs (fal uploads, public /library paths, and legacy
+  // rows that stored a full presigned URL) pass through untouched.
+  let anchorUrl: string | null = null;
+  if (row.anchorUrl) {
+    anchorUrl = row.anchorUrl.includes("://")
+      ? row.anchorUrl
+      : presignReadUrl(row.anchorUrl);
+  }
   return {
+    anchorUrl,
+    createdAt: row.createdAt,
+    deck: row.deck,
+    height: row.height,
     id: row.id,
+    inspectorContext: row.inspectorContext,
+    palette: row.palette,
+    prompt: row.prompt,
+    sessionId: (row.sessionId ?? "") as LiveSessionId,
+    tMs: row.tMs ?? 0,
+    triggerReason: row.triggerReason,
     url: presignReadUrl(row.url),
     width: row.width,
-    height: row.height,
-    palette: row.palette,
-    deck: row.deck,
-    prompt: row.prompt,
-    tMs: row.tMs ?? 0,
-    sessionId: (row.sessionId ?? "") as LiveSessionId,
-    createdAt: row.createdAt,
-    triggerReason: row.triggerReason,
-    // Bare bucket keys (new rows) get re-presigned for a fresh TTL, mirroring
-    // `url`; absolute URLs (fal uploads, public /library paths, and legacy
-    // rows that stored a full presigned URL) pass through untouched.
-    anchorUrl: row.anchorUrl
-      ? row.anchorUrl.includes("://")
-        ? row.anchorUrl
-        : presignReadUrl(row.anchorUrl)
-      : null,
-    inspectorContext: row.inspectorContext,
   };
-}
+};
 
 const FRAME_COLUMNS = {
   anchorUrl: SCHEMA.imageLibrary.anchorUrl,
@@ -144,8 +146,8 @@ export const libraryRouter = {
   list: protectedProcedure
     .input(
       z.object({
-        limit: z.number().int().min(1).max(LIST_MAX_LIMIT).optional(),
         cursor: z.string().datetime().optional(),
+        limit: z.number().int().min(1).max(LIST_MAX_LIMIT).optional(),
       })
     )
     .handler(async ({ input, context }) => {
@@ -172,7 +174,7 @@ export const libraryRouter = {
       const trimmed = hasMore ? rows.slice(0, limit) : rows;
       const frames = trimmed.map(rowToFrame);
       const nextCursor = hasMore
-        ? (trimmed[trimmed.length - 1]?.createdAt.toISOString() ?? null)
+        ? (trimmed.at(-1)?.createdAt.toISOString() ?? null)
         : null;
 
       return { frames, nextCursor };
@@ -187,8 +189,8 @@ export const libraryRouter = {
   sessions: protectedProcedure
     .input(
       z.object({
-        limit: z.number().int().min(1).max(SESSIONS_MAX_LIMIT).optional(),
         cursor: z.string().datetime().optional(),
+        limit: z.number().int().min(1).max(SESSIONS_MAX_LIMIT).optional(),
       })
     )
     .handler(async ({ input, context }) => {
@@ -208,16 +210,16 @@ export const libraryRouter = {
       // helpers; the GROUP BY expression is on sessionId only.
       const grouped = await db
         .select({
-          sessionId: SCHEMA.imageLibrary.sessionId,
-          frameCount: count(SCHEMA.imageLibrary.id),
           firstFrameAt: min(SCHEMA.imageLibrary.createdAt),
+          frameCount: count(SCHEMA.imageLibrary.id),
           lastFrameAt: max(SCHEMA.imageLibrary.createdAt),
           // Session-relative audio offsets — duration is computed from these
           // (the `tMs` axis) so the sidebar agrees with the timeline, which
           // also measures in tMs. Wall-clock createdAt would over-count any
           // paused stretch.
-          minTMs: min(SCHEMA.imageLibrary.tMs),
           maxTMs: max(SCHEMA.imageLibrary.tMs),
+          minTMs: min(SCHEMA.imageLibrary.tMs),
+          sessionId: SCHEMA.imageLibrary.sessionId,
         })
         .from(SCHEMA.imageLibrary)
         .where(and(...conditions))
@@ -267,7 +269,9 @@ export const libraryRouter = {
 
       const samplesByKey = new Map<string, string>();
       for (const r of sampleRows) {
-        if (r.sessionId) samplesByKey.set(r.sessionId, r.url);
+        if (r.sessionId) {
+          samplesByKey.set(r.sessionId, r.url);
+        }
       }
 
       const sessions = trimmed.map((g) => {
@@ -276,20 +280,19 @@ export const libraryRouter = {
         const firstAt = g.firstFrameAt as Date;
         const lastAt = g.lastFrameAt as Date;
         return {
-          sessionId,
-          frameCount: Number(g.frameCount),
-          firstFrameAt: firstAt,
-          lastFrameAt: lastAt,
-          sampleUrl: key ? presignReadUrl(key) : null,
           // tMs axis (see the aggregate select) — matches the timeline.
           durationMs: (g.maxTMs ?? 0) - (g.minTMs ?? 0),
+          firstFrameAt: firstAt,
+          frameCount: Number(g.frameCount),
+          lastFrameAt: lastAt,
+          sampleUrl: key ? presignReadUrl(key) : null,
+          sessionId,
         };
       });
 
       const nextCursor = hasMore
-        ? ((
-            trimmed[trimmed.length - 1]?.lastFrameAt as Date | undefined
-          )?.toISOString() ?? null)
+        ? ((trimmed.at(-1)?.lastFrameAt as Date | undefined)?.toISOString() ??
+          null)
         : null;
 
       // Studio prefill: a signed-in user with no real sessions gets example
@@ -298,9 +301,9 @@ export const libraryRouter = {
       // the (empty) real set shouldn't resurface examples.
       if (sessions.length === 0 && !cursorDate) {
         const examples = await buildExampleSessions(db);
-        return { sessions: examples, nextCursor: null };
+        return { nextCursor: null, sessions: examples };
       }
 
-      return { sessions, nextCursor };
+      return { nextCursor, sessions };
     }),
 };

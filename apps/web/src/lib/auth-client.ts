@@ -11,13 +11,13 @@ export interface SessionUser {
 }
 
 export const authClient = createAuthClient({
-  baseURL: typeof window !== "undefined" ? window.location.origin : undefined,
+  baseURL: typeof window === "undefined" ? undefined : window.location.origin,
   plugins: [dodopaymentsClient()],
 });
 
 const { useSession: _useSession, signOut } = authClient;
 
-function useSession() {
+const useSession = () => {
   const session = _useSession();
   return session as typeof session & {
     data:
@@ -26,6 +26,6 @@ function useSession() {
         })
       | null;
   };
-}
+};
 
 export { useSession, signOut };

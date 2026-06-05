@@ -76,9 +76,9 @@ export const createImageAnchorSlice: StateCreator<
   uploadState: "idle",
 });
 
-export function readClickwrapAccepted(): boolean {
+export const readClickwrapAccepted = (): boolean => {
   if (typeof window === "undefined") {
     return false;
   }
   return window.localStorage.getItem(ANCHOR_CLICKWRAP_KEY) === "1";
-}
+};

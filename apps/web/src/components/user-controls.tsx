@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { UsagePanel } from "@/components/usage-panel";
 import { signOut, useSession } from "@/lib/auth-client";
 
-export function UserControls() {
+export const UserControls = () => {
   const { data: sessionData } = useSession();
   const isSignedIn = !!sessionData?.session;
   const [panelOpen, setPanelOpen] = useState(false);
@@ -78,4 +78,4 @@ export function UserControls() {
       ) : null}
     </div>
   );
-}
+};

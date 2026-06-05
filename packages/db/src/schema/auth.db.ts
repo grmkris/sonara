@@ -15,29 +15,29 @@ import { baseEntityFields, createTimestampField, typeId } from "../utils";
 // adapter reads; SQL column names (snake_case) are Drizzle-internal.
 
 export const user = pgTable("user", {
-  id: typeId("user", "id")
-    .primaryKey()
-    .$defaultFn(() => typeIdGenerator("user"))
-    .$type<UserId>(),
-  name: text("name").notNull(),
+  // Dodo Payments customer id. Lazily populated on first checkout.
+  dodoCustomerId: text("dodo_customer_id"),
   email: text("email").notNull().unique(),
   emailVerified: boolean("email_verified")
     .$defaultFn(() => false)
     .notNull(),
+  id: typeId("user", "id")
+    .primaryKey()
+    .$defaultFn(() => typeIdGenerator("user"))
+    .$type<UserId>(),
   image: text("image"),
-  // Dodo Payments customer id. Lazily populated on first checkout.
-  dodoCustomerId: text("dodo_customer_id"),
+  name: text("name").notNull(),
   ...baseEntityFields,
 });
 
 export const session = pgTable(
   "session",
   {
+    expiresAt: createTimestampField("expires_at").notNull(),
     id: typeId("session", "id")
       .primaryKey()
       .$defaultFn(() => typeIdGenerator("session"))
       .$type<SessionId>(),
-    expiresAt: createTimestampField("expires_at").notNull(),
     token: text("token").notNull().unique(),
     ...baseEntityFields,
     ipAddress: text("ip_address"),

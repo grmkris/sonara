@@ -9,7 +9,7 @@ import { env } from "../env";
 import { protectedProcedure } from "./procedures";
 
 let _dodo: DodoPayments | null = null;
-function getDodoClient(): DodoPayments {
+const getDodoClient = (): DodoPayments => {
   if (_dodo) {
     return _dodo;
   }
@@ -18,7 +18,7 @@ function getDodoClient(): DodoPayments {
     environment: dodoModeForEnv(env.APP_ENV),
   });
   return _dodo;
-}
+};
 
 export const creditsRouter = {
   /**
@@ -39,14 +39,16 @@ export const creditsRouter = {
 
       const [u] = await db
         .select({
+          dodoCustomerId: SCHEMA.user.dodoCustomerId,
           email: SCHEMA.user.email,
           name: SCHEMA.user.name,
-          dodoCustomerId: SCHEMA.user.dodoCustomerId,
         })
         .from(SCHEMA.user)
         .where(eq(SCHEMA.user.id, userId))
         .limit(1);
-      if (!u) throw new ORPCError("UNAUTHORIZED");
+      if (!u) {
+        throw new ORPCError("UNAUTHORIZED");
+      }
 
       const dodo = getDodoClient();
 
@@ -67,13 +69,13 @@ export const creditsRouter = {
       }
 
       const session = await dodo.checkoutSessions.create({
-        product_cart: [{ product_id: productId, quantity: 1 }],
         customer: { customer_id: customerId },
         metadata: {
+          packId: pack.id,
           type: "credit_pack",
           userId,
-          packId: pack.id,
         },
+        product_cart: [{ product_id: productId, quantity: 1 }],
         return_url: `${SERVICE_URLS[env.APP_ENV].web}/credits/success`,
       });
 
@@ -124,9 +126,9 @@ export const creditsRouter = {
 
     return {
       frames: balance.frames,
+      lowBalance: balance.frames < 30,
       monthFrames: Math.abs(Number(monthFramesRow?.total ?? 0)),
       totalSpentUsd: Number(spendRow?.totalCents ?? 0) / 100,
-      lowBalance: balance.frames < 30,
     };
   }),
 };

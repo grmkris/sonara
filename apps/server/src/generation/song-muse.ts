@@ -30,8 +30,8 @@ export interface SongMuseOpts {
   logger: Logger;
 }
 
-function buildSystemPrompt(): string {
-  return `You translate a recognized song into a single evocative sumi-e-style scene description. Given track metadata and the live audio mood, emit a SINGLE JSON object — no prose, no markdown fences, no commentary:
+const buildSystemPrompt = (): string =>
+  `You translate a recognized song into a single evocative sumi-e-style scene description. Given track metadata and the live audio mood, emit a SINGLE JSON object — no prose, no markdown fences, no commentary:
 
 { "prompt": string }   // ONE sentence describing a concrete visual scene; ≤ ${MAX_PROMPT_CHARS} characters
 
@@ -55,9 +55,8 @@ Track: Daft Punk — Around the World (valence 0.75, arousal 0.85, 122 bpm)
 → {"prompt":"a neon orbit spinning through a mirrored club interior in synthetic light, euphoric and relentless, magenta and chrome"}
 
 Output ONLY the JSON object.`;
-}
 
-function buildUserPrompt(input: SongMuseInput): string {
+const buildUserPrompt = (input: SongMuseInput): string => {
   const t = input.track;
   return `Track:
   title: ${t.title}
@@ -72,30 +71,30 @@ Live audio mood:
   bpm: ${input.bpm > 0 ? Math.round(input.bpm) : "(unknown)"}
 
 Emit the JSON object.`;
-}
+};
 
 interface AnyLlmResult {
   output?: string;
 }
 
-function extractOutput(data: unknown): string | null {
+const extractOutput = (data: unknown): string | null => {
   if (!data || typeof data !== "object") {
     return null;
   }
   const r = data as AnyLlmResult;
   return typeof r.output === "string" ? r.output : null;
-}
+};
 
-function stripFences(text: string): string {
+const stripFences = (text: string): string => {
   let out = text.trim();
-  const m = out.match(/^```(?:json)?\s*\n?([\s\S]*?)\n?```$/);
+  const m = out.match(/^```(?:json)?\s*\n?([\s\S]*?)\n?```$/u);
   if (m?.[1]) {
     out = m[1].trim();
   }
   return out;
-}
+};
 
-function coerce(raw: unknown): SongMusePatch | null {
+const coerce = (raw: unknown): SongMusePatch | null => {
   if (!raw || typeof raw !== "object") {
     return null;
   }
@@ -105,8 +104,8 @@ function coerce(raw: unknown): SongMusePatch | null {
   }
   const cleaned = o.prompt
     .trim()
-    .replaceAll(/^["']|["']$/g, "")
-    .replace(/\.+$/, "")
+    .replaceAll(/^["']|["']$/gu, "")
+    .replace(/\.+$/u, "")
     .trim();
   if (cleaned.length === 0) {
     return null;
@@ -117,12 +116,12 @@ function coerce(raw: unknown): SongMusePatch | null {
       ? cleaned.slice(0, MAX_PROMPT_CHARS).trimEnd()
       : cleaned;
   return { prompt: capped };
-}
+};
 
-export async function synthesizeFromTrack(
+export const synthesizeFromTrack = async (
   input: SongMuseInput,
   opts: SongMuseOpts
-): Promise<SongMusePatch | null> {
+): Promise<SongMusePatch | null> => {
   if (!env.FAL_KEY) {
     opts.logger.debug("song-muse: FAL_KEY not set, skipping");
     return null;
@@ -168,8 +167,10 @@ export async function synthesizeFromTrack(
     }
     return patch;
   } catch (error) {
-    if (opts.signal.aborted) return null;
+    if (opts.signal.aborted) {
+      return null;
+    }
     opts.logger.warn({ error }, "song-muse: fal any-llm error");
     return null;
   }
-}
+};

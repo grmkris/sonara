@@ -22,14 +22,14 @@ interface FrameCardProps {
 // timeline by its `leftPct`. Clicking selects the frame. Hover scales +
 // reveals tMs. Stacked frames (when timestamps cluster) sit beneath the
 // primary row with a hairline connector.
-export function FrameCard({
+export const FrameCard = ({
   frame,
   selected,
   onSelect,
   leftPct,
   stackIdx,
   size,
-}: FrameCardProps) {
+}: FrameCardProps) => {
   const onClick = useCallback(() => {
     onSelect(frame.id);
   }, [frame.id, onSelect]);
@@ -79,4 +79,4 @@ export function FrameCard({
       </span>
     </button>
   );
-}
+};

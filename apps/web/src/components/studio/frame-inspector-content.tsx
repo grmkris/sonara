@@ -13,12 +13,76 @@ interface FrameInspectorContentProps {
   frame: LibraryFrame;
 }
 
+interface FieldProps {
+  label: string;
+  body: string;
+  mono?: boolean;
+  italic?: boolean;
+}
+
+const Field = ({ label, body, mono, italic }: FieldProps) => (
+  <div className="flex flex-col gap-1">
+    <span className="font-sans text-[9px] uppercase tracking-[0.22em] text-[color:var(--stone)]">
+      {label}
+    </span>
+    <span
+      className={cn(
+        "text-[12px] leading-snug text-[color:var(--paper)]/90",
+        mono ? "font-mono uppercase tracking-[0.12em]" : "font-sans",
+        italic && "italic"
+      )}
+    >
+      {body}
+    </span>
+  </div>
+);
+
+const Bar = ({ label, value }: { label: string; value: number }) => {
+  const pct = Math.max(0, Math.min(1, value)) * 100;
+  return (
+    <div className="flex items-center gap-2">
+      <span className="w-[110px] shrink-0 font-mono text-[9px] uppercase tracking-[0.14em] text-[color:var(--stone)]">
+        {label}
+      </span>
+      <div className="relative h-1 flex-1 rounded-sm bg-[color:var(--hairline)]/30">
+        <div
+          className="absolute inset-y-0 left-0 rounded-sm bg-[color:var(--paper)]"
+          style={{ width: `${pct}%` }}
+        />
+      </div>
+    </div>
+  );
+};
+
+const formatStamp = (date: Date): string => {
+  const y = date.getFullYear();
+  const m = (date.getMonth() + 1).toString().padStart(2, "0");
+  const d = date.getDate().toString().padStart(2, "0");
+  const hh = date.getHours().toString().padStart(2, "0");
+  const mm = date.getMinutes().toString().padStart(2, "0");
+  return `${y}${m}${d}-${hh}${mm}`;
+};
+
+// Friendly name for the fal model. Falls back to whatever the row stores
+// if we don't recognise it.
+// Model isn't in LibraryFrame directly (we omit it from the wire shape
+// since it's mostly noise). The deck + anchorUrl presence are enough
+// hints for the inspector: if anchorUrl is set this was anchor-mode
+// (flux-pro/v1.1-ultra), else text-mode (klein/9b).
+const shortModelName = (
+  _deck: string,
+  _tMs: number,
+  frame: LibraryFrame
+): string => (frame.anchorUrl ? "anchor · flux-pro" : "text · klein/9b");
+
 // The inspector body. Reused by the desktop right-pane wrapper and the
 // mobile Sheet wrapper. All actions are URL-driven — clicking "use as
 // anchor" navigates to /play?anchor=...&strength=0.55, etc. /play's
 // useSearchParams consumer dispatches the WS action after the socket
 // opens, then router.replace clears the params (Phase 8e).
-export function FrameInspectorContent({ frame }: FrameInspectorContentProps) {
+export const FrameInspectorContent = ({
+  frame,
+}: FrameInspectorContentProps) => {
   const router = useRouter();
 
   const onUseAsAnchor = useCallback(() => {
@@ -37,15 +101,17 @@ export function FrameInspectorContent({ frame }: FrameInspectorContentProps) {
   }, [frame.prompt, router]);
 
   const onCopyPrompt = useCallback(() => {
-    void navigator.clipboard
-      .writeText(frame.prompt)
-      .then(() => toast("prompt copied", { duration: 1600 }))
-      .catch(() =>
+    void (async () => {
+      try {
+        await navigator.clipboard.writeText(frame.prompt);
+        toast("prompt copied", { duration: 1600 });
+      } catch {
         toast.error("copy failed", {
           description: "clipboard permission denied",
           duration: 2400,
-        })
-      );
+        });
+      }
+    })();
   }, [frame.prompt]);
 
   const downloadName = `sonara-${formatStamp(frame.createdAt)}-${frame.id.slice(-8)}.webp`;
@@ -237,70 +303,4 @@ export function FrameInspectorContent({ frame }: FrameInspectorContentProps) {
       )}
     </div>
   );
-}
-
-interface FieldProps {
-  label: string;
-  body: string;
-  mono?: boolean;
-  italic?: boolean;
-}
-
-function Field({ label, body, mono, italic }: FieldProps) {
-  return (
-    <div className="flex flex-col gap-1">
-      <span className="font-sans text-[9px] uppercase tracking-[0.22em] text-[color:var(--stone)]">
-        {label}
-      </span>
-      <span
-        className={cn(
-          "text-[12px] leading-snug text-[color:var(--paper)]/90",
-          mono ? "font-mono uppercase tracking-[0.12em]" : "font-sans",
-          italic && "italic"
-        )}
-      >
-        {body}
-      </span>
-    </div>
-  );
-}
-
-function Bar({ label, value }: { label: string; value: number }) {
-  const pct = Math.max(0, Math.min(1, value)) * 100;
-  return (
-    <div className="flex items-center gap-2">
-      <span className="w-[110px] shrink-0 font-mono text-[9px] uppercase tracking-[0.14em] text-[color:var(--stone)]">
-        {label}
-      </span>
-      <div className="relative h-1 flex-1 rounded-sm bg-[color:var(--hairline)]/30">
-        <div
-          className="absolute inset-y-0 left-0 rounded-sm bg-[color:var(--paper)]"
-          style={{ width: `${pct}%` }}
-        />
-      </div>
-    </div>
-  );
-}
-
-function formatStamp(date: Date): string {
-  const y = date.getFullYear();
-  const m = (date.getMonth() + 1).toString().padStart(2, "0");
-  const d = date.getDate().toString().padStart(2, "0");
-  const hh = date.getHours().toString().padStart(2, "0");
-  const mm = date.getMinutes().toString().padStart(2, "0");
-  return `${y}${m}${d}-${hh}${mm}`;
-}
-
-// Friendly name for the fal model. Falls back to whatever the row stores
-// if we don't recognise it.
-function shortModelName(
-  _deck: string,
-  _tMs: number,
-  frame: LibraryFrame
-): string {
-  // Model isn't in LibraryFrame directly (we omit it from the wire shape
-  // since it's mostly noise). The deck + anchorUrl presence are enough
-  // hints for the inspector: if anchorUrl is set this was anchor-mode
-  // (flux-pro/v1.1-ultra), else text-mode (klein/9b).
-  return frame.anchorUrl ? "anchor · flux-pro" : "text · klein/9b";
-}
+};

@@ -93,9 +93,6 @@ interface WsData {
 }
 
 const server = Bun.serve<WsData, never>({
-  port,
-  // Dual-stack bind so Railway's private network (gateway → server.railway.internal) reaches us.
-  hostname: "::",
   async fetch(req, srv) {
     const url = new URL(req.url);
     if (url.pathname === "/ws") {
@@ -121,6 +118,9 @@ const server = Bun.serve<WsData, never>({
     }
     return app.fetch(req);
   },
+  // Dual-stack bind so Railway's private network (gateway → server.railway.internal) reaches us.
+  hostname: "::",
+  port,
   websocket: {
     close(ws) {
       const { sessionId } = ws.data;

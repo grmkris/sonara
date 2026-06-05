@@ -23,7 +23,7 @@ interface DeckPickerProps {
 // Internally still uses the demoMode/demoDeck slice + the demo.set WS
 // action — a 10-file state rename is a deferred cleanup; the wire shape
 // and underlying behaviour are unchanged.
-export function DeckPicker({ send }: DeckPickerProps) {
+export const DeckPicker = ({ send }: DeckPickerProps) => {
   const { data: sessionData } = useSession();
   const isSignedIn = !!sessionData?.session;
   const demoMode = useVisualizerStore((s) => s.demoMode);
@@ -129,4 +129,4 @@ export function DeckPicker({ send }: DeckPickerProps) {
       </ToggleGroup>
     </div>
   );
-}
+};

@@ -20,7 +20,8 @@ import type { ResolvedScene } from "@sonara/shared";
 //
 // drift_modifiers go last so each keyframe can vary them without disturbing
 // earlier slots.
-export function serializeResolvedScene(rs: ResolvedScene): string {
+// oxlint-disable-next-line complexity -- straight-line prompt assembly with many optional clauses; extracting helpers would obscure the fixed slot order that FLUX.2 depends on
+export const serializeResolvedScene = (rs: ResolvedScene): string => {
   const subject = rs.subjects[0]?.description.trim() ?? "";
   if (subject.length === 0) {
     return "";
@@ -29,7 +30,7 @@ export function serializeResolvedScene(rs: ResolvedScene): string {
   const tail: string[] = [];
 
   // Additional subjects (1..n) with optional position/action.
-  for (let i = 1; i < rs.subjects.length; i++) {
+  for (let i = 1; i < rs.subjects.length; i += 1) {
     const s = rs.subjects[i];
     if (!s) {
       continue;
@@ -90,4 +91,4 @@ export function serializeResolvedScene(rs: ResolvedScene): string {
   }
 
   return [subject, ...tail].join(", ");
-}
+};

@@ -22,7 +22,9 @@ export interface SessionConnection {
   client: SessionRouterClient;
 }
 
-export function createSessionConnection(sessionId: string): SessionConnection {
+export const createSessionConnection = (
+  sessionId: string
+): SessionConnection => {
   const urlProvider = async (): Promise<string> => {
     // mintWsTicket is public: signed-in visitors get a ticket carrying
     // their uuid; everyone else gets an anon ticket (userId: null) which
@@ -37,8 +39,8 @@ export function createSessionConnection(sessionId: string): SessionConnection {
 
   const socket = new ReconnectingWebSocket(urlProvider, undefined, {
     // Sane reconnect defaults; override if UX demands faster/slower.
-    minReconnectionDelay: 500,
     maxReconnectionDelay: 8000,
+    minReconnectionDelay: 500,
     reconnectionDelayGrowFactor: 2,
   });
 
@@ -48,4 +50,4 @@ export function createSessionConnection(sessionId: string): SessionConnection {
 
   const client: SessionRouterClient = createORPCClient(link);
   return { client, socket };
-}
+};

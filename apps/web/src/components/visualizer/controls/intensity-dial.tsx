@@ -15,7 +15,7 @@ interface IntensityDialProps {
 // Master audio→visual coupling dial. Continuous 0..1. Composes VU
 // time-constants, onset impulse gain, hue pump range, zoom impulse, AI
 // cadence (periodicMs), pause threshold, onset refractory.
-export function IntensityDial({ send }: IntensityDialProps) {
+export const IntensityDial = ({ send }: IntensityDialProps) => {
   const intensity = useVisualizerStore((s) => s.scene.intensity);
 
   // Radix Slider fires onValueChange per pointer-move. Debounce WS emits to
@@ -57,4 +57,4 @@ export function IntensityDial({ send }: IntensityDialProps) {
       </span>
     </div>
   );
-}
+};

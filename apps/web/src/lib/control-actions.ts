@@ -11,11 +11,11 @@ import type { SessionAction } from "./session-actions";
 //
 // Audio (features + recognize) never leaves the projector, and `hello` is a
 // WS-init handshake, so those are no-ops here.
-export function dispatchControlAction(
+export const dispatchControlAction = (
   client: AppRouterClient,
   liveSessionId: LiveSessionId,
   action: SessionAction
-): Promise<unknown> {
+): Promise<unknown> => {
   const c = client.control;
   switch (action.type) {
     case "scene.patch":
@@ -27,7 +27,7 @@ export function dispatchControlAction(
       return c.reset({ liveSessionId });
     }
     case "demo.set": {
-      return c.setDemoMode({ liveSessionId, on: action.on, deck: action.deck });
+      return c.setDemoMode({ deck: action.deck, liveSessionId, on: action.on });
     }
     case "session.goLive": {
       // The operator has no canvas, so there's no on-screen frame to seed
@@ -37,17 +37,20 @@ export function dispatchControlAction(
     case "image.anchor.set": {
       return c.setImageAnchor({
         liveSessionId,
-        url: action.url,
         strength: action.strength,
+        url: action.url,
       });
     }
     case "image.anchor.clear": {
-      return c.setImageAnchor({ liveSessionId, clear: true });
+      return c.setImageAnchor({ clear: true, liveSessionId });
     }
     case "hello":
     case "audio.features":
     case "audio.recognize": {
       return Promise.resolve();
     }
+    default: {
+      return Promise.resolve();
+    }
   }
-}
+};

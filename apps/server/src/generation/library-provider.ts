@@ -15,23 +15,22 @@ export interface LibraryPick {
 // session's small LRU of recently-served typeids so consecutive triggers
 // don't repeat. Returns null when the deck is empty (caller should fall
 // back to the fal path).
-export async function pickLibraryFrame(
+export const pickLibraryFrame = async (
   deck: string,
   excludeIds: readonly ImageLibraryId[],
   logger: Logger
-): Promise<LibraryPick | null> {
+): Promise<LibraryPick | null> => {
   const excludeUuids = excludeIds.map((id) => typeIdToUuid(id).uuid);
   const client = await getPool().connect();
   try {
-    const pick = async (exclude: string[]) =>
-      (
-        await client.query<{
-          id: string;
-          url: string;
-          width: number;
-          height: number;
-        }>(
-          `SELECT id::text AS id, url, width, height
+    const pick = async (exclude: string[]) => {
+      const result = await client.query<{
+        id: string;
+        url: string;
+        width: number;
+        height: number;
+      }>(
+        `SELECT id::text AS id, url, width, height
              FROM image_library
             WHERE deck = $1
               AND source = 'seed'
@@ -39,9 +38,10 @@ export async function pickLibraryFrame(
               AND id <> ALL($2::uuid[])
             ORDER BY random()
             LIMIT 1`,
-          [deck, exclude]
-        )
-      ).rows[0];
+        [deck, exclude]
+      );
+      return result.rows[0];
+    };
 
     // Prefer a frame not recently served. But when the recent-LRU covers the
     // whole deck (deck size <= LIBRARY_LRU), the exclusion empties the result
@@ -65,4 +65,4 @@ export async function pickLibraryFrame(
   } finally {
     client.release();
   }
-}
+};

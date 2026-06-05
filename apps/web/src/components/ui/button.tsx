@@ -40,7 +40,7 @@ interface ButtonProps
   asChild?: boolean;
 }
 
-export function Button({
+export const Button = ({
   className,
   variant,
   size,
@@ -48,7 +48,7 @@ export function Button({
   render,
   children,
   ...props
-}: ButtonProps) {
+}: ButtonProps) => {
   const renderEl =
     asChild && isValidElement(children) ? (children as ReactElement) : render;
   return (
@@ -57,13 +57,13 @@ export function Button({
       data-slot="button"
       // When rendering as an anchor/Link (asChild or render), it's not a native
       // <button>, so disable Base UI's nativeButton behaviour for correct a11y.
-      nativeButton={renderEl == null}
+      nativeButton={renderEl === undefined || renderEl === null}
       render={renderEl}
       {...props}
     >
       {asChild ? undefined : children}
     </ButtonPrimitive>
   );
-}
+};
 
 export { buttonVariants };

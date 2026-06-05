@@ -14,7 +14,8 @@ interface DriftEntry {
   // Weight per act. 0 = never, 1 = always eligible. Sampling multiplies these
   // by the current-act affinity (intro / build / dissolve) derived from
   // sessionProgress.
-  weights: [number, number, number]; // [intro, build, dissolve]
+  // [intro, build, dissolve]
+  weights: [number, number, number];
 }
 
 const DRIFT_POOL: readonly DriftEntry[] = [
@@ -50,7 +51,7 @@ const DRIFT_POOL: readonly DriftEntry[] = [
 
 // Map sessionProgress (0..1) → per-act affinity (summing to ~1). Triangular
 // weights centred on each act's natural time: intro=0.15, build=0.5, dissolve=0.85.
-function actWeights(progress: number): [number, number, number] {
+const actWeights = (progress: number): [number, number, number] => {
   const p = Math.max(0, Math.min(1, progress));
   const tri = (center: number, width: number) =>
     Math.max(0, 1 - Math.abs(p - center) / width);
@@ -59,11 +60,11 @@ function actWeights(progress: number): [number, number, number] {
   const dissolve = tri(0.85, 0.5);
   const sum = intro + build + dissolve || 1;
   return [intro / sum, build / sum, dissolve / sum];
-}
+};
 
 // Returns a single random modifier biased by sessionProgress. When progress is
 // null/undefined we fall back to uniform sampling (preserves old behaviour).
-export function sampleDrift(sessionProgress?: number): string | null {
+export const sampleDrift = (sessionProgress?: number): string | null => {
   if (DRIFT_POOL.length === 0) {
     return null;
   }
@@ -88,7 +89,7 @@ export function sampleDrift(sessionProgress?: number): string | null {
     }
   }
   return weighted.at(-1)?.phrase ?? null;
-}
+};
 
 // Stateful drift sequence held by each Session. Pre-samples a fixed-length
 // trajectory of modifiers and advances one slot per keyframe; the slot order
@@ -154,7 +155,8 @@ export class DriftTrajectory {
     if (Math.random() < RECOMBINE_PROB) {
       const replacement = this.sampleOne();
       if (replacement) {
-        const offset = 2 + Math.floor(Math.random() * 4); // 2..5 ahead
+        // 2..5 ahead
+        const offset = 2 + Math.floor(Math.random() * 4);
         const replaceIdx = (this.cursor + offset) % this.slots.length;
         this.slots[replaceIdx] = replacement;
       }
@@ -174,7 +176,7 @@ export class DriftTrajectory {
 
   private sampleSlots(): string[] {
     const out: string[] = [];
-    for (let i = 0; i < TRAJECTORY_LENGTH; i++) {
+    for (let i = 0; i < TRAJECTORY_LENGTH; i += 1) {
       const phrase = this.sampleOne();
       if (phrase) {
         out.push(phrase);

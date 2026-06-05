@@ -26,7 +26,7 @@ export const typeId = <const T extends IdTypePrefixNames>(
 
 export const createTimestampField = (name?: string) => {
   if (!name) {
-    return timestamp({ withTimezone: true, mode: "date" });
+    return timestamp({ mode: "date", withTimezone: true });
   }
   return timestamp(name, { mode: "date", withTimezone: true });
 };

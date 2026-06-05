@@ -22,14 +22,14 @@ const MAX_DURATION_MS = 10 * 60_000;
 
 type Phase = "idle" | "recording" | "exporting";
 
-function formatDuration(ms: number): string {
+const formatDuration = (ms: number): string => {
   const total = Math.floor(ms / 1000);
   const mm = Math.floor(total / 60);
   const ss = total % 60;
   return `${String(mm).padStart(2, "0")}:${String(ss).padStart(2, "0")}`;
-}
+};
 
-export function RecordToggle() {
+export const RecordToggle = () => {
   const { data: sessionData } = useSession();
   const isSignedIn = !!sessionData?.session;
   const [supported, setSupported] = useState(true);
@@ -55,7 +55,10 @@ export function RecordToggle() {
         tickRef.current = null;
       }
       if (handleRef.current) {
-        handleRef.current.stop().catch(() => undefined);
+        // oxlint-disable-next-line prefer-await-to-then -- sync effect cleanup; fire-and-forget stop, cannot await
+        handleRef.current.stop().catch(() => {
+          // noop
+        });
         handleRef.current = null;
       }
     },
@@ -171,6 +174,15 @@ export function RecordToggle() {
   const isRecording = phase === "recording";
   const isExporting = phase === "exporting";
 
+  let statusLabel: string;
+  if (isExporting) {
+    statusLabel = `saving ${exportPct}%`;
+  } else if (isRecording) {
+    statusLabel = formatDuration(elapsed);
+  } else {
+    statusLabel = "rec · r";
+  }
+
   return (
     <div className="pointer-events-auto flex items-center gap-3">
       <button
@@ -218,13 +230,9 @@ export function RecordToggle() {
             !isExporting && !isRecording && "hidden sm:inline"
           )}
         >
-          {isExporting
-            ? `saving ${exportPct}%`
-            : isRecording
-              ? formatDuration(elapsed)
-              : "rec · r"}
+          {statusLabel}
         </span>
       </button>
     </div>
   );
-}
+};

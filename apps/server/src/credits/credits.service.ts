@@ -13,9 +13,8 @@ export { __setPoolForTests, type PoolLike } from "../db/pool";
 // shared typeid generator so ledger rows from apps/server are time-sortable
 // and round-trip through drizzle's `typeId` customType the same way as rows
 // written via the web router.
-function newLedgerId(): string {
-  return typeIdToUuid(typeIdGenerator("usageLedger")).uuid;
-}
+const newLedgerId = (): string =>
+  typeIdToUuid(typeIdGenerator("usageLedger")).uuid;
 
 /**
  * Atomic decrement of `balance_frames` by `cost`. Returns the new balance if
@@ -29,11 +28,11 @@ function newLedgerId(): string {
  * Race-safe: single UPDATE with a WHERE clause; concurrent callers see
  * either the decrement or a 0-row result, never a double-spend.
  */
-export async function debitFrame(
+export const debitFrame = async (
   userId: string,
   cost: number,
   logger?: Logger
-): Promise<number | null> {
+): Promise<number | null> => {
   const client = await getPool().connect();
   try {
     await client.query("BEGIN");
@@ -56,13 +55,15 @@ export async function debitFrame(
     await client.query("COMMIT");
     return upd.rows[0]?.balance ?? 0;
   } catch (error) {
-    await client.query("ROLLBACK").catch(() => {});
-    logger?.error({ error, userId, cost }, "debitFrame failed");
+    await client.query("ROLLBACK").catch(() => {
+      // noop — rollback best-effort; original error is rethrown below
+    });
+    logger?.error({ cost, error, userId }, "debitFrame failed");
     throw error;
   } finally {
     client.release();
   }
-}
+};
 
 /**
  * Inverse of `debitFrame`. Increments `balance_frames` by `cost` and appends
@@ -72,11 +73,11 @@ export async function debitFrame(
  *
  * Use case: a fal generation fails after the credit was already debited.
  */
-export async function refundFrame(
+export const refundFrame = async (
   userId: string,
   cost: number,
   logger?: Logger
-): Promise<number | null> {
+): Promise<number | null> => {
   const client = await getPool().connect();
   try {
     await client.query("BEGIN");
@@ -99,13 +100,15 @@ export async function refundFrame(
     await client.query("COMMIT");
     return upd.rows[0]?.balance ?? 0;
   } catch (error) {
-    await client.query("ROLLBACK").catch(() => {});
-    logger?.error({ error, userId, cost }, "refundFrame failed");
+    await client.query("ROLLBACK").catch(() => {
+      // noop — rollback best-effort; original error is rethrown below
+    });
+    logger?.error({ cost, error, userId }, "refundFrame failed");
     throw error;
   } finally {
     client.release();
   }
-}
+};
 
 /**
  * Try to consume one free-tier slot in the current hourly window. Returns
@@ -118,11 +121,11 @@ export async function refundFrame(
  * RETURNING + row count — we read the usage_count back and check against
  * the limit on the client side as a second guard.
  */
-export async function tryConsumeFreeTier(
+export const tryConsumeFreeTier = async (
   userId: string,
   limitPerHour = 3,
   logger?: Logger
-): Promise<boolean> {
+): Promise<boolean> => {
   const res = await getPool().query<{ usage_count: number }>(
     `INSERT INTO free_tier_ledger (user_id, window_start, usage_count)
        VALUES ($1, date_trunc('hour', now()), 1)
@@ -150,19 +153,22 @@ export async function tryConsumeFreeTier(
     logger?.warn({ error, userId }, "failed to append free-tier ledger row");
   }
   return true;
-}
+};
 
-export async function getBalance(userId: string): Promise<{ frames: number }> {
+export const getBalance = async (
+  userId: string
+): Promise<{ frames: number }> => {
   const res = await getPool().query<{ balance_frames: number }>(
     `SELECT balance_frames FROM credits WHERE user_id = $1`,
     [userId]
   );
-  if (res.rowCount === 0) {
+  const [row] = res.rows;
+  if (res.rowCount === 0 || !row) {
     return { frames: 0 };
   }
-  return { frames: res.rows[0]!.balance_frames };
-}
+  return { frames: row.balance_frames };
+};
 
-export async function closePool(): Promise<void> {
+export const closePool = async (): Promise<void> => {
   await closeSharedPool();
-}
+};

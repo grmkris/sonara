@@ -41,6 +41,7 @@ import { user } from "./auth.db";
 // rows for the timeline + gallery.
 export const imageLibrary = pgTable(
   "image_library",
+  // oxlint-disable-next-line sort-keys -- columns are grouped by concern (core / live-session / inspector) with field-specific doc comments; reordering would scramble the documentation, key order has no SQL effect
   {
     id: typeId("imageLibrary", "id")
       .primaryKey()

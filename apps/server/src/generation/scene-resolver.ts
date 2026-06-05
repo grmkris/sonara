@@ -32,11 +32,10 @@ const cache = new Map<string, CacheEntry>();
 // concurrent triggers fall back to deterministic in the meantime.
 const inFlight = new Map<string, Promise<ResolvedSceneCore>>();
 
-function hashScene(s: SonaraSceneState): string {
-  return s.prompt.trim().toLowerCase();
-}
+const hashScene = (s: SonaraSceneState): string =>
+  s.prompt.trim().toLowerCase();
 
-function getCached(hash: string): ResolvedSceneCore | null {
+const getCached = (hash: string): ResolvedSceneCore | null => {
   const hit = cache.get(hash);
   if (!hit) {
     return null;
@@ -46,7 +45,7 @@ function getCached(hash: string): ResolvedSceneCore | null {
     return null;
   }
   return hit.core;
-}
+};
 
 export interface ResolveOpts {
   driftModifiers: string[];
@@ -59,14 +58,18 @@ export interface ResolveOpts {
 // while kicking off a background LLM expansion. The next call for the same
 // hash gets the LLM result. This keeps the trigger() hot path non-blocking
 // while still warming the cache.
-export function resolveScene(
+export const resolveScene = (
   scene: SonaraSceneState,
   opts: ResolveOpts
-): ResolvedScene {
+): ResolvedScene => {
   const hash = hashScene(scene);
   const cached = getCached(hash);
 
   if (!cached && !inFlight.has(hash)) {
+    // Fire-and-forget background fill: the chain is intentionally NOT awaited
+    // so the hot path stays synchronous; the promise is stashed in `inFlight`
+    // for dedupe. Rewriting to await would block the trigger path.
+    /* oxlint-disable prefer-await-to-then, prefer-await-to-callbacks -- background fill must stay a non-awaited promise chain */
     const promise = expandScene(scene, {
       logger: opts.logger,
       signal: opts.signal,
@@ -99,6 +102,7 @@ export function resolveScene(
       .finally(() => {
         inFlight.delete(hash);
       });
+    /* oxlint-enable prefer-await-to-then, prefer-await-to-callbacks */
     inFlight.set(hash, promise);
   }
 
@@ -108,15 +112,15 @@ export function resolveScene(
     audio_state: opts.audio,
     drift_modifiers: opts.driftModifiers,
   };
-}
+};
 
 // Awaited variant — used by tests / shadow-mode validation that wants the
 // real LLM result rather than the deterministic stand-in. Still respects
 // the cache and the in-flight dedupe.
-export async function resolveSceneAwaited(
+export const resolveSceneAwaited = async (
   scene: SonaraSceneState,
   opts: ResolveOpts
-): Promise<ResolvedScene> {
+): Promise<ResolvedScene> => {
   const hash = hashScene(scene);
   let core = getCached(hash);
   if (!core) {
@@ -124,6 +128,11 @@ export async function resolveSceneAwaited(
     if (existing) {
       core = await existing;
     } else {
+      // The promise is stashed in `inFlight` (for cross-call dedupe) BEFORE
+      // it is awaited; the chain must stay a promise so concurrent callers
+      // share the same in-flight expansion. Rewriting to await would defeat
+      // the dedupe.
+      /* oxlint-disable prefer-await-to-then -- promise must be shared via inFlight before awaiting */
       const promise = expandScene(scene, {
         logger: opts.logger,
         signal: opts.signal,
@@ -135,6 +144,7 @@ export async function resolveSceneAwaited(
         .finally(() => {
           inFlight.delete(hash);
         });
+      /* oxlint-enable prefer-await-to-then */
       inFlight.set(hash, promise);
       core = await promise;
     }
@@ -144,14 +154,12 @@ export async function resolveSceneAwaited(
     audio_state: opts.audio,
     drift_modifiers: opts.driftModifiers,
   };
-}
+};
 
 // Test/maintenance helpers.
-export function _clearResolverCache(): void {
+export const _clearResolverCache = (): void => {
   cache.clear();
   inFlight.clear();
-}
+};
 
-export function _resolverCacheSize(): number {
-  return cache.size;
-}
+export const _resolverCacheSize = (): number => cache.size;

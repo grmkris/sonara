@@ -65,10 +65,10 @@ export const createInspectorSlice: StateCreator<
   pushTrigger: (reason, version) =>
     set((s) => {
       const entry: TriggerEntry = {
+        at: Date.now(),
         id: (s.triggerLog[0]?.id ?? 0) + 1,
         reason,
         version,
-        at: Date.now(),
       };
       return { triggerLog: [entry, ...s.triggerLog].slice(0, TRIGGER_LOG_MAX) };
     }),
@@ -83,13 +83,13 @@ export const createInspectorSlice: StateCreator<
         return { triggerLog };
       }
       return {
-        triggerLog,
         inspector: {
           ...s.inspector,
           completedAt: Date.now(),
           durationMs,
           success,
         },
+        triggerLog,
       };
     }),
   setInspectorRequested: (entry) =>

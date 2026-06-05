@@ -14,18 +14,17 @@
  * Also invoked at the end of seed-library.ts so it can't drift from the images.
  */
 import { readdir, writeFile } from "node:fs/promises";
-import { dirname, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
+import { resolve } from "node:path";
 
 import { DECK_KEYS } from "@sonara/shared";
 import type { LibraryManifest } from "@sonara/shared";
 
-function publicLibraryDir(): string {
+const publicLibraryDir = (): string => {
   const here = import.meta.dirname;
   return resolve(here, "../../web/public/library");
-}
+};
 
-export async function buildLibraryManifests(): Promise<void> {
+export const buildLibraryManifests = async (): Promise<void> => {
   const baseDir = publicLibraryDir();
   for (const deck of DECK_KEYS) {
     const deckDir = resolve(baseDir, deck);
@@ -47,14 +46,15 @@ export async function buildLibraryManifests(): Promise<void> {
     );
     console.log(`  ${deck}: ${frames.length} frames`);
   }
-}
+};
 
 // Run directly only when invoked as a script (not when imported by seed-library).
 if (import.meta.main) {
-  buildLibraryManifests()
-    .then(() => console.log("library manifests written"))
-    .catch((error) => {
-      console.error("build-library-manifests failed:", error);
-      process.exit(1);
-    });
+  try {
+    await buildLibraryManifests();
+    console.log("library manifests written");
+  } catch (error) {
+    console.error("build-library-manifests failed:", error);
+    process.exit(1);
+  }
 }

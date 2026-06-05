@@ -20,8 +20,7 @@
 
 import { createHash } from "node:crypto";
 import { mkdir, writeFile } from "node:fs/promises";
-import { dirname, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
+import { resolve } from "node:path";
 
 import { createFalClient } from "@fal-ai/client";
 import { createDb, SCHEMA } from "@sonara/db";
@@ -62,34 +61,37 @@ interface ExportRow {
   status: "active" | "rejected";
 }
 
-function fail(msg: string): never {
+const fail = (msg: string): never => {
   console.error(`error: ${msg}`);
   process.exit(1);
-}
+};
 
-function parseArgs(): Args {
+const parseArgs = (): Args => {
   const argv = process.argv.slice(2);
   let deck: DeckKey | null = null;
   let limit: number | null = null;
   let model = env.FAL_TEXT_MODEL;
   let dryRun = false;
   let fromExport = false;
-  for (let i = 0; i < argv.length; i++) {
+  for (let i = 0; i < argv.length; i += 1) {
     const a = argv[i];
     if (a === "--deck") {
-      const v = argv[++i];
+      i += 1;
+      const v = argv[i];
       if (!v || !(DECK_KEYS as readonly string[]).includes(v)) {
         fail(`--deck must be one of: ${DECK_KEYS.join(", ")}`);
       }
       deck = v as DeckKey;
     } else if (a === "--limit") {
-      const v = Number(argv[++i]);
+      i += 1;
+      const v = Number(argv[i]);
       if (!Number.isInteger(v) || v <= 0) {
         fail("--limit must be a positive integer");
       }
       limit = v;
     } else if (a === "--model") {
-      const v = argv[++i];
+      i += 1;
+      const v = argv[i];
       if (!v) {
         fail("--model requires a value");
       }
@@ -103,18 +105,18 @@ function parseArgs(): Args {
     }
   }
   return { deck, dryRun, fromExport, limit, model };
-}
+};
 
-function promptHash(deck: string, prompt: string): string {
-  return createHash("sha256").update(`${deck}::${prompt}`).digest("hex");
-}
+const promptHash = (deck: string, prompt: string): string =>
+  createHash("sha256").update(`${deck}::${prompt}`).digest("hex");
 
 // Deterministic seed so re-generating a rejected prompt yields a similar
 // image (modulo fal's nondeterminism on the same seed across model revs).
-function promptSeed(prompt: string): number {
+const promptSeed = (prompt: string): number => {
   const h = createHash("sha256").update(prompt).digest();
+  // oxlint-disable-next-line no-bitwise -- mask top bit to keep seed non-negative (mod 2^31)
   return h.readUInt32BE(0) & 0x7f_ff_ff_ff;
-}
+};
 
 interface FalImage {
   url: string;
@@ -126,7 +128,7 @@ interface FalData {
   image?: FalImage;
 }
 
-function pickImage(result: unknown): FalImage | null {
+const pickImage = (result: unknown): FalImage | null => {
   const data = (result as { data?: FalData } | undefined)?.data;
   if (!data) {
     return null;
@@ -138,19 +140,21 @@ function pickImage(result: unknown): FalImage | null {
     return data.images[0];
   }
   return null;
-}
+};
 
 // apps/server/scripts/seed-library.ts -> repo root -> apps/web/public/library
-function publicLibraryDir(): string {
+const publicLibraryDir = (): string => {
   const here = import.meta.dirname;
   return resolve(here, "../../web/public/library");
-}
+};
 
-async function downloadAndEncode(url: string): Promise<{
+const downloadAndEncode = async (
+  url: string
+): Promise<{
   buffer: Buffer;
   width: number;
   height: number;
-}> {
+}> => {
   const res = await fetch(url);
   if (!res.ok) {
     throw new Error(`fetch ${url} failed: ${res.status} ${res.statusText}`);
@@ -165,9 +169,9 @@ async function downloadAndEncode(url: string): Promise<{
     height: transformed.info.height,
     width: transformed.info.width,
   };
-}
+};
 
-async function importFromExport(args: Args): Promise<void> {
+const importFromExport = async (args: Args): Promise<void> => {
   const databaseUrl = env.DATABASE_URL;
   if (!databaseUrl) {
     fail("DATABASE_URL not set");
@@ -195,7 +199,7 @@ async function importFromExport(args: Args): Promise<void> {
       )
       .limit(1);
     if (existing.length > 0) {
-      skipped++;
+      skipped += 1;
       continue;
     }
     try {
@@ -212,13 +216,13 @@ async function importFromExport(args: Args): Promise<void> {
         url: row.url,
         width: row.width,
       });
-      imported++;
+      imported += 1;
       console.log(
         `  + ${row.deck}/${row.id}.webp  "${row.prompt.slice(0, 60)}"`
       );
     } catch (error) {
       console.error(`[fail] ${row.deck} "${row.prompt}":`, error);
-      failed++;
+      failed += 1;
     }
   }
 
@@ -227,9 +231,9 @@ async function importFromExport(args: Args): Promise<void> {
   );
   await buildLibraryManifests();
   process.exit(failed > 0 ? 1 : 0);
-}
+};
 
-async function main() {
+const main = async () => {
   const args = parseArgs();
 
   if (args.fromExport) {
@@ -291,13 +295,13 @@ async function main() {
         )
         .limit(1);
       if (existing.length > 0) {
-        skip++;
+        skip += 1;
         continue;
       }
 
       if (args.dryRun) {
         console.log(`[dry-run] ${entry.deck}: ${prompt}`);
-        gen++;
+        gen += 1;
         continue;
       }
 
@@ -320,7 +324,7 @@ async function main() {
         const img = pickImage(result);
         if (!img) {
           console.warn(`[warn] ${entry.deck} "${prompt}": no image from fal`);
-          fail_++;
+          fail_ += 1;
           continue;
         }
 
@@ -343,11 +347,11 @@ async function main() {
           width,
         });
 
-        gen++;
+        gen += 1;
         console.log(`  + ${entry.deck}/${filename}  "${prompt.slice(0, 60)}"`);
       } catch (error) {
         console.error(`[fail] ${entry.deck} "${prompt}":`, error);
-        fail_++;
+        fail_ += 1;
       }
     }
 
@@ -366,9 +370,11 @@ async function main() {
     await buildLibraryManifests();
   }
   process.exit(totalFail > 0 ? 1 : 0);
-}
+};
 
-main().catch((error) => {
+try {
+  await main();
+} catch (error) {
   console.error("seed-library failed:", error);
   process.exit(1);
-});
+}

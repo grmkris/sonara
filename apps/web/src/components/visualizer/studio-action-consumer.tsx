@@ -22,7 +22,7 @@ interface StudioActionConsumerProps {
 //
 // Lives in its own component (wrapped in Suspense at the call site) so
 // useSearchParams doesn't gate the rest of the page on the boundary.
-export function StudioActionConsumer({ send }: StudioActionConsumerProps) {
+export const StudioActionConsumer = ({ send }: StudioActionConsumerProps) => {
   const params = useSearchParams();
   const router = useRouter();
   const connected = useVisualizerStore((s) => s.connected);
@@ -83,4 +83,4 @@ export function StudioActionConsumer({ send }: StudioActionConsumerProps) {
   }, [connected, send, router]);
 
   return null;
-}
+};

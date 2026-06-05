@@ -26,7 +26,19 @@ import { cn } from "@/lib/utils";
 // `dimmed` desaturates + darkens the whole stack while no audio source is
 // connected, so the deck cycle reads as "asleep" until the visitor brings
 // sound — then it eases back to full and "wakes up" (see /play).
-export function SonaraCanvas({ dimmed = false }: { dimmed?: boolean }) {
+const Webgl2RequiredOverlay = () => (
+  <div className="absolute inset-0 flex items-center justify-center bg-[color:var(--ink)] text-[color:var(--paper)]">
+    <div className="max-w-md p-8 text-center font-serif">
+      <p className="mb-2 text-2xl italic">WebGL2 required</p>
+      <p className="text-sm opacity-70">
+        The visualiser needs a browser with WebGL2 support. Try the latest
+        Chrome, Safari, Firefox, or Edge.
+      </p>
+    </div>
+  </div>
+);
+
+export const SonaraCanvas = ({ dimmed = false }: { dimmed?: boolean }) => {
   const [hasWebgl2, setHasWebgl2] = useState<boolean | null>(null);
 
   useEffect(() => {
@@ -52,18 +64,4 @@ export function SonaraCanvas({ dimmed = false }: { dimmed?: boolean }) {
       <div aria-hidden className="vignette-mask absolute inset-0" />
     </div>
   );
-}
-
-function Webgl2RequiredOverlay() {
-  return (
-    <div className="absolute inset-0 flex items-center justify-center bg-[color:var(--ink)] text-[color:var(--paper)]">
-      <div className="max-w-md p-8 text-center font-serif">
-        <p className="mb-2 text-2xl italic">WebGL2 required</p>
-        <p className="text-sm opacity-70">
-          The visualiser needs a browser with WebGL2 support. Try the latest
-          Chrome, Safari, Firefox, or Edge.
-        </p>
-      </div>
-    </div>
-  );
-}
+};

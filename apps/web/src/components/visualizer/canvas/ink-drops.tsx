@@ -14,18 +14,27 @@ import { useVisualizerStore } from "@/stores/visualizer";
 
 const MAX_DROPS = 6;
 const LIFE_MS = 2200;
-const PEAK_HOLD_MS = 300; // minimum time between spawns
-const PEAK_DELTA = 0.12; // minimum rise in RMS vs recent trailing avg
+// minimum time between spawns
+const PEAK_HOLD_MS = 300;
+// minimum rise in RMS vs recent trailing avg
+const PEAK_DELTA = 0.12;
 
 interface Drop {
-  x: number; // 0..1
-  y: number; // 0..1
-  strength: number; // 0..1, shapes radius + opacity
-  born: number; // performance.now()
-  tint: number; // 0..1, bias from paper (0) to indigo (1)
+  // 0..1
+  x: number;
+  // 0..1
+  y: number;
+  // 0..1, shapes radius + opacity
+  strength: number;
+  // performance.now()
+  born: number;
+  // 0..1, bias from paper (0) to indigo (1)
+  tint: number;
 }
 
-export function InkDrops() {
+const lerp = (a: number, b: number, t: number): number => a + (b - a) * t;
+
+export const InkDrops = () => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const dropsRef = useRef<Drop[]>([]);
   const trailingAvgRef = useRef(0);
@@ -43,7 +52,7 @@ export function InkDrops() {
 
     let rafId = 0;
 
-    function resize() {
+    const resize = () => {
       if (!canvas) {
         return;
       }
@@ -55,7 +64,7 @@ export function InkDrops() {
         canvas.height = h * dpr;
         ctx?.setTransform(dpr, 0, 0, dpr, 0, 0);
       }
-    }
+    };
 
     const onResize = () => resize();
     window.addEventListener("resize", onResize);
@@ -108,7 +117,7 @@ export function InkDrops() {
       // Render.
       ctx.clearRect(0, 0, w, h);
       const drops = dropsRef.current;
-      for (let i = drops.length - 1; i >= 0; i--) {
+      for (let i = drops.length - 1; i >= 0; i -= 1) {
         const d = drops[i];
         if (!d) {
           continue;
@@ -118,7 +127,8 @@ export function InkDrops() {
           drops.splice(i, 1);
           continue;
         }
-        const t = age / LIFE_MS; // 0..1
+        // 0..1
+        const t = age / LIFE_MS;
         const radius = 20 + t * 180 * d.strength;
         // Opacity: rises fast, fades slow. Peaks around 15% life.
         const a =
@@ -167,8 +177,4 @@ export function InkDrops() {
       style={{ willChange: "contents" }}
     />
   );
-}
-
-function lerp(a: number, b: number, t: number): number {
-  return a + (b - a) * t;
-}
+};

@@ -38,16 +38,16 @@ export type LibraryFrame = z.infer<typeof LibraryFrameSchema>;
 // per-frame data, just the aggregate + a representative sample URL for
 // the sessions sidebar in /studio.
 export const SessionSummarySchema = z.object({
-  sessionId: LiveSessionIdSchema,
-  frameCount: z.number().int().nonnegative(),
+  // Total session duration in ms (lastFrameAt - firstFrameAt). Cheap to
+  // compute server-side; clients avoid a Date math step.
+  durationMs: z.number().int().nonnegative(),
   firstFrameAt: z.coerce.date(),
+  frameCount: z.number().int().nonnegative(),
   lastFrameAt: z.coerce.date(),
   // Presigned URL of the newest frame in the session — used as the
   // sidebar thumbnail. Null only if the session has no rows (defensive).
   sampleUrl: z.string().nullable(),
-  // Total session duration in ms (lastFrameAt - firstFrameAt). Cheap to
-  // compute server-side; clients avoid a Date math step.
-  durationMs: z.number().int().nonnegative(),
+  sessionId: LiveSessionIdSchema,
 });
 
 export type SessionSummary = z.infer<typeof SessionSummarySchema>;
@@ -74,15 +74,15 @@ export const ServerEvent = z.discriminatedUnion("type", [
     version: z.number(),
   }),
   z.object({
-    type: z.literal("frame.final"),
-    imageUrl: z.string(),
-    version: z.number(),
     // Optional during rollout — older server builds emit without these.
     // frameId + tMs let the client match this final to a library row
     // appended via `library.appended`, so the timeline can highlight the
     // currently-playing frame.
     frameId: ImageLibraryIdSchema.optional(),
+    imageUrl: z.string(),
     tMs: z.number().int().nonnegative().optional(),
+    type: z.literal("frame.final"),
+    version: z.number(),
   }),
   z.object({
     message: z.string().optional(),

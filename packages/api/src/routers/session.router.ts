@@ -87,20 +87,26 @@ const RecognizeInput = z.object({
 });
 
 const StateOutput = z.object({
-  scene: SonaraSceneState,
+  demoDeck: DeckKeySchema.nullable(),
   // Server-authoritative demo state. Anon sessions are pinned to demoMode=true
   // at Session construction with a random deck; signed-in sessions reflect
   // whatever the user last toggled. The client hydrates the zustand demo
   // slice from this on every (re)connect — that's what starts the client-native
   // demo loop (use-demo-frame-loop) for the right deck.
   demoMode: z.boolean(),
-  demoDeck: DeckKeySchema.nullable(),
   // Server-authoritative image anchor. Set via setImageAnchor; survives a
   // tab refresh because the live Session keeps it in memory until disconnect.
   imageAnchor: ImageAnchor.nullable(),
+  scene: SonaraSceneState,
 });
 
 export const sessionRouter = {
+  audioFeatures: sessionOs
+    .input(AudioFeaturesInput)
+    .handler(({ context, input }) => {
+      context.session.applyAudio(input.features);
+    }),
+
   // Long-lived event stream. The client subscribes once per connection and
   // receives every server-initiated event (scene.state, frame.preview /
   // frame.final, job.status, now.playing, preset.suggest, generation.*).
@@ -112,27 +118,31 @@ export const sessionRouter = {
       }
     }),
 
+  // Leave the deck and go live. Flips demo off server-side, applies the typed
+  // scene, and (if a seed frame is given) seeds the first frame off it as a
+  // one-shot anchor before continuing with cheap text frames. Anon is refused
+  // (live generation needs credits) — the client gates this too.
+  goLive: sessionOs.input(GoLiveInput).handler(({ context, input }) => {
+    context.session.goLive(input.prompt, input.seedFrameUrl);
+  }),
+
   hello: sessionOs.input(HelloInput).handler(({ context }) => {
     context.session.init();
   }),
 
-  scenePatch: sessionOs.input(ScenePatchInput).handler(({ context, input }) => {
-    context.session.applyPatch(input.patch, "client");
+  recognize: sessionOs
+    .input(RecognizeInput)
+    .output(NowPlaying.nullable())
+    .handler(({ context, input }) =>
+      context.session.recognize(input.clipBase64, input.mimeType, input.trigger)
+    ),
+
+  reset: sessionOs.handler(({ context }) => {
+    context.session.reset();
   }),
 
-  audioFeatures: sessionOs
-    .input(AudioFeaturesInput)
-    .handler(({ context, input }) => {
-      context.session.applyAudio(input.features);
-    }),
-
-  // Direct field-keyed PTT patch. The client routes each push-to-talk
-  // transcript to a specific scene field (subject/environment/mood/palette),
-  // so the patch is unambiguous — no LLM disambiguation. origin="voice"
-  // gives the lower SEMANTIC_THRESHOLD so single-field changes fire
-  // immediately.
-  voicePatch: sessionOs.input(VoicePatchInput).handler(({ context, input }) => {
-    context.session.applyPatch(input.patch, "voice");
+  scenePatch: sessionOs.input(ScenePatchInput).handler(({ context, input }) => {
+    context.session.applyPatch(input.patch, "client");
   }),
 
   // DEMO mode switch. When on with a deck selected, the session pulls
@@ -140,14 +150,6 @@ export const sessionRouter = {
   // off resumes the standard fal path on the next trigger.
   setDemoMode: sessionOs.input(DemoModeInput).handler(({ context, input }) => {
     context.session.setDemoMode(input.on, input.deck);
-  }),
-
-  // Leave the deck and go live. Flips demo off server-side, applies the typed
-  // scene, and (if a seed frame is given) seeds the first frame off it as a
-  // one-shot anchor before continuing with cheap text frames. Anon is refused
-  // (live generation needs credits) — the client gates this too.
-  goLive: sessionOs.input(GoLiveInput).handler(({ context, input }) => {
-    context.session.goLive(input.prompt, input.seedFrameUrl);
   }),
 
   // Image-anchor switch. The browser uploaded an image via the web service's
@@ -161,17 +163,6 @@ export const sessionRouter = {
       context.session.setImageAnchor(input);
     }),
 
-  recognize: sessionOs
-    .input(RecognizeInput)
-    .output(NowPlaying.nullable())
-    .handler(({ context, input }) =>
-      context.session.recognize(input.clipBase64, input.mimeType, input.trigger)
-    ),
-
-  reset: sessionOs.handler(({ context }) => {
-    context.session.reset();
-  }),
-
   // Current-state snapshot. Idempotent pull used by the client on connect (and
   // on every reconnect) to cover the race where session.init()'s initial
   // publishes land before the events() subscribe has attached. Also useful for
@@ -182,6 +173,15 @@ export const sessionRouter = {
     imageAnchor: context.session.getImageAnchor(),
     scene: context.session.getSnapshot(),
   })),
+
+  // Direct field-keyed PTT patch. The client routes each push-to-talk
+  // transcript to a specific scene field (subject/environment/mood/palette),
+  // so the patch is unambiguous — no LLM disambiguation. origin="voice"
+  // gives the lower SEMANTIC_THRESHOLD so single-field changes fire
+  // immediately.
+  voicePatch: sessionOs.input(VoicePatchInput).handler(({ context, input }) => {
+    context.session.applyPatch(input.patch, "voice");
+  }),
 };
 
 export type SessionRouter = typeof sessionRouter;

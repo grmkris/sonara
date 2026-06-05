@@ -10,7 +10,7 @@ const CORE_BASE = "https://unpkg.com/@ffmpeg/core@0.12.10/dist/umd";
 
 let cached: FFmpeg | null = null;
 
-async function loadFfmpeg(): Promise<FFmpeg> {
+const loadFfmpeg = async (): Promise<FFmpeg> => {
   if (cached) {
     return cached;
   }
@@ -22,12 +22,12 @@ async function loadFfmpeg(): Promise<FFmpeg> {
   });
   cached = instance;
   return instance;
-}
+};
 
-export async function transcodeToMp4(
+export const transcodeToMp4 = async (
   webm: Blob,
   opts: { hasAudio: boolean; onProgress?: (ratio: number) => void }
-): Promise<Blob> {
+): Promise<Blob> => {
   const ffmpeg = await loadFfmpeg();
 
   const handleProgress = ({ progress }: { progress: number }) => {
@@ -68,7 +68,11 @@ export async function transcodeToMp4(
     return new Blob([new Uint8Array(out)], { type: "video/mp4" });
   } finally {
     ffmpeg.off("progress", handleProgress);
-    await ffmpeg.deleteFile(inputName).catch(() => {});
-    await ffmpeg.deleteFile(outputName).catch(() => {});
+    await ffmpeg.deleteFile(inputName).catch(() => {
+      // noop
+    });
+    await ffmpeg.deleteFile(outputName).catch(() => {
+      // noop
+    });
   }
-}
+};

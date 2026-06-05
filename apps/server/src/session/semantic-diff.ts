@@ -9,10 +9,10 @@ import type { SonaraSceneState } from "@sonara/shared";
 // non-trivial edit to the prompt is a "heavy" change — we don't try to
 // measure semantic similarity inside the string. Sliders contribute a small
 // continuous score so a noticeable drag still re-triggers.
-export function semanticDiff(
+export const semanticDiff = (
   prev: SonaraSceneState,
   curr: SonaraSceneState
-): number {
+): number => {
   let score = 0;
 
   // Prompt change — any non-empty edit is a meaningful scene shift. Compare
@@ -21,7 +21,7 @@ export function semanticDiff(
   const a = prev.prompt.trim().toLowerCase();
   const b = curr.prompt.trim().toLowerCase();
   if (a !== b) {
-    score += 1.0;
+    score += 1;
   }
 
   // Continuous sliders — delta weighted. Same coefficients as the previous
@@ -38,4 +38,4 @@ export function semanticDiff(
   }
 
   return score;
-}
+};

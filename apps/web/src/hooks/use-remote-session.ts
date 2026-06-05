@@ -33,9 +33,9 @@ export interface RemoteSession {
 // drives a remote live Session over the authed `control` HTTP router and
 // hydrates the SAME zustand store from ~1s snapshot polls, so the reused
 // controls read current state exactly as they do on /play.
-export function useRemoteSession(
+export const useRemoteSession = (
   liveSessionId: LiveSessionId | null
-): RemoteSession {
+): RemoteSession => {
   const [snapshot, setSnapshot] = useState<ControlSnapshot | null>(null);
   const [connected, setConnected] = useState(false);
 
@@ -108,10 +108,11 @@ export function useRemoteSession(
       const s = useVisualizerStore.getState();
       s.setScene({ ...s.scene, ...action.patch });
     }
+    // oxlint-disable-next-line prefer-await-to-then, prefer-await-to-callbacks -- send is a synchronous fire-and-forget SessionSend; awaiting here would change its contract
     dispatchControlAction(rpcClient, id, action).catch((error) => {
       console.warn("[control] dispatch failed", error);
     });
   }, []);
 
   return { connected, send, snapshot };
-}
+};

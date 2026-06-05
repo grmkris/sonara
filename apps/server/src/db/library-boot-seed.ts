@@ -32,7 +32,7 @@ interface ExportRow {
 // index predicate (WHERE source = 'seed') because 0002 narrowed
 // image_library_prompt_hash_idx to seed rows — without it Postgres can't
 // pick the arbiter index and a fresh-DB seed fails with 42P10.
-export async function seedLibraryOnBoot(logger: Logger): Promise<void> {
+export const seedLibraryOnBoot = async (logger: Logger): Promise<void> => {
   const seed = seedRows as ExportRow[];
   if (seed.length === 0) {
     logger.info("library seed file is empty — skipping");
@@ -79,9 +79,9 @@ export async function seedLibraryOnBoot(logger: Logger): Promise<void> {
         ]
       );
       if (res.rowCount && res.rowCount > 0) {
-        imported++;
+        imported += 1;
       } else {
-        skipped++;
+        skipped += 1;
       }
     }
   } finally {
@@ -91,4 +91,4 @@ export async function seedLibraryOnBoot(logger: Logger): Promise<void> {
     { imported, skipped, total: seed.length },
     "library boot-seed complete"
   );
-}
+};

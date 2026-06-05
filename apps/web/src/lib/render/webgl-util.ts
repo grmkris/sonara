@@ -1,11 +1,11 @@
 // Minimal WebGL2 helpers for the displacement renderer. Kept small and
 // dependency-free — Three.js / ogl would add ~100kB for a single textured quad.
 
-export function createShader(
+export const createShader = (
   gl: WebGL2RenderingContext,
   type: GLenum,
   source: string
-): WebGLShader {
+): WebGLShader => {
   const shader = gl.createShader(type);
   if (!shader) {
     throw new Error("createShader failed");
@@ -18,13 +18,13 @@ export function createShader(
     throw new Error(`Shader compile error: ${info}`);
   }
   return shader;
-}
+};
 
-export function createProgram(
+export const createProgram = (
   gl: WebGL2RenderingContext,
   vs: WebGLShader,
   fs: WebGLShader
-): WebGLProgram {
+): WebGLProgram => {
   const program = gl.createProgram();
   if (!program) {
     throw new Error("createProgram failed");
@@ -38,7 +38,7 @@ export function createProgram(
     throw new Error(`Program link error: ${info}`);
   }
   return program;
-}
+};
 
 export interface QuadBuffer {
   vao: WebGLVertexArrayObject;
@@ -46,7 +46,7 @@ export interface QuadBuffer {
 
 // Fullscreen quad with UV (0,0) at top-left so a plain HTML <img> uploaded
 // without Y-flip samples correctly.
-export function createQuadBuffer(gl: WebGL2RenderingContext): QuadBuffer {
+export const createQuadBuffer = (gl: WebGL2RenderingContext): QuadBuffer => {
   const vao = gl.createVertexArray();
   if (!vao) {
     throw new Error("createVertexArray failed");
@@ -74,9 +74,9 @@ export function createQuadBuffer(gl: WebGL2RenderingContext): QuadBuffer {
 
   gl.bindVertexArray(null);
   return { vao };
-}
+};
 
-export function createTexture(gl: WebGL2RenderingContext): WebGLTexture {
+export const createTexture = (gl: WebGL2RenderingContext): WebGLTexture => {
   const tex = gl.createTexture();
   if (!tex) {
     throw new Error("createTexture failed");
@@ -99,24 +99,24 @@ export function createTexture(gl: WebGL2RenderingContext): WebGLTexture {
     new Uint8Array([0, 0, 0, 0])
   );
   return tex;
-}
+};
 
-export function uploadImageToTexture(
+export const uploadImageToTexture = (
   gl: WebGL2RenderingContext,
   tex: WebGLTexture,
   img: HTMLImageElement
-): void {
+): void => {
   gl.bindTexture(gl.TEXTURE_2D, tex);
   gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
   gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
   gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, img);
-}
+};
 
 // Resizes the drawing buffer to match CSS size × DPR. Returns true if it changed.
-export function resizeCanvasToDisplay(
+export const resizeCanvasToDisplay = (
   canvas: HTMLCanvasElement,
   gl: WebGL2RenderingContext
-): boolean {
+): boolean => {
   const dpr = window.devicePixelRatio || 1;
   const w = Math.max(1, Math.floor(canvas.clientWidth * dpr));
   const h = Math.max(1, Math.floor(canvas.clientHeight * dpr));
@@ -127,7 +127,7 @@ export function resizeCanvasToDisplay(
     return true;
   }
   return false;
-}
+};
 
 // Framebuffer object with a colour-attached texture, for ping-pong feedback.
 // Size-resizable so the FBO tracks canvas resizes.
@@ -138,11 +138,11 @@ export interface Fbo {
   height: number;
 }
 
-export function createFbo(
+export const createFbo = (
   gl: WebGL2RenderingContext,
   width: number,
   height: number
-): Fbo {
+): Fbo => {
   const tex = gl.createTexture();
   if (!tex) {
     throw new Error("createTexture failed");
@@ -182,14 +182,14 @@ export function createFbo(
     throw new Error(`FBO incomplete: 0x${status.toString(16)}`);
   }
   return { fbo, height, tex, width };
-}
+};
 
-export function resizeFbo(
+export const resizeFbo = (
   gl: WebGL2RenderingContext,
   slot: Fbo,
   width: number,
   height: number
-): Fbo {
+): Fbo => {
   const w = Math.max(1, width);
   const h = Math.max(1, height);
   if (slot.width === w && slot.height === h) {
@@ -208,14 +208,14 @@ export function resizeFbo(
     null
   );
   return { ...slot, height: h, width: w };
-}
+};
 
-export function deleteFbo(gl: WebGL2RenderingContext, slot: Fbo): void {
+export const deleteFbo = (gl: WebGL2RenderingContext, slot: Fbo): void => {
   gl.deleteTexture(slot.tex);
   gl.deleteFramebuffer(slot.fbo);
-}
+};
 
-export function isWebgl2Available(): boolean {
+export const isWebgl2Available = (): boolean => {
   if (typeof document === "undefined") {
     return false;
   }
@@ -226,4 +226,4 @@ export function isWebgl2Available(): boolean {
   } catch {
     return false;
   }
-}
+};

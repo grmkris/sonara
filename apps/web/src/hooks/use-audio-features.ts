@@ -21,16 +21,14 @@ export type AudioSource =
 // (WaveformRibbon, SpectrumCurve, etc.) can read the AnalyserNode directly
 // without prop-drilling. Only ever one engine per app lifetime.
 let currentEngine: AudioEngine | null = null;
-export function getCurrentAudioEngine(): AudioEngine | null {
-  return currentEngine;
-}
+export const getCurrentAudioEngine = (): AudioEngine | null => currentEngine;
 
-export function useAudioFeatures(
+export const useAudioFeatures = (
   source: AudioSource,
   send: SessionSend,
   onError?: (err: unknown) => void,
   onSourceLost?: () => void
-): void {
+): void => {
   const engineRef = useRef<AudioEngine | null>(null);
   const lastSentAtRef = useRef(0);
 
@@ -96,7 +94,9 @@ export function useAudioFeatures(
           engine.detachSource();
         }
       } catch (error) {
-        if (!cancelled) onError?.(error);
+        if (!cancelled) {
+          onError?.(error);
+        }
       }
     };
 
@@ -107,4 +107,4 @@ export function useAudioFeatures(
       engine.detachSource();
     };
   }, [source, onError]);
-}
+};

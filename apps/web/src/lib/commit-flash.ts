@@ -7,7 +7,7 @@ const DURATION_MS = 320;
 
 let active = false;
 
-export function flashCommit(): void {
+export const flashCommit = (): void => {
   if (typeof document === "undefined") {
     return;
   }
@@ -21,4 +21,4 @@ export function flashCommit(): void {
     root.classList.remove(CLASS);
     active = false;
   }, DURATION_MS);
-}
+};

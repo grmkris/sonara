@@ -75,15 +75,13 @@ export const DeckKeySchema = z.enum(
 
 // Style descriptor for a deck, or "" if unknown. Used as a drift modifier on
 // live generation after leaving the deck (see Session.goLive / trigger()).
-export function deckStyle(key: DeckKey): string {
-  return DECKS.find((d) => d.key === key)?.style ?? "";
-}
+export const deckStyle = (key: DeckKey): string =>
+  DECKS.find((d) => d.key === key)?.style ?? "";
 
 // Human-facing label for a deck, or "" if unknown. The DeckPicker shows it on
 // the deck chips; the look badge under the wordmark shows it too.
-export function deckLabel(key: DeckKey): string {
-  return DECKS.find((d) => d.key === key)?.label ?? "";
-}
+export const deckLabel = (key: DeckKey): string =>
+  DECKS.find((d) => d.key === key)?.label ?? "";
 
 // A deck's full "look profile" — the render preset, default audio-reactivity
 // intensity, and frame cadence (ms held at intensity 0 / 1). Applied as a unit
@@ -91,8 +89,10 @@ export function deckLabel(key: DeckKey): string {
 // together rather than being three knobs to set by hand.
 export interface DeckLook {
   preset: VisualPresetName;
-  intensity: number; // 0..1, default scene intensity for this deck
-  cadence: { calm: number; loud: number }; // ms per frame at intensity 0 / 1
+  // 0..1, default scene intensity for this deck
+  intensity: number;
+  // ms per frame at intensity 0 / 1
+  cadence: { calm: number; loud: number };
 }
 
 // App-default cadence (used by decks without a DECK_LOOK entry): calm 6s → loud 2s.
@@ -108,7 +108,7 @@ export const DECK_LOOK: Partial<Record<DeckKey, DeckLook>> = {
   // The anti-rave: chill, dark, slow. Long holds, low reactivity, the `noir`
   // preset's no-strobe nocturne. Built for the movie room.
   noir: {
-    cadence: { calm: 12_000, loud: 7_000 },
+    cadence: { calm: 12_000, loud: 7000 },
     intensity: 0.15,
     preset: "noir",
   },

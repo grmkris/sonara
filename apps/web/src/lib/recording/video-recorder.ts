@@ -23,7 +23,7 @@ const PREFERRED_MIME_TYPES = [
   "video/webm",
 ];
 
-function pickMimeType(): string | undefined {
+const pickMimeType = (): string | undefined => {
   if (typeof MediaRecorder === "undefined") {
     return undefined;
   }
@@ -33,7 +33,7 @@ function pickMimeType(): string | undefined {
     }
   }
   return undefined;
-}
+};
 
 export interface VideoRecorderHandle {
   readonly mimeType: string;
@@ -42,13 +42,11 @@ export interface VideoRecorderHandle {
   stop(): Promise<{ blob: Blob; mimeType: string }>;
 }
 
-export function isRecordingSupported(): boolean {
-  return pickMimeType() !== undefined;
-}
+export const isRecordingSupported = (): boolean => pickMimeType() !== undefined;
 
-export function startRecording(opts: {
+export const startRecording = (opts: {
   withAudio: boolean;
-}): VideoRecorderHandle {
+}): VideoRecorderHandle => {
   const canvas = getCurrentDisplacementCanvas();
   if (!canvas) {
     throw new Error("visualizer canvas not ready");
@@ -59,7 +57,7 @@ export function startRecording(opts: {
   }
 
   const videoStream = canvas.captureStream(FPS);
-  const videoTrack = videoStream.getVideoTracks()[0];
+  const [videoTrack] = videoStream.getVideoTracks();
   if (!videoTrack) {
     throw new Error("canvas.captureStream produced no video track");
   }
@@ -98,12 +96,14 @@ export function startRecording(opts: {
     hasAudio: audioTracks.length > 0,
     mimeType,
     stop() {
+      // oxlint-disable-next-line avoid-new -- bridging MediaRecorder's event callbacks (onstop/onerror) into a promise has no async/await equivalent
       return new Promise((resolve, reject) => {
         const finish = () => {
           cleanup();
           resolve({ blob: new Blob(chunks, { type: mimeType }), mimeType });
         };
         recorder.onstop = finish;
+        // oxlint-disable-next-line unicorn/prefer-add-event-listener -- MediaRecorder fires onstop/onerror exactly once for this one-shot stop; on-handler assignment is intentional and matched to onstop above
         recorder.onerror = (ev) => {
           cleanup();
           reject(
@@ -111,18 +111,20 @@ export function startRecording(opts: {
               new Error("MediaRecorder error")
           );
         };
-        if (recorder.state === "inactive") finish();
-        else recorder.stop();
+        if (recorder.state === "inactive") {
+          finish();
+        } else {
+          recorder.stop();
+        }
       });
     },
   };
-}
+};
 
-export function isMp4Mime(mimeType: string): boolean {
-  return mimeType.startsWith("video/mp4");
-}
+export const isMp4Mime = (mimeType: string): boolean =>
+  mimeType.startsWith("video/mp4");
 
-export function downloadBlob(blob: Blob, filename: string): void {
+export const downloadBlob = (blob: Blob, filename: string): void => {
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
@@ -131,11 +133,12 @@ export function downloadBlob(blob: Blob, filename: string): void {
   a.click();
   a.remove();
   setTimeout(() => URL.revokeObjectURL(url), 5000);
-}
+};
 
-export function buildFilename(extension: "mp4" | "webm"): string {
+const pad = (n: number) => String(n).padStart(2, "0");
+
+export const buildFilename = (extension: "mp4" | "webm"): string => {
   const d = new Date();
-  const pad = (n: number) => String(n).padStart(2, "0");
   const stamp = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}-${pad(d.getMinutes())}-${pad(d.getSeconds())}`;
   return `sonara-${stamp}.${extension}`;
-}
+};

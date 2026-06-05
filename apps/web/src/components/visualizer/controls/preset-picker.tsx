@@ -28,11 +28,9 @@ const MODES: { id: PresetMode; label: string; title: string }[] = [
 ];
 
 // Pretty labels for the preset names (replace underscores).
-function pretty(name: PresetName): string {
-  return name.replaceAll(/_/g, " ");
-}
+const pretty = (name: PresetName): string => name.replaceAll("_", " ");
 
-export function PresetPicker() {
+export const PresetPicker = () => {
   const preset = useVisualizerStore((s) => s.preset);
   const mode = useVisualizerStore((s) => s.presetMode);
   const cycleMs = useVisualizerStore((s) => s.presetCycleMs);
@@ -94,7 +92,7 @@ export function PresetPicker() {
     }
     let lastSeenId = useVisualizerStore.getState().triggerLog[0]?.id ?? 0;
     const unsub = useVisualizerStore.subscribe((state) => {
-      const head = state.triggerLog[0];
+      const [head] = state.triggerLog;
       if (!head || head.id <= lastSeenId) {
         return;
       }
@@ -154,6 +152,7 @@ export function PresetPicker() {
               onClick={() => selectSavedPreset(name)}
               onContextMenu={(ev) => {
                 ev.preventDefault();
+                // oxlint-disable-next-line no-alert -- native confirm is the intended lightweight delete guard
                 if (window.confirm(`Delete saved preset "${name}"?`)) {
                   deleteSavedPreset(name);
                 }
@@ -175,6 +174,7 @@ export function PresetPicker() {
         <button
           type="button"
           onClick={() => {
+            // oxlint-disable-next-line no-alert -- native prompt is the intended lightweight name capture
             const name = window.prompt("name this mid-state")?.trim();
             if (name) {
               snapshotCurrentPreset(name);
@@ -238,4 +238,4 @@ export function PresetPicker() {
       )}
     </div>
   );
-}
+};

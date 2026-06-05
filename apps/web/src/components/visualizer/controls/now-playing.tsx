@@ -14,9 +14,42 @@ import { useVisualizerStore } from "@/stores/visualizer";
 // "listening…" instead of just bouncing back to the resting state — users
 // couldn't tell whether the click had registered otherwise.
 //
+const RefreshIcon = () => (
+  <svg
+    width="12"
+    height="12"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+  >
+    <path d="M21 12a9 9 0 1 1-3-6.7" />
+    <path d="M21 3v6h-6" />
+  </svg>
+);
+
+const SpinnerIcon = () => (
+  <svg
+    width="12"
+    height="12"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    className="animate-spin"
+    aria-hidden
+  >
+    <path d="M21 12a9 9 0 1 1-6.219-8.56" />
+  </svg>
+);
+
 // Hidden for anonymous visitors. The underlying `recognize` WS proc returns
 // null for `userId === null`, so the chip would never light up anyway.
-export function NowPlaying() {
+export const NowPlaying = () => {
   const { data: sessionData } = useSession();
   const track = useVisualizerStore((s) => s.nowPlaying);
   const requestIdentify = useVisualizerStore((s) => s.requestIdentify);
@@ -86,41 +119,4 @@ export function NowPlaying() {
       </button>
     </div>
   );
-}
-
-function RefreshIcon() {
-  return (
-    <svg
-      width="12"
-      height="12"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <path d="M21 12a9 9 0 1 1-3-6.7" />
-      <path d="M21 3v6h-6" />
-    </svg>
-  );
-}
-
-function SpinnerIcon() {
-  return (
-    <svg
-      width="12"
-      height="12"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      className="animate-spin"
-      aria-hidden
-    >
-      <path d="M21 12a9 9 0 1 1-6.219-8.56" />
-    </svg>
-  );
-}
+};

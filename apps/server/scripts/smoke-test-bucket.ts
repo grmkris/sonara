@@ -14,7 +14,7 @@ import {
   uploadBytes,
 } from "../src/storage/bucket";
 
-async function main() {
+const main = async () => {
   if (!isConfigured()) {
     console.error("bucket not configured — S3_* env vars missing");
     process.exit(1);
@@ -37,13 +37,16 @@ async function main() {
   console.log("       upload ok");
 
   console.log("[2/2] presigning read URL ...");
-  const url = presignReadUrl(key, 60); // 60s TTL — disposable
+  // 60s TTL — disposable
+  const url = presignReadUrl(key, 60);
   console.log("       URL:");
   console.log(`       ${url}`);
   console.log("\nverify with:  curl -I '<URL above>'  →  HTTP/1.1 200");
-}
+};
 
-main().catch((error) => {
+try {
+  await main();
+} catch (error) {
   console.error("smoke test failed:", error);
   process.exit(1);
-});
+}

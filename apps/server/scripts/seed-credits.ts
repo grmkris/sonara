@@ -16,18 +16,21 @@
  */
 
 import { createDb, SCHEMA } from "@sonara/db";
-import { typeIdFromUuid, typeIdToUuid } from "@sonara/shared/typeid";
-import { typeIdGenerator } from "@sonara/shared/typeid";
+import {
+  typeIdFromUuid,
+  typeIdGenerator,
+  typeIdToUuid,
+} from "@sonara/shared/typeid";
 import { sql } from "drizzle-orm";
 
-function fail(msg: string): never {
+const fail = (msg: string): never => {
   console.error(`error: ${msg}`);
   process.exit(1);
-}
+};
 
-function parseUserId(raw: string): string {
+const parseUserId = (raw: string): string => {
   if (
-    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(raw)
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/iu.test(raw)
   ) {
     return typeIdFromUuid("user", raw);
   }
@@ -35,9 +38,9 @@ function parseUserId(raw: string): string {
     return raw;
   }
   return fail(`userId must be a typeid (usr_…) or a UUID — got "${raw}"`);
-}
+};
 
-async function main() {
+const main = async () => {
   const [userIdRaw, framesRaw] = process.argv.slice(2);
   if (!userIdRaw || !framesRaw) {
     fail(
@@ -94,9 +97,11 @@ async function main() {
 
   console.log(`granted ${frames} frames to ${userId}`);
   process.exit(0);
-}
+};
 
-main().catch((error) => {
+try {
+  await main();
+} catch (error) {
   console.error("seed-credits failed:", error);
   process.exit(1);
-});
+}

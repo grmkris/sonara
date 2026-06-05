@@ -23,7 +23,7 @@ interface PromptInputProps {
 // `voice.patch` so the server's lower semantic-diff threshold for voice
 // still applies. We track `lastDraftFromVoice` to decide which message
 // type to send on commit.
-export function PromptInput({ send }: PromptInputProps) {
+export const PromptInput = ({ send }: PromptInputProps) => {
   const scene = useVisualizerStore((s) => s.scene);
   const status = useVisualizerStore((s) => s.status);
   const isListening = useVisualizerStore((s) => s.isListening);
@@ -189,4 +189,4 @@ export function PromptInput({ send }: PromptInputProps) {
       <ImageAnchorZone send={send} />
     </div>
   );
-}
+};

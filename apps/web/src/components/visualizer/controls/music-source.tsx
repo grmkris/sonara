@@ -19,24 +19,89 @@ interface MusicSourceProps {
 
 // Safari supports getDisplayMedia for video but silently drops audio tracks.
 // Detect via UA — the usual "Safari but not Chrome/Edge/Android" pattern.
-function isSafariLike(): boolean {
+const isSafariLike = (): boolean => {
   if (typeof navigator === "undefined") {
     return false;
   }
   const ua = navigator.userAgent;
-  return /^((?!chrome|android|edg|crios|fxios).)*safari/i.test(ua);
-}
+  return /^((?!chrome|android|edg|crios|fxios).)*safari/iu.test(ua);
+};
 
-function displayMediaSupported(): boolean {
+const displayMediaSupported = (): boolean => {
   if (typeof navigator === "undefined") {
     return false;
   }
   return typeof navigator.mediaDevices?.getDisplayMedia === "function";
-}
+};
 
 const COMPUTER_AUDIO_HINT_KEY = "sonara.computerAudioHintSeen";
 
-export function MusicSource({ source, setSource }: MusicSourceProps) {
+interface IconButtonProps {
+  active: boolean;
+  disabled?: boolean;
+  label: string;
+  title?: string;
+  onClick: () => void;
+  icon: React.ReactNode;
+}
+
+const IconButton = ({
+  active,
+  disabled,
+  label,
+  title,
+  onClick,
+  icon,
+}: IconButtonProps) => {
+  let stateClass: string;
+  if (disabled) {
+    stateClass = "cursor-not-allowed text-[color:var(--stone)]/40";
+  } else if (active) {
+    stateClass = "text-[color:var(--paper)]";
+  } else {
+    stateClass = "text-[color:var(--stone)] hover:text-[color:var(--paper)]";
+  }
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <button
+          type="button"
+          onClick={onClick}
+          disabled={disabled}
+          aria-label={label}
+          className={cn(
+            "group flex items-center gap-1.5 transition-colors",
+            stateClass
+          )}
+        >
+          {icon}
+          {/* Compact label, shown when the control is active or hovered.
+             Reserves vertical rhythm without screaming when at rest. */}
+          <span
+            className={cn(
+              "font-sans text-[10px] uppercase tracking-[0.22em] transition-opacity",
+              active ? "opacity-100" : "opacity-0 group-hover:opacity-80"
+            )}
+          >
+            {label}
+          </span>
+        </button>
+      </TooltipTrigger>
+      <TooltipContent
+        side="top"
+        sideOffset={6}
+        className="font-mono bg-[color:var(--ink)] text-[color:var(--paper)] border border-[color:var(--hairline)]/40 px-2 py-0.5 text-[10px] uppercase tracking-[0.18em]"
+      >
+        {title ?? label}
+      </TooltipContent>
+    </Tooltip>
+  );
+};
+
+const truncate = (s: string, n: number): string =>
+  s.length > n ? `${s.slice(0, n - 1)}…` : s;
+
+export const MusicSource = ({ source, setSource }: MusicSourceProps) => {
   const fileRef = useRef<HTMLInputElement | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const objectUrlRef = useRef<string | null>(null);
@@ -64,7 +129,9 @@ export function MusicSource({ source, setSource }: MusicSourceProps) {
 
   useEffect(
     () => () => {
-      if (objectUrlRef.current) URL.revokeObjectURL(objectUrlRef.current);
+      if (objectUrlRef.current) {
+        URL.revokeObjectURL(objectUrlRef.current);
+      }
     },
     []
   );
@@ -94,7 +161,12 @@ export function MusicSource({ source, setSource }: MusicSourceProps) {
     el.src = url;
     el.loop = true;
     el.crossOrigin = "anonymous";
-    void el.play().catch(() => {});
+    // play() may reject when autoplay is blocked; ignore and proceed without
+    // awaiting so setSource fires synchronously regardless of playback start.
+    // oxlint-disable-next-line prefer-await-to-then -- must not await; setSource runs unconditionally
+    void el.play().catch(() => {
+      // noop — autoplay rejection is non-fatal
+    });
     setSource({ element: el, type: "element" });
   };
 
@@ -174,66 +246,4 @@ export function MusicSource({ source, setSource }: MusicSourceProps) {
       />
     </div>
   );
-}
-
-interface IconButtonProps {
-  active: boolean;
-  disabled?: boolean;
-  label: string;
-  title?: string;
-  onClick: () => void;
-  icon: React.ReactNode;
-}
-
-function IconButton({
-  active,
-  disabled,
-  label,
-  title,
-  onClick,
-  icon,
-}: IconButtonProps) {
-  return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <button
-          type="button"
-          onClick={onClick}
-          disabled={disabled}
-          aria-label={label}
-          className={cn(
-            "group flex items-center gap-1.5 transition-colors",
-            disabled
-              ? "cursor-not-allowed text-[color:var(--stone)]/40"
-              : active
-                ? "text-[color:var(--paper)]"
-                : "text-[color:var(--stone)] hover:text-[color:var(--paper)]"
-          )}
-        >
-          {icon}
-          {/* Compact label, shown when the control is active or hovered.
-             Reserves vertical rhythm without screaming when at rest. */}
-          <span
-            className={cn(
-              "font-sans text-[10px] uppercase tracking-[0.22em] transition-opacity",
-              active ? "opacity-100" : "opacity-0 group-hover:opacity-80"
-            )}
-          >
-            {label}
-          </span>
-        </button>
-      </TooltipTrigger>
-      <TooltipContent
-        side="top"
-        sideOffset={6}
-        className="font-mono bg-[color:var(--ink)] text-[color:var(--paper)] border border-[color:var(--hairline)]/40 px-2 py-0.5 text-[10px] uppercase tracking-[0.18em]"
-      >
-        {title ?? label}
-      </TooltipContent>
-    </Tooltip>
-  );
-}
-
-function truncate(s: string, n: number): string {
-  return s.length > n ? `${s.slice(0, n - 1)}…` : s;
-}
+};

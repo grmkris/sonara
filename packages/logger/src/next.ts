@@ -16,7 +16,7 @@ export { createEvlog, evlogMiddleware, log, useLogger } from "evlog/next";
  *
  * Returns `{ register, onRequestError, withEvlog, useLogger, log, createError }`.
  */
-export function createSonaraWebEvlog(appEnv: string) {
+export const createSonaraWebEvlog = (appEnv: string) => {
   const env: Partial<EnvironmentContext> = {
     environment: appEnv,
     service: "sonara-web",
@@ -26,4 +26,4 @@ export function createSonaraWebEvlog(appEnv: string) {
     ...createInstrumentation(common),
     ...createEvlog(common),
   };
-}
+};

@@ -13,6 +13,22 @@ export const ImageAnchor = z.object({
 export type ImageAnchor = z.infer<typeof ImageAnchor>;
 
 export const SonaraSceneState = z.object({
+  // Treatment knob — unchanged. Consumed by scene-llm-expander for
+  // composition/style modulation, by cadenceFromIntensity for trigger timing.
+  abstraction: z.number().min(0).max(1),
+
+  // Set by the server via the dedicated setImageAnchor mutation, never
+  // through scene.patch. Client surfaces are auth-gated (PromptInput).
+  imageAnchor: ImageAnchor.optional(),
+
+  // Treatment knob — unchanged. Consumed by scene-llm-expander for
+  // composition/style modulation, by cadenceFromIntensity for trigger timing.
+  intensity: z.number().min(0).max(1),
+
+  // Server-authoritative. Set by the song-recognition pipeline; cleared on
+  // sustained silence or reset. Clients never patch this field.
+  nowPlaying: NowPlaying.optional(),
+
   // Single user-facing content field. Replaces the previous 8-field split
   // (subject/action/environment/style/lighting/palette/camera/mood). The
   // server-side scene-llm-expander parses this into the rich ResolvedSceneCore.
@@ -21,20 +37,10 @@ export const SonaraSceneState = z.object({
   // Treatment knobs — unchanged. Consumed by scene-llm-expander for
   // composition/style modulation, by cadenceFromIntensity for trigger timing.
   softness: z.number().min(0).max(1),
-  surrealness: z.number().min(0).max(1),
-  abstraction: z.number().min(0).max(1),
   stability: z.number().min(0).max(1),
-  intensity: z.number().min(0).max(1),
-
-  // Set by the server via the dedicated setImageAnchor mutation, never
-  // through scene.patch. Client surfaces are auth-gated (PromptInput).
-  imageAnchor: ImageAnchor.optional(),
+  surrealness: z.number().min(0).max(1),
 
   version: z.number().int().nonnegative(),
-
-  // Server-authoritative. Set by the song-recognition pipeline; cleared on
-  // sustained silence or reset. Clients never patch this field.
-  nowPlaying: NowPlaying.optional(),
 });
 
 export type SonaraSceneState = z.infer<typeof SonaraSceneState>;

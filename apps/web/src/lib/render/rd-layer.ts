@@ -119,7 +119,8 @@ void main() {
 export interface RDFrameOpts {
   feed: number;
   kill: number;
-  kickImpulse: number; // 0..1, rising edge seeds a dot
+  // 0..1, rising edge seeds a dot
+  kickImpulse: number;
   rms: number;
 }
 
@@ -217,7 +218,7 @@ export class RDLayer {
     gl.activeTexture(gl.TEXTURE0);
     gl.uniform1i(this.uni.update.uSrc, 0);
 
-    for (let i = 0; i < ITERATIONS_PER_FRAME; i++) {
+    for (let i = 0; i < ITERATIONS_PER_FRAME; i += 1) {
       const write = this.writeIsA ? this.fboA : this.fboB;
       const read = this.writeIsA ? this.fboB : this.fboA;
       gl.bindFramebuffer(gl.FRAMEBUFFER, write.fbo);

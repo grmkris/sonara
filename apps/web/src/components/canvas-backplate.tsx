@@ -16,7 +16,7 @@ import { useVisualizerStore } from "@/stores/visualizer";
 // A single `.page-veil` sits between the canvas (z-0, behind the grain at z-1)
 // and the page content (z-10): one uniform ink wash so the backplate reads as
 // ONE continuous image top-to-bottom, with no per-section panel seam.
-export function CanvasBackplate() {
+export const CanvasBackplate = () => {
   useWsSession();
   useDemoFrameLoop();
 
@@ -46,4 +46,4 @@ export function CanvasBackplate() {
       />
     </>
   );
-}
+};

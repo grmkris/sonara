@@ -53,42 +53,41 @@ class TrackCache {
 
 const trackCache = new TrackCache();
 
-function identityKey(match: AuddMatch): string {
-  return `${match.artist.toLowerCase()}|${match.title.toLowerCase()}`;
-}
+const identityKey = (match: AuddMatch): string =>
+  `${match.artist.toLowerCase()}|${match.title.toLowerCase()}`;
 
 // Apple Music artwork URLs are templated with `{w}x{h}bb` (plus `.jpg`) so
 // consumers can request an arbitrary size. We pick a comfortable default
 // that still renders well as a reference image for FLUX.2-edit.
-function expandAppleArtwork(url: string | undefined): string | undefined {
+const expandAppleArtwork = (url: string | undefined): string | undefined => {
   if (!url) {
     return undefined;
   }
-  return url.replaceAll(/\{w\}/g, "600").replaceAll(/\{h\}/g, "600");
-}
+  return url.replaceAll("{w}", "600").replaceAll("{h}", "600");
+};
 
-function extractYear(s?: string): number | undefined {
+const extractYear = (s?: string): number | undefined => {
   if (!s) {
     return undefined;
   }
-  const m = s.match(/^(\d{4})/);
+  const m = s.match(/^(\d{4})/u);
   if (!m) {
     return undefined;
   }
   const n = Number(m[1]);
   return Number.isFinite(n) ? n : undefined;
-}
+};
 
 export interface RecognizeOutcome {
   track: NowPlaying | null;
   source: "audd" | "cache";
 }
 
-export async function recognizeClip(
+export const recognizeClip = async (
   clipBase64: string,
   mimeType: string,
   logger: Logger
-): Promise<RecognizeOutcome> {
+): Promise<RecognizeOutcome> => {
   let buf: Buffer;
   try {
     buf = Buffer.from(clipBase64, "base64");
@@ -106,7 +105,7 @@ export async function recognizeClip(
 
   const match = await recognizeWithAudd(buf, mimeType, logger);
   if (!match) {
-    return { track: null, source: "audd" };
+    return { source: "audd", track: null };
   }
 
   const key = identityKey(match);
@@ -135,4 +134,4 @@ export async function recognizeClip(
 
   trackCache.set(key, track);
   return { source: "audd", track };
-}
+};

@@ -63,9 +63,9 @@ export type CreditGateResult = CreditGateOk | CreditGateDenied;
  *
  * Any exception inside debitFrame/tryConsumeFreeTier → `system_error`.
  */
-export async function tryDebitCredit(
+export const tryDebitCredit = async (
   input: CreditGateInput
-): Promise<CreditGateResult> {
+): Promise<CreditGateResult> => {
   const cost = input.cost ?? COST_PER_FRAME;
   try {
     const remaining = await debitFrame(input.userId, cost, input.logger);
@@ -102,7 +102,7 @@ export async function tryDebitCredit(
       shouldEmit: true,
     };
   }
-}
+};
 
 /**
  * Fire-and-forget refund after a fal generation fails. Free-tier paths pass
@@ -110,18 +110,22 @@ export async function tryDebitCredit(
  * but never propagated — refund failures shouldn't poison the outer error
  * path.
  */
-export function refundOnError(
+export const refundOnError = (
   userId: string,
   paidCost: number | null,
   logger: Logger
-): void {
+): void => {
   if (paidCost === null) {
     return;
   }
+  // Intentionally fire-and-forget: this is a synchronous void helper called
+  // from non-async error paths; awaiting would change its contract and the
+  // caller's control flow. Errors are swallowed here by design.
+  // oxlint-disable-next-line prefer-await-to-then, prefer-await-to-callbacks -- fire-and-forget void helper
   refundFrame(userId, paidCost, logger).catch((error) => {
     logger.error(
-      { error, cost: paidCost },
+      { cost: paidCost, error },
       "refundFrame after fal error failed"
     );
   });
-}
+};

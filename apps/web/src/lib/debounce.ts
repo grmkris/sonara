@@ -8,10 +8,10 @@ export interface Debounced<Args extends readonly unknown[]> {
   cancel: () => void;
 }
 
-export function debounce<Args extends readonly unknown[]>(
+export const debounce = <Args extends readonly unknown[]>(
   fn: (...args: Args) => void,
   waitMs: number
-): Debounced<Args> {
+): Debounced<Args> => {
   let timer: ReturnType<typeof setTimeout> | null = null;
   let pending: Args | null = null;
 
@@ -46,4 +46,4 @@ export function debounce<Args extends readonly unknown[]>(
   debounced.flush = flush;
   debounced.cancel = cancel;
   return debounced;
-}
+};

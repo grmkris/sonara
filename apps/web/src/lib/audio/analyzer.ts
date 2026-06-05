@@ -25,6 +25,167 @@ const elementSourceCache = new WeakMap<
   MediaElementAudioSourceNode
 >();
 
+const mean = (
+  arr: Uint8Array<ArrayBuffer>,
+  start: number,
+  end: number
+): number => {
+  if (end <= start) {
+    return 0;
+  }
+  let sum = 0;
+  for (let i = start; i < end; i += 1) {
+    sum += arr[i] ?? 0;
+  }
+  return sum / (end - start);
+};
+
+// Krumhansl-Kessler key profiles (major + minor). Each is a 12-entry
+// hierarchy of tonal prominence for a C-rooted scale; other keys are
+// obtained by rotating the profile. Standard MIR reference.
+const KK_MAJOR = [
+  6.35, 2.23, 3.48, 2.33, 4.38, 4.09, 2.52, 5.19, 2.39, 3.66, 2.29, 2.88,
+];
+const KK_MINOR = [
+  6.33, 2.68, 3.52, 5.38, 2.6, 3.53, 2.54, 4.75, 3.98, 2.69, 3.34, 3.17,
+];
+
+// Pearson correlation of two 12-vectors.
+const pearson12 = (a: number[], b: number[]): number => {
+  let meanA = 0;
+  let meanB = 0;
+  for (let i = 0; i < 12; i += 1) {
+    meanA += a[i] ?? 0;
+    meanB += b[i] ?? 0;
+  }
+  meanA /= 12;
+  meanB /= 12;
+  let num = 0;
+  let dA = 0;
+  let dB = 0;
+  for (let i = 0; i < 12; i += 1) {
+    const ai = (a[i] ?? 0) - meanA;
+    const bi = (b[i] ?? 0) - meanB;
+    num += ai * bi;
+    dA += ai * ai;
+    dB += bi * bi;
+  }
+  const denom = Math.sqrt(dA * dB);
+  return denom > 1e-9 ? num / denom : 0;
+};
+
+// Autocorrelation BPM on a flux ring buffer sampled at ~60 Hz. Prefers
+// tempos close to the previous estimate to smooth wobble between halves
+// and doubles (a common failure mode of single-lag picks).
+const estimateBpm = (flux: number[], prevBpm: number): number => {
+  const fps = 60;
+  const minBpm = 60;
+  const maxBpm = 180;
+  let bestBpm = 0;
+  let bestScore = -Infinity;
+  const len = flux.length;
+  // Zero-mean the input so the DC component doesn't dominate.
+  let m = 0;
+  for (let i = 0; i < len; i += 1) {
+    m += flux[i] ?? 0;
+  }
+  m /= len;
+  for (let bpm = minBpm; bpm <= maxBpm; bpm += 1) {
+    const lag = Math.round((fps * 60) / bpm);
+    if (lag <= 0 || lag >= len) {
+      continue;
+    }
+    let corr = 0;
+    for (let i = lag; i < len; i += 1) {
+      corr += ((flux[i] ?? 0) - m) * ((flux[i - lag] ?? 0) - m);
+    }
+    // Prefer BPMs close to the previous estimate — 3% bonus per 10 BPM of
+    // agreement. Prevents half/double jumps when the peak is a near-tie.
+    if (prevBpm > 0) {
+      const dist = Math.abs(bpm - prevBpm);
+      corr *= 1 + Math.max(0, 0.03 * (1 - dist / 10));
+    }
+    if (corr > bestScore) {
+      bestScore = corr;
+      bestBpm = bpm;
+    }
+  }
+  // Reject low-confidence matches: if the peak score is tiny relative to the
+  // signal variance, don't publish a BPM yet.
+  let variance = 0;
+  for (let i = 0; i < len; i += 1) {
+    const d = (flux[i] ?? 0) - m;
+    variance += d * d;
+  }
+  if (variance <= 1e-6 || bestScore / variance < 0.15) {
+    return 0;
+  }
+  return bestBpm;
+};
+
+// Returns the best-matching key (tonic 0..11, mode, correlation 0..1).
+// Null when the chroma vector is empty (no harmonic content detected).
+const detectKey = (
+  chroma: number[]
+): { tonic: number; mode: "major" | "minor"; strength: number } | null => {
+  let total = 0;
+  for (let i = 0; i < 12; i += 1) {
+    total += chroma[i] ?? 0;
+  }
+  if (total < 1e-6) {
+    return null;
+  }
+  let bestTonic = 0;
+  let bestMode: "major" | "minor" = "major";
+  let bestCorr = -Infinity;
+  const rotated: number[] = Array.from({ length: 12 }, () => 0);
+  for (let tonic = 0; tonic < 12; tonic += 1) {
+    // rotate the profile so index 0 corresponds to this tonic
+    for (let i = 0; i < 12; i += 1) {
+      rotated[i] = KK_MAJOR[(i - tonic + 12) % 12] ?? 0;
+    }
+    const cMaj = pearson12(chroma, rotated);
+    for (let i = 0; i < 12; i += 1) {
+      rotated[i] = KK_MINOR[(i - tonic + 12) % 12] ?? 0;
+    }
+    const cMin = pearson12(chroma, rotated);
+    if (cMaj > bestCorr) {
+      bestCorr = cMaj;
+      bestTonic = tonic;
+      bestMode = "major";
+    }
+    if (cMin > bestCorr) {
+      bestCorr = cMin;
+      bestTonic = tonic;
+      bestMode = "minor";
+    }
+  }
+  // Clamp negative correlations to 0 for cleanliness.
+  return { mode: bestMode, strength: Math.max(0, bestCorr), tonic: bestTonic };
+};
+
+const avg = (arr: number[]): number => {
+  if (arr.length === 0) {
+    return 0;
+  }
+  let sum = 0;
+  for (const v of arr) {
+    sum += v;
+  }
+  return sum / arr.length;
+};
+
+const stddev = (arr: number[], m: number): number => {
+  if (arr.length === 0) {
+    return 0;
+  }
+  let sum = 0;
+  for (const v of arr) {
+    sum += (v - m) * (v - m);
+  }
+  return Math.sqrt(sum / arr.length);
+};
+
 export class AudioEngine {
   private ctx: AudioContext | null = null;
   private analyser: AnalyserNode | null = null;
@@ -160,7 +321,7 @@ export class AudioEngine {
     for (const t of stream.getVideoTracks()) {
       t.stop();
     }
-    const audioTrack = stream.getAudioTracks()[0];
+    const [audioTrack] = stream.getAudioTracks();
     if (!audioTrack) {
       // User shared a source with no audio (or Safari silently stripped it).
       for (const t of stream.getTracks()) {
@@ -187,6 +348,7 @@ export class AudioEngine {
     });
   }
 
+  // oxlint-disable-next-line prefer-await-to-callbacks -- event-style registration API; a one-shot promise can't model a repeatable source-lost notification
   onSourceLost(cb: () => void): void {
     this.sourceLostCb = cb;
   }
@@ -234,6 +396,7 @@ export class AudioEngine {
     }
   }
 
+  // oxlint-disable-next-line prefer-await-to-callbacks -- per-frame tick subscription; fires ~60x/s, not a one-shot promise
   onTick(cb: TickCallback): void {
     this.callback = cb;
     if (this.rafId === null) {
@@ -251,6 +414,7 @@ export class AudioEngine {
   // Grab the most recent ~6s of audio from the clip-recorder ring buffer,
   // base64-encoded and ready to ship over WS for song recognition. Null if
   // no source is attached or MediaRecorder isn't available.
+  // oxlint-disable-next-line require-await -- async keeps the return type a Promise on both the null and delegated paths
   async grabClip(): Promise<{
     blob: Blob;
     mimeType: string;
@@ -286,7 +450,9 @@ export class AudioEngine {
         } catch {
           // noop
         }
-        for (const t of dest.stream.getTracks()) t.stop();
+        for (const t of dest.stream.getTracks()) {
+          t.stop();
+        }
       },
       stream: dest.stream,
     };
@@ -299,7 +465,10 @@ export class AudioEngine {
     this.rafId = null;
     this.detachSource();
     if (this.ctx) {
-      this.ctx.close().catch(() => {});
+      // oxlint-disable-next-line prefer-await-to-then -- stop() is sync; closing the context is fire-and-forget
+      this.ctx.close().catch(() => {
+        // noop
+      });
       this.ctx = null;
     }
     this.analyser = null;
@@ -409,6 +578,7 @@ export class AudioEngine {
     }
   }
 
+  // oxlint-disable-next-line complexity -- single per-frame DSP pipeline; splitting it would add per-call overhead at 60Hz and obscure the data flow
   private loop = (): void => {
     this.rafId = requestAnimationFrame(this.loop);
     if (
@@ -430,8 +600,8 @@ export class AudioEngine {
     // RMS computed from time-domain samples (byte, centred on 128). Matches
     // WaveformRibbon's formula; independent of Meyda so it never stalls at 0.
     let sumSq = 0;
-    for (let i = 0; i < time.length; i++) {
-      const d = (time[i] ?? 128) - 128;
+    for (const sample of time) {
+      const d = (sample ?? 128) - 128;
       sumSq += d * d;
     }
     const rms = Math.sqrt(sumSq / time.length) / 128;
@@ -440,7 +610,7 @@ export class AudioEngine {
     // the Meyda dependency for this core feature.
     let num = 0;
     let den = 0;
-    for (let i = 0; i < bins; i++) {
+    for (let i = 0; i < bins; i += 1) {
       const v = (freq[i] ?? 0) / 255;
       num += i * v;
       den += v;
@@ -492,7 +662,7 @@ export class AudioEngine {
     let flux = 0;
     const prev = this.prevSpectrum;
     if (prev && prev.length === bins) {
-      for (let i = 0; i < bins; i++) {
+      for (let i = 0; i < bins; i += 1) {
         const curr = (freq[i] ?? 0) / 255;
         const delta = curr - (prev[i] ?? 0);
         if (delta > 0) {
@@ -506,7 +676,7 @@ export class AudioEngine {
     }
     const p = this.prevSpectrum;
     if (p) {
-      for (let i = 0; i < bins; i++) {
+      for (let i = 0; i < bins; i += 1) {
         p[i] = (freq[i] ?? 0) / 255;
       }
     }
@@ -557,11 +727,10 @@ export class AudioEngine {
       this.lastBpmAnalysisAt = now;
       this.bpmEst = estimateBpm(this.beatFluxHistory, this.bpmEst);
     }
-    if (this.bpmEst > 0) {
-      this.bpmPhase = (this.bpmPhase + (dtMs / 1000) * (this.bpmEst / 60)) % 1;
-    } else {
-      this.bpmPhase = 0;
-    }
+    this.bpmPhase =
+      this.bpmEst > 0
+        ? (this.bpmPhase + (dtMs / 1000) * (this.bpmEst / 60)) % 1
+        : 0;
 
     const payload: AudioFeatures = {
       arousal: Math.max(0, Math.min(1, this.arousalSmoothed)),
@@ -586,165 +755,4 @@ export class AudioEngine {
 
     this.callback(payload);
   };
-}
-
-function mean(
-  arr: Uint8Array<ArrayBuffer>,
-  start: number,
-  end: number
-): number {
-  if (end <= start) {
-    return 0;
-  }
-  let sum = 0;
-  for (let i = start; i < end; i++) {
-    sum += arr[i] ?? 0;
-  }
-  return sum / (end - start);
-}
-
-// Krumhansl-Kessler key profiles (major + minor). Each is a 12-entry
-// hierarchy of tonal prominence for a C-rooted scale; other keys are
-// obtained by rotating the profile. Standard MIR reference.
-const KK_MAJOR = [
-  6.35, 2.23, 3.48, 2.33, 4.38, 4.09, 2.52, 5.19, 2.39, 3.66, 2.29, 2.88,
-];
-const KK_MINOR = [
-  6.33, 2.68, 3.52, 5.38, 2.6, 3.53, 2.54, 4.75, 3.98, 2.69, 3.34, 3.17,
-];
-
-// Pearson correlation of two 12-vectors.
-function pearson12(a: number[], b: number[]): number {
-  let meanA = 0;
-  let meanB = 0;
-  for (let i = 0; i < 12; i++) {
-    meanA += a[i] ?? 0;
-    meanB += b[i] ?? 0;
-  }
-  meanA /= 12;
-  meanB /= 12;
-  let num = 0;
-  let dA = 0;
-  let dB = 0;
-  for (let i = 0; i < 12; i++) {
-    const ai = (a[i] ?? 0) - meanA;
-    const bi = (b[i] ?? 0) - meanB;
-    num += ai * bi;
-    dA += ai * ai;
-    dB += bi * bi;
-  }
-  const denom = Math.sqrt(dA * dB);
-  return denom > 1e-9 ? num / denom : 0;
-}
-
-// Autocorrelation BPM on a flux ring buffer sampled at ~60 Hz. Prefers
-// tempos close to the previous estimate to smooth wobble between halves
-// and doubles (a common failure mode of single-lag picks).
-function estimateBpm(flux: number[], prevBpm: number): number {
-  const fps = 60;
-  const minBpm = 60;
-  const maxBpm = 180;
-  let bestBpm = 0;
-  let bestScore = -Infinity;
-  const len = flux.length;
-  // Zero-mean the input so the DC component doesn't dominate.
-  let m = 0;
-  for (let i = 0; i < len; i++) {
-    m += flux[i] ?? 0;
-  }
-  m /= len;
-  for (let bpm = minBpm; bpm <= maxBpm; bpm++) {
-    const lag = Math.round((fps * 60) / bpm);
-    if (lag <= 0 || lag >= len) {
-      continue;
-    }
-    let corr = 0;
-    for (let i = lag; i < len; i++) {
-      corr += ((flux[i] ?? 0) - m) * ((flux[i - lag] ?? 0) - m);
-    }
-    // Prefer BPMs close to the previous estimate — 3% bonus per 10 BPM of
-    // agreement. Prevents half/double jumps when the peak is a near-tie.
-    if (prevBpm > 0) {
-      const dist = Math.abs(bpm - prevBpm);
-      corr *= 1 + Math.max(0, 0.03 * (1 - dist / 10));
-    }
-    if (corr > bestScore) {
-      bestScore = corr;
-      bestBpm = bpm;
-    }
-  }
-  // Reject low-confidence matches: if the peak score is tiny relative to the
-  // signal variance, don't publish a BPM yet.
-  let variance = 0;
-  for (let i = 0; i < len; i++) {
-    const d = (flux[i] ?? 0) - m;
-    variance += d * d;
-  }
-  if (variance <= 1e-6 || bestScore / variance < 0.15) {
-    return 0;
-  }
-  return bestBpm;
-}
-
-// Returns the best-matching key (tonic 0..11, mode, correlation 0..1).
-// Null when the chroma vector is empty (no harmonic content detected).
-function detectKey(
-  chroma: number[]
-): { tonic: number; mode: "major" | "minor"; strength: number } | null {
-  let total = 0;
-  for (let i = 0; i < 12; i++) {
-    total += chroma[i] ?? 0;
-  }
-  if (total < 1e-6) {
-    return null;
-  }
-  let bestTonic = 0;
-  let bestMode: "major" | "minor" = "major";
-  let bestCorr = -Infinity;
-  const rotated: number[] = Array.from({ length: 12 }, () => 0);
-  for (let tonic = 0; tonic < 12; tonic++) {
-    // rotate the profile so index 0 corresponds to this tonic
-    for (let i = 0; i < 12; i++) {
-      rotated[i] = KK_MAJOR[(i - tonic + 12) % 12] ?? 0;
-    }
-    const cMaj = pearson12(chroma, rotated);
-    for (let i = 0; i < 12; i++) {
-      rotated[i] = KK_MINOR[(i - tonic + 12) % 12] ?? 0;
-    }
-    const cMin = pearson12(chroma, rotated);
-    if (cMaj > bestCorr) {
-      bestCorr = cMaj;
-      bestTonic = tonic;
-      bestMode = "major";
-    }
-    if (cMin > bestCorr) {
-      bestCorr = cMin;
-      bestTonic = tonic;
-      bestMode = "minor";
-    }
-  }
-  // Clamp negative correlations to 0 for cleanliness.
-  return { mode: bestMode, strength: Math.max(0, bestCorr), tonic: bestTonic };
-}
-
-function avg(arr: number[]): number {
-  if (arr.length === 0) {
-    return 0;
-  }
-  let sum = 0;
-  for (const v of arr) {
-    sum += v;
-  }
-  return sum / arr.length;
-}
-
-function stddev(arr: number[], m: number): number {
-  if (arr.length === 0) {
-    return 0;
-  }
-  let sum = 0;
-  for (const v of arr) {
-    sum += (v - m) * (v - m);
-  }
-  return Math.sqrt(sum / arr.length);
 }

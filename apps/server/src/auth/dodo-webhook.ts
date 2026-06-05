@@ -24,7 +24,7 @@ interface DodoPaymentPayload {
  * unique index `usage_ledger_tx_hash_idx WHERE tx_hash IS NOT NULL` makes
  * duplicate webhook deliveries no-ops.
  */
-export function createDodoWebhookHandlers(props: { db: Database }) {
+export const createDodoWebhookHandlers = (props: { db: Database }) => {
   const { db } = props;
 
   return {
@@ -103,4 +103,4 @@ export function createDodoWebhookHandlers(props: { db: Database }) {
       }
     },
   };
-}
+};

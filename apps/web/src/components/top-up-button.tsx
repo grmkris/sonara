@@ -18,7 +18,7 @@ interface TopUpButtonProps {
  * `payment.succeeded`. After redirect back to /credits/success the panel
  * re-fetches the balance.
  */
-export function TopUpButton({ onCredited: _ }: TopUpButtonProps) {
+export const TopUpButton = ({ onCredited: _ }: TopUpButtonProps) => {
   const [busy, setBusy] = useState<Pack["id"] | null>(null);
 
   const handleBuy = async (pack: Pack) => {
@@ -65,4 +65,4 @@ export function TopUpButton({ onCredited: _ }: TopUpButtonProps) {
       ) : null}
     </div>
   );
-}
+};

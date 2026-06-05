@@ -30,7 +30,7 @@ interface CaptureJson {
 }
 
 // Map Content-Type to file extension. Defaults to .jpg.
-function extFromContentType(ct: string | null): string {
+const extFromContentType = (ct: string | null): string => {
   if (!ct) {
     return "jpg";
   }
@@ -45,19 +45,19 @@ function extFromContentType(ct: string | null): string {
     return "gif";
   }
   return "jpg";
-}
+};
 
-async function pathExists(p: string): Promise<boolean> {
+const pathExists = async (p: string): Promise<boolean> => {
   try {
     await access(p);
     return true;
   } catch {
     return false;
   }
-}
+};
 
-async function main(): Promise<void> {
-  const slug = process.argv[2];
+const main = async (): Promise<void> => {
+  const slug = process.argv.at(2);
   if (!slug) {
     console.error(
       "usage: bun run apps/server/src/scripts/ingest-demo.ts <slug>"
@@ -108,7 +108,7 @@ async function main(): Promise<void> {
   );
 
   const localFrames: DemoFrame[] = [];
-  for (let i = 0; i < capture.frames.length; i++) {
+  for (let i = 0; i < capture.frames.length; i += 1) {
     const frame = capture.frames[i];
     if (!frame) {
       continue;
@@ -146,9 +146,11 @@ async function main(): Promise<void> {
   console.log(`[ingest] wrote ${manifestPath}`);
   console.log(`[ingest] deleted ${capturePath}`);
   console.log(`[ingest] done — ${localFrames.length} frames ingested`);
-}
+};
 
-main().catch((error) => {
+try {
+  await main();
+} catch (error) {
   console.error("[ingest] unexpected failure:", error);
   process.exit(1);
-});
+}

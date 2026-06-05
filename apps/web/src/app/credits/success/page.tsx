@@ -1,6 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
+import type { ReactNode } from "react";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
@@ -58,35 +59,44 @@ export default function CheckoutSuccessPage() {
     };
   }, [router]);
 
+  let statusBody: ReactNode;
+  if (status === "waiting") {
+    statusBody = (
+      <p className="font-sans text-[12px] leading-relaxed text-[color:var(--paper)]/80">
+        Crediting your account. This usually takes a few seconds…
+      </p>
+    );
+  } else if (status === "credited") {
+    statusBody = (
+      <p className="font-sans text-[12px] leading-relaxed text-[color:var(--paper)]">
+        Frames credited — back to the visualizer.
+      </p>
+    );
+  } else {
+    statusBody = (
+      <>
+        <p className="font-sans text-[12px] leading-relaxed text-[color:var(--paper)]/80">
+          Payment confirmed but credits haven&apos;t shown up yet. They should
+          arrive shortly. If not, contact support.
+        </p>
+        <button
+          type="button"
+          className="font-mono text-[11px] uppercase tracking-[0.2em] text-[color:var(--signal)] underline"
+          onClick={() => router.push("/play")}
+        >
+          back to visualiser
+        </button>
+      </>
+    );
+  }
+
   return (
     <main className="flex min-h-screen items-center justify-center bg-[color:var(--ink)] p-8">
       <div className="flex w-full max-w-sm flex-col gap-4 border border-[color:var(--hairline)]/50 bg-[color:var(--ink)]/95 p-6 text-center">
         <h1 className="font-mono text-[11px] uppercase tracking-[0.28em] text-[color:var(--stone)]">
           payment received
         </h1>
-        {status === "waiting" ? (
-          <p className="font-sans text-[12px] leading-relaxed text-[color:var(--paper)]/80">
-            Crediting your account. This usually takes a few seconds…
-          </p>
-        ) : status === "credited" ? (
-          <p className="font-sans text-[12px] leading-relaxed text-[color:var(--paper)]">
-            Frames credited — back to the visualizer.
-          </p>
-        ) : (
-          <>
-            <p className="font-sans text-[12px] leading-relaxed text-[color:var(--paper)]/80">
-              Payment confirmed but credits haven&apos;t shown up yet. They
-              should arrive shortly. If not, contact support.
-            </p>
-            <button
-              type="button"
-              className="font-mono text-[11px] uppercase tracking-[0.2em] text-[color:var(--signal)] underline"
-              onClick={() => router.push("/play")}
-            >
-              back to visualiser
-            </button>
-          </>
-        )}
+        {statusBody}
       </div>
     </main>
   );

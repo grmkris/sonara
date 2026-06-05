@@ -56,12 +56,12 @@ const AuddResponse = z.object({
 
 export type AuddMatch = z.infer<typeof AuddResult>;
 
-export async function recognizeWithAudd(
+export const recognizeWithAudd = async (
   buf: Buffer,
   mimeType: string,
   logger: Logger,
   signal?: AbortSignal
-): Promise<AuddMatch | null> {
+): Promise<AuddMatch | null> => {
   const form = new FormData();
   form.append("api_token", env.AUDD_API_KEY);
   form.append("return", "apple_music");
@@ -103,4 +103,4 @@ export async function recognizeWithAudd(
     return null;
   }
   return parsed.data.result ?? null;
-}
+};

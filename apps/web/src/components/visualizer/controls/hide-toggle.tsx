@@ -8,7 +8,7 @@ import { useHotkey } from "@/hooks/use-hotkey";
 import { HOTKEYS } from "@/lib/hotkeys";
 import { useVisualizerStore } from "@/stores/visualizer";
 
-export function HideToggle() {
+export const HideToggle = () => {
   const uiVisible = useVisualizerStore((s) => s.uiVisible);
   const toggleUi = useVisualizerStore((s) => s.toggleUi);
   const setUiVisible = useVisualizerStore((s) => s.setUiVisible);
@@ -32,4 +32,4 @@ export function HideToggle() {
       label={uiVisible ? "hide" : "show"}
     />
   );
-}
+};

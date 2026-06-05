@@ -10,7 +10,7 @@ import { z } from "zod";
 // Lives in shared because it is shipped over the WS event stream
 // (generation.requested) so the client can render it.
 
-const HexColor = z.string().regex(/^#[0-9a-fA-F]{6}$/, "expected #RRGGBB hex");
+const HexColor = z.string().regex(/^#[0-9a-fA-F]{6}$/u, "expected #RRGGBB hex");
 
 export const ResolvedSubjectSchema = z.object({
   action: z.string().optional(),
@@ -33,20 +33,20 @@ export const ResolvedAudioStateSchema = z.object({
 // Core = everything the LLM expander emits. Cached server-side by scene-hash
 // so it is reused across periodic/pause triggers without re-calling the LLM.
 export const ResolvedSceneCoreSchema = z.object({
-  scene: z.string(),
-  subjects: z.array(ResolvedSubjectSchema).min(1),
-  style: z.string(),
+  background: z.string(),
+  camera: ResolvedCameraSchema,
   color_palette: z.array(HexColor),
+  composition: z.string(),
+  drift_candidates: z.array(z.string()),
+  lighting: z.string(),
+  mood: z.string(),
   // Natural-language palette text from the user (e.g. "iridescent pastels").
   // Always-populated fallback for the serializer: used when color_palette is
   // empty (cold-cache / LLM failure) so the prompt never loses palette signal.
   palette_text: z.string().default(""),
-  lighting: z.string(),
-  mood: z.string(),
-  background: z.string(),
-  composition: z.string(),
-  camera: ResolvedCameraSchema,
-  drift_candidates: z.array(z.string()),
+  scene: z.string(),
+  style: z.string(),
+  subjects: z.array(ResolvedSubjectSchema).min(1),
 });
 
 // Full resolved scene = core + per-trigger drift selection + audio snapshot.

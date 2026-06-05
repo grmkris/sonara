@@ -16,7 +16,7 @@ interface SliderRowProps {
   onChange: (v: number) => void;
 }
 
-export function SliderRow({ label, value, onChange }: SliderRowProps) {
+export const SliderRow = ({ label, value, onChange }: SliderRowProps) => {
   const [dragging, setDragging] = useState(false);
   // Optimistic local value drives the thumb at pointer speed. Without it the
   // thumb is bound to `value` (round-tripped store state behind a 60ms debounce
@@ -88,4 +88,4 @@ export function SliderRow({ label, value, onChange }: SliderRowProps) {
       </span>
     </div>
   );
-}
+};

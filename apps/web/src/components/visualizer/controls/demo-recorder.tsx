@@ -11,16 +11,7 @@ import type { Recorder } from "@/lib/demo/recorder";
 // Captures every `currentFrame` transition while recording, then downloads a
 // `capture.json` for the ingest CLI to consume.
 
-export function DemoRecorder() {
-  const params = useSearchParams();
-  const slug = params.get("record");
-  if (!slug) {
-    return null;
-  }
-  return <RecorderPanel slug={slug} />;
-}
-
-function RecorderPanel({ slug }: { slug: string }) {
+const RecorderPanel = ({ slug }: { slug: string }) => {
   // Recreate the recorder when the slug changes; clean up on unmount.
   const recorder = useMemo<Recorder>(() => createRecorder(slug), [slug]);
   useEffect(() => () => recorder.dispose(), [recorder]);
@@ -76,4 +67,13 @@ function RecorderPanel({ slug }: { slug: string }) {
       )}
     </div>
   );
-}
+};
+
+export const DemoRecorder = () => {
+  const params = useSearchParams();
+  const slug = params.get("record");
+  if (!slug) {
+    return null;
+  }
+  return <RecorderPanel slug={slug} />;
+};

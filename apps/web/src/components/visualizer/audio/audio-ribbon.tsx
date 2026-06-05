@@ -10,11 +10,14 @@ import { getCurrentAudioEngine } from "@/hooks/use-audio-features";
 // that decays over a handful of frames. Reads the AnalyserNode directly
 // at 60Hz (no store round-trip).
 
-const GRID_STEP_Y = 8; // px between horizontal grid lines
-const GRID_STEP_X = 60; // px between vertical grid lines
+// px between horizontal grid lines
+const GRID_STEP_Y = 8;
+// px between vertical grid lines
+const GRID_STEP_X = 60;
 const STROKE_ALPHA_MIN = 0.18;
 const STROKE_ALPHA_MAX = 0.85;
-const TRANSIENT_THRESHOLD = 0.085; // RMS jump that counts as a "tick"
+// RMS jump that counts as a "tick"
+const TRANSIENT_THRESHOLD = 0.085;
 const TICK_DECAY_FRAMES = 6;
 
 interface AudioRibbonProps {
@@ -26,7 +29,7 @@ interface Tick {
   life: number;
 }
 
-export function AudioRibbon({ height = 40 }: AudioRibbonProps) {
+export const AudioRibbon = ({ height = 40 }: AudioRibbonProps) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const gridRef = useRef<HTMLCanvasElement | null>(null);
 
@@ -56,7 +59,8 @@ export function AudioRibbon({ height = 40 }: AudioRibbonProps) {
       grid.height = Math.floor(h * dpr);
       gridCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
       gridCtx.clearRect(0, 0, w, h);
-      gridCtx.strokeStyle = "rgba(201, 192, 174, 0.18)"; // --hairline @ 18 %
+      // --hairline @ 18 %
+      gridCtx.strokeStyle = "rgba(201, 192, 174, 0.18)";
       gridCtx.lineWidth = 1;
       // Horizontal rules
       for (let y = GRID_STEP_Y; y < h; y += GRID_STEP_Y) {
@@ -91,8 +95,10 @@ export function AudioRibbon({ height = 40 }: AudioRibbonProps) {
     ro.observe(canvas);
 
     let waveBuf: Uint8Array<ArrayBuffer> | null = null;
-    const paperStroke = "rgba(237, 231, 217, 1)"; // --paper literal
-    const tickStroke = "rgba(164, 52, 58, 0.45)"; // --signal @ 45 %
+    // --paper literal
+    const paperStroke = "rgba(237, 231, 217, 1)";
+    // --signal @ 45 %
+    const tickStroke = "rgba(164, 52, 58, 0.45)";
     let lastRms = 0;
     const ticks: Tick[] = [];
 
@@ -132,7 +138,7 @@ export function AudioRibbon({ height = 40 }: AudioRibbonProps) {
 
       // RMS for alpha modulation + transient detection.
       let sum = 0;
-      for (let i = 0; i < waveBins; i++) {
+      for (let i = 0; i < waveBins; i += 1) {
         const d = (waveBuf[i] ?? 128) - 128;
         sum += d * d;
       }
@@ -154,8 +160,9 @@ export function AudioRibbon({ height = 40 }: AudioRibbonProps) {
       ctx.lineCap = "round";
       ctx.beginPath();
       const slice = w / waveBins;
-      for (let i = 0; i < waveBins; i++) {
-        const v = ((waveBuf[i] ?? 128) - 128) / 128; // -1..1
+      for (let i = 0; i < waveBins; i += 1) {
+        // -1..1
+        const v = ((waveBuf[i] ?? 128) - 128) / 128;
         const y = h / 2 + v * (h / 2) * 0.78;
         const x = i * slice;
         if (i === 0) {
@@ -169,7 +176,7 @@ export function AudioRibbon({ height = 40 }: AudioRibbonProps) {
       // Event ticks — decaying vertical signal-red rules.
       ctx.strokeStyle = tickStroke;
       ctx.lineWidth = 1;
-      for (let i = ticks.length - 1; i >= 0; i--) {
+      for (let i = ticks.length - 1; i >= 0; i -= 1) {
         const t = ticks[i];
         if (!t) {
           continue;
@@ -179,7 +186,7 @@ export function AudioRibbon({ height = 40 }: AudioRibbonProps) {
         ctx.moveTo(t.x + 0.5, 0);
         ctx.lineTo(t.x + 0.5, h);
         ctx.stroke();
-        t.life--;
+        t.life -= 1;
         if (t.life <= 0) {
           ticks.splice(i, 1);
         }
@@ -202,4 +209,4 @@ export function AudioRibbon({ height = 40 }: AudioRibbonProps) {
       style={{ height, width: "100%" }}
     />
   );
-}
+};

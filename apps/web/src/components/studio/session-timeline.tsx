@@ -21,17 +21,85 @@ const FRAME_SIZE_DESKTOP = 56;
 // frames a few seconds apart in a 5-minute session.
 const CLUSTER_FRACTION = 0.01;
 
+interface LayoutEntry {
+  frame: LibraryFrame;
+  leftPct: number;
+  stackIdx: number;
+}
+
+interface Layout {
+  frames: LayoutEntry[];
+  ticks: { ms: number; pct: number; label: string }[];
+  durationMs: number;
+}
+
+const computeTicks = (
+  durationMs: number
+): { ms: number; pct: number; label: string }[] => {
+  // Adaptive interval: every 30s up to 5min, every 1min up to 30min,
+  // every 5min beyond.
+  const minutes = durationMs / 60_000;
+  let intervalMs = 5 * 60_000;
+  if (minutes < 5) {
+    intervalMs = 30_000;
+  } else if (minutes < 30) {
+    intervalMs = 60_000;
+  }
+  const ticks: { ms: number; pct: number; label: string }[] = [];
+  for (let ms = 0; ms <= durationMs; ms += intervalMs) {
+    ticks.push({
+      label: formatMmSs(ms),
+      ms,
+      pct: (ms / durationMs) * 100,
+    });
+  }
+  return ticks;
+};
+
+const computeLayout = (frames: LibraryFrame[]): Layout => {
+  if (frames.length === 0) {
+    return { durationMs: 0, frames: [], ticks: [] };
+  }
+  // Frames arrive ordered by tMs ASC per library.bySession.
+  const lastTMs = frames.at(-1)?.tMs ?? 0;
+  // Guard: at least 1s of timeline so a single frame still positions.
+  const durationMs = Math.max(lastTMs, 1000);
+
+  // Cluster check: if a frame's tMs is within CLUSTER_FRACTION of the
+  // previous frame's tMs at the SAME stackIdx, push it one row down.
+  const entries: LayoutEntry[] = [];
+  // index = stackIdx, value = last tMs at that row
+  const lastAtStack: number[] = [];
+  const clusterWindowMs = durationMs * CLUSTER_FRACTION;
+
+  for (const f of frames) {
+    let stackIdx = 0;
+    while (
+      lastAtStack[stackIdx] !== undefined &&
+      f.tMs - (lastAtStack[stackIdx] ?? 0) < clusterWindowMs
+    ) {
+      stackIdx += 1;
+    }
+    lastAtStack[stackIdx] = f.tMs;
+    const leftPct = (f.tMs / durationMs) * 100;
+    entries.push({ frame: f, leftPct, stackIdx });
+  }
+
+  const ticks = computeTicks(durationMs);
+  return { durationMs, frames: entries, ticks };
+};
+
 // Time-coded horizontal timeline. Frames are positioned along the
 // horizontal axis by their `tMs` proportionally to the session duration.
 // Tickmarks underneath at adaptive intervals (every 30s for <5min, every
 // 1min for <30min, every 5min for longer). Frames that cluster within
 // 1% of total duration stack vertically with the older one beneath.
-export function SessionTimeline({
+export const SessionTimeline = ({
   frames,
   loading,
   selectedFrameId,
   onSelectFrame,
-}: SessionTimelineProps) {
+}: SessionTimelineProps) => {
   const layout = useMemo(() => computeLayout(frames), [frames]);
 
   if (loading) {
@@ -50,7 +118,10 @@ export function SessionTimeline({
     );
   }
 
-  const maxStack = layout.frames.reduce((m, f) => Math.max(m, f.stackIdx), 0);
+  let maxStack = 0;
+  for (const f of layout.frames) {
+    maxStack = Math.max(maxStack, f.stackIdx);
+  }
   const trackHeight = FRAME_SIZE_DESKTOP * (maxStack + 1) + maxStack * 4;
 
   return (
@@ -60,7 +131,7 @@ export function SessionTimeline({
           session timeline
         </span>
         <h2 className="font-sans text-[14px] uppercase tracking-[0.18em] text-[color:var(--paper)]/90">
-          {frames.length} frame{frames.length !== 1 ? "s" : ""}
+          {frames.length} frame{frames.length === 1 ? "" : "s"}
           {" · "}
           {formatDuration(layout.durationMs)}
         </h2>
@@ -106,66 +177,4 @@ export function SessionTimeline({
       </div>
     </div>
   );
-}
-
-interface LayoutEntry {
-  frame: LibraryFrame;
-  leftPct: number;
-  stackIdx: number;
-}
-
-interface Layout {
-  frames: LayoutEntry[];
-  ticks: { ms: number; pct: number; label: string }[];
-  durationMs: number;
-}
-
-function computeLayout(frames: LibraryFrame[]): Layout {
-  if (frames.length === 0) {
-    return { durationMs: 0, frames: [], ticks: [] };
-  }
-  // Frames arrive ordered by tMs ASC per library.bySession.
-  const lastTMs = frames.at(-1)?.tMs ?? 0;
-  // Guard: at least 1s of timeline so a single frame still positions.
-  const durationMs = Math.max(lastTMs, 1000);
-
-  // Cluster check: if a frame's tMs is within CLUSTER_FRACTION of the
-  // previous frame's tMs at the SAME stackIdx, push it one row down.
-  const entries: LayoutEntry[] = [];
-  const lastAtStack: number[] = []; // index = stackIdx, value = last tMs at that row
-  const clusterWindowMs = durationMs * CLUSTER_FRACTION;
-
-  for (const f of frames) {
-    let stackIdx = 0;
-    while (
-      lastAtStack[stackIdx] !== undefined &&
-      f.tMs - (lastAtStack[stackIdx] ?? 0) < clusterWindowMs
-    ) {
-      stackIdx++;
-    }
-    lastAtStack[stackIdx] = f.tMs;
-    const leftPct = (f.tMs / durationMs) * 100;
-    entries.push({ frame: f, leftPct, stackIdx });
-  }
-
-  const ticks = computeTicks(durationMs);
-  return { durationMs, frames: entries, ticks };
-}
-
-function computeTicks(
-  durationMs: number
-): { ms: number; pct: number; label: string }[] {
-  // Adaptive interval: every 30s up to 5min, every 1min up to 30min,
-  // every 5min beyond.
-  const minutes = durationMs / 60_000;
-  const intervalMs = minutes < 5 ? 30_000 : minutes < 30 ? 60_000 : 5 * 60_000;
-  const ticks: { ms: number; pct: number; label: string }[] = [];
-  for (let ms = 0; ms <= durationMs; ms += intervalMs) {
-    ticks.push({
-      label: formatMmSs(ms),
-      ms,
-      pct: (ms / durationMs) * 100,
-    });
-  }
-  return ticks;
-}
+};

@@ -5,18 +5,18 @@ import { z } from "zod";
 // Prefixes must be unique, lowercase, and stable — they become part of the
 // serialized id format and renaming one is a breaking change.
 export const idTypesMapNameToPrefix = {
-  user: "usr",
-  session: "ses",
   account: "acc",
-  verification: "ver",
-  credits: "crd",
-  usageLedger: "usg",
   allowedEmail: "alw",
+  credits: "crd",
   imageLibrary: "img",
   // Visualizer WS session — minted in-memory on each Session construction.
   // Distinct from `session` (Better Auth's browser session). Used to group
   // image_library rows by live-play session for the timeline view.
   liveSession: "lse",
+  session: "ses",
+  usageLedger: "usg",
+  user: "usr",
+  verification: "ver",
 } as const;
 
 export type IdTypePrefixNames = keyof typeof idTypesMapNameToPrefix;

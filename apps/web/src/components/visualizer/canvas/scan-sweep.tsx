@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 
 import { useVisualizerStore } from "@/stores/visualizer";
 
-export function ScanSweep() {
+export const ScanSweep = () => {
   const pulse = useVisualizerStore((s) => s.sweepPulse);
   const [active, setActive] = useState(false);
 
@@ -21,4 +21,4 @@ export function ScanSweep() {
     return null;
   }
   return <span aria-hidden className="ink-sweep" key={pulse} />;
-}
+};

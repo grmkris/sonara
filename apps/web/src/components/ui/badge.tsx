@@ -26,19 +26,17 @@ const badgeVariants = cva(
   }
 );
 
-function Badge({
+const Badge = ({
   className,
   variant = "default",
   ...props
-}: ComponentProps<"span"> & VariantProps<typeof badgeVariants>) {
-  return (
-    <span
-      data-slot="badge"
-      data-variant={variant}
-      className={cn(badgeVariants({ variant }), className)}
-      {...props}
-    />
-  );
-}
+}: ComponentProps<"span"> & VariantProps<typeof badgeVariants>) => (
+  <span
+    data-slot="badge"
+    data-variant={variant}
+    className={cn(badgeVariants({ variant }), className)}
+    {...props}
+  />
+);
 
 export { Badge, badgeVariants };

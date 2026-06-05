@@ -31,13 +31,11 @@ const SLIDERS: { key: SliderKey; label: string }[] = [
 // reactive it is (INTENSITY, the master dial) → refine the visual treatment
 // (preset + feel). Hairline rules segment the three movements.
 
-function Divider() {
-  return (
-    <div aria-hidden className="h-px w-full bg-[color:var(--hairline)]/20" />
-  );
-}
+const Divider = () => (
+  <div aria-hidden className="h-px w-full bg-[color:var(--hairline)]/20" />
+);
 
-export function ControlsPanel({ send }: ControlsPanelProps) {
+export const ControlsPanel = ({ send }: ControlsPanelProps) => {
   const scene = useVisualizerStore((s) => s.scene);
 
   const patchSlider = (key: SliderKey, value: number) =>
@@ -76,4 +74,4 @@ export function ControlsPanel({ send }: ControlsPanelProps) {
       </div>
     </div>
   );
-}
+};

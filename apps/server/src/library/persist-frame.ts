@@ -42,7 +42,8 @@ export interface PersistFrameInput {
 
 export interface PersistedFrame {
   id: ImageLibraryId;
-  url: string; // presigned read URL
+  // presigned read URL
+  url: string;
   width: number;
   height: number;
   palette: string[] | null;
@@ -59,9 +60,9 @@ export interface PersistedFrame {
 // any failure (bucket not configured, fal fetch failed, upload failed,
 // DB insert failed). NEVER throws; the caller fire-and-forgets and the
 // rendering hot path is never blocked.
-export async function persistFrame(
+export const persistFrame = async (
   input: PersistFrameInput
-): Promise<PersistedFrame | null> {
+): Promise<PersistedFrame | null> => {
   const { logger } = input;
 
   if (!isConfigured()) {
@@ -96,7 +97,7 @@ export async function persistFrame(
     bytes = await res.arrayBuffer();
   } catch (error) {
     logger.warn(
-      { sessionId: input.sessionId, falUrl: input.falUrl, err: String(error) },
+      { err: String(error), falUrl: input.falUrl, sessionId: input.sessionId },
       "persist-frame: fal fetch threw"
     );
     return null;
@@ -106,7 +107,7 @@ export async function persistFrame(
     await uploadBytes(key, bytes, contentType);
   } catch (error) {
     logger.warn(
-      { sessionId: input.sessionId, key, err: String(error) },
+      { err: String(error), key, sessionId: input.sessionId },
       "persist-frame: bucket upload failed"
     );
     return null;
@@ -164,7 +165,7 @@ export async function persistFrame(
     }
   } catch (error) {
     logger.warn(
-      { sessionId: input.sessionId, key, err: String(error) },
+      { err: String(error), key, sessionId: input.sessionId },
       "persist-frame: DB insert failed (object orphaned in bucket)"
     );
     return null;
@@ -182,4 +183,4 @@ export async function persistFrame(
     url: presignReadUrl(key),
     width: input.width,
   };
-}
+};

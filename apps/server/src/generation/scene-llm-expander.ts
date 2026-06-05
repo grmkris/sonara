@@ -16,8 +16,8 @@ import type { Logger } from "../lib/logger";
 const DEFAULT_MODEL = "google/gemini-2.5-flash-lite";
 const MAX_OUTPUT_TOKENS = 600;
 
-function buildSystemPrompt(): string {
-  return `You parse a single user-written prompt sentence into a structured FLUX.2 prompt object. Given the user's prompt and 5 slider values, emit a SINGLE JSON object — no prose, no markdown fences. The object MUST match this schema exactly:
+const buildSystemPrompt = (): string =>
+  `You parse a single user-written prompt sentence into a structured FLUX.2 prompt object. Given the user's prompt and 5 slider values, emit a SINGLE JSON object — no prose, no markdown fences. The object MUST match this schema exactly:
 
 {
   "scene": string,                          // 2-5 word title for this look
@@ -55,9 +55,8 @@ RULES:
 - drift_candidates: evocative ink/paper/light/motion clauses thematically tied to subjects[0] + mood. Vary them — don't repeat words across entries.
 - Stay sumi-e / ethereal / dreamlike unless the user's prompt explicitly names a different register.
 - Output ONLY the JSON object. No fences. No commentary.`;
-}
 
-function buildUserPrompt(s: SonaraSceneState): string {
+const buildUserPrompt = (s: SonaraSceneState): string => {
   const prompt = s.prompt.trim();
   return `User prompt: ${prompt.length > 0 ? `"${prompt}"` : "(blank)"}
 
@@ -69,13 +68,13 @@ Sliders (0..1):
   stability: ${s.stability.toFixed(2)}
 
 Emit the JSON object.`;
-}
+};
 
 interface AnyLlmResult {
   output?: string;
 }
 
-function extractOutput(data: unknown): string | null {
+const extractOutput = (data: unknown): string | null => {
   if (!data || typeof data !== "object") {
     return null;
   }
@@ -84,30 +83,30 @@ function extractOutput(data: unknown): string | null {
     return r.output;
   }
   return null;
-}
+};
 
-function stripFences(text: string): string {
+const stripFences = (text: string): string => {
   let out = text.trim();
-  const fence = /^```(?:json)?\s*\n?([\s\S]*?)\n?```$/;
+  const fence = /^```(?:json)?\s*\n?([\s\S]*?)\n?```$/u;
   const m = out.match(fence);
   if (m?.[1]) {
     out = m[1].trim();
   }
   return out;
-}
+};
 
 // Heuristic anchor extraction: take the first ~5 words of the prompt as the
 // stand-in subject. Used for the deterministic fallback when the LLM hasn't
 // expanded yet (cold cache or error path). The LLM rewrites `subjects[0]`
 // with a better choice on its hot-path completion.
-function anchorFromPrompt(prompt: string): string {
+const anchorFromPrompt = (prompt: string): string => {
   const trimmed = prompt.trim();
   if (trimmed.length === 0) {
     return "abstract form";
   }
-  const words = trimmed.split(/\s+/);
+  const words = trimmed.split(/\s+/u);
   return words.slice(0, 5).join(" ");
-}
+};
 
 // Deterministic fallback used when the LLM errors / returns garbage, AND on
 // cold-cache first frames before the background LLM expansion lands. No
@@ -115,7 +114,9 @@ function anchorFromPrompt(prompt: string): string {
 // on the expander. Hex palette is intentionally empty — serializer falls back
 // to `palette_text` (which is also empty here; the user's raw prompt carries
 // the palette signal directly in this case).
-export function deterministicResolve(s: SonaraSceneState): ResolvedSceneCore {
+export const deterministicResolve = (
+  s: SonaraSceneState
+): ResolvedSceneCore => {
   const anchor = anchorFromPrompt(s.prompt);
   const compositionParts: string[] = [];
   if (s.surrealness > 0.7) {
@@ -164,17 +165,17 @@ export function deterministicResolve(s: SonaraSceneState): ResolvedSceneCore {
     style: styleParts.join(", "),
     subjects: [{ description: anchor }],
   };
-}
+};
 
 export interface ExpandSceneOpts {
   signal?: AbortSignal;
   logger: Logger;
 }
 
-export async function expandScene(
+export const expandScene = async (
   scene: SonaraSceneState,
   opts: ExpandSceneOpts
-): Promise<ResolvedSceneCore> {
+): Promise<ResolvedSceneCore> => {
   const model = env.FAL_LLM_MODEL ?? DEFAULT_MODEL;
   const scoped = createFalClient({ credentials: env.FAL_KEY });
 
@@ -223,8 +224,10 @@ export async function expandScene(
 
     return validated.data;
   } catch (error) {
-    if (opts.signal?.aborted) return deterministicResolve(scene);
+    if (opts.signal?.aborted) {
+      return deterministicResolve(scene);
+    }
     opts.logger.warn({ error }, "scene-expander: fal any-llm error");
     return deterministicResolve(scene);
   }
-}
+};

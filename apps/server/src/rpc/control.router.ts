@@ -38,11 +38,11 @@ const SetImageAnchorInput = z.union([
 // ctx.userId is the user's typeid (usr_…) but Session.userId is the raw UUID
 // (the WS ticket converts it — see auth.router mintWsTicket), so we convert
 // before comparing. Unknown id → NOT_FOUND; someone else's session → FORBIDDEN.
-function resolveOwnedSession(
+const resolveOwnedSession = (
   registry: { getByLiveSessionId(id: string): ControllableSession | undefined },
   userId: UserId,
   liveSessionId: string
-): ControllableSession {
+): ControllableSession => {
   const session = registry.getByLiveSessionId(liveSessionId);
   if (!session) {
     throw new ORPCError("NOT_FOUND", {
@@ -54,9 +54,23 @@ function resolveOwnedSession(
     throw new ORPCError("FORBIDDEN");
   }
   return session;
-}
+};
 
 export const controlRouter = {
+  // The operator has no canvas, so there's no on-screen deck frame to hand off
+  // from — seed from the server's last final frame if there is one, else start
+  // text-only.
+  goLive: protectedProcedure
+    .input(GoLiveInput)
+    .handler(({ context, input }) => {
+      const session = resolveOwnedSession(
+        context.registry,
+        context.userId,
+        input.liveSessionId
+      );
+      session.goLive(input.prompt, session.getControlSnapshot().lastFrameUrl);
+    }),
+
   // The caller's currently-live sessions (usually one — the projector). The
   // operator UI lists these to pick / auto-select, and re-resolves on every
   // poll so it follows a reconnect that minted a fresh liveSessionId.
@@ -80,18 +94,15 @@ export const controlRouter = {
     return { sessions };
   }),
 
-  // Full snapshot of one owned live session. Polled (~1s) by the operator UI to
-  // hydrate the same zustand store the WS path feeds — current scene, status,
-  // and the last frame URL for the thumbnail.
-  snapshot: protectedProcedure
+  reset: protectedProcedure
     .input(ByLiveSession)
-    .handler(({ context, input }) =>
+    .handler(({ context, input }) => {
       resolveOwnedSession(
         context.registry,
         context.userId,
         input.liveSessionId
-      ).getControlSnapshot()
-    ),
+      ).reset();
+    }),
 
   scenePatch: protectedProcedure
     .input(ScenePatchInput)
@@ -101,20 +112,6 @@ export const controlRouter = {
         context.userId,
         input.liveSessionId
       ).applyPatch(input.patch, "client");
-    }),
-
-  // The operator has no canvas, so there's no on-screen deck frame to hand off
-  // from — seed from the server's last final frame if there is one, else start
-  // text-only.
-  goLive: protectedProcedure
-    .input(GoLiveInput)
-    .handler(({ context, input }) => {
-      const session = resolveOwnedSession(
-        context.registry,
-        context.userId,
-        input.liveSessionId
-      );
-      session.goLive(input.prompt, session.getControlSnapshot().lastFrameUrl);
     }),
 
   setDemoMode: protectedProcedure
@@ -142,13 +139,16 @@ export const controlRouter = {
       );
     }),
 
-  reset: protectedProcedure
+  // Full snapshot of one owned live session. Polled (~1s) by the operator UI to
+  // hydrate the same zustand store the WS path feeds — current scene, status,
+  // and the last frame URL for the thumbnail.
+  snapshot: protectedProcedure
     .input(ByLiveSession)
-    .handler(({ context, input }) => {
+    .handler(({ context, input }) =>
       resolveOwnedSession(
         context.registry,
         context.userId,
         input.liveSessionId
-      ).reset();
-    }),
+      ).getControlSnapshot()
+    ),
 };

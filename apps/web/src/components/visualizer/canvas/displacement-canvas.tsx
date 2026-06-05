@@ -54,9 +54,8 @@ const SESSION_ARC_MS = 20 * 60_000;
 // Module-level ref to the active WebGL canvas so sibling overlays (e.g. the
 // slit-scan trail) can sample from it without prop-drilling.
 let currentCanvas: HTMLCanvasElement | null = null;
-export function getCurrentDisplacementCanvas(): HTMLCanvasElement | null {
-  return currentCanvas;
-}
+export const getCurrentDisplacementCanvas = (): HTMLCanvasElement | null =>
+  currentCanvas;
 
 interface EnvelopeBundle {
   rms: VuEnvelope;
@@ -66,10 +65,10 @@ interface EnvelopeBundle {
 }
 
 // Carry prior value/peak so intensity-driven rebuilds don't snap to 0.
-function buildEnvelopes(
+const buildEnvelopes = (
   intensity: number,
   prev?: EnvelopeBundle
-): EnvelopeBundle {
+): EnvelopeBundle => {
   const c = intensityCoefficients(intensity);
   const make = (p?: VuEnvelope) =>
     createVuEnvelope({
@@ -87,7 +86,7 @@ function buildEnvelopes(
     rms: make(prev?.rms),
     treble: make(prev?.treble),
   };
-}
+};
 
 interface TextureSlot {
   tex: WebGLTexture;
@@ -104,39 +103,43 @@ interface DropLayer {
 // Pick four representative stops from a palette of arbitrary length so the
 // gradient covers dark→light without dropping detail when the LLM returns
 // only 3 colours or 7. Always returns exactly 4 #RRGGBB strings.
-function padPaletteToFour(colors: string[]): [string, string, string, string] {
+const padPaletteToFour = (
+  colors: string[]
+): [string, string, string, string] => {
   if (colors.length === 0) {
     return ["#000000", "#444444", "#aaaaaa", "#ffffff"];
   }
+  const last = colors.at(-1) ?? "#ffffff";
   if (colors.length >= 4) {
     return [
-      colors[0]!,
-      colors[Math.floor(colors.length / 3)]!,
-      colors[Math.floor((2 * colors.length) / 3)]!,
-      colors.at(-1)!,
+      colors[0] ?? last,
+      colors[Math.floor(colors.length / 3)] ?? last,
+      colors[Math.floor((2 * colors.length) / 3)] ?? last,
+      last,
     ];
   }
   const out = [...colors];
   while (out.length < 4) {
-    out.push(colors[colors.length - 1]!);
+    out.push(last);
   }
-  return [out[0]!, out[1]!, out[2]!, out[3]!];
-}
+  return [out[0] ?? last, out[1] ?? last, out[2] ?? last, out[3] ?? last];
+};
 
-function hexToRgb(hex: string): [number, number, number] {
+const hexToRgb = (hex: string): [number, number, number] => {
   const r = Number.parseInt(hex.slice(1, 3), 16) / 255;
   const g = Number.parseInt(hex.slice(3, 5), 16) / 255;
   const b = Number.parseInt(hex.slice(5, 7), 16) / 255;
   return [r, g, b];
-}
+};
 interface DropLayers {
   l1: DropLayer;
   l2: DropLayer;
   l3: DropLayer;
 }
 
-function randomDropLayers(): DropLayers {
-  const rand = () => Math.random();
+const rand = () => Math.random();
+
+const randomDropLayers = (): DropLayers => {
   const aX = 0.5 + (rand() - 0.5) * 0.25;
   const aY = 0.5 + (rand() - 0.5) * 0.25;
   return {
@@ -171,7 +174,7 @@ function randomDropLayers(): DropLayers {
       ],
     },
   };
-}
+};
 
 interface DabPositions {
   kick: [number, number];
@@ -180,10 +183,10 @@ interface DabPositions {
   vocal: [number, number];
 }
 
-function rollDab(
+const rollDab = (
   kind: "kick" | "snare" | "hat" | "vocal",
   centroid: number
-): [number, number] {
+): [number, number] => {
   const r = Math.random;
   switch (kind) {
     case "kick": {
@@ -198,16 +201,19 @@ function rollDab(
     case "vocal": {
       return [0.25 + centroid * 0.5 + (r() - 0.5) * 0.15, 0.3 + r() * 0.4];
     }
+    default: {
+      return [0.5, 0.5];
+    }
   }
-}
+};
 
 // Apply slow LFO drift to a base preset config. Modifies a few fields so the
 // preset doesn't sit still even on long tenures.
-function applyDrift(
+const applyDrift = (
   base: PresetConfig,
   drift: PresetDrift,
   tSec: number
-): PresetConfig {
+): PresetConfig => {
   const d = { ...base };
   if (drift.bloomMult) {
     d.bloomMult = Math.max(
@@ -235,9 +241,9 @@ function applyDrift(
     );
   }
   return d;
-}
+};
 
-export function DisplacementCanvas() {
+export const DisplacementCanvas = () => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
   useEffect(() => {
@@ -274,6 +280,7 @@ export function DisplacementCanvas() {
 
     gl.useProgram(program);
 
+    // oxlint-disable-next-line sort-keys -- uniform-location map is grouped by render concern (effects-deck block) with explanatory comments; alphabetising would scatter that structure
     const uni = {
       uCurr: gl.getUniformLocation(program, "uCurr"),
       uPrev: gl.getUniformLocation(program, "uPrev"),
@@ -399,7 +406,9 @@ export function DisplacementCanvas() {
     // frame supersedes this URL.
     const loadFrame = (url: string, attempt: number) => {
       if (pendingImg) {
+        // oxlint-disable-next-line unicorn/prefer-add-event-listener -- detaching the prior pending image's handlers; addEventListener has no nulling equivalent
         pendingImg.onload = null;
+        // oxlint-disable-next-line unicorn/prefer-add-event-listener -- detaching the prior pending image's handlers
         pendingImg.onerror = null;
         pendingImg = null;
       }
@@ -408,6 +417,7 @@ export function DisplacementCanvas() {
       pendingImg = img;
 
       const target = getInactive();
+      // oxlint-disable-next-line unicorn/prefer-add-event-listener -- onload assignment is paired with onload=null detach elsewhere; keep assignment semantics
       img.onload = () => {
         if (pendingImg !== img) {
           return;
@@ -425,6 +435,7 @@ export function DisplacementCanvas() {
         drops = randomDropLayers();
         markImageLoaded();
       };
+      // oxlint-disable-next-line unicorn/prefer-add-event-listener -- onerror assignment is paired with onerror=null detach elsewhere; keep assignment semantics
       img.onerror = () => {
         if (pendingImg !== img) {
           return;
@@ -464,6 +475,7 @@ export function DisplacementCanvas() {
         img.crossOrigin = "anonymous";
         pendingImg = img;
         const target = getInactive();
+        // oxlint-disable-next-line unicorn/prefer-add-event-listener -- onload assignment paired with onload=null detach; keep assignment semantics
         img.onload = () => {
           if (pendingImg !== img) {
             return;
@@ -484,6 +496,7 @@ export function DisplacementCanvas() {
           drops = randomDropLayers();
           markImageLoaded();
         };
+        // oxlint-disable-next-line unicorn/prefer-add-event-listener -- onerror assignment paired with onerror=null detach; keep assignment semantics
         img.onerror = () => {
           if (pendingImg === img) {
             pendingImg = null;
@@ -504,6 +517,11 @@ export function DisplacementCanvas() {
     let currentPresetName: PresetName = useVisualizerStore.getState().preset;
     let currentDrift: PresetDrift = makeDriftForPreset(currentPresetName);
 
+    // Tracks the snapshot used by applyPreset — captured from the last frame's
+    // rendered uniforms.
+    let lastEffective: PresetConfig = { ...BASE };
+    const effectiveCfgSnapshot = (): PresetConfig => ({ ...lastEffective });
+
     const applyPreset = (newName: PresetName, atMs: number) => {
       // Snapshot whatever is currently being rendered as the fade-source.
       fromCfg = effectiveCfgSnapshot();
@@ -517,11 +535,6 @@ export function DisplacementCanvas() {
       currentPresetName = newName;
       currentDrift = makeDriftForPreset(newName);
     };
-
-    // Tracks the snapshot used by applyPreset — captured from the last frame's
-    // rendered uniforms.
-    let lastEffective: PresetConfig = { ...BASE };
-    const effectiveCfgSnapshot = (): PresetConfig => ({ ...lastEffective });
 
     // Watch the store for preset selection. The store increments `presetTick`
     // whenever `setPreset` is called, so changes propagate even when the name
@@ -548,7 +561,7 @@ export function DisplacementCanvas() {
         return;
       }
       const stops = padPaletteToFour(hexes);
-      for (let i = 0; i < 4; i++) {
+      for (let i = 0; i < 4; i += 1) {
         const stop = stops[i];
         if (!stop) {
           continue;
@@ -607,6 +620,7 @@ export function DisplacementCanvas() {
     const mountedAt = performance.now();
 
     let raf = 0;
+    // oxlint-disable-next-line complexity -- single per-frame render loop; splitting it would add per-frame closure/allocation overhead and obscure the linear GPU uniform-upload sequence
     const tick = () => {
       raf = requestAnimationFrame(tick);
       const state = useVisualizerStore.getState();
@@ -692,11 +706,10 @@ export function DisplacementCanvas() {
       const currSlot = getCurr();
       const prevSlot = getPrev();
       const hasPrev = state.previousFrame !== null && prevSlot.loaded;
+      const settledBleed = currSlot.loaded ? 1 : 0;
       const bleedT =
         state.crossfadeStartedAt === null
-          ? currSlot.loaded
-            ? 1
-            : 0
+          ? settledBleed
           : Math.min(
               1,
               (now - state.crossfadeStartedAt) / (hasPrev ? BLEED_MS : FADE_MS)
@@ -758,7 +771,14 @@ export function DisplacementCanvas() {
           nextPeekAt =
             now + peekIntervalMinNow + Math.random() * peekIntervalJitterNow;
         } else {
-          const peekT = p < 0.4 ? p / 0.4 : p < 0.6 ? 1 : 1 - (p - 0.6) / 0.4;
+          let peekT: number;
+          if (p < 0.4) {
+            peekT = p / 0.4;
+          } else if (p < 0.6) {
+            peekT = 1;
+          } else {
+            peekT = 1 - (p - 0.6) / 0.4;
+          }
           effective = lerpPreset(effective, peekCfg, peekT);
         }
       }
@@ -933,9 +953,10 @@ export function DisplacementCanvas() {
       // Palette lerp: 1.5s time-constant fade toward the FLUX-derived palette.
       // Frame-rate independent (alpha derived from dtMs).
       const palAlpha = 1 - Math.exp(-dtMs / 1500);
-      for (let i = 0; i < 12; i++) {
-        currentPalette[i]! +=
-          palAlpha * (targetPalette[i]! - currentPalette[i]!);
+      for (let i = 0; i < 12; i += 1) {
+        const cur = currentPalette[i] ?? 0;
+        const tgt = targetPalette[i] ?? 0;
+        currentPalette[i] = cur + palAlpha * (tgt - cur);
       }
       currentPaletteAmount +=
         palAlpha * (targetPaletteAmount - currentPaletteAmount);
@@ -968,7 +989,9 @@ export function DisplacementCanvas() {
         clearTimeout(retryTimer);
       }
       if (pendingImg) {
+        // oxlint-disable-next-line unicorn/prefer-add-event-listener -- detaching handlers on unmount; addEventListener has no nulling equivalent
         pendingImg.onload = null;
+        // oxlint-disable-next-line unicorn/prefer-add-event-listener -- detaching handlers on unmount
         pendingImg.onerror = null;
       }
       if (currentCanvas === canvas) {
@@ -993,4 +1016,4 @@ export function DisplacementCanvas() {
       style={{ willChange: "transform" }}
     />
   );
-}
+};

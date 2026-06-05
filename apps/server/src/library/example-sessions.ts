@@ -32,17 +32,14 @@ const MAX_FRAMES_PER_DECK = 14;
 // DECKS order (newest first) even if re-sorted by date.
 const SESSION_STAGGER_MS = 3_600_000;
 
-export function exampleSessionId(deck: string): LiveSessionId {
-  return `${EXAMPLE_PREFIX}${deck}` as LiveSessionId;
-}
+export const exampleSessionId = (deck: string): LiveSessionId =>
+  `${EXAMPLE_PREFIX}${deck}` as LiveSessionId;
 
-export function isExampleSessionId(id: string): boolean {
-  return id.startsWith(EXAMPLE_PREFIX);
-}
+export const isExampleSessionId = (id: string): boolean =>
+  id.startsWith(EXAMPLE_PREFIX);
 
-export function deckFromExampleSessionId(id: string): string {
-  return id.slice(EXAMPLE_PREFIX.length);
-}
+export const deckFromExampleSessionId = (id: string): string =>
+  id.slice(EXAMPLE_PREFIX.length);
 
 interface SeedRow {
   id: LibraryFrame["id"];
@@ -59,15 +56,19 @@ interface SeedRow {
 // so it works as a browser <img src>, a download, AND a server-side anchor
 // fetch (which needs an absolute URL, exactly like a real generated frame's
 // presigned URL).
-function toAbsoluteUrl(url: string): string {
+const toAbsoluteUrl = (url: string): string => {
   if (url.includes("://")) {
     return url;
   }
-  const base = SERVICE_URLS[env.APP_ENV].web.replace(/\/+$/, "");
+  const base = SERVICE_URLS[env.APP_ENV].web.replace(/\/+$/u, "");
   return `${base}${url.startsWith("/") ? "" : "/"}${url}`;
-}
+};
 
-async function fetchSeedRows(db: Database, deck?: string): Promise<SeedRow[]> {
+// oxlint-disable-next-line require-await -- returns a drizzle thenable query builder; keep async so the declared Promise<SeedRow[]> return type holds
+const fetchSeedRows = async (
+  db: Database,
+  deck?: string
+): Promise<SeedRow[]> => {
   const conditions = [
     eq(SCHEMA.imageLibrary.source, "seed"),
     eq(SCHEMA.imageLibrary.status, "active"),
@@ -92,14 +93,14 @@ async function fetchSeedRows(db: Database, deck?: string): Promise<SeedRow[]> {
       // Stable ordering so the synthetic timeline is deterministic per deck.
       .orderBy(asc(SCHEMA.imageLibrary.deck), asc(SCHEMA.imageLibrary.id))
   );
-}
+};
 
 // Maps one deck's seed rows to a synthetic, chronologically-ordered frame set.
-function rowsToFrames(
+const rowsToFrames = (
   deck: string,
   rows: SeedRow[],
   now: number
-): LibraryFrame[] {
+): LibraryFrame[] => {
   const deckIndex = Math.max(0, DECK_KEYS.indexOf(deck as never));
   const capped = rows.slice(0, MAX_FRAMES_PER_DECK);
   const sessionEnd = now - deckIndex * SESSION_STAGGER_MS;
@@ -120,13 +121,13 @@ function rowsToFrames(
     url: toAbsoluteUrl(row.url),
     width: row.width,
   }));
-}
+};
 
 // One example session per non-empty seed deck, in DECKS order. Used as the
 // sessions() fallback when the user has no real sessions.
-export async function buildExampleSessions(
+export const buildExampleSessions = async (
   db: Database
-): Promise<SessionSummary[]> {
+): Promise<SessionSummary[]> => {
   const rows = await fetchSeedRows(db);
   if (rows.length === 0) {
     return [];
@@ -151,7 +152,7 @@ export async function buildExampleSessions(
       continue;
     }
     const frames = rowsToFrames(deck, deckRows, now);
-    const first = frames[0];
+    const [first] = frames;
     const last = frames.at(-1);
     if (!first || !last) {
       continue;
@@ -166,17 +167,17 @@ export async function buildExampleSessions(
     });
   }
   return summaries;
-}
+};
 
 // Frames for a single example session. Used as the bySession() short-circuit
 // when the requested sessionId is an example id.
-export async function buildExampleFrames(
+export const buildExampleFrames = async (
   db: Database,
   deck: string
-): Promise<LibraryFrame[]> {
+): Promise<LibraryFrame[]> => {
   const rows = await fetchSeedRows(db, deck);
   if (rows.length === 0) {
     return [];
   }
   return rowsToFrames(deck, rows, Date.now());
-}
+};

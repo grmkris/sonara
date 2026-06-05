@@ -56,7 +56,7 @@ const LEVEL_MAP: Record<Exclude<LogLevel, "silent">, EvlogLevel> = {
 
 type EmitLevel = "info" | "warn" | "debug" | "error";
 
-function toFields(objOrMsg: unknown): Record<string, unknown> {
+const toFields = (objOrMsg: unknown): Record<string, unknown> => {
   if (objOrMsg instanceof Error) {
     return { error: objOrMsg.message, stack: objOrMsg.stack };
   }
@@ -64,9 +64,12 @@ function toFields(objOrMsg: unknown): Record<string, unknown> {
     return { ...(objOrMsg as Record<string, unknown>) };
   }
   return { value: objOrMsg };
-}
+};
 
-function buildLogger(tag: string, bindings: Record<string, unknown>): Logger {
+const buildLogger = (
+  tag: string,
+  bindings: Record<string, unknown>
+): Logger => {
   const hasBindings = Object.keys(bindings).length > 0;
 
   const emit = (level: EmitLevel, objOrMsg: unknown, msg?: string): void => {
@@ -94,14 +97,14 @@ function buildLogger(tag: string, bindings: Record<string, unknown>): Logger {
     info: (objOrMsg: unknown, msg?: string) => emit("info", objOrMsg, msg),
     warn: (objOrMsg: unknown, msg?: string) => emit("warn", objOrMsg, msg),
   } as Logger;
-}
+};
 
 /**
  * Create the application logger. Configures evlog's global pipeline (level,
  * pretty/JSON, env) on each call — the last caller wins, which is exactly what
  * a single app singleton (plus silent loggers in tests) wants.
  */
-export function createLogger(config: CreateLoggerConfig = {}): Logger {
+export const createLogger = (config: CreateLoggerConfig = {}): Logger => {
   const tag = config.name ?? "sonara";
   const level = config.level ?? "info";
 
@@ -114,4 +117,4 @@ export function createLogger(config: CreateLoggerConfig = {}): Logger {
   });
 
   return buildLogger(tag, {});
-}
+};

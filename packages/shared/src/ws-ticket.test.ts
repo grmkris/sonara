@@ -13,7 +13,7 @@ describe("ws-ticket", () => {
     expect(payload?.userId).toBe(USER_ID);
     expect(typeof payload?.exp).toBe("number");
     expect(typeof payload?.iat).toBe("number");
-    expect(payload!.exp).toBeGreaterThan(payload!.iat);
+    expect(payload?.exp).toBeGreaterThan(payload?.iat ?? 0);
   });
 
   test("rejects a token signed with a different secret", async () => {
@@ -34,7 +34,8 @@ describe("ws-ticket", () => {
   test("rejects an expired token", async () => {
     const token = await signTicket({
       secret: SECRET,
-      ttlMs: -1, // already expired
+      // already expired
+      ttlMs: -1,
       userId: USER_ID,
     });
     const payload = await verifyTicket(token, SECRET);

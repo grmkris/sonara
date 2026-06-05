@@ -11,7 +11,7 @@ const LRU = 10;
 // list. The Service Worker also caches the manifest at the HTTP layer.
 const manifestCache = new Map<string, string[]>();
 
-async function loadManifest(deck: string): Promise<string[]> {
+const loadManifest = async (deck: string): Promise<string[]> => {
   const cached = manifestCache.get(deck);
   if (cached) {
     return cached;
@@ -28,7 +28,7 @@ async function loadManifest(deck: string): Promise<string[]> {
   } catch {
     return [];
   }
-}
+};
 
 /**
  * Client-native demo loop. Demo no longer depends on the server/WebSocket:
@@ -38,7 +38,7 @@ async function loadManifest(deck: string): Promise<string[]> {
  *
  * Mounted once in the play page alongside useWsSession().
  */
-export function useDemoFrameLoop(): void {
+export const useDemoFrameLoop = (): void => {
   const demoMode = useVisualizerStore((s) => s.demoMode);
   const demoDeck = useVisualizerStore((s) => s.demoDeck);
 
@@ -75,20 +75,23 @@ export function useDemoFrameLoop(): void {
         ] as string;
         recent = [url, ...recent.filter((f) => f !== url)].slice(0, LRU);
         const s = store.getState();
-        s.pushFrame(url, ++localVersion);
+        localVersion += 1;
+        s.pushFrame(url, localVersion);
         s.pushHero(url);
       }
       const { intensity } = store.getState().scene;
       timer = setTimeout(tick, libraryCadenceMs(intensity, demoDeck));
     };
 
-    void loadManifest(demoDeck).then((f) => {
+    void (async () => {
+      const f = await loadManifest(demoDeck);
       if (cancelled) {
         return;
       }
       frames = f;
-      tick(); // fire one frame immediately, then self-schedule
-    });
+      // fire one frame immediately, then self-schedule
+      tick();
+    })();
 
     return () => {
       cancelled = true;
@@ -97,4 +100,4 @@ export function useDemoFrameLoop(): void {
       }
     };
   }, [demoMode, demoDeck]);
-}
+};

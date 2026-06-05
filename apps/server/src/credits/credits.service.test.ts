@@ -69,20 +69,20 @@ beforeEach(async () => {
   );
 });
 
-async function seedCredits(userId: string, frames: number): Promise<void> {
+const seedCredits = async (userId: string, frames: number): Promise<void> => {
   await pg.query(
     `INSERT INTO credits (id, user_id, balance_frames)
      VALUES (gen_random_uuid(), $1, $2)`,
     [userId, frames]
   );
-}
+};
 
-async function ledgerCount(): Promise<number> {
+const ledgerCount = async (): Promise<number> => {
   const res = await pg.query<{ count: string }>(
     `SELECT COUNT(*)::text AS count FROM usage_ledger`
   );
   return Number(res.rows[0]?.count ?? 0);
-}
+};
 
 describe("debitFrame", () => {
   test("decrements balance_frames by cost when sufficient", async () => {

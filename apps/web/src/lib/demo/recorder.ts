@@ -6,8 +6,10 @@ import { useVisualizerStore } from "@/stores/visualizer";
 // demo playthrough — see apps/web/public/demos/README.md for the workflow.
 
 export interface CaptureFrame {
-  t: number; // seconds since start()
-  url: string; // raw fal CDN URL
+  // seconds since start()
+  t: number;
+  // raw fal CDN URL
+  url: string;
 }
 
 export interface CaptureSnapshot {
@@ -27,7 +29,7 @@ export interface Recorder {
   dispose: () => void;
 }
 
-export function createRecorder(slug: string): Recorder {
+export const createRecorder = (slug: string): Recorder => {
   let startedAt: number | null = null;
   let isRecording = false;
   const frames: CaptureFrame[] = [];
@@ -74,11 +76,11 @@ export function createRecorder(slug: string): Recorder {
       const elapsedSec =
         startedAt === null ? 0 : (performance.now() - startedAt) / 1000;
       return {
+        elapsedSec,
+        frames: [...frames],
+        isRecording,
         slug,
         startedAt,
-        elapsedSec,
-        frames: frames.slice(),
-        isRecording,
       };
     },
     reset() {
@@ -89,7 +91,9 @@ export function createRecorder(slug: string): Recorder {
       notify();
     },
     start() {
-      if (isRecording) return;
+      if (isRecording) {
+        return;
+      }
       startedAt = performance.now();
       isRecording = true;
       // Seed `lastUrl` with the current store value so we don't re-record the
@@ -98,7 +102,9 @@ export function createRecorder(slug: string): Recorder {
       notify();
     },
     stop() {
-      if (!isRecording) return;
+      if (!isRecording) {
+        return;
+      }
       isRecording = false;
       notify();
     },
@@ -107,7 +113,7 @@ export function createRecorder(slug: string): Recorder {
       return () => listeners.delete(l);
     },
   };
-}
+};
 
 export interface CaptureExport {
   slug: string;
@@ -115,15 +121,13 @@ export interface CaptureExport {
   frames: CaptureFrame[];
 }
 
-export function exportCapture(snapshot: CaptureSnapshot): CaptureExport {
-  return {
-    durationSec: snapshot.elapsedSec,
-    frames: snapshot.frames,
-    slug: snapshot.slug,
-  };
-}
+export const exportCapture = (snapshot: CaptureSnapshot): CaptureExport => ({
+  durationSec: snapshot.elapsedSec,
+  frames: snapshot.frames,
+  slug: snapshot.slug,
+});
 
-export function downloadCaptureJson(snapshot: CaptureSnapshot): void {
+export const downloadCaptureJson = (snapshot: CaptureSnapshot): void => {
   const payload = exportCapture(snapshot);
   const blob = new Blob([JSON.stringify(payload, null, 2)], {
     type: "application/json",
@@ -136,4 +140,4 @@ export function downloadCaptureJson(snapshot: CaptureSnapshot): void {
   a.click();
   a.remove();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
-}
+};

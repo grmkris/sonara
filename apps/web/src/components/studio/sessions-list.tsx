@@ -16,7 +16,7 @@ interface SessionsListProps {
 
 type DateBand = "today" | "yesterday" | "this week" | "older";
 
-function bandOf(date: Date, now: Date): DateBand {
+const bandOf = (date: Date, now: Date): DateBand => {
   const sameDay =
     date.getFullYear() === now.getFullYear() &&
     date.getMonth() === now.getMonth() &&
@@ -39,31 +39,30 @@ function bandOf(date: Date, now: Date): DateBand {
     return "this week";
   }
   return "older";
-}
+};
 
-function formatTime(date: Date): string {
+const formatTime = (date: Date): string => {
   const h = date.getHours().toString().padStart(2, "0");
   const m = date.getMinutes().toString().padStart(2, "0");
   return `${h}:${m}`;
-}
+};
 
-function formatDateLong(date: Date): string {
-  return date.toLocaleDateString(undefined, {
+const formatDateLong = (date: Date): string =>
+  date.toLocaleDateString(undefined, {
     day: "numeric",
     month: "short",
   });
-}
 
 // Left-rail list of session summaries, grouped by date band (today /
 // yesterday / this week / older). Each session card shows: sample thumb,
 // time range, frame count, duration. Click selects the session.
-export function SessionsList({
+export const SessionsList = ({
   sessions,
   loading,
   bootstrapped,
   selectedSessionId,
   onSelect,
-}: SessionsListProps) {
+}: SessionsListProps) => {
   const grouped = useMemo(() => {
     const now = new Date();
     const map = new Map<DateBand, SessionSummary[]>();
@@ -140,7 +139,7 @@ export function SessionsList({
                           : formatTime(s.firstFrameAt)}
                       </span>
                       <span className="font-mono text-[9px] uppercase tracking-[0.18em] text-[color:var(--stone)]">
-                        {s.frameCount} frame{s.frameCount !== 1 ? "s" : ""}
+                        {s.frameCount} frame{s.frameCount === 1 ? "" : "s"}
                         {" · "}
                         {formatDuration(s.durationMs)}
                       </span>
@@ -154,4 +153,4 @@ export function SessionsList({
       ))}
     </nav>
   );
-}
+};

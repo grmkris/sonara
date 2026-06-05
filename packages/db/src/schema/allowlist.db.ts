@@ -13,18 +13,18 @@ import { user } from "./auth.db";
 export const allowedEmail = pgTable(
   "allowed_email",
   {
+    addedByUserId: typeId("user", "added_by_user_id")
+      .references(() => user.id, { onDelete: "set null" })
+      .$type<UserId>(),
+    // Stored lowercased and trimmed. The signup hook normalises before
+    // comparing.
+    email: text("email").notNull(),
     id: typeId("allowedEmail", "id")
       .primaryKey()
       .$defaultFn(() => typeIdGenerator("allowedEmail"))
       .$type<AllowedEmailId>(),
-    // Stored lowercased and trimmed. The signup hook normalises before
-    // comparing.
-    email: text("email").notNull(),
     // Free-text note ("alpha tester", "investor"). Optional.
     note: text("note"),
-    addedByUserId: typeId("user", "added_by_user_id")
-      .references(() => user.id, { onDelete: "set null" })
-      .$type<UserId>(),
     ...baseEntityFields,
   },
   (table) => [uniqueIndex("allowed_email_email_idx").on(table.email)]

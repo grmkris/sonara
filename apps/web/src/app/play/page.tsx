@@ -44,6 +44,94 @@ import {
   useVisualizerStore,
 } from "@/stores/visualizer";
 
+// Quieter rail-side hint for anonymous visitors who reached /play from the
+// landing. Going live (typing a scene / pinning an anchor) needs credits, so
+// anon never gets the PromptInput — this sign-in nudge is the wall. Deck
+// switching + bringing your own audio stay free for them.
+const AnonPromptPlaceholder = () => (
+  <div className="flex flex-col gap-3">
+    <span className="font-serif italic text-[color:var(--paper)]/85 text-[15px] leading-snug">
+      sign in to direct the visuals.
+    </span>
+    <Button asChild variant="ghost" size="sm" className="-ml-2 w-fit">
+      <Link
+        href="/login"
+        className="font-sans text-[11px] uppercase tracking-[0.24em]"
+      >
+        sign in
+      </Link>
+    </Button>
+  </div>
+);
+
+// Quiet caption under the wordmark naming the look you're starting from. Shows
+// only while on a deck; once you commit a prompt and go live it disappears (the
+// deck picker's "live · generating" chip carries the live state). Replaces the
+// old SceneHud telemetry; the audio-reactive 1px rule under "sonara"
+// (`.wordmark::after` via `--amp`) carries live-presence more elegantly.
+const LookChip = () => {
+  const demoMode = useVisualizerStore((s) => s.demoMode);
+  const demoDeck = useVisualizerStore((s) => s.demoDeck);
+  if (!demoMode || !demoDeck) {
+    return null;
+  }
+  return (
+    <span className="font-mono pointer-events-none text-[10px] uppercase tracking-[0.22em] text-[color:var(--paper)]/85">
+      {deckLabel(demoDeck)}
+    </span>
+  );
+};
+
+// Discreet link to the operator remote (/control). Opens in a new tab so the
+// projector keeps playing; in practice you open /control on a second device,
+// but the link makes the feature discoverable from the projector too.
+const RemoteLink = () => (
+  <Link
+    href="/control"
+    target="_blank"
+    rel="noopener"
+    aria-label="open operator remote"
+    title="control from your phone"
+    className="focus-ring flex items-center text-[color:var(--stone)] transition-colors hover:text-[color:var(--paper)]"
+  >
+    <Smartphone className="size-4" strokeWidth={1.5} />
+  </Link>
+);
+
+const Logotype = () => {
+  const ref = useRef<HTMLSpanElement | null>(null);
+  // Subscribe to live RMS and write to a CSS variable on the wordmark span.
+  // Done via a ref + RAF coalescer rather than React state so the underline
+  // can react at frame rate without re-rendering the React subtree.
+  useEffect(() => {
+    const unsub = useVisualizerStore.subscribe((s, prev) => {
+      if (s.audio.rms === prev.audio.rms) {
+        return;
+      }
+      const el = ref.current;
+      if (!el) {
+        return;
+      }
+      const clamped = Math.max(0, Math.min(1, s.audio.rms));
+      el.style.setProperty("--amp", clamped.toFixed(3));
+    });
+    return () => unsub();
+  }, []);
+
+  return (
+    <span className="pointer-events-auto flex items-center gap-2.5 text-[color:var(--paper)]/85">
+      <Mark reactive className="h-7 w-7 shrink-0" />
+      <span
+        ref={ref}
+        className="wordmark font-serif block select-none italic tracking-tight"
+        style={{ fontSize: "34px", fontWeight: 500, lineHeight: 0.9 }}
+      >
+        sonara.fm
+      </span>
+    </span>
+  );
+};
+
 export default function Page() {
   const send = useWsSession();
   // Demo is client-native: the browser drives demo frames from a static
@@ -99,9 +187,10 @@ export default function Page() {
   // offline there's no connect snapshot either — default them into demo so the
   // client-native loop runs. Signed-in users control their own demo toggle.
   useEffect(() => {
+    // session still resolving
     if (sessionData === undefined) {
       return;
-    } // session still resolving
+    }
     if (isSignedIn) {
       return;
     }
@@ -293,97 +382,5 @@ export default function Page() {
         <StudioActionConsumer send={send} />
       </Suspense>
     </main>
-  );
-}
-
-// Quieter rail-side hint for anonymous visitors who reached /play from the
-// landing. Going live (typing a scene / pinning an anchor) needs credits, so
-// anon never gets the PromptInput — this sign-in nudge is the wall. Deck
-// switching + bringing your own audio stay free for them.
-function AnonPromptPlaceholder() {
-  return (
-    <div className="flex flex-col gap-3">
-      <span className="font-serif italic text-[color:var(--paper)]/85 text-[15px] leading-snug">
-        sign in to direct the visuals.
-      </span>
-      <Button asChild variant="ghost" size="sm" className="-ml-2 w-fit">
-        <Link
-          href="/login"
-          className="font-sans text-[11px] uppercase tracking-[0.24em]"
-        >
-          sign in
-        </Link>
-      </Button>
-    </div>
-  );
-}
-
-// Quiet caption under the wordmark naming the look you're starting from. Shows
-// only while on a deck; once you commit a prompt and go live it disappears (the
-// deck picker's "live · generating" chip carries the live state). Replaces the
-// old SceneHud telemetry; the audio-reactive 1px rule under "sonara"
-// (`.wordmark::after` via `--amp`) carries live-presence more elegantly.
-function LookChip() {
-  const demoMode = useVisualizerStore((s) => s.demoMode);
-  const demoDeck = useVisualizerStore((s) => s.demoDeck);
-  if (!demoMode || !demoDeck) {
-    return null;
-  }
-  return (
-    <span className="font-mono pointer-events-none text-[10px] uppercase tracking-[0.22em] text-[color:var(--paper)]/85">
-      {deckLabel(demoDeck)}
-    </span>
-  );
-}
-
-// Discreet link to the operator remote (/control). Opens in a new tab so the
-// projector keeps playing; in practice you open /control on a second device,
-// but the link makes the feature discoverable from the projector too.
-function RemoteLink() {
-  return (
-    <Link
-      href="/control"
-      target="_blank"
-      rel="noopener"
-      aria-label="open operator remote"
-      title="control from your phone"
-      className="focus-ring flex items-center text-[color:var(--stone)] transition-colors hover:text-[color:var(--paper)]"
-    >
-      <Smartphone className="size-4" strokeWidth={1.5} />
-    </Link>
-  );
-}
-
-function Logotype() {
-  const ref = useRef<HTMLSpanElement | null>(null);
-  // Subscribe to live RMS and write to a CSS variable on the wordmark span.
-  // Done via a ref + RAF coalescer rather than React state so the underline
-  // can react at frame rate without re-rendering the React subtree.
-  useEffect(() => {
-    const unsub = useVisualizerStore.subscribe((s, prev) => {
-      if (s.audio.rms === prev.audio.rms) {
-        return;
-      }
-      const el = ref.current;
-      if (!el) {
-        return;
-      }
-      const clamped = Math.max(0, Math.min(1, s.audio.rms));
-      el.style.setProperty("--amp", clamped.toFixed(3));
-    });
-    return () => unsub();
-  }, []);
-
-  return (
-    <span className="pointer-events-auto flex items-center gap-2.5 text-[color:var(--paper)]/85">
-      <Mark reactive className="h-7 w-7 shrink-0" />
-      <span
-        ref={ref}
-        className="wordmark font-serif block select-none italic tracking-tight"
-        style={{ fontSize: "34px", fontWeight: 500, lineHeight: 0.9 }}
-      >
-        sonara.fm
-      </span>
-    </span>
   );
 }

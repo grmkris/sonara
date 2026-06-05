@@ -19,7 +19,7 @@ export interface UiSlice {
 export const createUiSlice: StateCreator<VisualizerState, [], [], UiSlice> = (
   set
 ) => ({
-  sessionStartedAt: typeof performance !== "undefined" ? performance.now() : 0,
+  sessionStartedAt: typeof performance === "undefined" ? 0 : performance.now(),
   setUiVisible: (v) => {
     if (typeof window !== "undefined") {
       window.localStorage.setItem(UI_VISIBLE_KEY, v ? "1" : "0");

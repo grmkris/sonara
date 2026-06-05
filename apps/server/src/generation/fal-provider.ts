@@ -39,7 +39,7 @@ interface FalResult {
   image?: FalImage;
 }
 
-function extractImageUrl(ev: unknown): string | undefined {
+const extractImageUrl = (ev: unknown): string | undefined => {
   if (!ev || typeof ev !== "object") {
     return undefined;
   }
@@ -51,9 +51,11 @@ function extractImageUrl(ev: unknown): string | undefined {
     return e.images[0].url;
   }
   return undefined;
-}
+};
 
-export async function streamPreview(input: StreamPreviewInput): Promise<void> {
+export const streamPreview = async (
+  input: StreamPreviewInput
+): Promise<void> => {
   // Per-call scoped client. No global singleton — avoids cross-session
   // credential races under hot reload/test.
   const scoped = createFalClient({
@@ -111,4 +113,4 @@ export async function streamPreview(input: StreamPreviewInput): Promise<void> {
     }
     input.onError(error);
   }
-}
+};

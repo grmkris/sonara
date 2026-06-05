@@ -21,14 +21,14 @@ const AUTH_MODEL_TO_PREFIX: Record<string, IdTypePrefixNames> = {
   verification: "verification",
 };
 
-export function createAuth(props: {
+export const createAuth = (props: {
   db: Database;
   secret: string;
   baseURL: string;
   dodoApiKey: string;
   dodoWebhookSecret: string;
   dodoMode: "test_mode" | "live_mode";
-}) {
+}) => {
   const { db, secret, baseURL, dodoApiKey, dodoWebhookSecret, dodoMode } =
     props;
 
@@ -38,48 +38,11 @@ export function createAuth(props: {
   const dodoClient = dodoEnabled
     ? new DodoPayments({ bearerToken: dodoApiKey, environment: dodoMode })
     : null;
+  if (dodoEnabled && !dodoClient) {
+    throw new Error("Dodo enabled but client failed to initialise");
+  }
 
   return betterAuth({
-    database: drizzleAdapter(db, { provider: "pg", schema: SCHEMA }),
-    secret,
-    baseURL,
-    trustedOrigins: [baseURL],
-
-    // Email + password is the sole auth method. Signup is open — the
-    // earlier allowlist gate was dropped when the public demo path landed
-    // (unauthenticated visitors run the visualiser in demo-library mode;
-    // signup unlocks live fal generation, gated downstream by the credits
-    // ledger + free-tier). `allowed_email` table is unused but kept in the
-    // schema as inert data until a follow-up migration removes it.
-    emailAndPassword: {
-      enabled: true,
-      minPasswordLength: 12,
-      // No email verification yet (would need Resend / SES wired). Once an
-      // email provider lands, flip this to true.
-      requireEmailVerification: false,
-      // Issue a session immediately on successful signup.
-      autoSignIn: true,
-    },
-
-    plugins: dodoEnabled
-      ? [
-          dodopayments({
-            client: dodoClient!,
-            // Customer is created lazily on first checkout (see
-            // creditsRouter.createCheckout). Keeping this `false` means signup
-            // doesn't hit Dodo, so users can register even before the API key
-            // is wired or if Dodo is down.
-            createCustomerOnSignUp: false,
-            use: [
-              webhooks({
-                webhookKey: dodoWebhookSecret,
-                ...createDodoWebhookHandlers({ db }),
-              }),
-            ],
-          }),
-        ]
-      : [],
-
     advanced: {
       database: {
         // Generate typeid-prefixed ids for the auth tables. The drizzle
@@ -99,14 +62,53 @@ export function createAuth(props: {
         },
       },
     },
+    baseURL,
+    database: drizzleAdapter(db, { provider: "pg", schema: SCHEMA }),
+
+    // Email + password is the sole auth method. Signup is open — the
+    // earlier allowlist gate was dropped when the public demo path landed
+    // (unauthenticated visitors run the visualiser in demo-library mode;
+    // signup unlocks live fal generation, gated downstream by the credits
+    // ledger + free-tier). `allowed_email` table is unused but kept in the
+    // schema as inert data until a follow-up migration removes it.
+    emailAndPassword: {
+      // Issue a session immediately on successful signup.
+      autoSignIn: true,
+      enabled: true,
+      minPasswordLength: 12,
+      // No email verification yet (would need Resend / SES wired). Once an
+      // email provider lands, flip this to true.
+      requireEmailVerification: false,
+    },
+
+    plugins: dodoEnabled
+      ? [
+          dodopayments({
+            client: dodoClient as DodoPayments,
+            // Customer is created lazily on first checkout (see
+            // creditsRouter.createCheckout). Keeping this `false` means signup
+            // doesn't hit Dodo, so users can register even before the API key
+            // is wired or if Dodo is down.
+            createCustomerOnSignUp: false,
+            use: [
+              webhooks({
+                webhookKey: dodoWebhookSecret,
+                ...createDodoWebhookHandlers({ db }),
+              }),
+            ],
+          }),
+        ]
+      : [],
+    secret,
+    trustedOrigins: [baseURL],
   });
-}
+};
 
 export type Auth = ReturnType<typeof createAuth>;
 
 // Singleton — the Hono routes (auth handler, /rpc context, upload) share it.
 let cached: Auth | null = null;
-export function getAuth(): Auth {
+export const getAuth = (): Auth => {
   if (cached) {
     return cached;
   }
@@ -120,4 +122,4 @@ export function getAuth(): Auth {
     secret: env.BETTER_AUTH_SECRET,
   });
   return cached;
-}
+};

@@ -70,10 +70,10 @@ export const SCENE_TEMPLATES: readonly SceneTemplate[] = [
   },
 ] as const;
 
-export function getSceneTemplate(key: string): SceneTemplate | null {
+export const getSceneTemplate = (key: string): SceneTemplate | null => {
   const k = key.trim().toLowerCase();
   return SCENE_TEMPLATES.find((p) => p.key === k) ?? null;
-}
+};
 
 export const SCENE_TEMPLATE_KEYS: readonly string[] = SCENE_TEMPLATES.map(
   (p) => p.key

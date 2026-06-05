@@ -14,12 +14,12 @@
 import { createDb, SCHEMA } from "@sonara/db";
 import { eq, like, sql } from "drizzle-orm";
 
-function fail(msg: string): never {
+const fail = (msg: string): never => {
   console.error(`error: ${msg}`);
   process.exit(1);
-}
+};
 
-async function main() {
+const main = async () => {
   const databaseUrl = process.env.DATABASE_URL;
   if (!databaseUrl) {
     fail("DATABASE_URL not set — run from apps/server with .env in place");
@@ -47,9 +47,11 @@ async function main() {
     console.log(`  - ${u.email}`);
   }
   process.exit(0);
-}
+};
 
-main().catch((error) => {
+try {
+  await main();
+} catch (error) {
   console.error("purge-wallet-users failed:", error);
   process.exit(1);
-});
+}

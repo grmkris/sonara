@@ -13,20 +13,20 @@ export type DemoFrame = z.infer<typeof DemoFrame>;
 // assets, the visualizer renders as if the frames were streaming in live.
 // No server round-trip, no fal.ai calls.
 export const DemoManifest = z.object({
-  slug: z.string().regex(/^[a-z0-9-]+$/, "slug must be kebab-case"),
-  title: z.string().min(1),
   artist: z.string().min(1),
-  // Attribution / license info — shown in a small corner credit during demo.
-  source: z.string().url(),
-  license: z.string().min(1),
   // Path relative to the manifest's directory.
   audio: z.string().min(1),
+  durationSec: z.number().positive(),
+  frames: z.array(DemoFrame),
+  license: z.string().min(1),
+  // Preset the demo looks best with. See apps/web/src/lib/render/presets.ts.
+  preset: z.string().min(1),
   // Free-form prompt used when the frames were generated. Displayed as
   // placeholder text in the prompt input while the demo plays.
   prompt: z.string().min(1),
-  // Preset the demo looks best with. See apps/web/src/lib/render/presets.ts.
-  preset: z.string().min(1),
-  durationSec: z.number().positive(),
-  frames: z.array(DemoFrame),
+  slug: z.string().regex(/^[a-z0-9-]+$/u, "slug must be kebab-case"),
+  // Attribution / license info — shown in a small corner credit during demo.
+  source: z.string().url(),
+  title: z.string().min(1),
 });
 export type DemoManifest = z.infer<typeof DemoManifest>;

@@ -16,15 +16,15 @@ const MAX_BYTES = 5 * 1024 * 1024;
 const ALLOWED_MIME = new Set(["image/jpeg", "image/png", "image/webp"]);
 
 let configured = false;
-function configureFal(): void {
+const configureFal = (): void => {
   if (configured) {
     return;
   }
   fal.config({ credentials: env.FAL_KEY });
   configured = true;
-}
+};
 
-export async function uploadImage(req: Request): Promise<Response> {
+export const uploadImage = async (req: Request): Promise<Response> => {
   if (!env.FAL_KEY) {
     return Response.json({ error: "upload_not_configured" }, { status: 503 });
   }
@@ -70,4 +70,4 @@ export async function uploadImage(req: Request): Promise<Response> {
     });
     return Response.json({ error: "upload_failed", message }, { status: 502 });
   }
-}
+};

@@ -12,6 +12,40 @@ import { SiteFooter } from "@/components/site-footer";
 // copy scrolls over it in a z-10 column. Audio-reactivity is a /play concern
 // once the visitor brings sound.
 
+const OldShareLinkRedirect = () => {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  useEffect(() => {
+    if (searchParams.get("record") !== null) {
+      const qs = searchParams.toString();
+      router.replace(`/play${qs ? `?${qs}` : ""}`);
+    }
+  }, [router, searchParams]);
+  return null;
+};
+
+const Capability = ({
+  eyebrow,
+  hook,
+  body,
+}: {
+  eyebrow: string;
+  hook: string;
+  body: string;
+}) => (
+  <div className="flex flex-col gap-3 md:border-r md:border-[color:var(--hairline)]/25 md:pr-8 md:last:border-r-0">
+    <span className="font-mono text-[10px] uppercase tracking-[0.28em] text-[color:var(--stone)]">
+      {eyebrow}
+    </span>
+    <span className="font-serif text-[28px] italic leading-tight text-[color:var(--paper)] md:text-[32px]">
+      {hook}
+    </span>
+    <p className="font-sans text-[14px] leading-relaxed text-[color:var(--paper)]/80">
+      {body}
+    </p>
+  </div>
+);
+
 export default function LandingPage() {
   return (
     <main className="relative min-h-svh overflow-x-hidden bg-[color:var(--ink)] text-[color:var(--paper)]">
@@ -105,41 +139,5 @@ export default function LandingPage() {
         <SiteFooter />
       </div>
     </main>
-  );
-}
-
-function OldShareLinkRedirect() {
-  const router = useRouter();
-  const searchParams = useSearchParams();
-  useEffect(() => {
-    if (searchParams.get("record") !== null) {
-      const qs = searchParams.toString();
-      router.replace(`/play${qs ? `?${qs}` : ""}`);
-    }
-  }, [router, searchParams]);
-  return null;
-}
-
-function Capability({
-  eyebrow,
-  hook,
-  body,
-}: {
-  eyebrow: string;
-  hook: string;
-  body: string;
-}) {
-  return (
-    <div className="flex flex-col gap-3 md:border-r md:border-[color:var(--hairline)]/25 md:pr-8 md:last:border-r-0">
-      <span className="font-mono text-[10px] uppercase tracking-[0.28em] text-[color:var(--stone)]">
-        {eyebrow}
-      </span>
-      <span className="font-serif text-[28px] italic leading-tight text-[color:var(--paper)] md:text-[32px]">
-        {hook}
-      </span>
-      <p className="font-sans text-[14px] leading-relaxed text-[color:var(--paper)]/80">
-        {body}
-      </p>
-    </div>
   );
 }

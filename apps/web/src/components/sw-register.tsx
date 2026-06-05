@@ -10,10 +10,29 @@ interface NetworkInformation {
   effectiveType?: string;
 }
 
+const prefetchDeck = async (): Promise<void> => {
+  try {
+    const res = await fetch(`/library/${PREFETCH_DECK}/manifest.json`);
+    if (!res.ok) {
+      return;
+    }
+    const data = (await res.json()) as { frames?: string[] };
+    const urls = Array.isArray(data.frames) ? data.frames : [];
+    const ctrl = navigator.serviceWorker.controller;
+    if (urls.length > 0 && ctrl) {
+      // ServiceWorker.postMessage takes (message, transfer) — no targetOrigin.
+      // oxlint-disable-next-line unicorn/require-post-message-target-origin -- ServiceWorker.postMessage has no targetOrigin param
+      ctrl.postMessage({ type: "PREFETCH_DECK", urls });
+    }
+  } catch {
+    /* ignore */
+  }
+};
+
 // Registers the offline service worker (production only) and, once it's
 // controlling the page, background-prefetches the full showcase deck while on a
 // decent connection — so "open it once on wifi, then it works in the basement".
-export function SwRegister() {
+export const SwRegister = () => {
   useEffect(() => {
     if (process.env.NODE_ENV !== "production") {
       return;
@@ -21,10 +40,10 @@ export function SwRegister() {
     if (typeof navigator === "undefined" || !("serviceWorker" in navigator)) {
       return;
     }
-    navigator.serviceWorker
-      .register("/sw.js")
-      .then(() => navigator.serviceWorker.ready)
-      .then(() => {
+    void (async () => {
+      try {
+        await navigator.serviceWorker.register("/sw.js");
+        await navigator.serviceWorker.ready;
         if (!navigator.onLine) {
           return;
         }
@@ -38,33 +57,16 @@ export function SwRegister() {
         if (conn?.saveData) {
           return;
         }
-        if (conn?.effectiveType && /(^|-)(2g|slow)/.test(conn.effectiveType)) {
+        if (conn?.effectiveType && /(^|-)(2g|slow)/u.test(conn.effectiveType)) {
           return;
         }
         // Give the live demo a head start, then prefetch the rest.
         setTimeout(prefetchDeck, 8000);
-      })
-      .catch(() => {
+      } catch {
         /* registration failures are non-fatal */
-      });
+      }
+    })();
   }, []);
 
   return null;
-}
-
-async function prefetchDeck(): Promise<void> {
-  try {
-    const res = await fetch(`/library/${PREFETCH_DECK}/manifest.json`);
-    if (!res.ok) {
-      return;
-    }
-    const data = (await res.json()) as { frames?: string[] };
-    const urls = Array.isArray(data.frames) ? data.frames : [];
-    const ctrl = navigator.serviceWorker.controller;
-    if (urls.length > 0 && ctrl) {
-      ctrl.postMessage({ type: "PREFETCH_DECK", urls });
-    }
-  } catch {
-    /* ignore */
-  }
-}
+};

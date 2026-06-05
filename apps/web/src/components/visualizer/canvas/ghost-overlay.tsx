@@ -21,7 +21,7 @@ const HOLD_MS = 1500;
 const FADE_OUT_MS = 800;
 const PEAK_OPACITY = 0.22;
 
-export function GhostOverlay() {
+export const GhostOverlay = () => {
   const bank = useVisualizerStore((s) => s.heroBank);
   const [ghostUrl, setGhostUrl] = useState<string | null>(null);
   const [opacity, setOpacity] = useState(0);
@@ -42,6 +42,7 @@ export function GhostOverlay() {
 
     const scheduleNext = () => {
       const delay = INTERVAL_MIN_MS + Math.random() * INTERVAL_JITTER_MS;
+      // oxlint-disable-next-line no-use-before-define -- fire and scheduleNext are mutually recursive; reference is deferred inside setTimeout
       scheduleTimer = setTimeout(fire, delay);
     };
 
@@ -57,8 +58,8 @@ export function GhostOverlay() {
       const weights = candidates.map((_, i) => i + 1);
       const total = weights.reduce((s, w) => s + w, 0);
       let r = Math.random() * total;
-      let pick = candidates[0];
-      for (let i = 0; i < candidates.length; i++) {
+      let [pick] = candidates;
+      for (let i = 0; i < candidates.length; i += 1) {
         r -= weights[i] ?? 0;
         if (r <= 0) {
           pick = candidates[i];
@@ -132,4 +133,4 @@ export function GhostOverlay() {
       />
     </div>
   );
-}
+};

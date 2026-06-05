@@ -12,7 +12,7 @@ import { getCurrentAudioEngine } from "@/hooks/use-audio-features";
 const ALPHA_FLOOR = 0;
 const ALPHA_CEIL = 0.35;
 
-export function CanvasOscilloscope() {
+export const CanvasOscilloscope = () => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
   useEffect(() => {
@@ -66,7 +66,7 @@ export function CanvasOscilloscope() {
       // RMS of the buffer (same formula as WaveformRibbon / analyzer for
       // consistency). Gates the overall alpha so silent sections stay quiet.
       let sumSq = 0;
-      for (let i = 0; i < bins; i++) {
+      for (let i = 0; i < bins; i += 1) {
         const d = (buf[i] ?? 128) - 128;
         sumSq += d * d;
       }
@@ -86,7 +86,7 @@ export function CanvasOscilloscope() {
       const midY = h / 2;
       // Amplitude envelope kept gentle — the point is presence, not DAW graph.
       const ampY = (h / 2) * 0.42;
-      for (let i = 0; i < bins; i++) {
+      for (let i = 0; i < bins; i += 1) {
         const v = ((buf[i] ?? 128) - 128) / 128;
         const y = midY + v * ampY;
         const x = i * slice;
@@ -114,4 +114,4 @@ export function CanvasOscilloscope() {
       style={{ mixBlendMode: "screen" }}
     />
   );
-}
+};

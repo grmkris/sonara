@@ -13,19 +13,18 @@
  */
 
 import { writeFile } from "node:fs/promises";
-import { dirname, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
+import { resolve } from "node:path";
 
 import { createDb, SCHEMA } from "@sonara/db";
 
 import { env } from "../src/env";
 
-function fail(msg: string): never {
+const fail = (msg: string): never => {
   console.error(`error: ${msg}`);
   process.exit(1);
-}
+};
 
-async function main() {
+const main = async () => {
   if (!env.DATABASE_URL) {
     fail("DATABASE_URL not set");
   }
@@ -52,9 +51,11 @@ async function main() {
   await writeFile(out, `${JSON.stringify(rows, null, 2)}\n`);
   console.log(`exported ${rows.length} rows → ${out}`);
   process.exit(0);
-}
+};
 
-main().catch((error) => {
+try {
+  await main();
+} catch (error) {
   console.error("export-library failed:", error);
   process.exit(1);
-});
+}

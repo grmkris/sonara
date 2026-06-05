@@ -26,13 +26,11 @@ export interface ApiContext<TDb> {
   registry: SessionRegistry;
 }
 
-export function buildContext<TDb>(
+export const buildContext = <TDb>(
   args: CreateContextArgs<TDb>
-): ApiContext<TDb> {
-  return {
-    db: args.db,
-    registry: args.registry,
-    session: args.session,
-    userId: args.session?.user.id ?? null,
-  };
-}
+): ApiContext<TDb> => ({
+  db: args.db,
+  registry: args.registry,
+  session: args.session,
+  userId: args.session?.user.id ?? null,
+});

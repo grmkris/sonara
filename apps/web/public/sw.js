@@ -30,6 +30,7 @@ self.addEventListener("activate", (event) => {
   );
 });
 
+// oxlint-disable-next-line func-style, no-implicit-globals -- classic service-worker script: hoisted global helper used by event handlers below
 async function cacheFirst(req, cacheName) {
   const cache = await caches.open(cacheName);
   const hit = await cache.match(req);
@@ -43,20 +44,28 @@ async function cacheFirst(req, cacheName) {
   return res;
 }
 
+// oxlint-disable-next-line func-style, no-implicit-globals -- classic service-worker script: hoisted global helper used by event handlers below
 async function staleWhileRevalidate(req, cacheName) {
   const cache = await caches.open(cacheName);
   const hit = await cache.match(req);
-  const fetching = fetch(req)
-    .then((res) => {
+  const revalidate = async () => {
+    try {
+      const res = await fetch(req);
       if (res.ok) {
         cache.put(req, res.clone());
       }
       return res;
-    })
-    .catch(() => hit);
+    } catch {
+      return hit;
+    }
+  };
+  // Kick off revalidation but don't await it when we have a cached hit — the
+  // stale response is returned immediately while the fetch updates the cache.
+  const fetching = revalidate();
   return hit || fetching;
 }
 
+// oxlint-disable-next-line func-style, no-implicit-globals -- classic service-worker script: hoisted global helper used by event handlers below
 async function networkFirst(req, cacheName) {
   const cache = await caches.open(cacheName);
   try {
@@ -67,9 +76,13 @@ async function networkFirst(req, cacheName) {
     return res;
   } catch (error) {
     const hit = await cache.match(req);
-    if (hit) return hit;
+    if (hit) {
+      return hit;
+    }
     const fallback = await cache.match("/play");
-    if (fallback) return fallback;
+    if (fallback) {
+      return fallback;
+    }
     throw error;
   }
 }
@@ -109,7 +122,6 @@ self.addEventListener("fetch", (event) => {
   }
   if (p.startsWith("/_next/")) {
     event.respondWith(cacheFirst(req, ASSET_CACHE));
-    return;
   }
 });
 
@@ -124,6 +136,7 @@ self.addEventListener("message", (event) => {
   event.waitUntil(prefetchUrls(data.urls));
 });
 
+// oxlint-disable-next-line func-style, no-implicit-globals -- classic service-worker script: hoisted global helper referenced by the message handler above
 async function prefetchUrls(urls) {
   const cache = await caches.open(LIB_CACHE);
   const BATCH = 6;

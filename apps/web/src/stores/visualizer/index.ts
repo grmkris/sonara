@@ -41,7 +41,7 @@ export const useVisualizerStore = create<VisualizerState>()((...a) => ({
 
 // Always `true` on first render (server + client) so SSR hydrates cleanly.
 // The stored preference is applied post-mount via `hydrateUiVisible()`.
-export function hydrateUiVisible(): void {
+export const hydrateUiVisible = (): void => {
   if (typeof window === "undefined") {
     return;
   }
@@ -50,12 +50,12 @@ export function hydrateUiVisible(): void {
     return;
   }
   useVisualizerStore.setState({ uiVisible: raw !== "0" });
-}
+};
 
 // Pulls the last-used preset + mode from localStorage. Matches the
 // hydrateUiVisible pattern — server always renders with `wet_ink` / `manual`,
 // client applies the stored preference post-mount.
-export function hydratePresetPrefs(): void {
+export const hydratePresetPrefs = (): void => {
   if (typeof window === "undefined") {
     return;
   }
@@ -82,37 +82,37 @@ export function hydratePresetPrefs(): void {
   if (Object.keys(update).length > 0) {
     useVisualizerStore.setState(update);
   }
-}
+};
 
 // Same hydration pattern as preset prefs — apply localStorage values
 // post-mount so SSR + first client render stay consistent.
-export function hydrateDemoPrefs(): void {
+export const hydrateDemoPrefs = (): void => {
   if (typeof window === "undefined") {
     return;
   }
   const { demoMode, demoDeck } = readDemoPrefs();
   useVisualizerStore.setState({ demoDeck, demoMode });
-}
+};
 
 // Hydrates the clickwrap-acceptance flag from localStorage so the user
 // doesn't see the consent prompt twice in the same browser.
-export function hydrateAnchorPrefs(): void {
+export const hydrateAnchorPrefs = (): void => {
   if (typeof window === "undefined") {
     return;
   }
   if (readClickwrapAccepted()) {
     useVisualizerStore.setState({ clickwrapAccepted: true });
   }
-}
+};
 
 /**
  * Crossfade timing is driven by the `<img>.onLoad` event rather than the
  * moment a URL arrives. This avoids the black flash when a large fal image
  * hasn't decoded by the time the crossfade window (800 ms) elapses.
  */
-export function markImageLoaded(): void {
+export const markImageLoaded = (): void => {
   useVisualizerStore.setState({ crossfadeStartedAt: performance.now() });
-}
+};
 
 // Re-export slice types from one entry so consumers can import everything
 // they need from `@/stores/visualizer`.

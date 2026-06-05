@@ -16,29 +16,39 @@
 // frame-rate-independent — rAF jitter doesn't distort the ballistics.
 
 export interface VuOptions {
-  attackMs: number; // VU integration time
-  releaseMs: number; // VU fall time
-  peakAttackMs?: number; // PPM attack (default 10 ms)
-  peakReleaseMs?: number; // PPM release (default 1500 ms)
-  overshoot?: number; // 0..0.05, mechanical needle overshoot on rising edge
-  initialValue?: number; // seed "needle" state (carry-over across rebuilds)
-  initialPeak?: number; // seed peak-hold state (carry-over across rebuilds)
+  // VU integration time
+  attackMs: number;
+  // VU fall time
+  releaseMs: number;
+  // PPM attack (default 10 ms)
+  peakAttackMs?: number;
+  // PPM release (default 1500 ms)
+  peakReleaseMs?: number;
+  // 0..0.05, mechanical needle overshoot on rising edge
+  overshoot?: number;
+  // seed "needle" state (carry-over across rebuilds)
+  initialValue?: number;
+  // seed peak-hold state (carry-over across rebuilds)
+  initialPeak?: number;
 }
 
 export interface VuEnvelope {
   update(raw: number, dtMs: number): void;
-  value: number; // the slow VU "needle" level
-  peak: number; // the fast peak-hold plateau
+  // the slow VU "needle" level
+  value: number;
+  // the fast peak-hold plateau
+  peak: number;
 }
 
-export function createVuEnvelope(opts: VuOptions): VuEnvelope {
+export const createVuEnvelope = (opts: VuOptions): VuEnvelope => {
   const peakAttackMs = opts.peakAttackMs ?? 10;
   const peakReleaseMs = opts.peakReleaseMs ?? 1500;
   const overshoot = opts.overshoot ?? 0;
 
   let value = opts.initialValue ?? 0;
   let peak = Math.max(opts.initialPeak ?? 0, value);
-  let overshootPulse = 0; // short-lived additive bump on rising edges
+  // short-lived additive bump on rising edges
+  let overshootPulse = 0;
   let rising = false;
 
   return {
@@ -46,7 +56,9 @@ export function createVuEnvelope(opts: VuOptions): VuEnvelope {
       return peak;
     },
     update(raw, dtMs) {
-      if (dtMs <= 0) return;
+      if (dtMs <= 0) {
+        return;
+      }
       const tauValue = raw > value ? opts.attackMs : opts.releaseMs;
       const tauPeak = raw > peak ? peakAttackMs : peakReleaseMs;
 
@@ -68,12 +80,14 @@ export function createVuEnvelope(opts: VuOptions): VuEnvelope {
       // Decay for next frame — half-life ~60 ms.
       overshootPulse *= Math.exp(-dtMs / 60);
 
-      peak = peak + alphaPeak * (raw - peak);
+      peak += alphaPeak * (raw - peak);
       // Peak should never fall below value (peak "holds above" the needle).
-      if (peak < value) peak = value;
+      if (peak < value) {
+        peak = value;
+      }
     },
     get value() {
       return value;
     },
   };
-}
+};

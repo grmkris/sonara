@@ -29,7 +29,7 @@ const ALLOWED_MIME = new Set(["image/jpeg", "image/png", "image/webp"]);
 // success the live Session pins the fal URL as `imageAnchor` and the next
 // frame uses flux-pro/v1.1-ultra with image conditioning. Preset picker
 // underneath controls strength; changing it re-sends setImageAnchor.
-export function ImageAnchorZone({ send }: ImageAnchorZoneProps) {
+export const ImageAnchorZone = ({ send }: ImageAnchorZoneProps) => {
   const anchorImageUrl = useVisualizerStore((s) => s.anchorImageUrl);
   const anchorLocalPreview = useVisualizerStore((s) => s.anchorLocalPreview);
   const strengthPreset = useVisualizerStore((s) => s.strengthPreset);
@@ -161,7 +161,8 @@ export function ImageAnchorZone({ send }: ImageAnchorZoneProps) {
   const onFileChange = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
       const file = e.target.files?.[0];
-      e.target.value = ""; // allow re-selecting the same file
+      // allow re-selecting the same file
+      e.target.value = "";
       if (file) {
         handleFile(file);
       }
@@ -173,7 +174,7 @@ export function ImageAnchorZone({ send }: ImageAnchorZoneProps) {
     (e: React.DragEvent<HTMLDivElement>) => {
       e.preventDefault();
       setDragOver(false);
-      const file = e.dataTransfer.files[0];
+      const [file] = e.dataTransfer.files;
       if (file) {
         handleFile(file);
       }
@@ -314,4 +315,4 @@ export function ImageAnchorZone({ send }: ImageAnchorZoneProps) {
       )}
     </div>
   );
-}
+};

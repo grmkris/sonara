@@ -70,13 +70,13 @@ beforeEach(async () => {
   );
 });
 
-async function seedCredits(userId: string, frames: number): Promise<void> {
+const seedCredits = async (userId: string, frames: number): Promise<void> => {
   await pg.query(
     `INSERT INTO credits (id, user_id, balance_frames)
      VALUES (gen_random_uuid(), $1, $2)`,
     [userId, frames]
   );
-}
+};
 
 describe("paid debit", () => {
   test("deducts COST_PER_FRAME and returns paidCost for refund", async () => {
@@ -130,7 +130,7 @@ describe("free-tier fallback", () => {
   test("free tier exhausted → denial with shouldEmit on user-initiated", async () => {
     // Drain the hourly quota first
     await seedCredits(USER, 0);
-    for (let i = 0; i < 3; i++) {
+    for (let i = 0; i < 3; i += 1) {
       await tryDebitCredit({
         isUserInitiated: false,
         lastCreditDenialAt: 0,
@@ -160,9 +160,9 @@ describe("cooldown rule", () => {
   // free-tier quota by reusing the row in the same hour window — see test
   // helper above. Each test seeds fresh state in beforeEach, so we pre-drain
   // here.
-  async function drainFreeTier(): Promise<void> {
+  const drainFreeTier = async (): Promise<void> => {
     await seedCredits(USER, 0);
-    for (let i = 0; i < 3; i++) {
+    for (let i = 0; i < 3; i += 1) {
       await tryDebitCredit({
         isUserInitiated: false,
         lastCreditDenialAt: 0,
@@ -171,7 +171,7 @@ describe("cooldown rule", () => {
         userId: USER,
       });
     }
-  }
+  };
 
   test("first auto-trigger denial emits and stamps the denial timestamp", async () => {
     await drainFreeTier();
@@ -193,7 +193,8 @@ describe("cooldown rule", () => {
     await drainFreeTier();
     const r = await tryDebitCredit({
       isUserInitiated: false,
-      lastCreditDenialAt: NOW - 1000, // 1s ago, well inside cooldown
+      // 1s ago, well inside cooldown
+      lastCreditDenialAt: NOW - 1000,
       logger,
       now: NOW,
       userId: USER,
@@ -226,7 +227,8 @@ describe("cooldown rule", () => {
     await drainFreeTier();
     const r = await tryDebitCredit({
       isUserInitiated: true,
-      lastCreditDenialAt: NOW - 1000, // would suppress an auto trigger
+      // would suppress an auto trigger
+      lastCreditDenialAt: NOW - 1000,
       logger,
       now: NOW,
       userId: USER,

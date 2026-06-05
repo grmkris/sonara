@@ -4,6 +4,7 @@ import { z } from "zod";
 // Startup-time env validation. Required keys fail the parse immediately so
 // the server refuses to boot into a half-configured state. Optional model
 // overrides stay optional because they have sane defaults.
+// oxlint-disable-next-line sort-keys -- keys are grouped logically (required vs optional) with per-key documentation; alphabetic reorder would scramble the doc-comment associations
 const envSchema = z.object({
   // Which environment this is (local | dev | prod). Required — no default, so a
   // misconfigured deploy fails loudly instead of silently using local URLs.
@@ -19,10 +20,14 @@ const envSchema = z.object({
     .default("info"),
 
   // Required — without any of these the server cannot do its job.
-  BETTER_AUTH_SECRET: z.string().min(1), // Better Auth + WS ticket HMAC key
-  DATABASE_URL: z.string().url(), // credits ledger + auth tables
-  FAL_KEY: z.string().min(1), // image generation + image-anchor upload
-  AUDD_API_KEY: z.string().min(1), // song recognition
+  // Better Auth + WS ticket HMAC key
+  BETTER_AUTH_SECRET: z.string().min(1),
+  // credits ledger + auth tables
+  DATABASE_URL: z.string().url(),
+  // image generation + image-anchor upload
+  FAL_KEY: z.string().min(1),
+  // song recognition
+  AUDD_API_KEY: z.string().min(1),
 
   // The public origin (Caddy gateway), the WS origin, and the Dodo test/live
   // mode are all derived from APP_ENV via SERVICE_URLS / dodoModeForEnv in

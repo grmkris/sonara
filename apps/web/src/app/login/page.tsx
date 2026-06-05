@@ -10,7 +10,7 @@ type Mode = "signin" | "signup";
 // Only accept same-origin relative paths as a post-login destination, so a
 // crafted `?next=//evil.com` or `?next=https://…` can't turn login into an
 // open redirect. Falls back to /play.
-function safeNext(next: string | null): string {
+const safeNext = (next: string | null): string => {
   if (
     next &&
     next.startsWith("/") &&
@@ -20,10 +20,10 @@ function safeNext(next: string | null): string {
     return next;
   }
   return "/play";
-}
+};
 
 // Maps Better Auth + our APIError(code) values to friendly UI copy.
-function friendlyError(rawMessage: string | undefined): string {
+const friendlyError = (rawMessage: string | undefined): string => {
   if (!rawMessage) {
     return "Something went wrong. Try again.";
   }
@@ -41,17 +41,9 @@ function friendlyError(rawMessage: string | undefined): string {
     return "Password must be at least 12 characters.";
   }
   return rawMessage;
-}
+};
 
-export default function LoginPage() {
-  return (
-    <Suspense fallback={null}>
-      <LoginForm />
-    </Suspense>
-  );
-}
-
-function LoginForm() {
+const LoginForm = () => {
   const router = useRouter();
   const next = safeNext(useSearchParams().get("next"));
   const [mode, setMode] = useState<Mode>("signin");
@@ -61,7 +53,7 @@ function LoginForm() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
-  async function onSubmit(e: React.FormEvent) {
+  const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
     setBusy(true);
@@ -89,15 +81,17 @@ function LoginForm() {
       }
       router.push(next);
       router.refresh();
-    } catch (error) {
-      const msg = error instanceof Error ? error.message : String(error);
+      // oxlint-disable-next-line catch-error-name -- `error` would shadow the outer error state; renamed to `err`
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
       setError(friendlyError(msg));
     } finally {
       setBusy(false);
     }
-  }
+  };
 
   const isSignup = mode === "signup";
+  const signInLabel = isSignup ? "Create account" : "Sign in";
 
   return (
     <main className="min-h-screen flex items-center justify-center bg-[color:var(--ink)] text-[color:var(--paper)] px-4">
@@ -174,7 +168,7 @@ function LoginForm() {
             disabled={busy}
             className="w-full mt-2 py-3 border border-white/30 hover:border-white/60 disabled:opacity-40 disabled:cursor-not-allowed font-serif italic text-lg transition-colors"
           >
-            {busy ? "…" : isSignup ? "Create account" : "Sign in"}
+            {busy ? "…" : signInLabel}
           </button>
         </form>
 
@@ -211,5 +205,13 @@ function LoginForm() {
         </div>
       </div>
     </main>
+  );
+};
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={null}>
+      <LoginForm />
+    </Suspense>
   );
 }

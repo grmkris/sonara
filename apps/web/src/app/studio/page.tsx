@@ -24,25 +24,15 @@ import { cn } from "@/lib/utils";
 // metadata + context, and act on it (use as anchor / reseed / download /
 // copy prompt). Audio replay is out of scope at this stage.
 
-export default function StudioPage() {
-  return (
-    <Suspense fallback={<StudioFallback />}>
-      <StudioInner />
-    </Suspense>
-  );
-}
+const StudioFallback = () => (
+  <main className="flex min-h-svh items-center justify-center bg-[color:var(--ink)] text-[color:var(--stone)]">
+    <span className="font-mono text-[10px] uppercase tracking-[0.22em]">
+      loading…
+    </span>
+  </main>
+);
 
-function StudioFallback() {
-  return (
-    <main className="flex min-h-svh items-center justify-center bg-[color:var(--ink)] text-[color:var(--stone)]">
-      <span className="font-mono text-[10px] uppercase tracking-[0.22em]">
-        loading…
-      </span>
-    </main>
-  );
-}
-
-function StudioInner() {
+const StudioInner = () => {
   const { data: sessionData, isPending } = useSession();
   const isSignedIn = !!sessionData?.session;
   const sp = useSearchParams();
@@ -73,17 +63,16 @@ function StudioInner() {
     let cancelled = false;
     setSessionsLoading(true);
     setSessionsError(false);
-    rpcClient.library
-      .sessions({})
-      .then(({ sessions: s }) => {
+    const run = async () => {
+      try {
+        const { sessions: s } = await rpcClient.library.sessions({});
         if (cancelled) {
           return;
         }
         setSessions(s);
         setSessionsLoading(false);
         setSessionsBootstrapped(true);
-      })
-      .catch(() => {
+      } catch {
         if (cancelled) {
           return;
         }
@@ -92,7 +81,9 @@ function StudioInner() {
         setSessionsError(true);
         setSessionsLoading(false);
         setSessionsBootstrapped(true);
-      });
+      }
+    };
+    void run();
     return () => {
       cancelled = true;
     };
@@ -109,7 +100,7 @@ function StudioInner() {
     if (sessions.length === 0) {
       return;
     }
-    const newest = sessions[0];
+    const [newest] = sessions;
     if (newest) {
       router.replace(`/studio?session=${encodeURIComponent(newest.sessionId)}`);
     }
@@ -126,23 +117,26 @@ function StudioInner() {
     let cancelled = false;
     setFramesLoading(true);
     setFramesError(false);
-    rpcClient.library
-      .bySession({ sessionId: selectedSessionId as LiveSessionId })
-      .then(({ frames: f }) => {
+    const run = async () => {
+      try {
+        const { frames: f } = await rpcClient.library.bySession({
+          sessionId: selectedSessionId as LiveSessionId,
+        });
         if (cancelled) {
           return;
         }
         setFrames(f);
         setLoadedSessionId(selectedSessionId);
         setFramesLoading(false);
-      })
-      .catch(() => {
+      } catch {
         if (cancelled) {
           return;
         }
         setFramesError(true);
         setFramesLoading(false);
-      });
+      }
+    };
+    void run();
     return () => {
       cancelled = true;
     };
@@ -197,6 +191,40 @@ function StudioInner() {
   const showInspectorOnDesktop = !!selectedFrame;
   const showMobileTimeline = !!selectedSessionId;
 
+  const renderCenter = () => {
+    if (!sessionsBootstrapped) {
+      return (
+        <div className="px-10 py-16 font-sans text-[10px] uppercase tracking-[0.22em] text-[color:var(--stone)]">
+          loading…
+        </div>
+      );
+    }
+    if (sessionsError) {
+      return <ErrorState onRetry={retry} />;
+    }
+    if (sessions.length === 0) {
+      return <EmptyState />;
+    }
+    if (!selectedSessionId) {
+      return (
+        <div className="px-10 py-16 font-sans text-[10px] uppercase tracking-[0.22em] text-[color:var(--stone)]">
+          select a session
+        </div>
+      );
+    }
+    if (framesError) {
+      return <ErrorState onRetry={retry} />;
+    }
+    return (
+      <SessionTimeline
+        frames={frames}
+        loading={framesLoading}
+        selectedFrameId={selectedFrameId}
+        onSelectFrame={onSelectFrame}
+      />
+    );
+  };
+
   return (
     <main className="relative flex min-h-svh flex-col overflow-hidden bg-[color:var(--ink)] text-[color:var(--paper)]">
       {/* Header */}
@@ -215,8 +243,8 @@ function StudioInner() {
         </div>
         {sessionsBootstrapped && sessions.length > 0 && (
           <span className="font-sans text-[10px] uppercase tracking-[0.22em] text-[color:var(--stone)]">
-            {totalFrames} frame{totalFrames !== 1 ? "s" : ""} ·{" "}
-            {sessions.length} session{sessions.length !== 1 ? "s" : ""}
+            {totalFrames} frame{totalFrames === 1 ? "" : "s"} ·{" "}
+            {sessions.length} session{sessions.length === 1 ? "" : "s"}
           </span>
         )}
       </header>
@@ -265,30 +293,7 @@ function StudioInner() {
             </div>
           )}
 
-          {!sessionsBootstrapped ? (
-            <div className="px-10 py-16 font-sans text-[10px] uppercase tracking-[0.22em] text-[color:var(--stone)]">
-              loading…
-            </div>
-          ) : sessionsError ? (
-            <ErrorState onRetry={retry} />
-          ) : sessions.length === 0 ? (
-            <EmptyState />
-          ) : selectedSessionId ? (
-            framesError ? (
-              <ErrorState onRetry={retry} />
-            ) : (
-              <SessionTimeline
-                frames={frames}
-                loading={framesLoading}
-                selectedFrameId={selectedFrameId}
-                onSelectFrame={onSelectFrame}
-              />
-            )
-          ) : (
-            <div className="px-10 py-16 font-sans text-[10px] uppercase tracking-[0.22em] text-[color:var(--stone)]">
-              select a session
-            </div>
-          )}
+          {renderCenter()}
         </section>
 
         {/* Desktop inspector pane */}
@@ -322,5 +327,13 @@ function StudioInner() {
         </SheetContent>
       </Sheet>
     </main>
+  );
+};
+
+export default function StudioPage() {
+  return (
+    <Suspense fallback={<StudioFallback />}>
+      <StudioInner />
+    </Suspense>
   );
 }

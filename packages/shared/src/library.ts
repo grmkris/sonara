@@ -24,11 +24,11 @@ export const LibraryManifestSchema = z.object({
 // music is calm and cut faster when it's loud (intensity 0..1). The range comes
 // from the deck's look profile (DECK_LOOK) when given — e.g. Noir holds 12s→7s
 // for a chill, slow slideshow — otherwise the app default 6s→2s.
-export function libraryCadenceMs(
+export const libraryCadenceMs = (
   intensity: number,
   deck?: DeckKey | null
-): number {
+): number => {
   const i = Math.max(0, Math.min(1, intensity));
   const { calm, loud } = (deck && DECK_LOOK[deck]?.cadence) || DEFAULT_CADENCE;
   return Math.round(calm + (loud - calm) * i);
-}
+};

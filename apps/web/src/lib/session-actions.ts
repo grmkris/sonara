@@ -24,10 +24,11 @@ export type SessionAction =
 
 export type SessionSend = (action: SessionAction) => void;
 
-export function dispatchSessionAction(
+export const dispatchSessionAction = (
   client: SessionRouterClient,
   action: SessionAction
-): Promise<unknown> {
+): Promise<unknown> => {
+  // oxlint-disable-next-line default-case -- exhaustive over the SessionAction discriminated union; a default would defeat TS exhaustiveness checks
   switch (action.type) {
     case "hello": {
       return client.hello();
@@ -45,7 +46,7 @@ export function dispatchSessionAction(
       return client.reset();
     }
     case "demo.set": {
-      return client.setDemoMode({ on: action.on, deck: action.deck });
+      return client.setDemoMode({ deck: action.deck, on: action.on });
     }
     case "session.goLive": {
       return client.goLive({
@@ -55,8 +56,8 @@ export function dispatchSessionAction(
     }
     case "image.anchor.set": {
       return client.setImageAnchor({
-        url: action.url,
         strength: action.strength,
+        url: action.url,
       });
     }
     case "image.anchor.clear": {
@@ -65,10 +66,10 @@ export function dispatchSessionAction(
     case "audio.recognize": {
       return client.recognize({
         clipBase64: action.clipBase64,
-        mimeType: action.mimeType,
         durationMs: action.durationMs,
+        mimeType: action.mimeType,
         trigger: action.trigger,
       });
     }
   }
-}
+};

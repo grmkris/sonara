@@ -18,38 +18,63 @@ export type PresetName = VisualPresetName;
 
 export interface PresetConfig {
   // Effect amounts (0 = off)
-  kaleidoSegments: number; // 0 or 1 = off, 2..12 active
-  polarWarp: number; // radians per unit radius
-  posterizeAlways: number; // 0 or <2 = off, else levels (3..16)
-  duotoneMix: number; // 0..1
+  // 0 or 1 = off, 2..12 active
+  kaleidoSegments: number;
+  // radians per unit radius
+  polarWarp: number;
+  // 0 or <2 = off, else levels (3..16)
+  posterizeAlways: number;
+  // 0..1
+  duotoneMix: number;
   duotoneLo: [number, number, number];
   duotoneHi: [number, number, number];
-  edge: number; // 0..2
-  invert: number; // 0..1
-  feedbackAmount: number; // 0..0.85
+  // 0..2
+  edge: number;
+  // 0..1
+  invert: number;
+  // 0..0.85
+  feedbackAmount: number;
   // Multipliers on top of audio-driven effects
-  bloomMult: number; // 1 = baseline
-  noiseMult: number; // 1 = baseline displacement amplitude
+  // 1 = baseline
+  bloomMult: number;
+  // 1 = baseline displacement amplitude
+  noiseMult: number;
   // Paper/ink primitives (0 = off, 1 = full)
-  washi: number; // paper-fiber texture overlay
-  deckle: number; // torn-paper edge
-  bokashi: number; // wet gradient wash
-  nijimi: number; // ink bleed at dark boundaries
-  drybrush: number; // rough-brush highlight streaks
+  // paper-fiber texture overlay
+  washi: number;
+  // torn-paper edge
+  deckle: number;
+  // wet gradient wash
+  bokashi: number;
+  // ink bleed at dark boundaries
+  nijimi: number;
+  // rough-brush highlight streaks
+  drybrush: number;
   // Light primitives (0 = off, 1 = full)
-  halation: number; // highlight bloom spread
-  focal: number; // radial depth-of-field
-  godray: number; // directional light shafts
-  grain: number; // film grain
+  // highlight bloom spread
+  halation: number;
+  // radial depth-of-field
+  focal: number;
+  // directional light shafts
+  godray: number;
+  // film grain
+  grain: number;
   // Color/geometry primitives (0 = off, 1 = full)
-  curl: number; // curl-noise UV warp
-  dither: number; // ordered Bayer dither
-  seal: number; // kanji stamp overlay
-  enso: number; // single-stroke circle accent
+  // curl-noise UV warp
+  curl: number;
+  // ordered Bayer dither
+  dither: number;
+  // kanji stamp overlay
+  seal: number;
+  // single-stroke circle accent
+  enso: number;
   // Watercolor primitives (0 = off, 1 = full)
-  wetEdge: number; // dark bleed ring at luminance boundaries (classic sumi-e)
-  granulation: number; // pigment speckle on mid-tones from fbm noise
-  halftone: number; // printmaking dot/line screen overlay
+  // dark bleed ring at luminance boundaries (classic sumi-e)
+  wetEdge: number;
+  // pigment speckle on mid-tones from fbm noise
+  granulation: number;
+  // printmaking dot/line screen overlay
+  halftone: number;
   // Papari–Kuwahara polynomial painterly filter. 0 = off, 1 = full mix.
   painterly: number;
   // Watercolour traditions.
@@ -70,45 +95,47 @@ export interface PresetConfig {
 }
 
 export const BASE: PresetConfig = {
-  kaleidoSegments: 0,
-  polarWarp: 0,
-  posterizeAlways: 0,
-  duotoneMix: 0,
-  duotoneLo: [0.09, 0.08, 0.07],
-  duotoneHi: [0.93, 0.9, 0.84],
-  edge: 0,
-  invert: 0,
-  feedbackAmount: 0,
   bloomMult: 1,
-  noiseMult: 1,
-  washi: 0,
-  deckle: 0,
   bokashi: 0,
-  nijimi: 0,
+  cauliflower: 0,
+  curl: 0,
+  deckle: 0,
+  dither: 0,
   drybrush: 0,
-  halation: 0,
+  duotoneHi: [0.93, 0.9, 0.84],
+  duotoneLo: [0.09, 0.08, 0.07],
+  duotoneMix: 0,
+  edge: 0,
+  enso: 0,
+  feedbackAmount: 0,
   focal: 0,
   godray: 0,
   grain: 0,
-  curl: 0,
-  dither: 0,
-  seal: 0,
-  enso: 0,
-  wetEdge: 0,
   granulation: 0,
+  halation: 0,
   halftone: 0,
+  invert: 0,
+  kaleidoSegments: 0,
+  nijimi: 0,
+  noiseMult: 1,
   painterly: 0,
-  salt: 0,
-  cauliflower: 0,
-  splatter: 0,
+  polarWarp: 0,
+  posterizeAlways: 0,
   rd: 0,
   // Default to "spots" zone per Pearson. Active when rd > 0.
   rdFeed: 0.037,
   rdKill: 0.06,
+  salt: 0,
+  seal: 0,
+  splatter: 0,
+  washi: 0,
+  wetEdge: 0,
 };
 
 // Preset registry. Order roughly "closest to baseline" → "most distinct".
 // Keys MUST match `VISUAL_PRESET_NAMES` in `packages/shared/src/visual-presets.ts`.
+// oxlint-disable sort-keys -- intentional preset ordering (baseline→distinct) and
+// grouped per-preset uniform ordering are author-curated and load-bearing for readability
 export const PRESETS: Record<PresetName, PresetConfig> = {
   wet_ink: {
     ...BASE,
@@ -224,7 +251,7 @@ export const PRESETS: Record<PresetName, PresetConfig> = {
     bloomMult: 0.55,
     duotoneHi: [0.92, 0.32, 0.35],
     duotoneLo: [0.1, 0.11, 0.28],
-    duotoneMix: 1.0,
+    duotoneMix: 1,
     edge: 1.2,
     noiseMult: 0.3,
   },
@@ -299,7 +326,7 @@ export const PRESETS: Record<PresetName, PresetConfig> = {
     duotoneHi: [0.94, 0.62, 0.28],
     duotoneLo: [0.06, 0.1, 0.16],
     duotoneMix: 0.7,
-    edge: 1.0,
+    edge: 1,
     godray: 0.25,
     halation: 0.4,
     noiseMult: 0.5,
@@ -412,6 +439,7 @@ export const PRESETS: Record<PresetName, PresetConfig> = {
     posterizeAlways: 7,
   },
 };
+// oxlint-enable sort-keys
 
 export const PRESET_NAMES: readonly PresetName[] = VISUAL_PRESET_NAMES;
 
@@ -429,37 +457,32 @@ export interface PresetDrift {
   noiseMult?: { lfo: LfoDriver; amplitude: number };
 }
 
-export function makeDriftForPreset(_name: PresetName): PresetDrift {
-  return {
-    bloomMult: { amplitude: 0.08, lfo: sineLfo(45) },
-    feedbackAmount: { amplitude: 0.06, lfo: randomWalk(0.015) },
-    noiseMult: { amplitude: 0.12, lfo: sineLfo(35) },
-    polarWarp: { amplitude: 0.05, lfo: sineLfo(60) },
-  };
-}
+export const makeDriftForPreset = (_name: PresetName): PresetDrift => ({
+  bloomMult: { amplitude: 0.08, lfo: sineLfo(45) },
+  feedbackAmount: { amplitude: 0.06, lfo: randomWalk(0.015) },
+  noiseMult: { amplitude: 0.12, lfo: sineLfo(35) },
+  polarWarp: { amplitude: 0.05, lfo: sineLfo(60) },
+});
 
 // Linear interpolation helper used by the cross-fade layer.
-export function lerpNumber(a: number, b: number, t: number): number {
-  return a + (b - a) * t;
-}
+export const lerpNumber = (a: number, b: number, t: number): number =>
+  a + (b - a) * t;
 
-export function lerpVec3(
+export const lerpVec3 = (
   a: [number, number, number],
   b: [number, number, number],
   t: number
-): [number, number, number] {
-  return [
-    a[0] + (b[0] - a[0]) * t,
-    a[1] + (b[1] - a[1]) * t,
-    a[2] + (b[2] - a[2]) * t,
-  ];
-}
+): [number, number, number] => [
+  a[0] + (b[0] - a[0]) * t,
+  a[1] + (b[1] - a[1]) * t,
+  a[2] + (b[2] - a[2]) * t,
+];
 
-export function lerpPreset(
+export const lerpPreset = (
   a: PresetConfig,
   b: PresetConfig,
   t: number
-): PresetConfig {
+): PresetConfig => {
   const k = Math.max(0, Math.min(1, t));
   return {
     bloomMult: lerpNumber(a.bloomMult, b.bloomMult, k),
@@ -497,4 +520,4 @@ export function lerpPreset(
     washi: lerpNumber(a.washi, b.washi, k),
     wetEdge: lerpNumber(a.wetEdge, b.wetEdge, k),
   };
-}
+};
