@@ -173,6 +173,7 @@ export const PromptInput = ({ send }: PromptInputProps) => {
         onChange={onChange}
         onKeyDown={onKeyDown}
         rows={3}
+        aria-label="scene prompt"
         placeholder="describe the scene… e.g. a deer at the edge of a clearing, hushed and reverent, moss green and gold"
         className={cn(
           "w-full resize-none bg-transparent border border-[color:var(--hairline)]/40 px-3 py-2",

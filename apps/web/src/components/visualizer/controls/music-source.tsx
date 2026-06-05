@@ -235,10 +235,12 @@ export const MusicSource = ({ source, setSource }: MusicSourceProps) => {
         accept="audio/*"
         className="hidden"
         onChange={onFile}
+        aria-label="upload audio file"
       />
       <audio
         ref={audioRef}
         controls
+        aria-label="uploaded audio playback"
         className={cn(
           "h-6 w-full max-w-[220px] opacity-60",
           fileName ? "block" : "hidden"

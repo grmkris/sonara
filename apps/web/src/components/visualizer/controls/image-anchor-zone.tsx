@@ -284,6 +284,7 @@ export const ImageAnchorZone = ({ send }: ImageAnchorZoneProps) => {
             accept="image/jpeg,image/png,image/webp"
             onChange={onFileChange}
             className="hidden"
+            aria-label="upload anchor image"
           />
         </div>
       )}

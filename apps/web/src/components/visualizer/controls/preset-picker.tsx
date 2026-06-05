@@ -230,6 +230,7 @@ export const PresetPicker = () => {
             value={Math.round(cycleMs / 1000)}
             onChange={(ev) => setCycleMs(Number(ev.target.value) * 1000)}
             className="flex-1 accent-[color:var(--paper)]"
+            aria-label="cycle period in seconds"
           />
           <span className="font-mono nums text-[10px] text-[color:var(--paper)]/80 w-10 text-right">
             {Math.round(cycleMs / 1000)}s

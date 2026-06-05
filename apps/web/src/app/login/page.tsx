@@ -114,6 +114,7 @@ const LoginForm = () => {
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 autoComplete="name"
+                aria-label="Display name"
                 required
                 className="mt-1 w-full bg-transparent border-b border-white/20 focus:border-white/60 outline-none py-2 font-serif text-lg"
               />
@@ -129,6 +130,7 @@ const LoginForm = () => {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               autoComplete="email"
+              aria-label="Email"
               required
               className="mt-1 w-full bg-transparent border-b border-white/20 focus:border-white/60 outline-none py-2 font-serif text-lg"
             />
@@ -143,6 +145,7 @@ const LoginForm = () => {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               autoComplete={isSignup ? "new-password" : "current-password"}
+              aria-label="Password"
               required
               minLength={isSignup ? 12 : undefined}
               className="mt-1 w-full bg-transparent border-b border-white/20 focus:border-white/60 outline-none py-2 font-serif text-lg"
