@@ -174,8 +174,14 @@ export const FrameInspectorContent = ({
         </Button>
       </div>
 
-      {/* Add to a curated reel */}
-      <AddToReelPopover frame={frame} />
+      {/* Add to a curated reel. Hidden for example-session frames: those are
+          synthesized from shared seed rows (user_id NULL), so the server's
+          ownership check would reject them — a new user (who only has example
+          sessions) would otherwise hit an error. Real generated frames carry a
+          normal lse_ session id and are addable. */}
+      {!frame.sessionId.startsWith("lse_example_") && (
+        <AddToReelPopover frame={frame} />
+      )}
 
       {/* Metadata */}
       <section className="flex flex-col gap-3 border-t border-[color:var(--hairline)]/30 pt-4">
