@@ -4,7 +4,7 @@ import { InspectorContextSchema } from "./inspector-context";
 import { NowPlaying } from "./now-playing";
 import { SonaraSceneState } from "./scene";
 import { ResolvedScene } from "./scene-resolved";
-import { ImageLibraryIdSchema, LiveSessionIdSchema } from "./typeid";
+import { ImageLibraryIdSchema, LiveSessionIdSchema, ReelIdSchema } from "./typeid";
 import { VISUAL_PRESET_NAMES } from "./visual-presets";
 
 // One persisted generated frame. Returned by the library router (list /
@@ -51,6 +51,33 @@ export const SessionSummarySchema = z.object({
 });
 
 export type SessionSummary = z.infer<typeof SessionSummarySchema>;
+
+// Lightweight summary for the /studio reels sidebar — no per-frame data, just
+// the aggregate + a presigned cover thumbnail. Reels are user-curated groups
+// of frames (see packages/db/src/schema/reel.db.ts).
+export const ReelSummarySchema = z.object({
+  // Presigned URL of the cover frame (explicit cover, else newest member).
+  // Null when the reel is still empty.
+  coverUrl: z.string().nullable(),
+  createdAt: z.coerce.date(),
+  frameCount: z.number().int().nonnegative(),
+  id: ReelIdSchema,
+  name: z.string(),
+});
+
+export type ReelSummary = z.infer<typeof ReelSummarySchema>;
+
+// A full reel: summary header + its ordered frames (reusing LibraryFrame, with
+// freshly presigned urls). Frames are ordered by reel_frame.position.
+export const ReelSchema = z.object({
+  coverUrl: z.string().nullable(),
+  createdAt: z.coerce.date(),
+  frames: z.array(LibraryFrameSchema),
+  id: ReelIdSchema,
+  name: z.string(),
+});
+
+export type Reel = z.infer<typeof ReelSchema>;
 
 // Clients may only patch user-authored fields. version/nowPlaying are
 // server-authoritative; imageAnchor goes through its dedicated mutation
