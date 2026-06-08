@@ -162,6 +162,7 @@ export const reelRouter = {
         }
       }
       return {
+        coverFrameId: owned.coverFrameId,
         coverUrl,
         createdAt: owned.createdAt,
         frames,

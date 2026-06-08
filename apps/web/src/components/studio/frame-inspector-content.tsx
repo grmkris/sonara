@@ -9,6 +9,8 @@ import { Button } from "@/components/ui/button";
 import { formatMmSs } from "@/lib/format-time";
 import { cn } from "@/lib/utils";
 
+import { AddToReelPopover } from "./add-to-reel-popover";
+
 interface FrameInspectorContentProps {
   frame: LibraryFrame;
 }
@@ -171,6 +173,9 @@ export const FrameInspectorContent = ({
           copy prompt
         </Button>
       </div>
+
+      {/* Add to a curated reel */}
+      <AddToReelPopover frame={frame} />
 
       {/* Metadata */}
       <section className="flex flex-col gap-3 border-t border-[color:var(--hairline)]/30 pt-4">

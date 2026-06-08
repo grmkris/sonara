@@ -70,6 +70,9 @@ export type ReelSummary = z.infer<typeof ReelSummarySchema>;
 // A full reel: summary header + its ordered frames (reusing LibraryFrame, with
 // freshly presigned urls). Frames are ordered by reel_frame.position.
 export const ReelSchema = z.object({
+  // Explicit cover frame id (null = no explicit cover; the cover thumbnail then
+  // falls back to the first frame). Lets the editor badge the cover tile.
+  coverFrameId: ImageLibraryIdSchema.nullable(),
   coverUrl: z.string().nullable(),
   createdAt: z.coerce.date(),
   frames: z.array(LibraryFrameSchema),
