@@ -23,7 +23,12 @@ export interface SessionConnection {
 }
 
 export const createSessionConnection = (
-  sessionId: string
+  sessionId: string,
+  // Durable logical-performance id (sessionStorage, owned by the client). Sent
+  // on every (re)connect so the server keeps grouping persisted frames under
+  // one session across reconnects/reloads/redeploys. partysocket re-invokes the
+  // url provider on each reconnect, so the same id rides along automatically.
+  liveSessionId: string
 ): SessionConnection => {
   const urlProvider = async (): Promise<string> => {
     // mintWsTicket is public: signed-in visitors get a ticket carrying
@@ -34,6 +39,7 @@ export const createSessionConnection = (
     const url = new URL(WS_URL_BASE);
     url.searchParams.set("token", token);
     url.searchParams.set("sessionId", sessionId);
+    url.searchParams.set("liveSessionId", liveSessionId);
     return url.toString();
   };
 

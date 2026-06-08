@@ -1,4 +1,5 @@
 import type { SessionRegistry } from "@sonara/api/server";
+import type { LiveSessionId } from "@sonara/shared/typeid";
 
 import type { Logger } from "../lib/logger";
 import { Session } from "./session";
@@ -11,12 +12,21 @@ export class SessionManager implements SessionRegistry {
     this.logger = logger;
   }
 
-  create(id: string, userId: string | null): Session {
+  create(
+    id: string,
+    userId: string | null,
+    liveSessionId?: LiveSessionId | null
+  ): Session {
     const existing = this.sessions.get(id);
     if (existing) {
       existing.close();
     }
-    const session = new Session({ id, logger: this.logger, userId });
+    const session = new Session({
+      id,
+      liveSessionId,
+      logger: this.logger,
+      userId,
+    });
     this.sessions.set(id, session);
     return session;
   }

@@ -46,6 +46,11 @@ export interface SessionOpts {
   // no AudD recognition) — see constructor + trigger() + recognize().
   userId: string | null;
   logger: Logger;
+  // Durable identifier for the logical performance, owned by the client and
+  // re-sent on every (re)connect. When supplied, frames keep grouping under
+  // one session_id across reconnects; absent/null (old/direct client, or an
+  // unvalidated id) → fresh mint.
+  liveSessionId?: LiveSessionId | null;
 }
 
 // `source` is the granular reason a trigger fired — used only for logging and
@@ -172,11 +177,14 @@ export class Session implements ControllableSession {
   private sessionStartAt = Date.now();
   private lastCreditDenialAt = 0;
 
-  // Stable identifier for this live WS session. Stays fixed for the WS
-  // lifetime (reset() does NOT mint a new one — the user's library-row
-  // grouping survives a scene reset). Distinct from Better Auth's
-  // SessionId / opts.id (which is the WS-connection id).
-  readonly liveSessionId: LiveSessionId = typeIdGenerator("liveSession");
+  // Stable identifier for this live session — one logical performance. The
+  // client owns it (sessionStorage) and re-sends it on every (re)connect, so
+  // it survives reconnects / reloads / redeploys and the user's library-row
+  // grouping (image_library.session_id) stays ONE session instead of
+  // fragmenting per WS connect. Assigned in the constructor from opts, falling
+  // back to a fresh mint when a client doesn't supply one. reset() keeps it.
+  // Distinct from opts.id (the ephemeral per-tab WS-connection id).
+  readonly liveSessionId: LiveSessionId;
 
   // DEMO mode state. Frame-driving is client-side now (use-demo-frame-loop);
   // the server only tracks these to relay in the connect snapshot + anon pinning.
@@ -210,6 +218,7 @@ export class Session implements ControllableSession {
   constructor(opts: SessionOpts) {
     this.id = opts.id;
     this.userId = opts.userId;
+    this.liveSessionId = opts.liveSessionId ?? typeIdGenerator("liveSession");
     this.logger = opts.logger.child({
       anon: opts.userId === null,
       sessionId: opts.id,
@@ -917,11 +926,19 @@ export class Session implements ControllableSession {
           width: 768,
         });
         void (async () => {
-          const row = await persisted;
-          if (!row) {
-            return;
+          try {
+            const row = await persisted;
+            if (!row) {
+              return;
+            }
+            this.send({ frame: row, type: "library.appended" });
+          } catch (error) {
+            // Fire-and-forget: a persist/send failure here must never become an
+            // unhandled rejection (on a single-replica in-memory server that can
+            // crash Bun and drop every live session). Mirror the streamPreview/
+            // streamAnchor .catch guard above.
+            this.logger.error({ error }, "persistFrame unhandled");
           }
-          this.send({ frame: row, type: "library.appended" });
         })();
       },
       onPreview: (url) => {
@@ -1202,11 +1219,19 @@ export class Session implements ControllableSession {
           width: 1024,
         });
         void (async () => {
-          const row = await persisted;
-          if (!row) {
-            return;
+          try {
+            const row = await persisted;
+            if (!row) {
+              return;
+            }
+            this.send({ frame: row, type: "library.appended" });
+          } catch (error) {
+            // Fire-and-forget: a persist/send failure here must never become an
+            // unhandled rejection (on a single-replica in-memory server that can
+            // crash Bun and drop every live session). Mirror the streamPreview/
+            // streamAnchor .catch guard above.
+            this.logger.error({ error }, "persistFrame unhandled");
           }
-          this.send({ frame: row, type: "library.appended" });
         })();
       },
       onPreview: (url) => {

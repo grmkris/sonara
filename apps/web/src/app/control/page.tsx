@@ -1,5 +1,6 @@
 "use client";
 
+import { ORPCError } from "@orpc/client";
 import { deckLabel } from "@sonara/shared";
 import type { DeckKey, SonaraSceneState } from "@sonara/shared";
 import type { LiveSessionId } from "@sonara/shared/typeid";
@@ -32,6 +33,12 @@ type LiveSessionSummary = Awaited<
 >["sessions"][number];
 
 const SESSIONS_POLL_MS = 3000;
+
+// The `control` router is protected, so an expired cookie surfaces here as an
+// ORPCError with code UNAUTHORIZED — which we must show, not swallow. ORPCError
+// implements Symbol.hasInstance, so instanceof is SSR-safe across module copies.
+const isUnauthorized = (error: unknown): boolean =>
+  error instanceof ORPCError && error.code === "UNAUTHORIZED";
 
 const SLIDERS: {
   key: "softness" | "surrealness" | "abstraction" | "stability";
@@ -251,14 +258,17 @@ export default function ControlPage() {
 
   const [sessions, setSessions] = useState<LiveSessionSummary[]>([]);
   const [selectedId, setSelectedId] = useState<LiveSessionId | null>(null);
+  const [authExpired, setAuthExpired] = useState(false);
 
-  // Discover the caller's live sessions, and keep re-resolving — the projector's
-  // liveSessionId is reminted on every reconnect, so we never pin a stale id.
+  // Discover the caller's live sessions and keep re-resolving, so we rebind if
+  // the projector closes/reopens. (The projector's liveSessionId is durable now
+  // — client-owned — but re-resolving still cleanly handles it going away.)
   useEffect(() => {
     if (!isSignedIn) {
       return;
     }
     let cancelled = false;
+    let stopped = false;
     let timer: ReturnType<typeof setTimeout> | null = null;
     const poll = async (): Promise<void> => {
       try {
@@ -266,10 +276,16 @@ export default function ControlPage() {
         if (!cancelled) {
           setSessions(next);
         }
-      } catch {
-        // transient — keep the last list, try again next tick
+      } catch (error) {
+        // An expired session must surface (not leave a stale list on screen);
+        // stop polling and let the render show the sign-in prompt. Other errors
+        // are transient — keep the last list and retry next tick.
+        if (!cancelled && isUnauthorized(error)) {
+          setAuthExpired(true);
+          stopped = true;
+        }
       } finally {
-        if (!cancelled) {
+        if (!(cancelled || stopped)) {
           timer = setTimeout(poll, SESSIONS_POLL_MS);
         }
       }
@@ -310,6 +326,26 @@ export default function ControlPage() {
         <div className="flex flex-col items-center gap-4 text-center">
           <p className="font-serif text-[15px] text-[color:var(--paper)]/85">
             sign in to control your live session.
+          </p>
+          <Button asChild variant="ghost" size="sm">
+            <Link
+              href="/login?next=/control"
+              className="font-sans text-[11px] uppercase tracking-[0.24em]"
+            >
+              sign in
+            </Link>
+          </Button>
+        </div>
+      </Shell>
+    );
+  }
+
+  if (authExpired) {
+    return (
+      <Shell>
+        <div className="flex flex-col items-center gap-4 text-center">
+          <p className="font-serif text-[15px] text-[color:var(--paper)]/85">
+            your session expired — sign in again to keep controlling.
           </p>
           <Button asChild variant="ghost" size="sm">
             <Link

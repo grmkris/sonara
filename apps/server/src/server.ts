@@ -8,7 +8,8 @@ import type { SessionContext } from "@sonara/api/server";
 import { createDb } from "@sonara/db";
 import { runMigrations } from "@sonara/db/migrator";
 import { SERVICE_URLS, verifyTicket } from "@sonara/shared";
-import type { UserId } from "@sonara/shared/typeid";
+import { LiveSessionIdSchema } from "@sonara/shared/typeid";
+import type { LiveSessionId, UserId } from "@sonara/shared/typeid";
 import { Hono } from "hono";
 
 import { getAuth } from "./auth/auth";
@@ -90,6 +91,11 @@ interface WsData {
   // An anon ticket is still HMAC-signed by the web app — null just means
   // "the visitor wasn't signed in when they minted this ticket."
   userId: string | null;
+  // Durable logical-performance id the client owns (sessionStorage) and
+  // re-sends on every reconnect, so persisted frames keep grouping under one
+  // session_id. Validated as a well-formed liveSession typeid; null when a
+  // client doesn't supply one (old/direct client) → the Session mints its own.
+  liveSessionId: LiveSessionId | null;
 }
 
 const server = Bun.serve<WsData, never>({
@@ -109,8 +115,20 @@ const server = Bun.serve<WsData, never>({
       const sessionId =
         url.searchParams.get("sessionId") ??
         `sess_${Math.random().toString(36).slice(2, 10)}`;
+      // The client owns a durable liveSessionId (sessionStorage) and re-sends
+      // it on every reconnect. Validate it's a well-formed liveSession typeid
+      // before trusting it; a malformed/absent value falls back to a fresh mint
+      // server-side. It's only a grouping key — every persisted frame still
+      // carries the authenticated user_id, so a client can only group its own.
+      const liveSessionIdRaw = url.searchParams.get("liveSessionId");
+      const liveSessionParse = liveSessionIdRaw
+        ? LiveSessionIdSchema.safeParse(liveSessionIdRaw)
+        : null;
+      const liveSessionId = liveSessionParse?.success
+        ? liveSessionParse.data
+        : null;
       const upgraded = srv.upgrade(req, {
-        data: { sessionId, userId: payload.userId },
+        data: { liveSessionId, sessionId, userId: payload.userId },
       });
       return upgraded
         ? undefined
@@ -140,9 +158,9 @@ const server = Bun.serve<WsData, never>({
       });
     },
     open(ws) {
-      const { sessionId, userId } = ws.data;
-      manager.create(sessionId, userId);
-      logger.info({ sessionId, userId }, "ws opened");
+      const { liveSessionId, sessionId, userId } = ws.data;
+      manager.create(sessionId, userId, liveSessionId);
+      logger.info({ liveSessionId, sessionId, userId }, "ws opened");
     },
   },
 });
