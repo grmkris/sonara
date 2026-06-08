@@ -5,6 +5,7 @@ import { controlRouter } from "./control.router";
 import { creditsRouter } from "./credits.router";
 import { libraryRouter } from "./library.router";
 import { publicProcedure } from "./procedures";
+import { reelRouter } from "./reel.router";
 
 // The HTTP (oRPC over fetch) router. Mounted by the server's Hono app at
 // /rpc and reached from the browser through the Caddy gateway (same-origin).
@@ -17,6 +18,7 @@ export const appRouter = {
   credits: creditsRouter,
   healthCheck: publicProcedure.handler(() => "OK" as const),
   library: libraryRouter,
+  reels: reelRouter,
 };
 
 export type AppRouter = typeof appRouter;
