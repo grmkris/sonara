@@ -4,6 +4,7 @@ import type { InspectorSlice } from "./inspector-slice";
 import type { LibrarySlice } from "./library-slice";
 import type { PlaybackSlice } from "./playback-slice";
 import type { PresetSlice } from "./preset-slice";
+import type { ReelPlaybackSlice } from "./reel-playback-slice";
 import type { SceneSlice } from "./scene-slice";
 import type { UiSlice } from "./ui-slice";
 import type { VoiceSlice } from "./voice-slice";
@@ -19,4 +20,5 @@ export type VisualizerState = SceneSlice &
   PresetSlice &
   DemoSlice &
   ImageAnchorSlice &
-  LibrarySlice;
+  LibrarySlice &
+  ReelPlaybackSlice;

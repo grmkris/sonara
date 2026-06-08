@@ -26,11 +26,14 @@ import { HideToggle } from "@/components/visualizer/controls/hide-toggle";
 import { MusicSource } from "@/components/visualizer/controls/music-source";
 import { NowPlaying } from "@/components/visualizer/controls/now-playing";
 import { PromptInput } from "@/components/visualizer/controls/prompt-input";
+import { ReelPlaybackConsumer } from "@/components/visualizer/reel-playback-consumer";
+import { ReelPlaybackHud } from "@/components/visualizer/reel-playback-hud";
 import { StudioActionConsumer } from "@/components/visualizer/studio-action-consumer";
 import { useAudioFeatures } from "@/hooks/use-audio-features";
 import type { AudioSource } from "@/hooks/use-audio-features";
 import { useDemoFrameLoop } from "@/hooks/use-demo-frame-loop";
 import { useHotkey } from "@/hooks/use-hotkey";
+import { useReelPlaybackLoop } from "@/hooks/use-reel-playback-loop";
 import { useSongRecognition } from "@/hooks/use-song-recognition";
 import { useWsSession } from "@/hooks/use-ws-session";
 import { useSession } from "@/lib/auth-client";
@@ -138,6 +141,9 @@ export default function Page() {
   // manifest, so it works on slow/no internet (the server never generates in
   // demo mode).
   useDemoFrameLoop();
+  // Client-side reel/session replay producer (inert until a ?reel=/?session=
+  // param activates it via ReelPlaybackConsumer).
+  useReelPlaybackLoop();
   const { data: sessionData } = useSession();
   const isSignedIn = !!sessionData?.session;
   const [audioSource, setAudioSource] = useState<AudioSource>({ type: "none" });
@@ -381,6 +387,14 @@ export default function Page() {
       <Suspense fallback={null}>
         <StudioActionConsumer send={send} />
       </Suspense>
+
+      {/* Consumes ?reel= / ?session= replay params; drives the playback loop. */}
+      <Suspense fallback={null}>
+        <ReelPlaybackConsumer />
+      </Suspense>
+
+      {/* Replay overlay (exit control); only renders while a replay is active. */}
+      <ReelPlaybackHud />
     </main>
   );
 }

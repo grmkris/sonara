@@ -1,6 +1,8 @@
 "use client";
 
 import type { LibraryFrame } from "@sonara/shared";
+import { Play } from "lucide-react";
+import Link from "next/link";
 import { useMemo } from "react";
 
 import { formatDuration, formatMmSs } from "@/lib/format-time";
@@ -101,6 +103,7 @@ export const SessionTimeline = ({
   onSelectFrame,
 }: SessionTimelineProps) => {
   const layout = useMemo(() => computeLayout(frames), [frames]);
+  const sessionId = frames[0]?.sessionId ?? null;
 
   if (loading) {
     return (
@@ -126,15 +129,26 @@ export const SessionTimeline = ({
 
   return (
     <div className="flex h-full flex-col gap-6 overflow-y-auto px-6 py-8 md:px-10">
-      <header className="flex flex-col gap-1">
-        <span className="font-mono text-[10px] uppercase tracking-[0.26em] text-[color:var(--stone)]">
-          session timeline
-        </span>
-        <h2 className="font-sans text-[14px] uppercase tracking-[0.18em] text-[color:var(--paper)]/90">
-          {frames.length} frame{frames.length === 1 ? "" : "s"}
-          {" · "}
-          {formatDuration(layout.durationMs)}
-        </h2>
+      <header className="flex items-start justify-between gap-4">
+        <div className="flex flex-col gap-1">
+          <span className="font-mono text-[10px] uppercase tracking-[0.26em] text-[color:var(--stone)]">
+            session timeline
+          </span>
+          <h2 className="font-sans text-[14px] uppercase tracking-[0.18em] text-[color:var(--paper)]/90">
+            {frames.length} frame{frames.length === 1 ? "" : "s"}
+            {" · "}
+            {formatDuration(layout.durationMs)}
+          </h2>
+        </div>
+        {sessionId && (
+          <Link
+            href={`/play?session=${encodeURIComponent(sessionId)}`}
+            className="focus-ring font-sans inline-flex shrink-0 items-center gap-1.5 border border-[color:var(--hairline)]/40 px-3 py-1.5 text-[10px] uppercase tracking-[0.22em] text-[color:var(--paper)]/85 transition-colors hover:border-[color:var(--paper)]/70 hover:text-[color:var(--paper)]"
+          >
+            <Play className="size-3" strokeWidth={1.5} />
+            replay
+          </Link>
+        )}
       </header>
 
       {/* Timeline track */}

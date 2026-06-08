@@ -41,6 +41,10 @@ const loadManifest = async (deck: string): Promise<string[]> => {
 export const useDemoFrameLoop = (): void => {
   const demoMode = useVisualizerStore((s) => s.demoMode);
   const demoDeck = useVisualizerStore((s) => s.demoDeck);
+  // While a reel/session replay is active it owns the frame pipeline — the
+  // demo loop must stand down so the two never co-produce frames (even if a WS
+  // state() hydration flips demoMode back on mid-replay).
+  const reelPlaybackActive = useVisualizerStore((s) => s.reelPlaybackActive);
 
   useEffect(() => {
     const store = useVisualizerStore;
@@ -49,7 +53,7 @@ export const useDemoFrameLoop = (): void => {
     // as stale by pushFrame.
     store.getState().resetFrameVersion();
 
-    if (!demoMode || !demoDeck) {
+    if (!demoMode || !demoDeck || reelPlaybackActive) {
       return;
     }
 
@@ -99,5 +103,5 @@ export const useDemoFrameLoop = (): void => {
         clearTimeout(timer);
       }
     };
-  }, [demoMode, demoDeck]);
+  }, [demoMode, demoDeck, reelPlaybackActive]);
 };
