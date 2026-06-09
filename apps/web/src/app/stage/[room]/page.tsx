@@ -302,7 +302,7 @@ const PromptComposer = ({
       <div className="relative">
         <textarea
           aria-label="scene prompt"
-          className="min-h-[64px] w-full resize-none rounded-sm border border-[color:var(--hairline)]/30 bg-transparent px-3 py-2 pr-10 font-serif text-[14px] text-[color:var(--paper)] outline-none placeholder:text-[color:var(--stone)]/60 focus:border-[color:var(--paper)]/50"
+          className="min-h-[64px] w-full resize-none rounded-sm border border-[color:var(--hairline)]/30 bg-transparent px-3 py-2 pr-10 font-serif text-[16px] text-[color:var(--paper)] outline-none placeholder:text-[color:var(--stone)]/60 focus:border-[color:var(--paper)]/50"
           disabled={!linked}
           id="prompt"
           maxLength={200}
@@ -330,7 +330,7 @@ const PromptComposer = ({
       <div className="flex items-center gap-2">
         <input
           aria-label="tip in USDC to jump the queue"
-          className="w-24 rounded-sm border border-[color:var(--hairline)]/30 bg-transparent px-2 py-1.5 font-mono text-[11px] text-[color:var(--paper)] outline-none placeholder:text-[color:var(--stone)]/60 focus:border-[color:var(--paper)]/50"
+          className="w-24 rounded-sm border border-[color:var(--hairline)]/30 bg-transparent px-2 py-1.5 font-mono text-[16px] text-[color:var(--paper)] outline-none placeholder:text-[color:var(--stone)]/60 focus:border-[color:var(--paper)]/50"
           disabled={!linked}
           inputMode="decimal"
           onChange={(e) => setTip(e.target.value)}
