@@ -55,6 +55,12 @@ const envSchema = z.object({
   // song-muse (track → prompt synthesis). Not used by voice — voice is
   // direct dictation with no LLM round-trip.
   FAL_LLM_MODEL: z.string().optional(),
+  // Optional — direct Google Gemini API for the scene expander/moderator. When
+  // GEMINI_API_KEY is set, the scene LLM calls Gemini DIRECTLY, bypassing fal
+  // any-llm's ~1.5-2s queue overhead (measured) for a much faster prompt→frame.
+  // Absent → falls back to the FAL any-llm path. Small fast model by default.
+  GEMINI_API_KEY: z.string().optional(),
+  GEMINI_MODEL: z.string().default("gemini-2.5-flash-lite"),
 
   // Railway Bucket (S3-compatible, Tigris-backed). Stores every persisted
   // generated frame so users can browse their library / timeline. Optional

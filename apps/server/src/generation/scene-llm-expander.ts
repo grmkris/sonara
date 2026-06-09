@@ -181,32 +181,98 @@ export interface ExpandSceneOpts {
   logger: Logger;
 }
 
+// Pull the text payload out of a Gemini generateContent response.
+const extractGeminiText = (data: unknown): string | null => {
+  if (data === null || typeof data !== "object") {
+    return null;
+  }
+  const { candidates } = data as { candidates?: unknown };
+  if (!Array.isArray(candidates) || candidates.length === 0) {
+    return null;
+  }
+  const parts = (candidates[0] as { content?: { parts?: unknown } })?.content
+    ?.parts;
+  if (!Array.isArray(parts) || parts.length === 0) {
+    return null;
+  }
+  const { text } = parts[0] as { text?: unknown };
+  return typeof text === "string" ? text : null;
+};
+
+// Direct Google Gemini call — bypasses fal any-llm's ~1.5-2s queue overhead.
+// responseMimeType JSON forces a bare JSON object (no markdown fences).
+const callGemini = async (
+  apiKey: string,
+  system: string,
+  user: string,
+  signal: AbortSignal | undefined
+): Promise<string | null> => {
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${env.GEMINI_MODEL}:generateContent`;
+  const res = await fetch(url, {
+    body: JSON.stringify({
+      contents: [{ parts: [{ text: user }] }],
+      generationConfig: {
+        maxOutputTokens: MAX_OUTPUT_TOKENS,
+        responseMimeType: "application/json",
+        temperature: 0.8,
+      },
+      systemInstruction: { parts: [{ text: system }] },
+    }),
+    // This key authenticates via the header, not a ?key= query param.
+    headers: { "Content-Type": "application/json", "x-goog-api-key": apiKey },
+    method: "POST",
+    signal,
+  });
+  if (!res.ok) {
+    const errBody = await res.text();
+    throw new Error(`gemini ${res.status}: ${errBody.slice(0, 200)}`);
+  }
+  const json = await res.json();
+  return extractGeminiText(json);
+};
+
+// FAL any-llm fallback (the original transport). Used when GEMINI_API_KEY is
+// unset. Carries the queue overhead; kept for zero-config deploys.
+const callFalAnyLlm = async (
+  system: string,
+  user: string,
+  signal: AbortSignal | undefined
+): Promise<string | null> => {
+  const model = env.FAL_LLM_MODEL ?? DEFAULT_MODEL;
+  const scoped = createFalClient({ credentials: env.FAL_KEY });
+  const result = await scoped.subscribe("fal-ai/any-llm", {
+    abortSignal: signal,
+    input: {
+      max_tokens: MAX_OUTPUT_TOKENS,
+      model,
+      priority: "latency",
+      prompt: user,
+      system_prompt: system,
+    },
+    logs: false,
+  });
+  return extractOutput(result?.data);
+};
+
 export const expandScene = async (
   scene: SonaraSceneState,
   opts: ExpandSceneOpts
 ): Promise<ResolvedSceneCore> => {
-  const model = env.FAL_LLM_MODEL ?? DEFAULT_MODEL;
-  const scoped = createFalClient({ credentials: env.FAL_KEY });
+  const system = buildSystemPrompt();
+  const user = buildUserPrompt(scene);
+  const apiKey = env.GEMINI_API_KEY;
+  const useGemini = apiKey !== undefined && apiKey.length > 0;
 
   try {
-    const result = await scoped.subscribe("fal-ai/any-llm", {
-      abortSignal: opts.signal,
-      input: {
-        max_tokens: MAX_OUTPUT_TOKENS,
-        model,
-        priority: "latency",
-        prompt: buildUserPrompt(scene),
-        system_prompt: buildSystemPrompt(),
-      },
-      logs: false,
-    });
+    const output = useGemini
+      ? await callGemini(apiKey, system, user, opts.signal)
+      : await callFalAnyLlm(system, user, opts.signal);
     if (opts.signal?.aborted) {
       return deterministicResolve(scene);
     }
 
-    const output = extractOutput(result?.data);
-    if (!output) {
-      opts.logger.debug({ result }, "scene-expander: empty output");
+    if (output === null || output.length === 0) {
+      opts.logger.debug({ useGemini }, "scene-expander: empty LLM output");
       return deterministicResolve(scene);
     }
 
@@ -255,7 +321,7 @@ export const expandScene = async (
     if (opts.signal?.aborted) {
       return deterministicResolve(scene);
     }
-    opts.logger.warn({ error }, "scene-expander: fal any-llm error");
+    opts.logger.warn({ error }, "scene-expander: LLM error");
     return deterministicResolve(scene);
   }
 };
