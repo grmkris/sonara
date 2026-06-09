@@ -28,6 +28,7 @@ import { HideToggle } from "@/components/visualizer/controls/hide-toggle";
 import { MusicSource } from "@/components/visualizer/controls/music-source";
 import { NowPlaying } from "@/components/visualizer/controls/now-playing";
 import { PromptInput } from "@/components/visualizer/controls/prompt-input";
+import { ShareLink } from "@/components/visualizer/controls/share-link";
 import { ReelPlaybackConsumer } from "@/components/visualizer/reel-playback-consumer";
 import { ReelPlaybackHud } from "@/components/visualizer/reel-playback-hud";
 import { StudioActionConsumer } from "@/components/visualizer/studio-action-consumer";
@@ -283,6 +284,7 @@ export default function Page() {
           {/* Operator remote: drive this session from a phone so the projector
               stays a clean canvas (hide the HUD with the toggle beside this).
               Signed-in only — control needs an owned live session. */}
+          {isSignedIn && <ShareLink />}
           {isSignedIn && <RemoteLink />}
           <UserControls />
           <FullscreenToggle />
