@@ -14,6 +14,7 @@ import { EmptyState } from "@/components/studio/empty-state";
 import { ErrorState } from "@/components/studio/error-state";
 import { FrameInspector } from "@/components/studio/frame-inspector";
 import { FrameInspectorContent } from "@/components/studio/frame-inspector-content";
+import { LiveNowCard } from "@/components/studio/live-now-card";
 import { ReelEditor } from "@/components/studio/reel-editor";
 import { ReelsList } from "@/components/studio/reels-list";
 import { SessionTimeline } from "@/components/studio/session-timeline";
@@ -625,6 +626,7 @@ const StudioInner = () => {
             !showMobileCenter && "block w-full md:w-[280px]"
           )}
         >
+          <LiveNowCard />
           <StudioSidebarTabs tab={tab} onTab={onTab} />
           {tab === "recordings" ? (
             <SessionsList

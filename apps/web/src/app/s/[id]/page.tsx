@@ -88,7 +88,7 @@ const NotFoundShell = () => (
         href="/play"
         className="focus-ring font-sans text-[11px] uppercase tracking-[0.24em] text-[color:var(--stone)] transition-colors hover:text-[color:var(--paper)]"
       >
-        open the visualizer
+        press play
       </Link>
     </div>
   </main>
@@ -406,7 +406,7 @@ const LensView = ({
       <div className="pointer-events-none absolute inset-x-0 top-0 z-30 flex items-start justify-between gap-3 px-4 pt-6 md:px-10 md:pt-8">
         <div className="pointer-events-auto flex flex-col gap-3">
           <Wordmark />
-          <AppNavLinks current="s" />
+          <AppNavLinks current="live" />
           <TenseLabel name={name} tense={lens.tense} frameCount={frameCount} />
         </div>
         <div className="pointer-events-auto flex items-center gap-3 pt-2 sm:gap-4">

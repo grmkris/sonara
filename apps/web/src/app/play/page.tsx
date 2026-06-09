@@ -91,16 +91,16 @@ const LookChip = () => {
   );
 };
 
-// Discreet link to the operator remote (/control). Opens in a new tab so the
-// projector keeps playing; in practice you open /control on a second device,
-// but the link makes the feature discoverable from the projector too.
+// Discreet link to the console (/control resolves to the owner view on /s).
+// Opens in a new tab so the projector keeps playing; in practice you open it
+// on a second device, but the link makes it discoverable from here too.
 const RemoteLink = () => (
   <Link
     href="/control"
     target="_blank"
     rel="noopener"
-    aria-label="open operator remote"
-    title="control from your phone"
+    aria-label="open your console"
+    title="drive the show from your phone"
     className="focus-ring flex items-center text-[color:var(--stone)] transition-colors hover:text-[color:var(--paper)]"
   >
     <Smartphone className="size-4" strokeWidth={1.5} />

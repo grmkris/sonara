@@ -8,6 +8,8 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import type { AppRouterClient } from "server/rpc";
 
+import { AppNavLinks } from "@/components/app-nav";
+import { Mark } from "@/components/brand/mark";
 import { Button } from "@/components/ui/button";
 import { useSession } from "@/lib/auth-client";
 import { rpcClient } from "@/lib/orpc";
@@ -31,8 +33,15 @@ const isUnauthorized = (error: unknown): boolean =>
   error instanceof ORPCError && error.code === "UNAUTHORIZED";
 
 const Shell = ({ children }: { children: React.ReactNode }) => (
-  <main className="flex min-h-svh items-center justify-center bg-[color:var(--ink)] px-6 text-[color:var(--stone)]">
-    <div className="font-mono text-[11px] uppercase tracking-[0.22em]">
+  <main className="flex min-h-svh flex-col bg-[color:var(--ink)] px-6 text-[color:var(--stone)]">
+    <header className="flex items-center justify-between pt-7">
+      <span className="flex items-center gap-2.5 text-[color:var(--paper)]/85">
+        <Mark className="h-6 w-6 shrink-0" />
+        <span className="font-serif text-[20px] italic">live</span>
+      </span>
+      <AppNavLinks current="live" />
+    </header>
+    <div className="flex flex-1 items-center justify-center font-mono text-[11px] uppercase tracking-[0.22em]">
       {children}
     </div>
   </main>
@@ -104,7 +113,7 @@ export default function ControlPage() {
       <Shell>
         <div className="flex flex-col items-center gap-4 text-center">
           <p className="font-serif text-[15px] text-[color:var(--paper)]/85">
-            sign in to control your live session.
+            sign in to open your console.
           </p>
           <Button asChild variant="ghost" size="sm">
             <Link
@@ -124,7 +133,7 @@ export default function ControlPage() {
       <Shell>
         <div className="flex flex-col items-center gap-4 text-center">
           <p className="font-serif text-[15px] text-[color:var(--paper)]/85">
-            your session expired — sign in again to keep controlling.
+            your sign-in expired — sign in again to get back to the console.
           </p>
           <Button asChild variant="ghost" size="sm">
             <Link
@@ -142,26 +151,51 @@ export default function ControlPage() {
   if (sessions.length === 0) {
     return (
       <Shell>
-        <div className="flex max-w-sm flex-col items-center gap-3 text-center">
-          <p className="font-serif text-[15px] text-[color:var(--paper)]/85">
-            no live session yet.
+        <div className="flex max-w-md flex-col gap-8">
+          <p className="text-center font-serif text-[17px] text-[color:var(--paper)]/85">
+            nothing live yet.
           </p>
-          <p className="font-sans text-[11px] leading-relaxed tracking-[0.06em] text-[color:var(--stone)]">
-            open the visualizer on your projector and sign in with this account
-            — it&apos;ll show up here, and you can drive it from this screen.
-          </p>
-          <Button asChild variant="ghost" size="sm">
-            <Link
-              href="/play"
-              className="font-sans text-[11px] uppercase tracking-[0.24em]"
-            >
-              open the visualizer
-            </Link>
-          </Button>
+
+          {/* The common case first: one device — this screen IS the show. */}
+          <div className="flex flex-col gap-2">
+            <p className="font-sans text-[10px] uppercase tracking-[0.26em] text-[color:var(--stone)]">
+              one screen?
+            </p>
+            <p className="font-serif text-[14px] normal-case tracking-normal text-[color:var(--paper)]/85">
+              press play — this device becomes the show.
+            </p>
+            <Button asChild size="sm" className="w-fit">
+              <Link
+                href="/play"
+                className="font-sans text-[11px] uppercase tracking-[0.24em]"
+              >
+                play
+              </Link>
+            </Button>
+          </div>
+
+          {/* Two devices: projector runs /play; this page catches it. */}
+          <div className="flex flex-col gap-2">
+            <p className="font-sans text-[10px] uppercase tracking-[0.26em] text-[color:var(--stone)]">
+              two screens?
+            </p>
+            <p className="font-serif text-[14px] normal-case tracking-normal leading-relaxed text-[color:var(--paper)]/85">
+              open <span className="font-mono text-[12px]">sonara.fm/play</span>{" "}
+              on the projector and sign in as you. the moment it&apos;s live,
+              your console opens here on its own.
+            </p>
+            <p className="breath flex items-center gap-1.5 font-mono text-[9px] uppercase tracking-[0.22em] text-[color:var(--stone)]">
+              <span
+                aria-hidden
+                className="size-1.5 rounded-full bg-[color:var(--signal)]"
+              />
+              watching for your projector…
+            </p>
+          </div>
         </div>
       </Shell>
     );
   }
 
-  return <Shell>opening your session…</Shell>;
+  return <Shell>opening your console…</Shell>;
 }

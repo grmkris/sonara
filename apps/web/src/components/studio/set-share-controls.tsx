@@ -2,6 +2,7 @@
 
 import type { FrameSetVisibility } from "@sonara/shared";
 import { Link2 } from "lucide-react";
+import Link from "next/link";
 import { toast } from "sonner";
 
 const VISIBILITIES: FrameSetVisibility[] = ["private", "unlisted", "public"];
@@ -60,6 +61,15 @@ export const SetShareControls = ({
         <Link2 className="size-3" strokeWidth={1.5} />
         copy link
       </button>
+      {/* See it as your audience would — the /s permalink in a new tab. */}
+      <Link
+        href={`/s/${setId}`}
+        target="_blank"
+        rel="noopener"
+        className="focus-ring inline-flex items-center border border-[color:var(--hairline)]/40 px-3 py-1.5 font-sans text-[10px] uppercase tracking-[0.22em] text-[color:var(--stone)] transition-colors hover:border-[color:var(--paper)]/70 hover:text-[color:var(--paper)]"
+      >
+        watch ↗
+      </Link>
     </div>
   );
 };
