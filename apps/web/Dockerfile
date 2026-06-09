@@ -20,13 +20,21 @@
 FROM oven/bun:1.3.14 AS builder
 WORKDIR /app
 
-# NEXT_PUBLIC_* vars are inlined into the client bundle at build time, so they
-# must be present here. Railway passes them via service build args. APP_ENV is
-# the only one: every per-environment URL (WS origin, SSR-internal RPC) and the
-# devtools overlay are derived from it via SERVICE_URLS in @sonara/shared.
-# Defaults to "local" so a bare `docker build` works; Railway sets dev|prod.
+# NEXT_PUBLIC_* vars are inlined into the client bundle at BUILD time, so they
+# must be declared as build args here — Railway populates declared ARGs from the
+# service's variables. APP_ENV drives per-environment URLs (SERVICE_URLS in
+# @sonara/shared). The stage vars wire the on-chain Monad feature into the
+# client bundle: WITHOUT declaring them here they inline as empty strings, which
+# silently disables the stage host panel + audience writer (the feature looks
+# "missing" even though the Railway vars are set).
 ARG NEXT_PUBLIC_APP_ENV=local
 ENV NEXT_PUBLIC_APP_ENV=${NEXT_PUBLIC_APP_ENV}
+ARG NEXT_PUBLIC_SONARA_STAGE_CONTRACT=""
+ENV NEXT_PUBLIC_SONARA_STAGE_CONTRACT=${NEXT_PUBLIC_SONARA_STAGE_CONTRACT}
+ARG NEXT_PUBLIC_PIMLICO_API_KEY=""
+ENV NEXT_PUBLIC_PIMLICO_API_KEY=${NEXT_PUBLIC_PIMLICO_API_KEY}
+ARG NEXT_PUBLIC_PIMLICO_SPONSORSHIP_POLICY_ID=""
+ENV NEXT_PUBLIC_PIMLICO_SPONSORSHIP_POLICY_ID=${NEXT_PUBLIC_PIMLICO_SPONSORSHIP_POLICY_ID}
 
 # Workspace manifests + lockfile → install once. Cacheable across source
 # edits.
