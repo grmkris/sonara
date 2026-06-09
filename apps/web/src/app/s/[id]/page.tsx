@@ -23,6 +23,7 @@ import {
 } from "@/components/ui/sheet";
 import { SonaraCanvas } from "@/components/visualizer/canvas/sonara-canvas";
 import { FullscreenToggle } from "@/components/visualizer/controls/fullscreen-toggle";
+import { HideToggle } from "@/components/visualizer/controls/hide-toggle";
 import { MusicSource } from "@/components/visualizer/controls/music-source";
 import { publicEnv } from "@/env";
 import { useAudioFeatures } from "@/hooks/use-audio-features";
@@ -30,6 +31,7 @@ import type { AudioSource } from "@/hooks/use-audio-features";
 import { useReelPlaybackLoop } from "@/hooks/use-reel-playback-loop";
 import { rpcClient } from "@/lib/orpc";
 import { useStageFeed } from "@/lib/stage/use-stage-feed";
+import { cn } from "@/lib/utils";
 import { useVisualizerStore } from "@/stores/visualizer";
 
 // /s/[id] — the permalink, and a projector endpoint. The set (or the live
@@ -396,14 +398,33 @@ const LensView = ({
   const { consoleSessionId, frameCount, name, nowPlaying, stageRoom } =
     lensViewModel(lens, replaySet);
   const audioConnected = audioSource.type !== "none";
+  // Same projector discipline as /play: `h` toggles the chrome, Escape
+  // hides it, the top-right corner (or `h` again) brings it back.
+  const uiVisible = useVisualizerStore((s) => s.uiVisible);
+  const setUiVisible = useVisualizerStore((s) => s.setUiVisible);
 
   return (
     <main className="fixed inset-0 overflow-hidden bg-[color:var(--ink)] text-[color:var(--paper)]">
       <SonaraCanvas dimmed={!audioConnected} />
 
+      {/* Corner-reveal trigger while the chrome is hidden — cheaper than a
+          global mousemove listener (same pattern as /play). */}
+      {!uiVisible && (
+        <div
+          aria-hidden
+          className="pointer-events-auto absolute right-0 top-0 z-40 h-12 w-[200px]"
+          onMouseEnter={() => setUiVisible(true)}
+        />
+      )}
+
       {/* Top chrome — identity cluster left; audio source + fullscreen +
           now-playing + (owner) mobile console trigger right. */}
-      <div className="pointer-events-none absolute inset-x-0 top-0 z-30 flex items-start justify-between gap-3 px-4 pt-6 md:px-10 md:pt-8">
+      <div
+        className={cn(
+          "pointer-events-none absolute inset-x-0 top-0 z-30 flex items-start justify-between gap-3 px-4 pt-6 md:px-10 md:pt-8",
+          uiVisible ? "ui-fade-in" : "ui-fade-out"
+        )}
+      >
         <div className="pointer-events-auto flex flex-col gap-3">
           <Wordmark />
           <AppNavLinks current="live" />
@@ -420,22 +441,35 @@ const LensView = ({
           )}
           <MusicSource source={audioSource} setSource={setAudioSource} />
           <FullscreenToggle />
+          <HideToggle />
           {consoleSessionId && <ConsoleSheet liveSessionId={consoleSessionId} />}
         </div>
       </div>
 
-      {/* Owner mixer rail — md+ only; the mobile shape is the Sheet above. */}
-      {consoleSessionId && <ConsoleRail liveSessionId={consoleSessionId} />}
+      {/* Owner mixer rail — md+ only; the mobile shape is the Sheet above.
+          Fades with the chrome: a clean projector hides the mixer too. */}
+      {consoleSessionId && (
+        <div className={uiVisible ? "ui-fade-in" : "ui-fade-out"}>
+          <ConsoleRail liveSessionId={consoleSessionId} />
+        </div>
+      )}
 
       {/* The Monad wire + join QR while the crowd stage is open: txs scroll
           bottom-left, "scan to drive the visuals" bottom-right — this screen
-          explains itself to the room. */}
+          explains itself to the room. Deliberately NOT faded with the chrome:
+          while a stage is open these are audience-facing content, and the
+          host controls the QR from the console. */}
       {stageRoom && <ViewerWire room={stageRoom} />}
       {stageRoom && <StageJoinQr room={stageRoom} />}
 
       {/* Bottom-center: wake-up audio CTA until sound is connected. */}
       {!audioConnected && (
-        <div className="pointer-events-none absolute inset-x-0 bottom-6 z-30 flex justify-center">
+        <div
+          className={cn(
+            "pointer-events-none absolute inset-x-0 bottom-6 z-30 flex justify-center",
+            uiVisible ? "ui-fade-in" : "ui-fade-out"
+          )}
+        >
           <AudioCta onMic={() => setAudioSource({ type: "mic" })} />
         </div>
       )}
