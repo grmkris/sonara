@@ -7,7 +7,7 @@
 # which starts caddy:2-alpine with --network host so localhost reaches the
 # server (4471) and web (4472) processes running on the host.
 :{$PORT:4470} {
-	@server path /api/auth/* /rpc/* /api/upload/* /ws
+	@server path /api/auth/* /rpc/* /api/upload/* /api/mcp /api/mcp/* /ws
 
 	handle @server {
 		reverse_proxy {$SERVER_URL:http://localhost:4471} {

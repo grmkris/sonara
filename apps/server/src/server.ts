@@ -20,6 +20,7 @@ import { env } from "./env";
 import { uploadImage } from "./http/upload";
 import { logger } from "./lib/logger";
 import { createStageListener } from "./onchain/stage-listener";
+import { createStageMcp } from "./onchain/mcp-server";
 import { appRouter } from "./rpc/app.router";
 import { SessionManager } from "./session/session-manager";
 
@@ -76,6 +77,23 @@ app.on(["GET", "POST"], "/api/auth/*", (c) => auth.handler(c.req.raw));
 
 // Image-anchor upload (multipart → fal storage).
 app.post("/api/upload/image", (c) => uploadImage(c.req.raw));
+
+// MCP server (/api/mcp) — an AI agent drives a stage room via on-chain txs,
+// signed by the agent EOA (MCP_AGENT_KEY). Mounted only when both the contract
+// and the agent key are configured. The room code is the capability.
+const stageMcp =
+  env.SONARA_STAGE_CONTRACT &&
+  isAddress(env.SONARA_STAGE_CONTRACT) &&
+  /^0x[0-9a-fA-F]{64}$/u.test(env.MCP_AGENT_KEY)
+    ? createStageMcp({
+        agentKey: env.MCP_AGENT_KEY as `0x${string}`,
+        contract: env.SONARA_STAGE_CONTRACT,
+        logger,
+      })
+    : null;
+if (stageMcp) {
+  app.all("/api/mcp", (c) => stageMcp(c));
+}
 
 // oRPC HTTP router (credits, mintWsTicket). Build the context per request
 // from the Better Auth session, then delegate to the oRPC fetch handler.
