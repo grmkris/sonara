@@ -6,6 +6,7 @@ import Link from "next/link";
 import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
+import { AppNavLinks } from "@/components/app-nav";
 import { Mark } from "@/components/brand/mark";
 import { StageWire } from "@/components/stage/stage-wire";
 import { Button } from "@/components/ui/button";
@@ -272,6 +273,7 @@ export default function Page() {
       >
         <div className="pointer-events-auto flex flex-col gap-3">
           <Logotype />
+          <AppNavLinks current="play" />
           <LookChip />
         </div>
         <div className="pointer-events-auto flex items-center gap-3 pt-2 sm:gap-5">

@@ -8,6 +8,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
+import { AppNavLinks } from "@/components/app-nav";
 import { AnonCta } from "@/components/studio/anon-cta";
 import { EmptyState } from "@/components/studio/empty-state";
 import { ErrorState } from "@/components/studio/error-state";
@@ -600,15 +601,12 @@ const StudioInner = () => {
       <header className="flex shrink-0 items-center justify-between border-b border-[color:var(--hairline)]/30 px-4 py-3 md:px-10">
         <div className="flex items-center gap-4">
           <Link
-            href="/play"
-            className="focus-ring font-sans inline-flex items-center gap-1 text-[10px] uppercase tracking-[0.24em] text-[color:var(--stone)] transition-colors hover:text-[color:var(--paper)]"
+            href="/"
+            className="focus-ring font-serif text-[13px] italic tracking-tight text-[color:var(--paper)]/85 transition-colors hover:text-[color:var(--paper)]"
           >
-            <ChevronLeft className="size-3" strokeWidth={1.5} />
-            <span>/play</span>
+            sonara.fm
           </Link>
-          <span className="font-mono text-[10px] uppercase tracking-[0.28em] text-[color:var(--paper)]/85">
-            studio
-          </span>
+          <AppNavLinks current="studio" />
         </div>
         <HeaderCount
           tab={tab}
