@@ -44,6 +44,7 @@ export interface StageWriterState {
   balanceUnits: bigint | null;
   // Optimistically reflect a payment before the next poll catches up.
   spendLocally: (units: bigint) => void;
+  creditLocally: (units: bigint) => void;
 }
 
 // Builds the gasless (Pimlico-sponsored) on-chain writer for the audience page.
@@ -191,5 +192,12 @@ export const useStageWriter = (): StageWriterState => {
     });
   }, []);
 
-  return { ...state, balanceUnits, payment, spendLocally };
+  // Optimistic mirror of spendLocally for incoming funds (faucet drip): the
+  // UI credits instantly instead of waiting out the 15s poll; the next poll
+  // converges to the chain truth either way.
+  const creditLocally = useCallback((units: bigint) => {
+    setBalanceUnits((b) => (b === null ? units : b + units));
+  }, []);
+
+  return { ...state, balanceUnits, creditLocally, payment, spendLocally };
 };

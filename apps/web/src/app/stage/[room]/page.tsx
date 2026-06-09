@@ -83,24 +83,36 @@ const DRIP_ERRORS: Record<string, string> = {
 // faucet airdrops 0.2 USDC straight to this wallet (control.stageAirdrop — the
 // balance poll picks it up in a few seconds). Fallback: send USDC yourself
 // (address as text + QR) or hit the Circle testnet faucet.
-// The big tap: full-width signal slab with a soft glow — deliberately the
-// single bright object on the page, so an empty wallet reads as "press this"
-// before anyone has to think. Press feedback via active:scale; the sent state
-// breathes until the balance poll catches the drip and the panel unmounts.
-const dripLabel = (dripping: boolean, sent: boolean): string => {
-  if (dripping) {
-    return "sending…";
-  }
-  if (sent) {
-    return "on its way — a few seconds";
-  }
-  return "tap for 0.2 usdc — on the house";
-};
+// The familiar wallet glyph for the simulated pay sheet (inline so it renders
+// on every platform, not just Apple's).
+const PayMark = () => (
+  <svg
+    aria-hidden
+    className="size-4 shrink-0"
+    fill="currentColor"
+    viewBox="0 0 24 24"
+  >
+    <path d="M16.4 1.4c0 1.1-.45 2.2-1.2 3-.78.87-2.05 1.54-3.07 1.46-.13-1.1.42-2.26 1.14-3.04.8-.87 2.2-1.5 3.13-1.42zM20.5 17.2c-.57 1.32-.85 1.9-1.59 3.07-1.03 1.64-2.49 3.68-4.29 3.7-1.6.02-2.01-1.05-4.18-1.03-2.17.01-2.62 1.05-4.22 1.03-1.8-.02-3.18-1.86-4.21-3.5C-.87 16.9-1.17 11.1 1.62 8c1.03-1.13 2.49-1.8 3.87-1.8 1.63 0 2.65 1.04 4 1.04 1.31 0 2.1-1.05 3.99-1.05 1.23 0 2.53.67 3.46 1.82-3.04 1.66-2.55 5.99.66 7.18-.37.94-.55 1.36-1.1 2.01z" />
+  </svg>
+);
 
-const FundPanel = ({ address, room }: { address: string; room: string }) => {
+// The simulated top-up: a payment-sheet-style button (the shape everyone
+// knows from buying coffee) that under the hood draws from the house faucet —
+// so the demo reads as "tap, pay, prompt" without a real charge. On success
+// the balance credits OPTIMISTICALLY (creditLocally) so the composer unlocks
+// instantly instead of waiting out the 15s balance poll; the panel unmounts
+// the moment the wallet can afford a prompt.
+const FundPanel = ({
+  address,
+  room,
+  onCredited,
+}: {
+  address: string;
+  room: string;
+  onCredited: (units: bigint) => void;
+}) => {
   const [qr, setQr] = useState<string | null>(null);
-  const [dripping, setDripping] = useState(false);
-  const [sent, setSent] = useState(false);
+  const [phase, setPhase] = useState<"idle" | "confirming" | "paid">("idle");
   const [showManual, setShowManual] = useState(false);
 
   useEffect(() => {
@@ -109,20 +121,27 @@ const FundPanel = ({ address, room }: { address: string; room: string }) => {
     })();
   }, [address]);
 
-  const airdrop = async (): Promise<void> => {
-    setDripping(true);
+  const topUp = async (): Promise<void> => {
+    setPhase("confirming");
+    // A beat of "confirming…" so the interaction reads as a payment sheet,
+    // not an instant free button.
+    // oxlint-disable-next-line promise/avoid-new -- REVIEW: setTimeout delay has no library-promise equivalent
+    await new Promise((resolve) => {
+      setTimeout(resolve, 900);
+    });
     try {
       const result = await rpcClient.control.stageAirdrop({ address, room });
       if (result.ok) {
-        setSent(true);
-        toast.success("usdc on its way — a few seconds");
+        onCredited(BigInt(result.units));
+        setPhase("paid");
+        toast.success("topped up — 0.2 usdc");
       } else {
-        toast.error(DRIP_ERRORS[result.reason] ?? "airdrop failed");
+        setPhase("idle");
+        toast.error(DRIP_ERRORS[result.reason] ?? "top-up failed");
       }
     } catch {
-      toast.error("airdrop failed");
-    } finally {
-      setDripping(false);
+      setPhase("idle");
+      toast.error("top-up failed");
     }
   };
 
@@ -143,29 +162,39 @@ const FundPanel = ({ address, room }: { address: string; room: string }) => {
         className="pointer-events-none absolute -right-10 -top-10 size-36 rounded-full bg-[color:var(--signal)]/10 blur-2xl"
       />
       <p className="font-serif text-[17px] italic leading-snug text-[color:var(--paper)]/90">
-        first one&apos;s on the house.
+        top up to drop a scene.
       </p>
       <p className="-mt-2 font-sans text-[9px] uppercase tracking-[0.22em] text-[color:var(--stone)]">
         prompts cost usdc · your stage wallet is empty
       </p>
       <button
         type="button"
-        disabled={dripping || sent}
-        onClick={airdrop}
+        disabled={phase !== "idle"}
+        onClick={topUp}
         className={cn(
-          "focus-ring flex w-full flex-col items-center gap-0.5 rounded-sm bg-[color:var(--signal)] px-4 py-4 text-[color:var(--ink)] shadow-[0_0_36px_-10px_var(--signal)] transition-all active:scale-[0.98]",
-          (dripping || sent) && "animate-pulse opacity-80"
+          "focus-ring flex w-full items-center justify-center gap-2 rounded-md bg-white px-4 py-3.5 text-black shadow-[0_0_36px_-10px_var(--signal)] transition-all active:scale-[0.98]",
+          phase === "confirming" && "animate-pulse"
         )}
       >
-        <span className="font-serif text-[18px] italic leading-none">
-          {dripLabel(dripping, sent)}
-        </span>
-        {!(dripping || sent) && (
-          <span className="font-sans text-[9px] uppercase tracking-[0.24em] opacity-70">
-            free · covers your next prompts
-          </span>
+        {phase === "idle" && (
+          <>
+            <PayMark />
+            <span className="text-[16px] font-semibold tracking-tight">
+              Pay
+            </span>
+            <span className="text-[14px] text-black/60">· 0.20 $</span>
+          </>
+        )}
+        {phase === "confirming" && (
+          <span className="text-[14px] font-medium">confirming…</span>
+        )}
+        {phase === "paid" && (
+          <span className="text-[14px] font-medium">✓ topped up</span>
         )}
       </button>
+      <p className="-mt-1 font-sans text-[8px] uppercase tracking-[0.22em] text-[color:var(--stone)]/80">
+        demo top-up — the house covers it, nothing is charged
+      </p>
       <button
         type="button"
         onClick={() => setShowManual((v) => !v)}
@@ -262,6 +291,7 @@ const PromptComposer = ({
   payment,
   balanceUnits,
   onSend,
+  onCredited,
 }: {
   linked: boolean;
   address: string | null;
@@ -269,6 +299,7 @@ const PromptComposer = ({
   payment: StagePayment | null;
   balanceUnits: bigint | null;
   onSend: (text: string, tipUnits: bigint, cost: bigint) => void;
+  onCredited: (units: bigint) => void;
 }) => {
   const [prompt, setPrompt] = useState("");
   const [tip, setTip] = useState("");
@@ -390,7 +421,9 @@ const PromptComposer = ({
           {tip ? "jump the line" : "queue it"}
         </Button>
       </div>
-      {needsFunds && address && <FundPanel address={address} room={room} />}
+      {needsFunds && address && (
+        <FundPanel address={address} onCredited={onCredited} room={room} />
+      )}
     </section>
   );
 };
@@ -398,8 +431,16 @@ const PromptComposer = ({
 export default function StagePage() {
   const params = useParams<{ room: string }>();
   const { room } = params;
-  const { writer, ready, error: writerError, address, payment, balanceUnits, spendLocally } =
-    useStageWriter();
+  const {
+    writer,
+    ready,
+    error: writerError,
+    address,
+    payment,
+    balanceUnits,
+    spendLocally,
+    creditLocally,
+  } = useStageWriter();
 
   const [localTx, setLocalTx] = useState(0);
   const lastSliderAt = useRef(0);
@@ -590,6 +631,7 @@ export default function StagePage() {
           address={address}
           balanceUnits={balanceUnits}
           linked={linked}
+          onCredited={creditLocally}
           onSend={sendPrompt}
           payment={payment}
           room={room}
