@@ -18,14 +18,27 @@ import type { Logger } from "../lib/logger";
 // `/edit`; the Redux-style image-prompt conditioning is a different fal
 // surface with different cost trade-offs and explicit opt-in.
 
-export interface StreamPreviewInput {
-  prompt: string;
-  seed?: number;
+// Shared callback/lifecycle surface for both text-mode transports (this queue
+// path and the realtime-provider websocket path). A frame stream takes a
+// cancel signal + logger and reports through three callbacks: onPreview (an
+// intermediate frame), onFinal (the settled frame), onError (failed OR
+// superseded — the session refunds the credit either way and uses the signal
+// to tell abort from a real error).
+export interface FrameStreamCallbacks {
   signal: AbortSignal;
   logger: Logger;
   onPreview: (url: string) => void;
   onFinal: (url: string) => void;
   onError: (err: unknown) => void;
+}
+
+export interface StreamPreviewInput extends FrameStreamCallbacks {
+  prompt: string;
+  seed?: number;
+  // fal endpoint id. Defaults to env.FAL_TEXT_MODEL when omitted (klein/9b).
+  model?: string;
+  // Square render size. Defaults to 768² when omitted.
+  size?: { width: number; height: number };
 }
 
 type FalClient = ReturnType<typeof createFalClient>;
@@ -63,14 +76,15 @@ export const streamPreview = async (
   });
   const subscribe: FalSubscriber = scoped.subscribe.bind(scoped);
 
-  const model = env.FAL_TEXT_MODEL;
+  const model = input.model ?? env.FAL_TEXT_MODEL;
+  const size = input.size ?? { height: 768, width: 768 };
 
-  // 768² (0.59 MP) — billed at ~$0.0035/image vs ~$0.006 at square_hd (1 MP).
-  // Klein/9b accepts any 64-aligned dimensions; 4 steps is the documented
-  // minimum (tighter returns a 422).
+  // 768² (0.59 MP) — billed at ~$0.0035/image vs ~$0.006 at square_hd (1 MP);
+  // 512² roughly halves that again. Klein/9b accepts any 64-aligned dimensions;
+  // 4 steps is the documented minimum (tighter returns a 422).
   const payload: Record<string, unknown> = {
     enable_safety_checker: false,
-    image_size: { height: 768, width: 768 },
+    image_size: { height: size.height, width: size.width },
     num_images: 1,
     num_inference_steps: 4,
     output_format: "jpeg",

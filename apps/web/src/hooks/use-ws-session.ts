@@ -78,16 +78,37 @@ export const useWsSession = (): WsSession => {
           break;
         }
         case "frame.preview": {
+          // eslint-disable-next-line no-console
+          console.debug(
+            `%c[sonara] frame.preview%c v${event.version}`,
+            "color:#888",
+            "color:inherit",
+            event.imageUrl
+          );
           s.pushFrame(event.imageUrl, event.version);
           break;
         }
         case "frame.final": {
+          // eslint-disable-next-line no-console
+          console.info(
+            `%c[sonara] frame.final%c v${event.version} — image landed`,
+            "color:#3a3",
+            "color:inherit",
+            event.imageUrl
+          );
           s.pushFrame(event.imageUrl, event.version);
           // Settled images go into the ghost callback ring; previews don't.
           s.pushHero(event.imageUrl);
           break;
         }
         case "job.status": {
+          // eslint-disable-next-line no-console
+          console.info(
+            `%c[sonara] job.status%c ${event.status}`,
+            "color:#39c",
+            "color:inherit",
+            { message: event.message, reason: event.reason }
+          );
           s.setStatus(event.status, event.message);
           if (event.status === "running" && event.reason) {
             s.pushTrigger(event.reason, s.scene.version);
@@ -126,6 +147,13 @@ export const useWsSession = (): WsSession => {
           break;
         }
         case "generation.requested": {
+          // eslint-disable-next-line no-console
+          console.debug(
+            `%c[sonara] gen.requested%c v${event.version} reason=${event.reason}`,
+            "color:#888",
+            "color:inherit",
+            event.promptString
+          );
           s.setInspectorRequested({
             driftSource: event.driftSource,
             nextKeyframeAt: event.nextKeyframeAt,
@@ -138,6 +166,12 @@ export const useWsSession = (): WsSession => {
           break;
         }
         case "generation.completed": {
+          // eslint-disable-next-line no-console
+          console.info(
+            `%c[sonara] gen.completed%c v${event.version} ${event.durationMs}ms success=${event.success}`,
+            event.success ? "color:#3a3" : "color:#c33",
+            "color:inherit"
+          );
           s.setInspectorCompleted(
             event.version,
             event.durationMs,
@@ -186,6 +220,13 @@ export const useWsSession = (): WsSession => {
         // up with whatever they last set. The client no longer pushes its
         // localStorage demo prefs on connect.
         sendRef.current({ type: "hello" });
+        // The A/B model + resolution are CLIENT-authoritative (persisted to
+        // localStorage, hydrated post-mount). The server Session starts on its
+        // defaults, so re-send the user's current picks on every (re)connect so
+        // a fresh Session adopts them instead of silently reverting.
+        const st = store.getState();
+        sendRef.current({ model: st.model, type: "model.set" });
+        sendRef.current({ resolution: st.resolution, type: "resolution.set" });
       });
       socket.addEventListener("close", () => {
         store.getState().setConnected(false);

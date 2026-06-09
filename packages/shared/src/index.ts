@@ -10,6 +10,7 @@ export * from "./visual-presets";
 export * from "./demo";
 export * from "./decks";
 export * from "./library";
+export * from "./models";
 export * from "./pricing";
 export * from "./services";
 export * from "./ws-ticket";

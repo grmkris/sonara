@@ -42,6 +42,7 @@ import { cn } from "@/lib/utils";
 import {
   hydrateAnchorPrefs,
   hydrateDemoPrefs,
+  hydrateModelPrefs,
   hydratePresetPrefs,
   hydrateUiVisible,
   useVisualizerStore,
@@ -187,6 +188,7 @@ export default function Page() {
     hydratePresetPrefs();
     hydrateDemoPrefs();
     hydrateAnchorPrefs();
+    hydrateModelPrefs();
   }, []);
 
   // Anonymous visitors have no server session pinning them to demo mode, and

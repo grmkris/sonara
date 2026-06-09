@@ -2,6 +2,9 @@ import { EventPublisher } from "@orpc/server";
 import type { ControllableSession, ControlSnapshot } from "@sonara/api/server";
 import {
   DECK_KEYS,
+  DEFAULT_RESOLUTION,
+  DEFAULT_TEXT_MODEL,
+  TEXT_MODELS,
   deckStyle,
   defaultScene,
   libraryCadenceMs,
@@ -11,9 +14,11 @@ import type {
   ClientScenePatch,
   DeckKey,
   ImageAnchor,
+  RenderResolution,
   SonaraSceneState,
   NowPlaying,
   ServerEvent,
+  TextModelKey,
 } from "@sonara/shared";
 import { typeIdGenerator } from "@sonara/shared/typeid";
 import type { LiveSessionId } from "@sonara/shared/typeid";
@@ -28,6 +33,7 @@ import { streamAnchor } from "../generation/anchor-provider";
 import { streamPreview } from "../generation/fal-provider";
 import { serializeResolvedScene } from "../generation/prompt-compiler";
 import { DriftTrajectory } from "../generation/prompt-drift";
+import { RealtimeImagePool } from "../generation/realtime-provider";
 import {
   resolveScene,
   resolveSceneAwaited,
@@ -161,6 +167,19 @@ export class Session implements ControllableSession {
 
   private seed: number = rollSeed();
 
+  // Text-mode image model + render resolution, A/B-switchable from the studio
+  // (setModel / setResolution). The model key selects the fal endpoint AND the
+  // transport (realtime websocket vs queue) via TEXT_MODELS. Per-session, in
+  // memory; the client re-sends its choice on every (re)connect, so a fresh
+  // Session adopts it. Realtime models stream through `realtimePool`.
+  private model: TextModelKey = DEFAULT_TEXT_MODEL;
+  private resolution: RenderResolution = DEFAULT_RESOLUTION;
+  // Warm per-session websocket pool for realtime models. Lazily dials on first
+  // use; closed in close(). No-op cost if the session only ever uses the queue
+  // (klein) model. Assigned in the constructor (needs this.logger, which is set
+  // there) — a field initializer would run before this.logger exists.
+  private readonly realtimePool: RealtimeImagePool;
+
   private lastSectionEnergy = 0;
   private sectionDeltaStartedAt: number | null = null;
   private lastSectionTriggerAt = 0;
@@ -224,6 +243,7 @@ export class Session implements ControllableSession {
       sessionId: opts.id,
       userId: opts.userId,
     });
+    this.realtimePool = new RealtimeImagePool(this.logger);
     this.scene = { ...defaultScene };
     this.lastGeneratedScene = { ...defaultScene };
     // Anonymous sessions default to demo mode; the connect snapshot relays
@@ -330,6 +350,35 @@ export class Session implements ControllableSession {
     // Fire trigger immediately — bypasses semantic-diff gate so the first
     // anchor frame lands without waiting.
     void this.trigger("semantic");
+  }
+
+  // A/B-switch the text-mode image model. The key selects the fal endpoint +
+  // transport (realtime vs queue) via TEXT_MODELS. Fires a frame immediately
+  // (skips the semantic-diff gate) so the switch is visible at once; trigger()
+  // no-ops for demo/anon/empty-prompt sessions. Skipped when an image anchor
+  // is active — the model setting is text-path only.
+  setModel(model: TextModelKey): void {
+    if (this.model === model) {
+      return;
+    }
+    this.model = model;
+    this.logger.info({ model }, "text model set");
+    if (!this.scene.imageAnchor) {
+      void this.trigger("semantic");
+    }
+  }
+
+  // A/B-switch the render resolution (512² / 768²). Lower = faster + smaller
+  // payload. Same immediate-frame + anchor-skip semantics as setModel.
+  setResolution(resolution: RenderResolution): void {
+    if (this.resolution === resolution) {
+      return;
+    }
+    this.resolution = resolution;
+    this.logger.info({ resolution }, "render resolution set");
+    if (!this.scene.imageAnchor) {
+      void this.trigger("semantic");
+    }
   }
 
   // Transition from deck/library phase to live generation. The browser flips
@@ -619,6 +668,8 @@ export class Session implements ControllableSession {
     if (this.periodicTimer) {
       clearInterval(this.periodicTimer);
     }
+    // Tear down the warm realtime websocket(s) — nothing else closes them.
+    this.realtimePool.close();
   }
 
   private schedulePause(): void {
@@ -840,10 +891,17 @@ export class Session implements ControllableSession {
       version,
     });
 
-    streamPreview({
+    const modelCfg = TEXT_MODELS[this.model];
+    const size = { height: this.resolution, width: this.resolution };
+
+    // Transport-agnostic callbacks. The realtime websocket pool and the klein
+    // queue path share identical onPreview/onFinal/onError wiring — the version
+    // check + refund-on-error semantics don't care which transport delivered
+    // (or failed to deliver) the frame.
+    const frameCallbacks = {
       logger: this.logger,
-      onError: (err) => {
-        // Refund regardless of abort — fal-provider routes superseded
+      onError: (err: unknown) => {
+        // Refund regardless of abort — the provider routes superseded
         // generations through onError too, and the user should get the
         // credit back since no frame was delivered. Free-tier paths set
         // paidCost=null so this is a no-op for them.
@@ -868,7 +926,7 @@ export class Session implements ControllableSession {
           version,
         });
       },
-      onFinal: (url) => {
+      onFinal: (url: string) => {
         if (version !== this.activeVersion) {
           return;
         }
@@ -895,7 +953,7 @@ export class Session implements ControllableSession {
         const persisted = persistFrame({
           deck: this.lastDeck ?? "live",
           falUrl: url,
-          height: 768,
+          height: size.height,
           id: frameId,
           inspectorContext: {
             audio: {
@@ -915,7 +973,7 @@ export class Session implements ControllableSession {
             },
           },
           logger: this.logger,
-          model: env.FAL_TEXT_MODEL,
+          model: modelCfg.falId,
           palette: resolved.color_palette,
           prompt,
           seed: this.seed,
@@ -923,7 +981,7 @@ export class Session implements ControllableSession {
           tMs,
           triggerReason: source,
           userId,
-          width: 768,
+          width: size.width,
         });
         void (async () => {
           try {
@@ -941,7 +999,7 @@ export class Session implements ControllableSession {
           }
         })();
       },
-      onPreview: (url) => {
+      onPreview: (url: string) => {
         if (version !== this.activeVersion) {
           return;
         }
@@ -950,12 +1008,35 @@ export class Session implements ControllableSession {
       prompt,
       seed: this.seed,
       signal: controller.signal,
-      // oxlint-disable-next-line promise/prefer-await-to-then, promise/prefer-await-to-callbacks -- REVIEW: fire-and-forget: streamPreview must stream in the background; awaiting would block trigger() on the live hot path. streamPreview's onError/onFinal/onPreview are its callback API contract.
-    }).catch((error) => {
-      if (!controller.signal.aborted) {
-        this.logger.error({ error }, "streamPreview unhandled");
-      }
-    });
+    };
+
+    if (modelCfg.transport === "realtime") {
+      // Warm websocket — bypasses the queue for the ~150-300ms warm floor.
+      // Fire-and-forget: the pool reports via the callbacks above and never
+      // throws synchronously past its own guard.
+      this.realtimePool.stream({
+        ...frameCallbacks,
+        falModelId: modelCfg.falId,
+        guidanceScale: modelCfg.guidanceScale,
+        size,
+        steps: modelCfg.steps,
+      });
+    } else {
+      // Queue path (klein/9b quality baseline). Fire-and-forget: streamPreview
+      // must stream in the background; awaiting would block trigger() on the
+      // live hot path. Its onError/onFinal/onPreview are its callback contract.
+      const queued = streamPreview({
+        ...frameCallbacks,
+        model: modelCfg.falId,
+        size,
+      });
+      // oxlint-disable-next-line promise/prefer-await-to-then, promise/prefer-await-to-callbacks -- REVIEW: see the fire-and-forget note above; the trigger() hot path cannot await.
+      queued.catch((error) => {
+        if (!controller.signal.aborted) {
+          this.logger.error({ error }, "streamPreview unhandled");
+        }
+      });
+    }
   }
 
   // Image-anchor-mode trigger. Calls fal flux-pro/v1.1-ultra with the user's
