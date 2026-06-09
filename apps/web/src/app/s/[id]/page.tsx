@@ -362,6 +362,24 @@ const AudioCta = ({ onMic }: { onMic: () => void }) => (
   </button>
 );
 
+// Everything the viewer chrome needs, derived once per render — keeps the
+// JSX component under the complexity cap and the tense rules in one place.
+const lensViewModel = (lens: FoundLens, replaySet: ReplaySet | null) => {
+  const live = lens.tense === "live" ? lens.live : null;
+  const stage = lens.tense === "live" ? lens.stage : null;
+  return {
+    consoleSessionId:
+      lens.isOwner && live ? (live.liveSessionId ?? null) : null,
+    frameCount: replaySet?.frames.length ?? lens.set?.frameCount ?? 0,
+    name: lens.set?.name ?? "live session",
+    nowPlaying: live?.nowPlaying ?? null,
+    stageRoom:
+      stage?.open && publicEnv.NEXT_PUBLIC_SONARA_STAGE_CONTRACT
+        ? stage.room
+        : null,
+  };
+};
+
 // The found-state viewer: the real WebGL canvas full-bleed + overlay chrome,
 // in either tense.
 const LensView = ({
@@ -375,19 +393,9 @@ const LensView = ({
   audioSource: AudioSource;
   setAudioSource: (s: AudioSource) => void;
 }) => {
-  const consoleSessionId =
-    lens.tense === "live" && lens.isOwner
-      ? (lens.live?.liveSessionId ?? null)
-      : null;
-  const nowPlaying = lens.tense === "live" ? lens.live?.nowPlaying : null;
-  const stage = lens.tense === "live" ? lens.stage : null;
-  const name = lens.set?.name ?? "live session";
-  const frameCount = replaySet?.frames.length ?? lens.set?.frameCount ?? 0;
+  const { consoleSessionId, frameCount, name, nowPlaying, stageRoom } =
+    lensViewModel(lens, replaySet);
   const audioConnected = audioSource.type !== "none";
-  const stageRoom =
-    stage?.open && publicEnv.NEXT_PUBLIC_SONARA_STAGE_CONTRACT
-      ? stage.room
-      : null;
 
   return (
     <main className="fixed inset-0 overflow-hidden bg-[color:var(--ink)] text-[color:var(--paper)]">
