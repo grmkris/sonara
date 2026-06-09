@@ -1,7 +1,7 @@
 "use client";
 
-import type { LibraryFrame, ReelSummary } from "@sonara/shared";
-import type { ReelId } from "@sonara/shared/typeid";
+import type { FrameSetSummary, LibraryFrame } from "@sonara/shared";
+import type { FrameSetId } from "@sonara/shared/typeid";
 import { Plus } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -14,23 +14,24 @@ import {
 } from "@/components/ui/popover";
 import { rpcClient } from "@/lib/orpc";
 
-// Inspector action: add this frame to a curated reel. Opening fetches the
-// user's reels; picking one (or creating a new one inline) adds the frame and
-// toasts. Works from either studio tab — any frame can go into any reel.
-export const AddToReelPopover = ({ frame }: { frame: LibraryFrame }) => {
+// Inspector action: add this frame to a curated set. Opening fetches the
+// user's curated sets; picking one (or creating a new one inline) adds the
+// frame and toasts. Works from either studio tab — any frame can go into any
+// curated set (recordings are frozen; make a cut to edit those).
+export const AddToSetPopover = ({ frame }: { frame: LibraryFrame }) => {
   const [open, setOpen] = useState(false);
-  const [reels, setReels] = useState<ReelSummary[]>([]);
+  const [sets, setSets] = useState<FrameSetSummary[]>([]);
   const [loading, setLoading] = useState(false);
   const [creating, setCreating] = useState(false);
   const [draft, setDraft] = useState("");
 
-  const loadReels = async () => {
+  const loadSets = async () => {
     setLoading(true);
     try {
-      const { reels: r } = await rpcClient.reels.list({});
-      setReels(r);
+      const { sets: s } = await rpcClient.sets.list({ origin: "curated" });
+      setSets(s);
     } catch {
-      toast.error("couldn't load reels");
+      toast.error("couldn't load sets");
     } finally {
       setLoading(false);
     }
@@ -39,23 +40,23 @@ export const AddToReelPopover = ({ frame }: { frame: LibraryFrame }) => {
   const onOpenChange = (next: boolean) => {
     setOpen(next);
     if (next) {
-      void loadReels();
+      void loadSets();
     } else {
       setCreating(false);
       setDraft("");
     }
   };
 
-  const addToReel = async (reelId: string, name: string) => {
+  const addToSet = async (setId: string, name: string) => {
     setOpen(false);
     try {
-      await rpcClient.reels.addFrame({
+      await rpcClient.sets.addFrame({
         frameId: frame.id,
-        reelId: reelId as ReelId,
+        setId: setId as FrameSetId,
       });
       toast(`added to “${name}”`, { duration: 1600 });
     } catch {
-      toast.error("couldn't add to reel");
+      toast.error("couldn't add to set");
     }
   };
 
@@ -66,11 +67,11 @@ export const AddToReelPopover = ({ frame }: { frame: LibraryFrame }) => {
     }
     setOpen(false);
     try {
-      const { reel } = await rpcClient.reels.create({ name });
-      await rpcClient.reels.addFrame({ frameId: frame.id, reelId: reel.id });
-      toast(`added to “${reel.name}”`, { duration: 1600 });
+      const { set: created } = await rpcClient.sets.create({ name });
+      await rpcClient.sets.addFrame({ frameId: frame.id, setId: created.id });
+      toast(`added to “${created.name}”`, { duration: 1600 });
     } catch {
-      toast.error("couldn't create reel");
+      toast.error("couldn't create set");
     }
   };
 
@@ -82,7 +83,7 @@ export const AddToReelPopover = ({ frame }: { frame: LibraryFrame }) => {
           size="sm"
           className="w-full font-sans text-[10px] uppercase tracking-[0.22em]"
         >
-          add to reel
+          add to set
         </Button>
       </PopoverTrigger>
       <PopoverContent
@@ -91,7 +92,7 @@ export const AddToReelPopover = ({ frame }: { frame: LibraryFrame }) => {
         className="w-64 rounded-sm border-[color:var(--hairline)]/40 bg-[color:var(--ink)]/95 p-0 text-[color:var(--paper)] backdrop-blur-md"
       >
         <div className="border-b border-[color:var(--hairline)]/30 px-3 py-2 font-mono text-[9px] uppercase tracking-[0.26em] text-[color:var(--stone)]">
-          add to reel
+          add to set
         </div>
 
         {loading ? (
@@ -100,23 +101,23 @@ export const AddToReelPopover = ({ frame }: { frame: LibraryFrame }) => {
           </div>
         ) : (
           <ul className="max-h-[240px] overflow-y-auto">
-            {reels.length === 0 ? (
+            {sets.length === 0 ? (
               <li className="px-3 py-3 font-sans text-[11px] text-[color:var(--stone)]">
-                No reels yet — make one below.
+                No sets yet — make one below.
               </li>
             ) : (
-              reels.map((r) => (
-                <li key={r.id}>
+              sets.map((s) => (
+                <li key={s.id}>
                   <button
                     type="button"
-                    onClick={() => void addToReel(r.id, r.name)}
+                    onClick={() => void addToSet(s.id, s.name)}
                     className="focus-ring flex w-full items-center justify-between gap-2 px-3 py-2 text-left transition-colors hover:bg-[color:var(--paper)]/10"
                   >
                     <span className="truncate font-sans text-[12px] text-[color:var(--paper)]/90">
-                      {r.name}
+                      {s.name}
                     </span>
                     <span className="shrink-0 font-mono text-[9px] uppercase tracking-[0.16em] text-[color:var(--stone)]">
-                      {r.frameCount}
+                      {s.frameCount}
                     </span>
                   </button>
                 </li>
@@ -131,9 +132,9 @@ export const AddToReelPopover = ({ frame }: { frame: LibraryFrame }) => {
               type="text"
               value={draft}
               autoFocus
-              aria-label="new reel name"
+              aria-label="new set name"
               maxLength={120}
-              placeholder="reel name…"
+              placeholder="set name…"
               onChange={(e) => setDraft(e.target.value)}
               onKeyDown={(e) => {
                 if (e.key === "Enter") {
@@ -152,7 +153,7 @@ export const AddToReelPopover = ({ frame }: { frame: LibraryFrame }) => {
               className="focus-ring flex w-full items-center gap-1.5 px-1 py-1 font-sans text-[10px] uppercase tracking-[0.22em] text-[color:var(--stone)] transition-colors hover:text-[color:var(--paper)]"
             >
               <Plus className="size-3" strokeWidth={1.5} />
-              new reel
+              new set
             </button>
           )}
         </div>

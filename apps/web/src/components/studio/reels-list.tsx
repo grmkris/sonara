@@ -1,6 +1,6 @@
 "use client";
 
-import type { ReelSummary } from "@sonara/shared";
+import type { FrameSetSummary } from "@sonara/shared";
 import { Plus } from "lucide-react";
 import type { ReactNode } from "react";
 import { useState } from "react";
@@ -8,21 +8,21 @@ import { useState } from "react";
 import { cn } from "@/lib/utils";
 
 interface ReelsListProps {
-  reels: ReelSummary[];
+  sets: FrameSetSummary[];
   loading: boolean;
   bootstrapped: boolean;
-  selectedReelId: string | null;
-  onSelect: (reelId: string) => void;
+  selectedSetId: string | null;
+  onSelect: (setId: string) => void;
   onCreate: (name: string) => void;
 }
 
-// Left-rail list of curated reels. Each card shows the cover thumb, name, and
-// frame count. A "new reel" affordance reveals an inline input. Click selects.
+// Left-rail list of curated sets. Each card shows the cover thumb, name, and
+// frame count. A "new set" affordance reveals an inline input. Click selects.
 export const ReelsList = ({
-  reels,
+  sets,
   loading,
   bootstrapped,
-  selectedReelId,
+  selectedSetId,
   onSelect,
   onCreate,
 }: ReelsListProps) => {
@@ -43,20 +43,20 @@ export const ReelsList = ({
   if (!bootstrapped || loading) {
     body = (
       <div className="px-4 py-6 font-sans text-[10px] uppercase tracking-[0.22em] text-[color:var(--stone)]">
-        loading reels…
+        loading sets…
       </div>
     );
-  } else if (reels.length === 0) {
+  } else if (sets.length === 0) {
     body = (
       <p className="px-4 py-6 font-sans text-[11px] leading-relaxed text-[color:var(--stone)]">
-        No reels yet. Make one, then add frames from your sessions.
+        No sets yet. Make one, then add frames from your recordings.
       </p>
     );
   } else {
     body = (
       <ul className="flex flex-col">
-        {reels.map((r) => {
-          const selected = r.id === selectedReelId;
+        {sets.map((r) => {
+          const selected = r.id === selectedSetId;
           return (
             <li key={r.id}>
               <button
@@ -105,15 +105,15 @@ export const ReelsList = ({
   }
 
   return (
-    <nav aria-label="reels" className="flex flex-col">
+    <nav aria-label="sets" className="flex flex-col">
       <div className="flex items-center justify-between px-4 pt-5 pb-2">
         <h3 className="font-sans text-[9px] uppercase tracking-[0.26em] text-[color:var(--stone)]">
-          reels
+          sets
         </h3>
         <button
           type="button"
           onClick={() => setCreating((c) => !c)}
-          aria-label="new reel"
+          aria-label="new set"
           className="focus-ring flex items-center gap-1 font-sans text-[9px] uppercase tracking-[0.22em] text-[color:var(--stone)] transition-colors hover:text-[color:var(--paper)]"
         >
           <Plus className="size-3" strokeWidth={1.5} />
@@ -127,8 +127,8 @@ export const ReelsList = ({
             type="text"
             value={draftName}
             autoFocus
-            aria-label="new reel name"
-            placeholder="reel name…"
+            aria-label="new set name"
+            placeholder="set name…"
             maxLength={120}
             onChange={(e) => setDraftName(e.target.value)}
             onKeyDown={(e) => {

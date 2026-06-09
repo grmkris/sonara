@@ -1,7 +1,7 @@
 "use client";
 
-import type { LibraryFrame, Reel, ReelSummary, SessionSummary } from "@sonara/shared";
-import type { ImageLibraryId, LiveSessionId, ReelId } from "@sonara/shared/typeid";
+import type { FrameSet, FrameSetSummary, FrameSetVisibility } from "@sonara/shared";
+import type { FrameSetId, ImageLibraryId } from "@sonara/shared/typeid";
 import { ChevronLeft } from "lucide-react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -24,11 +24,12 @@ import { useSession } from "@/lib/auth-client";
 import { rpcClient } from "@/lib/orpc";
 import { cn } from "@/lib/utils";
 
-// /studio — the user's library editor. Two tabs: "sessions" (live history,
-// derived from generated frames; replayable) and "reels" (curated, named groups
-// of frames the user assembles, reorders, and replays). Browse, inspect a
-// frame's metadata + context, act on it (anchor / reseed / download / copy /
-// add-to-reel), and replay a session or reel in /play.
+// /studio — the user's set library. Two tabs: "recordings" (auto-captured
+// live performances; frame list frozen, replayable on original timing) and
+// "sets" (curated, named groups of frames the user assembles, reorders, and
+// replays). Browse, inspect a frame's metadata + context, act on it (anchor /
+// reseed / download / copy / add-to-set), make a cut of a recording, share a
+// set, and replay either in /play.
 
 const StudioFallback = () => (
   <main className="flex min-h-svh items-center justify-center bg-[color:var(--ink)] text-[color:var(--stone)]">
@@ -38,10 +39,10 @@ const StudioFallback = () => (
   </main>
 );
 
-const reelsHref = (reelId?: string, frameId?: string): string => {
-  const qs = new URLSearchParams({ tab: "reels" });
-  if (reelId) {
-    qs.set("reel", reelId);
+const setsHref = (setId?: string, frameId?: string): string => {
+  const qs = new URLSearchParams({ tab: "sets" });
+  if (setId) {
+    qs.set("set", setId);
   }
   if (frameId) {
     qs.set("frame", frameId);
@@ -49,25 +50,37 @@ const reelsHref = (reelId?: string, frameId?: string): string => {
   return `/studio?${qs.toString()}`;
 };
 
-// Right-side header tally for the sessions tab. Extracted so its conditionals
-// don't inflate StudioInner's complexity.
+const recordingsHref = (recordingId?: string, frameId?: string): string => {
+  const qs = new URLSearchParams();
+  if (recordingId) {
+    qs.set("recording", recordingId);
+  }
+  if (frameId) {
+    qs.set("frame", frameId);
+  }
+  const s = qs.toString();
+  return s.length > 0 ? `/studio?${s}` : "/studio";
+};
+
+// Right-side header tally for the recordings tab. Extracted so its
+// conditionals don't inflate StudioInner's complexity.
 const HeaderCount = ({
   tab,
-  sessions,
+  recordings,
   bootstrapped,
 }: {
   tab: StudioTab;
-  sessions: SessionSummary[];
+  recordings: FrameSetSummary[];
   bootstrapped: boolean;
 }) => {
-  if (tab !== "sessions" || !bootstrapped || sessions.length === 0) {
+  if (tab !== "recordings" || !bootstrapped || recordings.length === 0) {
     return null;
   }
-  const totalFrames = sessions.reduce((sum, s) => sum + s.frameCount, 0);
+  const totalFrames = recordings.reduce((sum, r) => sum + r.frameCount, 0);
   return (
     <span className="font-sans text-[10px] uppercase tracking-[0.22em] text-[color:var(--stone)]">
-      {totalFrames} frame{totalFrames === 1 ? "" : "s"} · {sessions.length}{" "}
-      session{sessions.length === 1 ? "" : "s"}
+      {totalFrames} frame{totalFrames === 1 ? "" : "s"} · {recordings.length}{" "}
+      recording{recordings.length === 1 ? "" : "s"}
     </span>
   );
 };
@@ -78,65 +91,64 @@ const StudioInner = () => {
   const sp = useSearchParams();
   const router = useRouter();
 
-  const tab: StudioTab = sp.get("tab") === "reels" ? "reels" : "sessions";
-  const selectedSessionId = sp.get("session");
-  const selectedReelId = sp.get("reel");
+  const tab: StudioTab = sp.get("tab") === "sets" ? "sets" : "recordings";
+  const selectedRecordingId = sp.get("recording");
+  const selectedSetId = sp.get("set");
   const selectedFrameId = sp.get("frame");
 
-  // --- Sessions (live history) ---
-  const [sessions, setSessions] = useState<SessionSummary[]>([]);
-  const [sessionsLoading, setSessionsLoading] = useState(false);
-  const [sessionsBootstrapped, setSessionsBootstrapped] = useState(false);
-  const [sessionsError, setSessionsError] = useState(false);
+  // --- Recordings (auto-captured live performances) ---
+  const [recordings, setRecordings] = useState<FrameSetSummary[]>([]);
+  const [recordingsLoading, setRecordingsLoading] = useState(false);
+  const [recordingsBootstrapped, setRecordingsBootstrapped] = useState(false);
+  const [recordingsError, setRecordingsError] = useState(false);
 
-  const [frames, setFrames] = useState<LibraryFrame[]>([]);
-  const [framesLoading, setFramesLoading] = useState(false);
-  const [framesError, setFramesError] = useState(false);
-  const [loadedSessionId, setLoadedSessionId] = useState<string | null>(null);
+  const [recordingDetail, setRecordingDetail] = useState<FrameSet | null>(null);
+  const [recordingLoading, setRecordingLoading] = useState(false);
+  const [recordingError, setRecordingError] = useState(false);
+  const [loadedRecordingId, setLoadedRecordingId] = useState<string | null>(
+    null
+  );
 
-  // --- Reels (curated) ---
-  const [reels, setReels] = useState<ReelSummary[]>([]);
-  const [reelsLoading, setReelsLoading] = useState(false);
-  const [reelsBootstrapped, setReelsBootstrapped] = useState(false);
-  const [reelDetail, setReelDetail] = useState<Reel | null>(null);
-  const [reelDetailLoading, setReelDetailLoading] = useState(false);
-  const [reelDetailError, setReelDetailError] = useState(false);
+  // --- Sets (curated) ---
+  const [curatedSets, setCuratedSets] = useState<FrameSetSummary[]>([]);
+  const [setsLoading, setSetsLoading] = useState(false);
+  const [setsBootstrapped, setSetsBootstrapped] = useState(false);
+  const [setDetail, setSetDetail] = useState<FrameSet | null>(null);
+  const [setDetailLoading, setSetDetailLoading] = useState(false);
+  const [setDetailError, setSetDetailError] = useState(false);
 
   // Retry / refresh nonces.
   const [reloadNonce, setReloadNonce] = useState(0);
   const retry = useCallback(() => setReloadNonce((n) => n + 1), []);
-  const [reelsNonce, setReelsNonce] = useState(0);
-  const refreshReels = useCallback(() => setReelsNonce((n) => n + 1), []);
-  const [reelDetailNonce, setReelDetailNonce] = useState(0);
-  const retryReelDetail = useCallback(
-    () => setReelDetailNonce((n) => n + 1),
-    []
-  );
+  const [setsNonce, setSetsNonce] = useState(0);
+  const refreshSets = useCallback(() => setSetsNonce((n) => n + 1), []);
+  const [setDetailNonce, setSetDetailNonce] = useState(0);
+  const retrySetDetail = useCallback(() => setSetDetailNonce((n) => n + 1), []);
 
-  // Sessions list bootstrap.
+  // Recordings list bootstrap.
   useEffect(() => {
     if (!isSignedIn) {
       return;
     }
     let cancelled = false;
-    setSessionsLoading(true);
-    setSessionsError(false);
+    setRecordingsLoading(true);
+    setRecordingsError(false);
     const run = async () => {
       try {
-        const { sessions: s } = await rpcClient.library.sessions({});
+        const { sets: s } = await rpcClient.sets.list({ origin: "recording" });
         if (cancelled) {
           return;
         }
-        setSessions(s);
-        setSessionsLoading(false);
-        setSessionsBootstrapped(true);
+        setRecordings(s);
+        setRecordingsLoading(false);
+        setRecordingsBootstrapped(true);
       } catch {
         if (cancelled) {
           return;
         }
-        setSessionsError(true);
-        setSessionsLoading(false);
-        setSessionsBootstrapped(true);
+        setRecordingsError(true);
+        setRecordingsLoading(false);
+        setRecordingsBootstrapped(true);
       }
     };
     void run();
@@ -145,246 +157,268 @@ const StudioInner = () => {
     };
   }, [isSignedIn, reloadNonce]);
 
-  // Reels list bootstrap (signed-in; refreshed via reelsNonce on mutations).
+  // Curated sets list bootstrap (signed-in; refreshed via setsNonce on mutations).
   useEffect(() => {
     if (!isSignedIn) {
       return;
     }
     let cancelled = false;
-    setReelsLoading(true);
+    setSetsLoading(true);
     const run = async () => {
       try {
-        const { reels: r } = await rpcClient.reels.list({});
+        const { sets: s } = await rpcClient.sets.list({ origin: "curated" });
         if (cancelled) {
           return;
         }
-        setReels(r);
-        setReelsLoading(false);
-        setReelsBootstrapped(true);
+        setCuratedSets(s);
+        setSetsLoading(false);
+        setSetsBootstrapped(true);
       } catch {
         if (cancelled) {
           return;
         }
-        setReelsLoading(false);
-        setReelsBootstrapped(true);
+        setSetsLoading(false);
+        setSetsBootstrapped(true);
       }
     };
     void run();
     return () => {
       cancelled = true;
     };
-  }, [isSignedIn, reelsNonce]);
+  }, [isSignedIn, setsNonce]);
 
-  // Auto-select most recent session when on the sessions tab with none chosen.
+  // Auto-select most recent recording when on the recordings tab with none chosen.
   useEffect(() => {
-    if (tab !== "sessions" || !sessionsBootstrapped || selectedSessionId) {
+    if (tab !== "recordings" || !recordingsBootstrapped || selectedRecordingId) {
       return;
     }
-    const [newest] = sessions;
+    const [newest] = recordings;
     if (newest) {
-      router.replace(`/studio?session=${encodeURIComponent(newest.sessionId)}`);
+      router.replace(recordingsHref(newest.id));
     }
-  }, [tab, sessionsBootstrapped, selectedSessionId, sessions, router]);
+  }, [tab, recordingsBootstrapped, selectedRecordingId, recordings, router]);
 
-  // Auto-select most recent reel when on the reels tab with none chosen.
+  // Auto-select most recent set when on the sets tab with none chosen.
   useEffect(() => {
-    if (tab !== "reels" || !reelsBootstrapped || selectedReelId) {
+    if (tab !== "sets" || !setsBootstrapped || selectedSetId) {
       return;
     }
-    const [newest] = reels;
+    const [newest] = curatedSets;
     if (newest) {
-      router.replace(reelsHref(newest.id));
+      router.replace(setsHref(newest.id));
     }
-  }, [tab, reelsBootstrapped, selectedReelId, reels, router]);
+  }, [tab, setsBootstrapped, selectedSetId, curatedSets, router]);
 
-  // Load session frames when the session selection changes.
+  // Load the recording detail when the recording selection changes.
   useEffect(() => {
-    if (!isSignedIn || !selectedSessionId) {
+    if (!isSignedIn || !selectedRecordingId) {
       return;
     }
-    if (loadedSessionId === selectedSessionId) {
+    if (loadedRecordingId === selectedRecordingId) {
       return;
     }
     let cancelled = false;
-    setFramesLoading(true);
-    setFramesError(false);
+    setRecordingLoading(true);
+    setRecordingError(false);
     const run = async () => {
       try {
-        const { frames: f } = await rpcClient.library.bySession({
-          sessionId: selectedSessionId as LiveSessionId,
+        const detail = await rpcClient.sets.get({
+          setId: selectedRecordingId as FrameSetId,
         });
         if (cancelled) {
           return;
         }
-        setFrames(f);
-        setLoadedSessionId(selectedSessionId);
-        setFramesLoading(false);
+        setRecordingDetail(detail);
+        setLoadedRecordingId(selectedRecordingId);
+        setRecordingLoading(false);
       } catch {
         if (cancelled) {
           return;
         }
-        setFramesError(true);
-        setFramesLoading(false);
+        setRecordingError(true);
+        setRecordingLoading(false);
       }
     };
     void run();
     return () => {
       cancelled = true;
     };
-  }, [isSignedIn, selectedSessionId, loadedSessionId, reloadNonce]);
+  }, [isSignedIn, selectedRecordingId, loadedRecordingId, reloadNonce]);
 
-  // Load reel detail when the reel selection (or retry nonce) changes.
+  // Load the set detail when the set selection (or retry nonce) changes.
   useEffect(() => {
-    if (!isSignedIn || !selectedReelId) {
-      setReelDetail(null);
+    if (!isSignedIn || !selectedSetId) {
+      setSetDetail(null);
       return;
     }
     let cancelled = false;
-    setReelDetailLoading(true);
-    setReelDetailError(false);
+    setSetDetailLoading(true);
+    setSetDetailError(false);
     const run = async () => {
       try {
-        const r = await rpcClient.reels.get({ reelId: selectedReelId as ReelId });
+        const detail = await rpcClient.sets.get({
+          setId: selectedSetId as FrameSetId,
+        });
         if (cancelled) {
           return;
         }
-        setReelDetail(r);
-        setReelDetailLoading(false);
+        setSetDetail(detail);
+        setSetDetailLoading(false);
       } catch {
         if (cancelled) {
           return;
         }
-        setReelDetailError(true);
-        setReelDetailLoading(false);
+        setSetDetailError(true);
+        setSetDetailLoading(false);
       }
     };
     void run();
     return () => {
       cancelled = true;
     };
-  }, [isSignedIn, selectedReelId, reelDetailNonce]);
+  }, [isSignedIn, selectedSetId, setDetailNonce]);
 
   const selectedFrame = useMemo(() => {
-    const pool = tab === "reels" ? (reelDetail?.frames ?? []) : frames;
+    const pool =
+      tab === "sets" ? (setDetail?.frames ?? []) : (recordingDetail?.frames ?? []);
     return pool.find((f) => f.id === selectedFrameId) ?? null;
-  }, [tab, frames, reelDetail, selectedFrameId]);
+  }, [tab, recordingDetail, setDetail, selectedFrameId]);
 
   // --- Navigation handlers ---
   const onTab = useCallback(
     (next: StudioTab) => {
-      router.push(next === "reels" ? "/studio?tab=reels" : "/studio");
+      router.push(next === "sets" ? "/studio?tab=sets" : "/studio");
     },
     [router]
   );
 
-  const onSelectSession = useCallback(
-    (sessionId: string) => {
-      router.push(`/studio?session=${encodeURIComponent(sessionId)}`);
+  const onSelectRecording = useCallback(
+    (recordingId: string) => {
+      router.push(recordingsHref(recordingId));
     },
     [router]
   );
 
-  const onSelectReel = useCallback(
-    (reelId: string) => {
-      router.push(reelsHref(reelId));
+  const onSelectSet = useCallback(
+    (setId: string) => {
+      router.push(setsHref(setId));
     },
     [router]
   );
 
   const onSelectFrame = useCallback(
     (frameId: string) => {
-      if (tab === "reels") {
-        if (!selectedReelId) {
+      if (tab === "sets") {
+        if (!selectedSetId) {
           return;
         }
-        router.push(reelsHref(selectedReelId, frameId));
+        router.push(setsHref(selectedSetId, frameId));
         return;
       }
-      if (!selectedSessionId) {
+      if (!selectedRecordingId) {
         return;
       }
-      router.push(
-        `/studio?session=${encodeURIComponent(selectedSessionId)}&frame=${encodeURIComponent(frameId)}`
-      );
+      router.push(recordingsHref(selectedRecordingId, frameId));
     },
-    [router, tab, selectedReelId, selectedSessionId]
+    [router, tab, selectedSetId, selectedRecordingId]
   );
 
   const onCloseInspector = useCallback(() => {
-    if (tab === "reels") {
-      router.replace(selectedReelId ? reelsHref(selectedReelId) : "/studio?tab=reels");
+    if (tab === "sets") {
+      router.replace(selectedSetId ? setsHref(selectedSetId) : "/studio?tab=sets");
       return;
     }
-    router.replace(
-      selectedSessionId
-        ? `/studio?session=${encodeURIComponent(selectedSessionId)}`
-        : "/studio"
-    );
-  }, [router, tab, selectedReelId, selectedSessionId]);
+    router.replace(recordingsHref(selectedRecordingId ?? undefined));
+  }, [router, tab, selectedSetId, selectedRecordingId]);
 
   const onBackToList = useCallback(() => {
-    router.replace(tab === "reels" ? "/studio?tab=reels" : "/studio");
+    router.replace(tab === "sets" ? "/studio?tab=sets" : "/studio");
   }, [router, tab]);
 
-  // --- Reel mutations (optimistic; sidebar refreshed via refreshReels) ---
-  const onCreateReel = useCallback(
+  // --- Set mutations (optimistic; sidebar refreshed via refreshSets) ---
+  const onCreateSet = useCallback(
     (name: string) => {
       void (async () => {
         try {
-          const { reel } = await rpcClient.reels.create({ name });
-          refreshReels();
-          router.push(reelsHref(reel.id));
-          toast(`created “${reel.name}”`, { duration: 1600 });
+          const { set: created } = await rpcClient.sets.create({ name });
+          refreshSets();
+          router.push(setsHref(created.id));
+          toast(`created “${created.name}”`, { duration: 1600 });
         } catch {
-          toast.error("couldn't create reel");
+          toast.error("couldn't create set");
         }
       })();
     },
-    [refreshReels, router]
+    [refreshSets, router]
   );
 
-  const onRenameReel = useCallback(
+  // "Make a cut": derive an editable curated set from the open recording.
+  const onMakeCut = useCallback(() => {
+    if (!recordingDetail) {
+      return;
+    }
+    const name = `cut of ${recordingDetail.name}`;
+    const fromSetId = recordingDetail.id;
+    void (async () => {
+      try {
+        const { set: created } = await rpcClient.sets.create({
+          fromSetId,
+          name,
+        });
+        refreshSets();
+        router.push(setsHref(created.id));
+        toast(`created “${created.name}”`, { duration: 1600 });
+      } catch {
+        toast.error("couldn't make a cut");
+      }
+    })();
+  }, [recordingDetail, refreshSets, router]);
+
+  const onRenameSet = useCallback(
     (name: string) => {
-      if (!(reelDetail && selectedReelId)) {
+      if (!(setDetail && selectedSetId)) {
         return;
       }
-      const prev = reelDetail.name;
-      setReelDetail((d) => (d ? { ...d, name } : d));
+      const prev = setDetail.name;
+      setSetDetail((d) => (d ? { ...d, name } : d));
       void (async () => {
         try {
-          await rpcClient.reels.rename({ name, reelId: selectedReelId as ReelId });
-          refreshReels();
+          await rpcClient.sets.rename({
+            name,
+            setId: selectedSetId as FrameSetId,
+          });
+          refreshSets();
         } catch {
-          setReelDetail((d) => (d ? { ...d, name: prev } : d));
+          setSetDetail((d) => (d ? { ...d, name: prev } : d));
           toast.error("rename failed");
         }
       })();
     },
-    [reelDetail, selectedReelId, refreshReels]
+    [setDetail, selectedSetId, refreshSets]
   );
 
-  const onDeleteReel = useCallback(() => {
-    if (!selectedReelId) {
+  const onDeleteSet = useCallback(() => {
+    if (!selectedSetId) {
       return;
     }
     void (async () => {
       try {
-        await rpcClient.reels.remove({ reelId: selectedReelId as ReelId });
-        refreshReels();
-        router.replace("/studio?tab=reels");
-        toast("reel deleted", { duration: 1600 });
+        await rpcClient.sets.remove({ setId: selectedSetId as FrameSetId });
+        refreshSets();
+        router.replace("/studio?tab=sets");
+        toast("set deleted", { duration: 1600 });
       } catch {
-        toast.error("couldn't delete reel");
+        toast.error("couldn't delete set");
       }
     })();
-  }, [selectedReelId, refreshReels, router]);
+  }, [selectedSetId, refreshSets, router]);
 
   const onMoveFrame = useCallback(
     (frameId: string, dir: "prev" | "next") => {
-      if (!(reelDetail && selectedReelId)) {
+      if (!(setDetail && selectedSetId)) {
         return;
       }
-      const ids = reelDetail.frames.map((f) => f.id);
+      const ids = setDetail.frames.map((f) => f.id);
       const i = ids.indexOf(frameId as ImageLibraryId);
       if (i === -1) {
         return;
@@ -393,82 +427,122 @@ const StudioInner = () => {
       if (j < 0 || j >= ids.length) {
         return;
       }
-      const reordered = [...reelDetail.frames];
+      const reordered = [...setDetail.frames];
       const [moved] = reordered.splice(i, 1);
       if (moved) {
         reordered.splice(j, 0, moved);
       }
-      const prevFrames = reelDetail.frames;
-      setReelDetail((d) => (d ? { ...d, frames: reordered } : d));
+      const prevFrames = setDetail.frames;
+      setSetDetail((d) => (d ? { ...d, frames: reordered } : d));
       void (async () => {
         try {
-          await rpcClient.reels.reorder({
+          await rpcClient.sets.reorder({
             orderedFrameIds: reordered.map((f) => f.id),
-            reelId: selectedReelId as ReelId,
+            setId: selectedSetId as FrameSetId,
           });
-          refreshReels();
+          refreshSets();
         } catch {
-          setReelDetail((d) => (d ? { ...d, frames: prevFrames } : d));
+          setSetDetail((d) => (d ? { ...d, frames: prevFrames } : d));
           toast.error("reorder failed");
         }
       })();
     },
-    [reelDetail, selectedReelId, refreshReels]
+    [setDetail, selectedSetId, refreshSets]
   );
 
   const onRemoveFrame = useCallback(
     (frameId: string) => {
-      if (!(reelDetail && selectedReelId)) {
+      if (!(setDetail && selectedSetId)) {
         return;
       }
-      const prevFrames = reelDetail.frames;
-      setReelDetail((d) =>
+      const prevFrames = setDetail.frames;
+      setSetDetail((d) =>
         d ? { ...d, frames: d.frames.filter((f) => f.id !== frameId) } : d
       );
       // If the open inspector frame was removed, close it.
       if (selectedFrameId === frameId) {
-        router.replace(reelsHref(selectedReelId));
+        router.replace(setsHref(selectedSetId));
       }
       void (async () => {
         try {
-          await rpcClient.reels.removeFrame({
+          await rpcClient.sets.removeFrame({
             frameId: frameId as ImageLibraryId,
-            reelId: selectedReelId as ReelId,
+            setId: selectedSetId as FrameSetId,
           });
-          refreshReels();
+          refreshSets();
         } catch {
-          setReelDetail((d) => (d ? { ...d, frames: prevFrames } : d));
+          setSetDetail((d) => (d ? { ...d, frames: prevFrames } : d));
           toast.error("couldn't remove frame");
         }
       })();
     },
-    [reelDetail, selectedReelId, selectedFrameId, refreshReels, router]
+    [setDetail, selectedSetId, selectedFrameId, refreshSets, router]
   );
 
   const onSetCover = useCallback(
     (frameId: string) => {
-      if (!(reelDetail && selectedReelId)) {
+      if (!(setDetail && selectedSetId)) {
         return;
       }
-      const prev = reelDetail.coverFrameId;
-      setReelDetail((d) =>
+      const prev = setDetail.coverFrameId;
+      setSetDetail((d) =>
         d ? { ...d, coverFrameId: frameId as ImageLibraryId } : d
       );
       void (async () => {
         try {
-          await rpcClient.reels.setCover({
+          await rpcClient.sets.setCover({
             frameId: frameId as ImageLibraryId,
-            reelId: selectedReelId as ReelId,
+            setId: selectedSetId as FrameSetId,
           });
-          refreshReels();
+          refreshSets();
           toast("cover set", { duration: 1400 });
         } catch {
-          setReelDetail((d) => (d ? { ...d, coverFrameId: prev } : d));
+          setSetDetail((d) => (d ? { ...d, coverFrameId: prev } : d));
           toast.error("couldn't set cover");
         }
       })();
     },
-    [reelDetail, selectedReelId, refreshReels]
+    [setDetail, selectedSetId, refreshSets]
+  );
+
+  const onSetVisibility = useCallback(
+    (visibility: FrameSetVisibility) => {
+      if (!setDetail) {
+        return;
+      }
+      const prev = setDetail.visibility;
+      const setId = setDetail.id;
+      setSetDetail((d) => (d ? { ...d, visibility } : d));
+      void (async () => {
+        try {
+          await rpcClient.sets.setVisibility({ setId, visibility });
+        } catch {
+          setSetDetail((d) => (d ? { ...d, visibility: prev } : d));
+          toast.error("couldn't change visibility");
+        }
+      })();
+    },
+    [setDetail]
+  );
+
+  const onRecordingVisibility = useCallback(
+    (visibility: FrameSetVisibility) => {
+      if (!recordingDetail) {
+        return;
+      }
+      const prev = recordingDetail.visibility;
+      const setId = recordingDetail.id;
+      setRecordingDetail((d) => (d ? { ...d, visibility } : d));
+      void (async () => {
+        try {
+          await rpcClient.sets.setVisibility({ setId, visibility });
+        } catch {
+          setRecordingDetail((d) => (d ? { ...d, visibility: prev } : d));
+          toast.error("couldn't change visibility");
+        }
+      })();
+    },
+    [recordingDetail]
   );
 
   // Auth gate.
@@ -480,40 +554,42 @@ const StudioInner = () => {
   }
 
   const showInspectorOnDesktop = !!selectedFrame;
-  // Mobile: the center pane takes over once a session/reel is chosen.
+  // Mobile: the center pane takes over once a recording/set is chosen.
   const showMobileCenter =
-    tab === "reels" ? !!selectedReelId : !!selectedSessionId;
+    tab === "sets" ? !!selectedSetId : !!selectedRecordingId;
 
-  const renderSessionsCenter = () => {
-    if (!sessionsBootstrapped) {
+  const renderRecordingsCenter = () => {
+    if (!recordingsBootstrapped) {
       return (
         <div className="px-10 py-16 font-sans text-[10px] uppercase tracking-[0.22em] text-[color:var(--stone)]">
           loading…
         </div>
       );
     }
-    if (sessionsError) {
+    if (recordingsError) {
       return <ErrorState onRetry={retry} />;
     }
-    if (sessions.length === 0) {
+    if (recordings.length === 0) {
       return <EmptyState />;
     }
-    if (!selectedSessionId) {
+    if (!selectedRecordingId) {
       return (
         <div className="px-10 py-16 font-sans text-[10px] uppercase tracking-[0.22em] text-[color:var(--stone)]">
-          select a session
+          select a recording
         </div>
       );
     }
-    if (framesError) {
+    if (recordingError) {
       return <ErrorState onRetry={retry} />;
     }
     return (
       <SessionTimeline
-        frames={frames}
-        loading={framesLoading}
+        recording={recordingDetail}
+        loading={recordingLoading}
         selectedFrameId={selectedFrameId}
         onSelectFrame={onSelectFrame}
+        onMakeCut={onMakeCut}
+        onVisibilityChange={onRecordingVisibility}
       />
     );
   };
@@ -536,8 +612,8 @@ const StudioInner = () => {
         </div>
         <HeaderCount
           tab={tab}
-          sessions={sessions}
-          bootstrapped={sessionsBootstrapped}
+          recordings={recordings}
+          bootstrapped={recordingsBootstrapped}
         />
       </header>
 
@@ -552,22 +628,22 @@ const StudioInner = () => {
           )}
         >
           <StudioSidebarTabs tab={tab} onTab={onTab} />
-          {tab === "sessions" ? (
+          {tab === "recordings" ? (
             <SessionsList
-              sessions={sessions}
-              loading={sessionsLoading}
-              bootstrapped={sessionsBootstrapped}
-              selectedSessionId={selectedSessionId}
-              onSelect={onSelectSession}
+              recordings={recordings}
+              loading={recordingsLoading}
+              bootstrapped={recordingsBootstrapped}
+              selectedRecordingId={selectedRecordingId}
+              onSelect={onSelectRecording}
             />
           ) : (
             <ReelsList
-              reels={reels}
-              loading={reelsLoading}
-              bootstrapped={reelsBootstrapped}
-              selectedReelId={selectedReelId}
-              onSelect={onSelectReel}
-              onCreate={onCreateReel}
+              sets={curatedSets}
+              loading={setsLoading}
+              bootstrapped={setsBootstrapped}
+              selectedSetId={selectedSetId}
+              onSelect={onSelectSet}
+              onCreate={onCreateSet}
             />
           )}
         </aside>
@@ -588,27 +664,28 @@ const StudioInner = () => {
                 aria-label="back"
               >
                 <ChevronLeft className="size-3" strokeWidth={1.5} />
-                <span>{tab === "reels" ? "reels" : "sessions"}</span>
+                <span>{tab === "sets" ? "sets" : "recordings"}</span>
               </button>
             </div>
           )}
 
-          {tab === "sessions" ? (
-            renderSessionsCenter()
+          {tab === "recordings" ? (
+            renderRecordingsCenter()
           ) : (
             <ReelEditor
-              reel={reelDetail}
-              loading={reelDetailLoading}
-              error={reelDetailError}
-              onRetry={retryReelDetail}
+              frameSet={setDetail}
+              loading={setDetailLoading}
+              error={setDetailError}
+              onRetry={retrySetDetail}
               selectedFrameId={selectedFrameId}
               onSelectFrame={onSelectFrame}
-              coverFrameId={reelDetail?.coverFrameId ?? null}
-              onRename={onRenameReel}
-              onDelete={onDeleteReel}
+              coverFrameId={setDetail?.coverFrameId ?? null}
+              onRename={onRenameSet}
+              onDelete={onDeleteSet}
               onMoveFrame={onMoveFrame}
               onRemoveFrame={onRemoveFrame}
               onSetCover={onSetCover}
+              onVisibilityChange={onSetVisibility}
             />
           )}
         </section>

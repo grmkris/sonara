@@ -1,6 +1,7 @@
 "use client";
 
-import type { LiveSessionId, ReelId } from "@sonara/shared/typeid";
+import type { FrameSetId, LiveSessionId, ReelId } from "@sonara/shared/typeid";
+import { typeIdFromUuid, typeIdToUuid } from "@sonara/shared/typeid";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useRef } from "react";
 import { toast } from "sonner";
@@ -11,8 +12,11 @@ import { useVisualizerStore } from "@/stores/visualizer";
 // Consumes the one-shot replay params left on /play after navigating from
 // /studio, then clears them via router.replace so a refresh doesn't restart.
 //
-//   ?reel=<reelId>      → curated reel, played on a fixed cadence
-//   ?session=<sessionId> → a past live session, replayed on its original timing
+//   ?set=<setId>         → a frame set; recordings replay on their original
+//                          timing, curated/builtin sets on a fixed cadence
+//   ?reel=<reelId>       → legacy curated reel link (reel ids live on as
+//                          set ids — same uuid), fixed cadence
+//   ?session=<sessionId> → legacy live-session link, original timing
 //
 // Playback is purely client-side (no WS action, no generation): we fetch the
 // ordered frames and hand them to the reel-playback slice; useReelPlaybackLoop
@@ -25,13 +29,16 @@ export const ReelPlaybackConsumer = () => {
 
   // Snapshot the params on first mount so we don't react to the clear we make
   // ourselves below.
-  const snapshotRef = useRef<{ reel: string | null; session: string | null } | null>(
-    null
-  );
+  const snapshotRef = useRef<{
+    reel: string | null;
+    session: string | null;
+    setId: string | null;
+  } | null>(null);
   if (snapshotRef.current === null) {
     snapshotRef.current = {
       reel: params.get("reel"),
       session: params.get("session"),
+      setId: params.get("set"),
     };
   }
 
@@ -40,25 +47,35 @@ export const ReelPlaybackConsumer = () => {
     if (!snap) {
       return;
     }
-    const { reel, session } = snap;
-    if (!(reel || session)) {
+    const { reel, session, setId } = snap;
+    if (!(reel || session || setId)) {
       return;
     }
 
     let cancelled = false;
     const run = async () => {
       try {
-        if (reel) {
-          const data = await rpcClient.reels.get({ reelId: reel as ReelId });
+        // Legacy ?reel= links keep working: the migration kept each reel's
+        // uuid as its set id, so a rel_ id converts to the set_ id of the
+        // same row and both params resolve through sets.get.
+        const replaySetId: FrameSetId | null =
+          (setId as FrameSetId | null) ??
+          (reel
+            ? typeIdFromUuid("frameSet", typeIdToUuid(reel as ReelId).uuid)
+            : null);
+        if (replaySetId) {
+          const data = await rpcClient.sets.get({
+            setId: replaySetId,
+          });
           if (cancelled) {
             return;
           }
           if (data.frames.length === 0) {
-            toast("that reel is empty");
+            toast("that set is empty");
             return;
           }
           startReelPlayback({
-            cadence: "fixed",
+            cadence: data.origin === "recording" ? "original" : "fixed",
             frames: data.frames,
             id: data.id,
             name: data.name,

@@ -1,17 +1,16 @@
 "use client";
 
-import type { SessionSummary } from "@sonara/shared";
+import type { FrameSetSummary } from "@sonara/shared";
 import { useMemo } from "react";
 
-import { formatDuration } from "@/lib/format-time";
 import { cn } from "@/lib/utils";
 
 interface SessionsListProps {
-  sessions: SessionSummary[];
+  recordings: FrameSetSummary[];
   loading: boolean;
   bootstrapped: boolean;
-  selectedSessionId: string | null;
-  onSelect: (sessionId: string) => void;
+  selectedRecordingId: string | null;
+  onSelect: (setId: string) => void;
 }
 
 type DateBand = "today" | "yesterday" | "this week" | "older";
@@ -47,29 +46,23 @@ const formatTime = (date: Date): string => {
   return `${h}:${m}`;
 };
 
-const formatDateLong = (date: Date): string =>
-  date.toLocaleDateString(undefined, {
-    day: "numeric",
-    month: "short",
-  });
-
-// Left-rail list of session summaries, grouped by date band (today /
-// yesterday / this week / older). Each session card shows: sample thumb,
-// time range, frame count, duration. Click selects the session.
+// Left-rail list of recording sets (auto-captured live performances), grouped
+// by date band (today / yesterday / this week / older). Each card shows:
+// cover thumb, name, frame count. Click selects the recording.
 export const SessionsList = ({
-  sessions,
+  recordings,
   loading,
   bootstrapped,
-  selectedSessionId,
+  selectedRecordingId,
   onSelect,
 }: SessionsListProps) => {
   const grouped = useMemo(() => {
     const now = new Date();
-    const map = new Map<DateBand, SessionSummary[]>();
-    for (const s of sessions) {
-      const band = bandOf(s.lastFrameAt, now);
+    const map = new Map<DateBand, FrameSetSummary[]>();
+    for (const r of recordings) {
+      const band = bandOf(r.createdAt, now);
       const arr = map.get(band) ?? [];
-      arr.push(s);
+      arr.push(r);
       map.set(band, arr);
     }
     // Stable order.
@@ -77,35 +70,35 @@ export const SessionsList = ({
     return order
       .map((band) => ({ band, items: map.get(band) ?? [] }))
       .filter((g) => g.items.length > 0);
-  }, [sessions]);
+  }, [recordings]);
 
   if (!bootstrapped || loading) {
     return (
       <div className="px-4 py-6 font-sans text-[10px] uppercase tracking-[0.22em] text-[color:var(--stone)]">
-        loading sessions…
+        loading recordings…
       </div>
     );
   }
 
-  if (sessions.length === 0) {
+  if (recordings.length === 0) {
     return null;
   }
 
   return (
-    <nav aria-label="library sessions" className="flex flex-col">
+    <nav aria-label="recordings" className="flex flex-col">
       {grouped.map((g) => (
         <section key={g.band} className="flex flex-col">
           <h3 className="sticky top-0 z-10 bg-[color:var(--ink)] px-4 pt-5 pb-2 font-sans text-[9px] uppercase tracking-[0.26em] text-[color:var(--stone)]">
             {g.band}
           </h3>
           <ul className="flex flex-col">
-            {g.items.map((s) => {
-              const selected = s.sessionId === selectedSessionId;
+            {g.items.map((r) => {
+              const selected = r.id === selectedRecordingId;
               return (
-                <li key={s.sessionId}>
+                <li key={r.id}>
                   <button
                     type="button"
-                    onClick={() => onSelect(s.sessionId)}
+                    onClick={() => onSelect(r.id)}
                     className={cn(
                       "focus-ring flex w-full items-center gap-3 px-4 py-2 text-left",
                       "border-b border-[color:var(--hairline)]/20 transition-colors",
@@ -115,9 +108,9 @@ export const SessionsList = ({
                     )}
                     aria-current={selected ? "true" : undefined}
                   >
-                    {s.sampleUrl ? (
+                    {r.coverUrl ? (
                       <img
-                        src={s.sampleUrl}
+                        src={r.coverUrl}
                         alt=""
                         loading="lazy"
                         className="size-10 shrink-0 rounded-sm border border-[color:var(--hairline)]/40 object-cover"
@@ -128,20 +121,16 @@ export const SessionsList = ({
                     <div className="flex min-w-0 flex-1 flex-col gap-0.5">
                       <span
                         className={cn(
-                          "font-sans text-[11px] uppercase tracking-[0.18em]",
+                          "truncate font-sans text-[11px] uppercase tracking-[0.18em]",
                           selected
                             ? "text-[color:var(--paper)]"
                             : "text-[color:var(--paper)]/80"
                         )}
                       >
-                        {g.band === "older"
-                          ? formatDateLong(s.lastFrameAt)
-                          : formatTime(s.firstFrameAt)}
+                        {r.name || formatTime(r.createdAt)}
                       </span>
                       <span className="font-mono text-[9px] uppercase tracking-[0.18em] text-[color:var(--stone)]">
-                        {s.frameCount} frame{s.frameCount === 1 ? "" : "s"}
-                        {" · "}
-                        {formatDuration(s.durationMs)}
+                        {r.frameCount} frame{r.frameCount === 1 ? "" : "s"}
                       </span>
                     </div>
                   </button>

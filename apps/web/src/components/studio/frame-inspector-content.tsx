@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { formatMmSs } from "@/lib/format-time";
 import { cn } from "@/lib/utils";
 
-import { AddToReelPopover } from "./add-to-reel-popover";
+import { AddToSetPopover } from "./add-to-set-popover";
 
 interface FrameInspectorContentProps {
   frame: LibraryFrame;
@@ -174,13 +174,13 @@ export const FrameInspectorContent = ({
         </Button>
       </div>
 
-      {/* Add to a curated reel. Hidden for example-session frames: those are
+      {/* Add to a curated set. Hidden for example-session frames: those are
           synthesized from shared seed rows (user_id NULL), so the server's
           ownership check would reject them — a new user (who only has example
           sessions) would otherwise hit an error. Real generated frames carry a
           normal lse_ session id and are addable. */}
       {!frame.sessionId.startsWith("lse_example_") && (
-        <AddToReelPopover frame={frame} />
+        <AddToSetPopover frame={frame} />
       )}
 
       {/* Metadata */}

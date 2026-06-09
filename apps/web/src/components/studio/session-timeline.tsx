@@ -1,26 +1,29 @@
 "use client";
 
-import type { LibraryFrame } from "@sonara/shared";
-import { Play } from "lucide-react";
+import type { FrameSet, FrameSetVisibility, LibraryFrame } from "@sonara/shared";
+import { Play, Scissors } from "lucide-react";
 import Link from "next/link";
 import { useMemo } from "react";
 
 import { formatDuration, formatMmSs } from "@/lib/format-time";
 
 import { FrameCard } from "./frame-card";
+import { SetShareControls } from "./set-share-controls";
 
 interface SessionTimelineProps {
-  frames: LibraryFrame[];
+  recording: FrameSet | null;
   loading: boolean;
   selectedFrameId: string | null;
   onSelectFrame: (frameId: string) => void;
+  onMakeCut: () => void;
+  onVisibilityChange: (visibility: FrameSetVisibility) => void;
 }
 
 const FRAME_SIZE_DESKTOP = 56;
 // Two frames count as "clustered" (and thus stack) when their tMs gap is
-// less than this fraction of the total session duration. 1% chosen by
+// less than this fraction of the total recording duration. 1% chosen by
 // eye — gives clustering on rapid-burst moments without false-collapsing
-// frames a few seconds apart in a 5-minute session.
+// frames a few seconds apart in a 5-minute recording.
 const CLUSTER_FRACTION = 0.01;
 
 interface LayoutEntry {
@@ -62,7 +65,7 @@ const computeLayout = (frames: LibraryFrame[]): Layout => {
   if (frames.length === 0) {
     return { durationMs: 0, frames: [], ticks: [] };
   }
-  // Frames arrive ordered by tMs ASC per library.bySession.
+  // Frames arrive ordered by tMs ASC per sets.get (junction position order).
   const lastTMs = frames.at(-1)?.tMs ?? 0;
   // Guard: at least 1s of timeline so a single frame still positions.
   const durationMs = Math.max(lastTMs, 1000);
@@ -91,21 +94,27 @@ const computeLayout = (frames: LibraryFrame[]): Layout => {
   return { durationMs, frames: entries, ticks };
 };
 
-// Time-coded horizontal timeline. Frames are positioned along the
-// horizontal axis by their `tMs` proportionally to the session duration.
-// Tickmarks underneath at adaptive intervals (every 30s for <5min, every
-// 1min for <30min, every 5min for longer). Frames that cluster within
-// 1% of total duration stack vertically with the older one beneath.
+// Time-coded horizontal timeline for a recording set. Frames are positioned
+// along the horizontal axis by their `tMs` proportionally to the recording
+// duration. Tickmarks underneath at adaptive intervals (every 30s for <5min,
+// every 1min for <30min, every 5min for longer). Frames that cluster within
+// 1% of total duration stack vertically with the older one beneath. A
+// recording's frame list is frozen — "make a cut" derives an editable set.
 export const SessionTimeline = ({
-  frames,
+  recording,
   loading,
   selectedFrameId,
   onSelectFrame,
+  onMakeCut,
+  onVisibilityChange,
 }: SessionTimelineProps) => {
-  const layout = useMemo(() => computeLayout(frames), [frames]);
-  const sessionId = frames[0]?.sessionId ?? null;
+  const frames = recording?.frames ?? [];
+  const layout = useMemo(
+    () => computeLayout(recording?.frames ?? []),
+    [recording]
+  );
 
-  if (loading) {
+  if (loading || !recording) {
     return (
       <div className="px-10 py-16 font-sans text-[10px] uppercase tracking-[0.22em] text-[color:var(--stone)]">
         loading frames…
@@ -116,7 +125,7 @@ export const SessionTimeline = ({
   if (frames.length === 0) {
     return (
       <div className="px-10 py-16 font-sans text-[10px] uppercase tracking-[0.22em] text-[color:var(--stone)]">
-        this session has no frames yet
+        this recording has no frames yet
       </div>
     );
   }
@@ -129,26 +138,42 @@ export const SessionTimeline = ({
 
   return (
     <div className="flex h-full flex-col gap-6 overflow-y-auto px-6 py-8 md:px-10">
-      <header className="flex items-start justify-between gap-4">
-        <div className="flex flex-col gap-1">
+      <header className="flex flex-wrap items-start justify-between gap-4">
+        <div className="flex min-w-0 flex-col gap-1">
           <span className="font-mono text-[10px] uppercase tracking-[0.26em] text-[color:var(--stone)]">
-            session timeline
+            recording
           </span>
-          <h2 className="font-sans text-[14px] uppercase tracking-[0.18em] text-[color:var(--paper)]/90">
+          <h2 className="truncate font-sans text-[14px] uppercase tracking-[0.18em] text-[color:var(--paper)]/90">
+            {recording.name}
+          </h2>
+          <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-[color:var(--stone)]">
             {frames.length} frame{frames.length === 1 ? "" : "s"}
             {" · "}
             {formatDuration(layout.durationMs)}
-          </h2>
+          </span>
         </div>
-        {sessionId && (
+        <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
+          <SetShareControls
+            setId={recording.id}
+            visibility={recording.visibility}
+            onVisibilityChange={onVisibilityChange}
+          />
+          <button
+            type="button"
+            onClick={onMakeCut}
+            className="focus-ring font-sans inline-flex items-center gap-1.5 border border-[color:var(--hairline)]/40 px-3 py-1.5 text-[10px] uppercase tracking-[0.22em] text-[color:var(--paper)]/85 transition-colors hover:border-[color:var(--paper)]/70 hover:text-[color:var(--paper)]"
+          >
+            <Scissors className="size-3" strokeWidth={1.5} />
+            make a cut
+          </button>
           <Link
-            href={`/play?session=${encodeURIComponent(sessionId)}`}
+            href={`/play?set=${encodeURIComponent(recording.id)}`}
             className="focus-ring font-sans inline-flex shrink-0 items-center gap-1.5 border border-[color:var(--hairline)]/40 px-3 py-1.5 text-[10px] uppercase tracking-[0.22em] text-[color:var(--paper)]/85 transition-colors hover:border-[color:var(--paper)]/70 hover:text-[color:var(--paper)]"
           >
             <Play className="size-3" strokeWidth={1.5} />
             replay
           </Link>
-        )}
+        </div>
       </header>
 
       {/* Timeline track */}

@@ -1,6 +1,6 @@
 "use client";
 
-import type { Reel } from "@sonara/shared";
+import type { FrameSet, FrameSetVisibility } from "@sonara/shared";
 import type { ImageLibraryId } from "@sonara/shared/typeid";
 import { Pencil, Play, Trash2 } from "lucide-react";
 import Link from "next/link";
@@ -11,9 +11,10 @@ import { cn } from "@/lib/utils";
 import { ErrorState } from "./error-state";
 import { ReelEmptyDraft } from "./reel-empty-draft";
 import { ReelFrameTile } from "./reel-frame-tile";
+import { SetShareControls } from "./set-share-controls";
 
 interface ReelEditorProps {
-  reel: Reel | null;
+  frameSet: FrameSet | null;
   loading: boolean;
   error: boolean;
   onRetry: () => void;
@@ -26,6 +27,7 @@ interface ReelEditorProps {
   onMoveFrame?: (frameId: string, dir: "prev" | "next") => void;
   onRemoveFrame?: (frameId: string) => void;
   onSetCover?: (frameId: string) => void;
+  onVisibilityChange?: (visibility: FrameSetVisibility) => void;
 }
 
 const Hint = ({ children }: { children: string }) => (
@@ -34,10 +36,11 @@ const Hint = ({ children }: { children: string }) => (
   </div>
 );
 
-// Center pane for the reels tab: the selected reel's frames in authored order,
-// plus header actions (replay, rename, delete) when edit handlers are supplied.
+// Center pane for the sets tab: the selected curated set's frames in authored
+// order, plus header actions (play, share, rename, delete) when edit handlers
+// are supplied.
 export const ReelEditor = ({
-  reel,
+  frameSet,
   loading,
   error,
   onRetry,
@@ -49,47 +52,48 @@ export const ReelEditor = ({
   onMoveFrame,
   onRemoveFrame,
   onSetCover,
+  onVisibilityChange,
 }: ReelEditorProps) => {
   const [renaming, setRenaming] = useState(false);
   const [draftName, setDraftName] = useState("");
 
-  // Reset the rename draft whenever the selected reel changes.
+  // Reset the rename draft whenever the selected set changes.
   useEffect(() => {
     setRenaming(false);
-    setDraftName(reel?.name ?? "");
-  }, [reel?.id, reel?.name]);
+    setDraftName(frameSet?.name ?? "");
+  }, [frameSet?.id, frameSet?.name]);
 
   if (error) {
     return <ErrorState onRetry={onRetry} />;
   }
   if (loading) {
-    return <Hint>loading reel…</Hint>;
+    return <Hint>loading set…</Hint>;
   }
-  if (!reel) {
-    return <Hint>select a reel</Hint>;
+  if (!frameSet) {
+    return <Hint>select a set</Hint>;
   }
 
   const submitRename = () => {
     const name = draftName.trim();
     setRenaming(false);
-    if (name.length > 0 && name !== reel.name && onRename) {
+    if (name.length > 0 && name !== frameSet.name && onRename) {
       onRename(name);
     }
   };
 
   return (
     <div className="flex h-full flex-col gap-6 overflow-y-auto px-6 py-8 md:px-10">
-      <header className="flex items-start justify-between gap-4">
+      <header className="flex flex-wrap items-start justify-between gap-4">
         <div className="flex min-w-0 flex-col gap-1">
           <span className="font-mono text-[10px] uppercase tracking-[0.26em] text-[color:var(--stone)]">
-            reel
+            set
           </span>
           {renaming && onRename ? (
             <input
               type="text"
               value={draftName}
               autoFocus
-              aria-label="reel name"
+              aria-label="set name"
               maxLength={120}
               onChange={(e) => setDraftName(e.target.value)}
               onKeyDown={(e) => {
@@ -97,7 +101,7 @@ export const ReelEditor = ({
                   submitRename();
                 } else if (e.key === "Escape") {
                   setRenaming(false);
-                  setDraftName(reel.name);
+                  setDraftName(frameSet.name);
                 }
               }}
               onBlur={submitRename}
@@ -105,15 +109,15 @@ export const ReelEditor = ({
             />
           ) : (
             <h2 className="flex items-center gap-2 font-sans text-[14px] uppercase tracking-[0.18em] text-[color:var(--paper)]/90">
-              <span className="truncate">{reel.name}</span>
+              <span className="truncate">{frameSet.name}</span>
               {onRename && (
                 <button
                   type="button"
                   onClick={() => {
-                    setDraftName(reel.name);
+                    setDraftName(frameSet.name);
                     setRenaming(true);
                   }}
-                  aria-label="rename reel"
+                  aria-label="rename set"
                   className="focus-ring shrink-0 text-[color:var(--stone)] transition-colors hover:text-[color:var(--paper)]"
                 >
                   <Pencil className="size-3" strokeWidth={1.5} />
@@ -122,14 +126,22 @@ export const ReelEditor = ({
             </h2>
           )}
           <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-[color:var(--stone)]">
-            {reel.frames.length} frame{reel.frames.length === 1 ? "" : "s"}
+            {frameSet.frames.length} frame
+            {frameSet.frames.length === 1 ? "" : "s"}
           </span>
         </div>
 
-        <div className="flex shrink-0 items-center gap-2">
-          {reel.frames.length > 0 && (
+        <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
+          {onVisibilityChange && (
+            <SetShareControls
+              setId={frameSet.id}
+              visibility={frameSet.visibility}
+              onVisibilityChange={onVisibilityChange}
+            />
+          )}
+          {frameSet.frames.length > 0 && (
             <Link
-              href={`/play?reel=${encodeURIComponent(reel.id)}`}
+              href={`/play?set=${encodeURIComponent(frameSet.id)}`}
               className="focus-ring font-sans inline-flex items-center gap-1.5 border border-[color:var(--hairline)]/40 px-3 py-1.5 text-[10px] uppercase tracking-[0.22em] text-[color:var(--paper)]/85 transition-colors hover:border-[color:var(--paper)]/70 hover:text-[color:var(--paper)]"
             >
               <Play className="size-3" strokeWidth={1.5} />
@@ -140,7 +152,7 @@ export const ReelEditor = ({
             <button
               type="button"
               onClick={onDelete}
-              aria-label="delete reel"
+              aria-label="delete set"
               className="focus-ring inline-flex items-center gap-1.5 border border-[color:var(--hairline)]/40 px-3 py-1.5 font-sans text-[10px] uppercase tracking-[0.22em] text-[color:var(--stone)] transition-colors hover:border-[color:var(--signal)] hover:text-[color:var(--signal)]"
             >
               <Trash2 className="size-3" strokeWidth={1.5} />
@@ -150,7 +162,7 @@ export const ReelEditor = ({
         </div>
       </header>
 
-      {reel.frames.length === 0 ? (
+      {frameSet.frames.length === 0 ? (
         <ReelEmptyDraft />
       ) : (
         <div
@@ -159,7 +171,7 @@ export const ReelEditor = ({
             "grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6"
           )}
         >
-          {reel.frames.map((frame, i) => (
+          {frameSet.frames.map((frame, i) => (
             <ReelFrameTile
               key={frame.id}
               frame={frame}
@@ -176,7 +188,7 @@ export const ReelEditor = ({
               onRemove={onRemoveFrame}
               onSetCover={onSetCover}
               canMovePrev={i > 0}
-              canMoveNext={i < reel.frames.length - 1}
+              canMoveNext={i < frameSet.frames.length - 1}
             />
           ))}
         </div>

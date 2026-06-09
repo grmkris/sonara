@@ -2,13 +2,13 @@
 
 import { cn } from "@/lib/utils";
 
-export type StudioTab = "sessions" | "reels";
+export type StudioTab = "recordings" | "sets";
 
-const TABS: StudioTab[] = ["sessions", "reels"];
+const TABS: StudioTab[] = ["recordings", "sets"];
 
-// Two-tab header for the /studio sidebar: live "sessions" (history, derived
-// from generated frames) and curated "reels" (named groups). URL-driven via
-// ?tab so selection survives refresh + deep links.
+// Two-tab header for the /studio sidebar: "recordings" (auto-captured live
+// performances) and curated "sets" (named groups). URL-driven via ?tab so
+// selection survives refresh + deep links.
 export const StudioSidebarTabs = ({
   tab,
   onTab,
