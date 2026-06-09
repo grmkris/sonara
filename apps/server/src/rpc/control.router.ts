@@ -2,7 +2,11 @@ import { ORPCError } from "@sonara/api/server";
 import type { ControllableSession } from "@sonara/api/server";
 import { SCHEMA } from "@sonara/db";
 import { ClientScenePatch, DeckKeySchema } from "@sonara/shared";
-import { LiveSessionIdSchema, typeIdToUuid } from "@sonara/shared/typeid";
+import {
+  LiveSessionIdSchema,
+  typeIdFromUuid,
+  typeIdToUuid,
+} from "@sonara/shared/typeid";
 import type {
   FrameSetId,
   LiveSessionId,
@@ -293,11 +297,20 @@ export const controlRouter = {
           .from(SCHEMA.frameSet)
           .where(eq(SCHEMA.frameSet.id, input.id as FrameSetId))
           .limit(1);
-        if (!row) {
-          return { exists: false as const };
+        if (row) {
+          setRow = row;
+          ({ liveSessionId } = row);
+        } else {
+          // No row yet — recording sets only materialize on the first
+          // PERSISTED frame, but a deck-only session shows frames without
+          // ever persisting. The set uuid IS the lse uuid by construction,
+          // so derive it and let the registry decide: live → watchable now,
+          // row appears later if the show generates; not live → not found.
+          liveSessionId = typeIdFromUuid(
+            "liveSession",
+            typeIdToUuid(input.id as FrameSetId).uuid
+          );
         }
-        setRow = row;
-        ({ liveSessionId } = row);
       } else if (input.id.startsWith("lse_")) {
         liveSessionId = input.id;
       } else {

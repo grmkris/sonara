@@ -13,13 +13,24 @@ monad-showcase, visuals-roadmap, testing.
 | WP | Phase | Status | Owned files (exclusive while in_progress) |
 |----|-------|--------|-------------------------------------------|
 | WP-1 | P1 keystone: `frame.report` → `Session.currentFrameUrl` | **done** (09f7d6b) | released |
-| WP-2a | P2 schema: `frame_set`/`frame_set_frame` + typeid + boot backfill | **done** (see note¹) | released except `apps/server/src/server.ts` |
-| WP-2b | P2 router: `sets` router replaces `reel` router + tests | **in_progress** | `apps/server/src/rpc/sets.router.ts` (new), `apps/server/src/rpc/sets.router.test.ts` (new), `apps/server/src/rpc/reel.router.ts` (delete), `apps/server/src/rpc/reel.router.test.ts` (delete), `apps/server/src/rpc/app.router.ts` (register), `apps/server/src/rpc/frame-mapping.ts` (origin-relative URL passthrough) |
-| WP-2c | P2 studio: unified set library UI | pending | `apps/web/src/app/studio/**`, `apps/web/src/components/studio/**` |
-| WP-0 | P0 app shell | pending | `apps/web/src/components/app-nav.tsx` (new), small chrome edits in `play/page.tsx`, `studio/page.tsx` |
-| WP-3 | P3 transport: Now-Showing dropdown + stop; recording-on-live | pending | `apps/web/src/components/visualizer/source-switcher.tsx` (new), `apps/web/src/stores/visualizer/set-playback-slice.ts` (rename of reel-playback-slice), `apps/web/src/hooks/use-set-playback-loop.ts` (rename), `apps/web/src/lib/session-actions.ts` (+source.report), `packages/api/src/routers/session.router.ts` (+sourceReport), `apps/server/src/session/session.ts` (recording set lifecycle), `apps/server/src/library/persist-frame.ts` (junction append), `play/page.tsx` |
-| WP-4 | P4 permalink: `lens` + `/s/[id]` + share | pending | `apps/server/src/rpc/control.router.ts` (lens), `apps/web/src/app/s/[id]/page.tsx` (new), `apps/web/src/components/stage/stage-host-panel.tsx` (share reuse), `play/page.tsx` (share affordance) |
-| WP-5 | P5 consolidation: redirects, retire reel/session wording | pending | `apps/web/src/app/control/page.tsx`, `apps/web/src/app/stage/[room]/page.tsx`, cleanup |
+| WP-2a | P2 schema: `frame_set`/`frame_set_frame` + typeid + boot backfill | **done** (d702f75; boot call rode 35ee620) | released |
+| WP-2b | P2 router: `sets` router + tests | **done** (19d6304) | released |
+| WP-2c | P2 studio: unified set library UI; reel router deleted | **done** (ccf0202) | released |
+| WP-0 | P0 app shell (AppNavLinks) | **done** (4ddf0c1) | released |
+| WP-3 | P3 transport: Now-Showing switcher + source.report + recording-on-live | **done** (64d1355) | released |
+| WP-4 | P4 permalink: `lens` (cd81efe) + `/s/[id]` + OperatorConsole + share (56e062c) | **done** | released |
+| WP-5 | P5 consolidation: lens row-less-live fallback, `/control` → `/s` redirect | **done** | released |
+
+**Deliberate deviations from the original plan** (coordination-driven):
+- `/stage/[room]` is NOT redirected into `/s/[id]` — the stage lane evolved it
+  into a first-class surface today (USDC prompts, wire feed, projector QR
+  pointing at it). `/s` links to it via the "join the stage" pill instead;
+  collapse later if ever, in coordination with that lane.
+- Internal file renames (reel-playback-slice/-loop/-hud/-consumer, ReelEditor,
+  sessions-list, …) are deferred — UI wording is fully "recordings / sets",
+  but the module names still say reel/session. Pure-rename cleanup PR later.
+- Legacy `?reel=`/`?session=` replay params and `library.sessions`/`bySession`
+  RPCs still exist (old links keep working); drop in the rename cleanup.
 
 Execution is **serial per WP** (one working tree, no worktrees). Each WP lands
 green (`bun run ci:local`) and is pushed before the next starts; dev deploy
