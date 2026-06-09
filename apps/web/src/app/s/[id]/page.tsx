@@ -44,8 +44,13 @@ type Lens = Awaited<ReturnType<AppRouterClient["control"]["lens"]>>;
 type FoundLens = Extract<Lens, { exists: true }>;
 type ReplaySet = Awaited<ReturnType<AppRouterClient["sets"]["get"]>>;
 
-const LENS_POLL_MS = 1000;
-// Nothing here (yet) — keep a slow watch so the page wakes when the show starts.
+// Live polls fast — the lens is a cheap registry/PK read and frame skew vs
+// the projector is poll-bounded, so 350ms reads as simultaneous in a room.
+// (The proper upgrade is a /ws/view push feed; this buys ~80% of it free.)
+// Replay is fully local playback — the lens only watches for a restarted
+// show, so it can idle. Not-found keeps a slow watch for the show starting.
+const LIVE_POLL_MS = 350;
+const REPLAY_POLL_MS = 3000;
 const GONE_POLL_MS = 5000;
 
 const Wordmark = () => (
@@ -162,7 +167,7 @@ const useLensPoll = (id: string): Lens | null => {
     let cancelled = false;
     let timer: ReturnType<typeof setTimeout> | null = null;
     const poll = async (): Promise<void> => {
-      let wait = LENS_POLL_MS;
+      let wait = LIVE_POLL_MS;
       try {
         const next = await rpcClient.control.lens({ id });
         if (cancelled) {
@@ -171,6 +176,8 @@ const useLensPoll = (id: string): Lens | null => {
         setLens(next);
         if (!next.exists) {
           wait = GONE_POLL_MS;
+        } else if (next.tense === "replay") {
+          wait = REPLAY_POLL_MS;
         }
       } catch {
         // Transient — keep the last lens on screen and retry next tick.
