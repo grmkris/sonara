@@ -84,6 +84,7 @@ export const controlRouter = {
     const sessions = context.registry.listByUserId(rawUuid).map((s) => {
       const snap = s.getControlSnapshot();
       return {
+        currentFrameUrl: snap.currentFrameUrl,
         demoDeck: snap.demoDeck,
         demoMode: snap.demoMode,
         jobStatus: snap.jobStatus,

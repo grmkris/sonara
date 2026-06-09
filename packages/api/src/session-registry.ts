@@ -26,6 +26,12 @@ export interface ControlSnapshot {
   // Last final frame URL the server emitted. Null in demo mode (frames are
   // client-driven there) and before the first live frame lands.
   lastFrameUrl: string | null;
+  // The frame actually on the producer's screen right now, reported by the
+  // projector over WS (frame.report) in EVERY mode — live, deck, reel. Unlike
+  // lastFrameUrl this is never null while something is showing, so viewers and
+  // the operator preview should prefer it. May be an origin-relative path
+  // (/library/…) for deck frames — only resolvable on the web origin.
+  currentFrameUrl: string | null;
   // Wall-clock ms when the live Session was constructed.
   startedAt: number;
 }
@@ -42,6 +48,7 @@ export interface ControllableSession {
   setImageAnchor(
     input: { url: string; strength: number } | { clear: true }
   ): void;
+  setCurrentFrame(url: string): void;
   reset(): void;
   getControlSnapshot(): ControlSnapshot;
 }

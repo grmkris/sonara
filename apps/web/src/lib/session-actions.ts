@@ -16,6 +16,7 @@ export type SessionAction =
   | { type: "voice.patch"; patch: ClientScenePatch }
   | { type: "audio.features"; features: AudioFeatures }
   | { type: "session.reset" }
+  | { type: "frame.report"; url: string }
   | { type: "demo.set"; on: boolean; deck: DeckKey | null }
   | { type: "session.goLive"; prompt: string; seedFrameUrl: string | null }
   | { type: "image.anchor.set"; url: string; strength: number }
@@ -52,6 +53,9 @@ export const dispatchSessionAction = (
     }
     case "session.reset": {
       return client.reset();
+    }
+    case "frame.report": {
+      return client.reportFrame({ url: action.url });
     }
     case "demo.set": {
       return client.setDemoMode({ deck: action.deck, on: action.on });

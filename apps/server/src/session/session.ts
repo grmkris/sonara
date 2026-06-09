@@ -153,6 +153,11 @@ export class Session implements ControllableSession {
   private lastFrameUrl: string | null = null;
   private lastJobStatus: ControlSnapshot["jobStatus"] = "idle";
 
+  // The frame the producer's projector reports as on-screen (frame.report),
+  // covering the modes the server never generates in (decks, reel replay) as
+  // well as live. May be an origin-relative /library/… path for deck frames.
+  private currentFrameUrl: string | null = null;
+
   private send(event: ServerEvent): void {
     if (event.type === "frame.final") {
       this.lastFrameUrl = event.imageUrl;
@@ -291,6 +296,7 @@ export class Session implements ControllableSession {
   // status while it drives the same session. See SessionRegistry.
   getControlSnapshot(): ControlSnapshot {
     return {
+      currentFrameUrl: this.currentFrameUrl ?? this.lastFrameUrl,
       demoDeck: this.demoDeck,
       demoMode: this.demoMode,
       imageAnchor: this.scene.imageAnchor ?? null,
@@ -301,6 +307,13 @@ export class Session implements ControllableSession {
       scene: this.scene,
       startedAt: this.sessionStartAt,
     };
+  }
+
+  // Producer-reported on-screen frame (WS frame.report). The projector is the
+  // only client that sends this — once per keyframe change (every 2–6s), in
+  // every mode. Not validated as a URL: deck frames are origin-relative paths.
+  setCurrentFrame(url: string): void {
+    this.currentFrameUrl = url;
   }
 
   // Set or clear the live session's image anchor. Setting clears demoMode
@@ -648,6 +661,7 @@ export class Session implements ControllableSession {
     this.lastGeneratedScene = { ...defaultScene };
     this.activeVersion = 0;
     this.lastKeyframeAt = 0;
+    this.currentFrameUrl = null;
     this.seed = rollSeed();
     this.sessionStartAt = Date.now();
     this.silentSinceAt = null;

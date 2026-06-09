@@ -32,6 +32,7 @@ import { StudioActionConsumer } from "@/components/visualizer/studio-action-cons
 import { useAudioFeatures } from "@/hooks/use-audio-features";
 import type { AudioSource } from "@/hooks/use-audio-features";
 import { useDemoFrameLoop } from "@/hooks/use-demo-frame-loop";
+import { useFrameReporter } from "@/hooks/use-frame-reporter";
 import { useHotkey } from "@/hooks/use-hotkey";
 import { useReelPlaybackLoop } from "@/hooks/use-reel-playback-loop";
 import { useSongRecognition } from "@/hooks/use-song-recognition";
@@ -145,6 +146,9 @@ export default function Page() {
   // Client-side reel/session replay producer (inert until a ?reel=/?session=
   // param activates it via ReelPlaybackConsumer).
   useReelPlaybackLoop();
+  // /play is the producer: report the on-screen frame upward so /control (and
+  // viewers) see it in every mode. Viewer surfaces must never mount this.
+  useFrameReporter(send);
   const { data: sessionData } = useSession();
   const isSignedIn = !!sessionData?.session;
   const [audioSource, setAudioSource] = useState<AudioSource>({ type: "none" });

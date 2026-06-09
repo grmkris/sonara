@@ -38,6 +38,7 @@ export interface SessionLike {
   ): void;
   setModel(model: TextModelKey): void;
   setResolution(resolution: RenderResolution): void;
+  setCurrentFrame(url: string): void;
   reset(): void;
   subscribe(signal?: AbortSignal): AsyncGenerator<ServerEvent>;
   getSnapshot(): SonaraSceneState;
@@ -101,6 +102,13 @@ const RecognizeInput = z.object({
   trigger: z.enum(["auto", "manual"]),
 });
 
+// Deliberately NOT z.string().url(): deck frames are origin-relative paths
+// (/library/{deck}/img_*.webp) that only resolve on the web origin, and reel
+// frames are presigned S3 URLs — both are opaque strings to the server.
+const ReportFrameInput = z.object({
+  url: z.string().min(1).max(4096),
+});
+
 const StateOutput = z.object({
   demoDeck: DeckKeySchema.nullable(),
   // Server-authoritative demo state. Anon sessions are pinned to demoMode=true
@@ -151,6 +159,16 @@ export const sessionRouter = {
     .handler(({ context, input }) =>
       context.session.recognize(input.clipBase64, input.mimeType, input.trigger)
     ),
+
+  // The producer reports the frame actually on its screen, once per keyframe
+  // change, in EVERY mode (live / deck / reel). This is the only way the
+  // server learns what's showing during client-driven playback, which is what
+  // the /control preview and any viewer lens render from. Fire-and-forget.
+  reportFrame: sessionOs
+    .input(ReportFrameInput)
+    .handler(({ context, input }) => {
+      context.session.setCurrentFrame(input.url);
+    }),
 
   reset: sessionOs.handler(({ context }) => {
     context.session.reset();

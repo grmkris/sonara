@@ -399,7 +399,7 @@ export default function ControlPage() {
         )}
 
         <PreviewCard
-          lastFrameUrl={snapshot?.lastFrameUrl ?? null}
+          lastFrameUrl={snapshot?.currentFrameUrl ?? snapshot?.lastFrameUrl ?? null}
           status={snapshot?.jobStatus ?? "idle"}
           prompt={snapshot?.scene.prompt ?? ""}
           demoMode={snapshot?.demoMode ?? false}
