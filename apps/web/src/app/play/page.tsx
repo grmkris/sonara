@@ -42,6 +42,7 @@ import { cn } from "@/lib/utils";
 import {
   hydrateAnchorPrefs,
   hydrateDemoPrefs,
+  hydrateModelPrefs,
   hydratePresetPrefs,
   hydrateUiVisible,
   useVisualizerStore,
@@ -136,7 +137,7 @@ const Logotype = () => {
 };
 
 export default function Page() {
-  const send = useWsSession();
+  const { send, startNewSession } = useWsSession();
   // Demo is client-native: the browser drives demo frames from a static
   // manifest, so it works on slow/no internet (the server never generates in
   // demo mode).
@@ -187,6 +188,7 @@ export default function Page() {
     hydratePresetPrefs();
     hydrateDemoPrefs();
     hydrateAnchorPrefs();
+    hydrateModelPrefs();
   }, []);
 
   // Anonymous visitors have no server session pinning them to demo mode, and
@@ -361,17 +363,34 @@ export default function Page() {
             <div className="flex items-center gap-3 sm:gap-6">
               <MusicSource source={audioSource} setSource={setAudioSource} />
             </div>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => {
-                setAudioSource({ type: "none" });
-                send({ type: "session.reset" });
-              }}
-              className="font-sans text-[10px] uppercase tracking-[0.24em] text-[color:var(--stone)] hover:text-[color:var(--paper)]"
-            >
-              reset · ⌫
-            </Button>
+            <div className="flex items-center gap-3 sm:gap-5">
+              {/* Start a fresh logical performance: mints a new durable
+                  liveSessionId and reconnects under it, so the next set is its
+                  own /studio entry instead of appending to this one. Distinct
+                  from reset (which only clears the current scene). */}
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  setAudioSource({ type: "none" });
+                  startNewSession();
+                }}
+                className="font-sans text-[10px] uppercase tracking-[0.24em] text-[color:var(--stone)] hover:text-[color:var(--paper)]"
+              >
+                new session
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  setAudioSource({ type: "none" });
+                  send({ type: "session.reset" });
+                }}
+                className="font-sans text-[10px] uppercase tracking-[0.24em] text-[color:var(--stone)] hover:text-[color:var(--paper)]"
+              >
+                reset · ⌫
+              </Button>
+            </div>
           </div>
         </section>
       </div>

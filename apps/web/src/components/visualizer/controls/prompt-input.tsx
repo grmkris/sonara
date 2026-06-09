@@ -1,5 +1,6 @@
 "use client";
 
+import { MAX_PROMPT_CHARS } from "@sonara/shared";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { useVoiceRecognition } from "@/hooks/use-voice-recognition";
@@ -173,6 +174,7 @@ export const PromptInput = ({ send }: PromptInputProps) => {
         onChange={onChange}
         onKeyDown={onKeyDown}
         rows={3}
+        maxLength={MAX_PROMPT_CHARS}
         aria-label="scene prompt"
         placeholder="describe the scene… e.g. a deer at the edge of a clearing, hushed and reverent, moss green and gold"
         className={cn(

@@ -9,6 +9,7 @@ import {
 } from "./image-anchor-slice";
 import { createInspectorSlice } from "./inspector-slice";
 import { createLibrarySlice } from "./library-slice";
+import { createModelSlice, readModelPrefs } from "./model-slice";
 import { createPlaybackSlice } from "./playback-slice";
 import { createReelPlaybackSlice } from "./reel-playback-slice";
 import {
@@ -33,6 +34,7 @@ export const useVisualizerStore = create<VisualizerState>()((...a) => ({
   ...createDemoSlice(...a),
   ...createImageAnchorSlice(...a),
   ...createLibrarySlice(...a),
+  ...createModelSlice(...a),
   ...createReelPlaybackSlice(...a),
 }));
 
@@ -94,6 +96,16 @@ export const hydrateDemoPrefs = (): void => {
   }
   const { demoMode, demoDeck } = readDemoPrefs();
   useVisualizerStore.setState({ demoDeck, demoMode });
+};
+
+// Same hydration pattern — apply the stored A/B model + resolution picks
+// post-mount so SSR + first client render stay consistent.
+export const hydrateModelPrefs = (): void => {
+  if (typeof window === "undefined") {
+    return;
+  }
+  const { model, resolution } = readModelPrefs();
+  useVisualizerStore.setState({ model, resolution });
 };
 
 // Hydrates the clickwrap-acceptance flag from localStorage so the user

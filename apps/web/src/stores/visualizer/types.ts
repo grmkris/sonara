@@ -2,6 +2,7 @@ import type { DemoSlice } from "./demo-slice";
 import type { ImageAnchorSlice } from "./image-anchor-slice";
 import type { InspectorSlice } from "./inspector-slice";
 import type { LibrarySlice } from "./library-slice";
+import type { ModelSlice } from "./model-slice";
 import type { PlaybackSlice } from "./playback-slice";
 import type { PresetSlice } from "./preset-slice";
 import type { ReelPlaybackSlice } from "./reel-playback-slice";
@@ -21,4 +22,5 @@ export type VisualizerState = SceneSlice &
   DemoSlice &
   ImageAnchorSlice &
   LibrarySlice &
+  ModelSlice &
   ReelPlaybackSlice;

@@ -1,7 +1,9 @@
 "use client";
 
 import type { ServerEvent } from "@sonara/shared";
-import { useCallback, useEffect, useRef } from "react";
+import { LiveSessionIdSchema, typeIdGenerator } from "@sonara/shared/typeid";
+import type { LiveSessionId } from "@sonara/shared/typeid";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import { createSessionConnection } from "@/lib/orpc-ws";
@@ -14,10 +16,48 @@ import { useVisualizerStore } from "@/stores/visualizer";
 const isKnownPreset = (name: string): name is PresetName =>
   (PRESET_NAMES as readonly string[]).includes(name);
 
-export const useWsSession = (): SessionSend => {
+// The durable liveSessionId lives in sessionStorage: one id per browser tab =
+// one logical performance. It survives reload + WS reconnect (so a Wi-Fi drop
+// mid-set doesn't fragment /studio history), and a new tab / explicit
+// startNewSession() begins a fresh session. The server adopts it on the /ws
+// upgrade; absent → the server mints its own.
+const LIVE_SESSION_STORAGE_KEY = "sonara.liveSessionId";
+
+const readOrMintLiveSessionId = (): LiveSessionId => {
+  if (typeof window === "undefined") {
+    return typeIdGenerator("liveSession");
+  }
+  const existing = window.sessionStorage.getItem(LIVE_SESSION_STORAGE_KEY);
+  // Validate on read: a corrupted/garbage value would be rejected server-side,
+  // which silently re-mints per reconnect and re-fragments history (the exact
+  // thing this feature fixes). Re-mint here so the client only ever sends a
+  // well-formed id the server will adopt.
+  const parsed = existing ? LiveSessionIdSchema.safeParse(existing) : null;
+  if (parsed?.success) {
+    return parsed.data;
+  }
+  const minted = typeIdGenerator("liveSession");
+  window.sessionStorage.setItem(LIVE_SESSION_STORAGE_KEY, minted);
+  return minted;
+};
+
+export interface WsSession {
+  send: SessionSend;
+  // Mint a fresh durable liveSessionId and reconnect under it — begins a new
+  // logical performance (its own /studio entry + reel target). Distinct from
+  // session.reset, which clears the scene but keeps the session id.
+  startNewSession: () => void;
+}
+
+export const useWsSession = (): WsSession => {
   const sendRef = useRef<SessionSend>(() => {
     // noop
   });
+  // Durable id held in state so startNewSession() can re-mint and force a
+  // clean reconnect under the new id (it's in the connect effect's deps).
+  const [liveSessionId, setLiveSessionId] = useState<LiveSessionId>(
+    readOrMintLiveSessionId
+  );
 
   useEffect(() => {
     const store = useVisualizerStore;
@@ -38,16 +78,37 @@ export const useWsSession = (): SessionSend => {
           break;
         }
         case "frame.preview": {
+          // eslint-disable-next-line no-console
+          console.debug(
+            `%c[sonara] frame.preview%c v${event.version}`,
+            "color:#888",
+            "color:inherit",
+            event.imageUrl
+          );
           s.pushFrame(event.imageUrl, event.version);
           break;
         }
         case "frame.final": {
+          // eslint-disable-next-line no-console
+          console.info(
+            `%c[sonara] frame.final%c v${event.version} — image landed`,
+            "color:#3a3",
+            "color:inherit",
+            event.imageUrl
+          );
           s.pushFrame(event.imageUrl, event.version);
           // Settled images go into the ghost callback ring; previews don't.
           s.pushHero(event.imageUrl);
           break;
         }
         case "job.status": {
+          // eslint-disable-next-line no-console
+          console.info(
+            `%c[sonara] job.status%c ${event.status}`,
+            "color:#39c",
+            "color:inherit",
+            { message: event.message, reason: event.reason }
+          );
           s.setStatus(event.status, event.message);
           if (event.status === "running" && event.reason) {
             s.pushTrigger(event.reason, s.scene.version);
@@ -86,6 +147,13 @@ export const useWsSession = (): SessionSend => {
           break;
         }
         case "generation.requested": {
+          // eslint-disable-next-line no-console
+          console.debug(
+            `%c[sonara] gen.requested%c v${event.version} reason=${event.reason}`,
+            "color:#888",
+            "color:inherit",
+            event.promptString
+          );
           s.setInspectorRequested({
             driftSource: event.driftSource,
             nextKeyframeAt: event.nextKeyframeAt,
@@ -98,6 +166,12 @@ export const useWsSession = (): SessionSend => {
           break;
         }
         case "generation.completed": {
+          // eslint-disable-next-line no-console
+          console.info(
+            `%c[sonara] gen.completed%c v${event.version} ${event.durationMs}ms success=${event.success}`,
+            event.success ? "color:#3a3" : "color:#c33",
+            "color:inherit"
+          );
           s.setInspectorCompleted(
             event.version,
             event.durationMs,
@@ -127,7 +201,7 @@ export const useWsSession = (): SessionSend => {
         return;
       }
 
-      conn = createSessionConnection(sessionId);
+      conn = createSessionConnection(sessionId, liveSessionId);
       const { socket, client } = conn;
 
       sendRef.current = (action: SessionAction) => {
@@ -146,6 +220,13 @@ export const useWsSession = (): SessionSend => {
         // up with whatever they last set. The client no longer pushes its
         // localStorage demo prefs on connect.
         sendRef.current({ type: "hello" });
+        // The A/B model + resolution are CLIENT-authoritative (persisted to
+        // localStorage, hydrated post-mount). The server Session starts on its
+        // defaults, so re-send the user's current picks on every (re)connect so
+        // a fresh Session adopts them instead of silently reverting.
+        const st = store.getState();
+        sendRef.current({ model: st.model, type: "model.set" });
+        sendRef.current({ resolution: st.resolution, type: "resolution.set" });
       });
       socket.addEventListener("close", () => {
         store.getState().setConnected(false);
@@ -232,9 +313,21 @@ export const useWsSession = (): SessionSend => {
         // noop
       };
     };
-  }, []);
+    // Re-runs when liveSessionId changes (startNewSession): tears down the old
+    // socket and reconnects under the fresh id. Otherwise one WS per tab.
+  }, [liveSessionId]);
 
-  return useCallback((action: SessionAction) => {
+  const send = useCallback((action: SessionAction) => {
     sendRef.current(action);
   }, []);
+
+  const startNewSession = useCallback(() => {
+    const next = typeIdGenerator("liveSession");
+    if (typeof window !== "undefined") {
+      window.sessionStorage.setItem(LIVE_SESSION_STORAGE_KEY, next);
+    }
+    setLiveSessionId(next);
+  }, []);
+
+  return { send, startNewSession };
 };

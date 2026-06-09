@@ -5,11 +5,18 @@ import {
   ClientScenePatch,
   DeckKeySchema,
   ImageAnchor,
+  RenderResolutionSchema,
   SonaraSceneState,
   NowPlaying,
   ServerEvent,
+  TextModelKeySchema,
 } from "@sonara/shared";
-import type { DeckKey, ImageAnchor as ImageAnchorType } from "@sonara/shared";
+import type {
+  DeckKey,
+  ImageAnchor as ImageAnchorType,
+  RenderResolution,
+  TextModelKey,
+} from "@sonara/shared";
 import { z } from "zod";
 
 // Structural interface for a live session. apps/server's Session class
@@ -29,6 +36,8 @@ export interface SessionLike {
   setImageAnchor(
     input: { url: string; strength: number } | { clear: true }
   ): void;
+  setModel(model: TextModelKey): void;
+  setResolution(resolution: RenderResolution): void;
   reset(): void;
   subscribe(signal?: AbortSignal): AsyncGenerator<ServerEvent>;
   getSnapshot(): SonaraSceneState;
@@ -78,6 +87,12 @@ const SetImageAnchorInput = z.union([
   }),
   z.object({ clear: z.literal(true) }),
 ]);
+
+// A/B model + resolution switches. Validated against the shared allowlist so a
+// client can never drive an arbitrary fal model id (cost/abuse) — only the
+// curated TEXT_MODEL_KEYS / RENDER_RESOLUTIONS flow through.
+const SetModelInput = z.object({ model: TextModelKeySchema });
+const SetResolutionInput = z.object({ resolution: RenderResolutionSchema });
 
 const RecognizeInput = z.object({
   clipBase64: z.string().min(1).max(400_000),
@@ -161,6 +176,20 @@ export const sessionRouter = {
     .input(SetImageAnchorInput)
     .handler(({ context, input }) => {
       context.session.setImageAnchor(input);
+    }),
+
+  // A/B-switch the text-mode image model (realtime lightning-sdxl, or the
+  // klein queue baseline). The session fires a frame immediately so the switch
+  // is visible at once. Client re-sends its choice on every (re)connect.
+  setModel: sessionOs.input(SetModelInput).handler(({ context, input }) => {
+    context.session.setModel(input.model);
+  }),
+
+  // A/B-switch the render resolution (512² / 768²).
+  setResolution: sessionOs
+    .input(SetResolutionInput)
+    .handler(({ context, input }) => {
+      context.session.setResolution(input.resolution);
     }),
 
   // Current-state snapshot. Idempotent pull used by the client on connect (and

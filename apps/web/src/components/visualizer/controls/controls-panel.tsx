@@ -4,6 +4,7 @@ import type { SonaraSceneState } from "@sonara/shared";
 
 import { DeckPicker } from "@/components/visualizer/controls/deck-picker";
 import { IntensityDial } from "@/components/visualizer/controls/intensity-dial";
+import { ModelPicker } from "@/components/visualizer/controls/model-picker";
 import { PresetPicker } from "@/components/visualizer/controls/preset-picker";
 import { SliderRow } from "@/components/visualizer/controls/slider-row";
 import type { SessionSend } from "@/lib/session-actions";
@@ -54,6 +55,12 @@ export const ControlsPanel = ({ send }: ControlsPanelProps) => {
       {/* Energy — the master audio→visual coupling, given room to read as the
           primary live dial rather than one slider among many. */}
       <IntensityDial send={send} />
+
+      <Divider />
+
+      {/* Engine — A/B the fal model (realtime vs queue baseline) + render
+          resolution. The latency/quality knob behind every live frame. */}
+      <ModelPicker send={send} />
 
       <Divider />
 

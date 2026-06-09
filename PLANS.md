@@ -2,7 +2,7 @@
 
 Brainstorms parked here. **Review and green-light before implementation begins** — this item pushes against existing design invariants and needs a product decision first.
 
-Older entries that shipped have been removed from this file: clickable suggestion chips (`aaf119a`), pre-generated demo image library (`d6181ec`), image-anchor upload (`e7df8c7` + follow-ups in late May 2026), and single-prompt scene collapse (`e7df8c7`). The four `docs/*.md` brainstorms (mood field, starter decks, story mode + image library, gesture/camera input) are separate captures sitting alongside this one.
+Older entries that shipped have been removed from this file: clickable suggestion chips (`aaf119a`), pre-generated demo image library (`d6181ec`), image-anchor upload (`e7df8c7` + follow-ups in late May 2026), and single-prompt scene collapse (`e7df8c7`). The `docs/*.md` brainstorms (mood field, starter decks, story mode + image library, gesture/camera input, and the rooms & roles live-session refactor in `docs/rooms-and-roles-plan.md`) are separate captures sitting alongside this one.
 
 ---
 

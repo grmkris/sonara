@@ -8,14 +8,19 @@ import type { SessionContext } from "@sonara/api/server";
 import { createDb } from "@sonara/db";
 import { runMigrations } from "@sonara/db/migrator";
 import { SERVICE_URLS, verifyTicket } from "@sonara/shared";
-import type { UserId } from "@sonara/shared/typeid";
+import { LiveSessionIdSchema } from "@sonara/shared/typeid";
+import type { LiveSessionId, UserId } from "@sonara/shared/typeid";
 import { Hono } from "hono";
+
+import { isAddress } from "viem";
 
 import { getAuth } from "./auth/auth";
 import { seedLibraryOnBoot } from "./db/library-boot-seed";
 import { env } from "./env";
 import { uploadImage } from "./http/upload";
 import { logger } from "./lib/logger";
+import { createStageListener } from "./onchain/stage-listener";
+import { createStageMcp } from "./onchain/mcp-server";
 import { appRouter } from "./rpc/app.router";
 import { SessionManager } from "./session/session-manager";
 
@@ -48,6 +53,20 @@ const rpcHandler = new RPCHandler(appRouter);
 // a user's own live session from a second device (the operator remote).
 const manager = new SessionManager(logger);
 
+// Monad "stage": when a contract address is configured, subscribe to its
+// on-chain events and fold them into the live Sessions (the crowd / AI agents
+// drive the visuals). Dormant when SONARA_STAGE_CONTRACT is empty.
+const stageListener =
+  env.SONARA_STAGE_CONTRACT && isAddress(env.SONARA_STAGE_CONTRACT)
+    ? createStageListener({
+        contract: env.SONARA_STAGE_CONTRACT,
+        dwellMs: env.PROMPT_DWELL_MS,
+        logger,
+        registry: manager,
+        wssUrl: env.MONAD_RPC_WSS,
+      })
+    : null;
+
 app.get("/health", (c) => c.json({ ok: true }));
 app.get("/", (c) => c.text("sonara server — connect to /ws via WebSocket"));
 
@@ -58,6 +77,23 @@ app.on(["GET", "POST"], "/api/auth/*", (c) => auth.handler(c.req.raw));
 
 // Image-anchor upload (multipart → fal storage).
 app.post("/api/upload/image", (c) => uploadImage(c.req.raw));
+
+// MCP server (/api/mcp) — an AI agent drives a stage room via on-chain txs,
+// signed by the agent EOA (MCP_AGENT_KEY). Mounted only when both the contract
+// and the agent key are configured. The room code is the capability.
+const stageMcp =
+  env.SONARA_STAGE_CONTRACT &&
+  isAddress(env.SONARA_STAGE_CONTRACT) &&
+  /^0x[0-9a-fA-F]{64}$/u.test(env.MCP_AGENT_KEY)
+    ? createStageMcp({
+        agentKey: env.MCP_AGENT_KEY as `0x${string}`,
+        contract: env.SONARA_STAGE_CONTRACT,
+        logger,
+      })
+    : null;
+if (stageMcp) {
+  app.all("/api/mcp", (c) => stageMcp(c));
+}
 
 // oRPC HTTP router (credits, mintWsTicket). Build the context per request
 // from the Better Auth session, then delegate to the oRPC fetch handler.
@@ -90,6 +126,11 @@ interface WsData {
   // An anon ticket is still HMAC-signed by the web app — null just means
   // "the visitor wasn't signed in when they minted this ticket."
   userId: string | null;
+  // Durable logical-performance id the client owns (sessionStorage) and
+  // re-sends on every reconnect, so persisted frames keep grouping under one
+  // session_id. Validated as a well-formed liveSession typeid; null when a
+  // client doesn't supply one (old/direct client) → the Session mints its own.
+  liveSessionId: LiveSessionId | null;
 }
 
 const server = Bun.serve<WsData, never>({
@@ -109,8 +150,20 @@ const server = Bun.serve<WsData, never>({
       const sessionId =
         url.searchParams.get("sessionId") ??
         `sess_${Math.random().toString(36).slice(2, 10)}`;
+      // The client owns a durable liveSessionId (sessionStorage) and re-sends
+      // it on every reconnect. Validate it's a well-formed liveSession typeid
+      // before trusting it; a malformed/absent value falls back to a fresh mint
+      // server-side. It's only a grouping key — every persisted frame still
+      // carries the authenticated user_id, so a client can only group its own.
+      const liveSessionIdRaw = url.searchParams.get("liveSessionId");
+      const liveSessionParse = liveSessionIdRaw
+        ? LiveSessionIdSchema.safeParse(liveSessionIdRaw)
+        : null;
+      const liveSessionId = liveSessionParse?.success
+        ? liveSessionParse.data
+        : null;
       const upgraded = srv.upgrade(req, {
-        data: { sessionId, userId: payload.userId },
+        data: { liveSessionId, sessionId, userId: payload.userId },
       });
       return upgraded
         ? undefined
@@ -140,9 +193,9 @@ const server = Bun.serve<WsData, never>({
       });
     },
     open(ws) {
-      const { sessionId, userId } = ws.data;
-      manager.create(sessionId, userId);
-      logger.info({ sessionId, userId }, "ws opened");
+      const { liveSessionId, sessionId, userId } = ws.data;
+      manager.create(sessionId, userId, liveSessionId);
+      logger.info({ liveSessionId, sessionId, userId }, "ws opened");
     },
   },
 });
@@ -154,11 +207,13 @@ logger.info(
 
 process.on("SIGTERM", () => {
   logger.info("SIGTERM received, shutting down");
+  stageListener?.close();
   server.stop();
   process.exit(0);
 });
 process.on("SIGINT", () => {
   logger.info("SIGINT received, shutting down");
+  stageListener?.close();
   server.stop();
   process.exit(0);
 });
