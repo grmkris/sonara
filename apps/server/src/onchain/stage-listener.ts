@@ -7,6 +7,7 @@ import type { Address } from 'viem';
 
 import type { Logger } from "../lib/logger";
 import { PromptQueue } from "./prompt-queue";
+import { publishActivity, publishBlock, publishQueue } from "./stage-feed";
 import { stageRooms } from "./stage-rooms";
 import { stageState } from "./stage-state";
 
@@ -79,7 +80,9 @@ export const createStageListener = (opts: {
           logger.info({ reason, text: e.text }, "stage prompt dropped"),
         onPlay: (entry) => {
           resolve(room)?.session.applyPatch({ prompt: entry.text }, "client");
-          stageState.setQueue(room, queue.snapshot());
+          const snapshot = queue.snapshot();
+          stageState.setQueue(room, snapshot);
+          publishQueue(room, snapshot);
         },
       });
       queues.set(room, queue);
@@ -148,7 +151,9 @@ export const createStageListener = (opts: {
     }
     const q = queueFor(room);
     q.enqueue({ enqueuedAt: Date.now(), text, tip, who });
-    stageState.setQueue(room, q.snapshot());
+    const snapshot = q.snapshot();
+    stageState.setQueue(room, snapshot);
+    publishQueue(room, snapshot);
   };
 
   const onError = (error: unknown): void =>
@@ -163,9 +168,15 @@ export const createStageListener = (opts: {
     ...base,
     eventName: "Nudge",
     onLogs: (logs) => {
-      for (const { args } of logs) {
+      for (const log of logs) {
+        const { args } = log;
         // viem types decoded args as optional; the contract guarantees them.
-        if (args.room === undefined || args.knob === undefined || args.delta === undefined) {
+        if (
+          args.room === undefined ||
+          args.who === undefined ||
+          args.knob === undefined ||
+          args.delta === undefined
+        ) {
           continue;
         }
         const room = bytes32ToRoom(args.room);
@@ -173,6 +184,14 @@ export const createStageListener = (opts: {
         const knob = knobFromIndex(args.knob);
         if (knob) {
           onNudge(room, knob, args.delta);
+          publishActivity(room, {
+            blockNumber: Number(log.blockNumber ?? 0n),
+            delta: args.delta / 1000,
+            kind: "nudge",
+            knob,
+            txHash: log.transactionHash ?? "",
+            who: args.who,
+          });
         }
       }
     },
@@ -182,8 +201,14 @@ export const createStageListener = (opts: {
     ...base,
     eventName: "Set",
     onLogs: (logs) => {
-      for (const { args } of logs) {
-        if (args.room === undefined || args.knob === undefined || args.value === undefined) {
+      for (const log of logs) {
+        const { args } = log;
+        if (
+          args.room === undefined ||
+          args.who === undefined ||
+          args.knob === undefined ||
+          args.value === undefined
+        ) {
           continue;
         }
         const room = bytes32ToRoom(args.room);
@@ -191,6 +216,14 @@ export const createStageListener = (opts: {
         const knob = knobFromIndex(args.knob);
         if (knob) {
           onSet(room, knob, args.value);
+          publishActivity(room, {
+            blockNumber: Number(log.blockNumber ?? 0n),
+            kind: "set",
+            knob,
+            txHash: log.transactionHash ?? "",
+            value: fromFixedPoint(args.value),
+            who: args.who,
+          });
         }
       }
     },
@@ -200,7 +233,8 @@ export const createStageListener = (opts: {
     ...base,
     eventName: "Prompt",
     onLogs: (logs) => {
-      for (const { args } of logs) {
+      for (const log of logs) {
+        const { args } = log;
         if (
           args.room === undefined ||
           args.who === undefined ||
@@ -212,9 +246,28 @@ export const createStageListener = (opts: {
         }
         const room = bytes32ToRoom(args.room);
         stageState.bump(room);
+        // Fold the prompt in first so the activity's count frame carries the
+        // updated revenue total.
         onPrompt(room, args.who, args.text, args.paid, args.tip);
+        publishActivity(room, {
+          blockNumber: Number(log.blockNumber ?? 0n),
+          kind: "prompt",
+          paid: args.paid,
+          text: args.text,
+          tip: args.tip,
+          txHash: log.transactionHash ?? "",
+          who: args.who,
+        });
       }
     },
+  });
+
+  // Monad block heartbeat (~400ms) — rides the same WSS subscription
+  // (eth_subscribe newHeads) and feeds the projector's block odometer.
+  const unwatchBlocks = client.watchBlockNumber({
+    emitOnBegin: true,
+    onBlockNumber: publishBlock,
+    onError,
   });
 
   const timer = setInterval(flush, FLUSH_MS);
@@ -226,6 +279,7 @@ export const createStageListener = (opts: {
       unwatchNudge();
       unwatchSet();
       unwatchPrompt();
+      unwatchBlocks();
       logger.info("stage listener stopped");
     },
   };

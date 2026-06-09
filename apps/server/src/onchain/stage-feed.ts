@@ -59,15 +59,6 @@ const send = (room: string, msg: StageFeedMessage): void => {
   publisher?.publish(topicFor(room), JSON.stringify(msg));
 };
 
-// The committed stage-state predates the in-flight USDC migration that adds
-// revenueUnits to StageLiveState — read it defensively so this module
-// compiles (and deploys) against both shapes. Collapse to a direct read once
-// the migration lands.
-const revenueOf = (room: string): string => {
-  const live = stageState.get(room) as { revenueUnits?: string };
-  return live.revenueUnits ?? "0";
-};
-
 // Record + fan out one decoded on-chain action, plus the updated counters.
 // Call AFTER stageState.bump so the count frame reflects this event.
 export const publishActivity = (
@@ -76,9 +67,10 @@ export const publishActivity = (
 ): StageActivityEvent => {
   const event = stageActivity.record(room, input);
   send(room, { event, type: "activity" });
+  const live = stageState.get(room);
   send(room, {
-    revenueUnits: revenueOf(room),
-    txCount: stageState.get(room).txCount,
+    revenueUnits: live.revenueUnits,
+    txCount: live.txCount,
     type: "count",
   });
   return event;
@@ -153,7 +145,7 @@ export const stageFeedHooks = {
         block: lastBlock,
         queue: { nowPlaying: live.nowPlaying, upNext: live.upNext },
         recent: stageActivity.recent(room),
-        revenueUnits: revenueOf(room),
+        revenueUnits: live.revenueUnits,
         room,
         txCount: live.txCount,
         type: "hello",
