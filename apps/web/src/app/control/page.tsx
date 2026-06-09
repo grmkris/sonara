@@ -9,6 +9,7 @@ import { useEffect, useState } from "react";
 import type { AppRouterClient } from "server/rpc";
 
 import { Mark } from "@/components/brand/mark";
+import { StageHostPanel } from "@/components/stage/stage-host-panel";
 import { Button } from "@/components/ui/button";
 import { DeckPicker } from "@/components/visualizer/controls/deck-picker";
 import { IntensityDial } from "@/components/visualizer/controls/intensity-dial";
@@ -405,6 +406,8 @@ export default function ControlPage() {
           demoDeck={snapshot?.demoDeck ?? null}
           connected={connected}
         />
+
+        <StageHostPanel liveSessionId={selectedId} />
 
         <ControlSurface send={send} />
       </div>

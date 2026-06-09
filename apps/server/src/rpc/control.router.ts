@@ -5,7 +5,9 @@ import { LiveSessionIdSchema, typeIdToUuid } from "@sonara/shared/typeid";
 import type { UserId } from "@sonara/shared/typeid";
 import { z } from "zod";
 
-import { protectedProcedure } from "./procedures";
+import { stageRooms } from "../onchain/stage-rooms";
+import { stageState } from "../onchain/stage-state";
+import { protectedProcedure, publicProcedure } from "./procedures";
 
 // Operator remote control plane. A signed-in user drives ONE OF THEIR OWN
 // currently-live in-memory Sessions from a second device (apps/web /control)
@@ -56,6 +58,7 @@ const resolveOwnedSession = (
   return session;
 };
 
+// oxlint-disable-next-line sort-keys -- REVIEW: the Monad "stage" procedures are grouped together at the end rather than interleaved alphabetically with the original operator ops
 export const controlRouter = {
   // The operator has no canvas, so there's no on-screen deck frame to hand off
   // from — seed from the server's last final frame if there is one, else start
@@ -151,4 +154,42 @@ export const controlRouter = {
         input.liveSessionId
       ).getControlSnapshot()
     ),
+
+  // --- Monad "stage": let the crowd (and AI agents) drive this session over
+  // on-chain txs. The owner opens a stage to mint a short room code; anyone
+  // with the code emits SonaraStage events that the listener folds in. Opening
+  // requires owning the session; reading the live state does not (the room
+  // code is the capability the audience page already holds).
+
+  openStage: protectedProcedure
+    .input(ByLiveSession.extend({ allowPrompts: z.boolean().default(true) }))
+    .handler(({ context, input }) => {
+      // Assert ownership before exposing the session to the crowd.
+      resolveOwnedSession(context.registry, context.userId, input.liveSessionId);
+      const room = stageRooms.open(input.liveSessionId, input.allowPrompts);
+      return { allowPrompts: input.allowPrompts, room };
+    }),
+
+  closeStage: protectedProcedure
+    .input(ByLiveSession)
+    .handler(({ context, input }) => {
+      resolveOwnedSession(context.registry, context.userId, input.liveSessionId);
+      const room = stageRooms.roomFor(input.liveSessionId);
+      if (room) {
+        stageRooms.close(room);
+      }
+    }),
+
+  // Public: the projector overlay + audience page poll this for the live tx
+  // counter and the prompt queue (now-playing / up-next). Unknown room → empty.
+  stageSnapshot: publicProcedure
+    .input(z.object({ room: z.string() }))
+    .handler(({ input }) => {
+      const binding = stageRooms.resolve(input.room);
+      return {
+        ...stageState.get(input.room),
+        allowPrompts: binding?.allowPrompts ?? false,
+        open: Boolean(binding),
+      };
+    }),
 };

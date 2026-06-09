@@ -12,11 +12,14 @@ import { LiveSessionIdSchema } from "@sonara/shared/typeid";
 import type { LiveSessionId, UserId } from "@sonara/shared/typeid";
 import { Hono } from "hono";
 
+import { isAddress } from "viem";
+
 import { getAuth } from "./auth/auth";
 import { seedLibraryOnBoot } from "./db/library-boot-seed";
 import { env } from "./env";
 import { uploadImage } from "./http/upload";
 import { logger } from "./lib/logger";
+import { createStageListener } from "./onchain/stage-listener";
 import { appRouter } from "./rpc/app.router";
 import { SessionManager } from "./session/session-manager";
 
@@ -48,6 +51,20 @@ const rpcHandler = new RPCHandler(appRouter);
 // also threaded into the HTTP context so the authed `control` router can find
 // a user's own live session from a second device (the operator remote).
 const manager = new SessionManager(logger);
+
+// Monad "stage": when a contract address is configured, subscribe to its
+// on-chain events and fold them into the live Sessions (the crowd / AI agents
+// drive the visuals). Dormant when SONARA_STAGE_CONTRACT is empty.
+const stageListener =
+  env.SONARA_STAGE_CONTRACT && isAddress(env.SONARA_STAGE_CONTRACT)
+    ? createStageListener({
+        contract: env.SONARA_STAGE_CONTRACT,
+        dwellMs: env.PROMPT_DWELL_MS,
+        logger,
+        registry: manager,
+        wssUrl: env.MONAD_RPC_WSS,
+      })
+    : null;
 
 app.get("/health", (c) => c.json({ ok: true }));
 app.get("/", (c) => c.text("sonara server — connect to /ws via WebSocket"));
@@ -172,11 +189,13 @@ logger.info(
 
 process.on("SIGTERM", () => {
   logger.info("SIGTERM received, shutting down");
+  stageListener?.close();
   server.stop();
   process.exit(0);
 });
 process.on("SIGINT", () => {
   logger.info("SIGINT received, shutting down");
+  stageListener?.close();
   server.stop();
   process.exit(0);
 });

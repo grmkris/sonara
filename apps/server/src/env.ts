@@ -70,6 +70,19 @@ const envSchema = z.object({
   // left open for a few days; the library.list RPC always returns fresh
   // URLs so any stale ones just need a refetch.
   S3_PRESIGN_TTL_SEC: z.coerce.number().int().positive().default(604_800),
+
+  // Monad "stage" (on-chain visual control). All optional — when MONAD_RPC_WSS
+  // and SONARA_STAGE_CONTRACT are both set, the server starts the on-chain
+  // event listener at boot; otherwise the feature is dormant (no listener, the
+  // control.openStage endpoint still mints rooms but nothing drives them).
+  MONAD_RPC_WSS: z.string().default("wss://testnet-rpc.monad.xyz"),
+  SONARA_STAGE_CONTRACT: z.string().default(""),
+  // How long each queued prompt holds the projector before the next advances.
+  PROMPT_DWELL_MS: z.coerce.number().int().positive().default(12_000),
+  // EOA key the MCP agent signs with (it pays its own gas in testnet MON).
+  MCP_AGENT_KEY: z.string().default(""),
+  // Optional Pimlico key to lift the public bundler rate limit before a demo.
+  PIMLICO_API_KEY: z.string().default(""),
 });
 
 export const env = envSchema.parse(Bun.env);

@@ -12,10 +12,15 @@ import { z } from "zod";
 // server-render and client-hydrate access via the same module.
 const clientEnvSchema = z.object({
   NEXT_PUBLIC_APP_ENV: Environment,
+  // SonaraStage contract address (Monad testnet). Empty disables the on-chain
+  // stage UI. Inlined at build time, so referenced as a literal below.
+  NEXT_PUBLIC_SONARA_STAGE_CONTRACT: z.string().default(""),
 });
 
 export const publicEnv = clientEnvSchema.parse({
   NEXT_PUBLIC_APP_ENV: process.env.NEXT_PUBLIC_APP_ENV,
+  NEXT_PUBLIC_SONARA_STAGE_CONTRACT:
+    process.env.NEXT_PUBLIC_SONARA_STAGE_CONTRACT,
 });
 
 export type PublicEnv = typeof publicEnv;
