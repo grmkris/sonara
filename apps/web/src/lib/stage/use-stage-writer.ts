@@ -26,7 +26,10 @@ const aaCacheKey = (ownerAddress: string): string =>
   `sonara.stage.aa.v1-safe141.${ownerAddress.toLowerCase()}`;
 
 const sleep = (ms: number): Promise<void> =>
-  new Promise((resolve) => setTimeout(resolve, ms));
+  // oxlint-disable-next-line promise/avoid-new -- REVIEW: setTimeout delay has no library-promise equivalent
+  new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
 
 export interface StageWriterState {
   writer: StageWriter | null;
