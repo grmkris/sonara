@@ -414,3 +414,41 @@ input::placeholder {
     transition: none;
   }
 }
+
+/* --- stage wire (Monad activity feed) --------------------------------
+   Teleprinter vocabulary for the on-chain layer: ticker lines "print" in
+   character-by-character (steps() clip reveal), the block odometer strikes
+   a hairline flash per ~400ms Monad block. */
+@keyframes wire-print {
+  from {
+    clip-path: inset(0 100% 0 0);
+  }
+  to {
+    clip-path: inset(0 0 0 0);
+  }
+}
+.wire-print {
+  animation: wire-print 360ms steps(18, end) both;
+}
+
+@keyframes wire-flash {
+  0% {
+    opacity: 0;
+  }
+  25% {
+    opacity: 0.9;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+.wire-flash {
+  animation: wire-flash 360ms ease-out both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .wire-print,
+  .wire-flash {
+    animation: none !important;
+  }
+}
