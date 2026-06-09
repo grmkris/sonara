@@ -83,9 +83,25 @@ const DRIP_ERRORS: Record<string, string> = {
 // faucet airdrops 1 USDC straight to this wallet (control.stageAirdrop — the
 // balance poll picks it up in a few seconds). Fallback: send USDC yourself
 // (address as text + QR) or hit the Circle testnet faucet.
+// The big tap: full-width signal slab with a soft glow — deliberately the
+// single bright object on the page, so an empty wallet reads as "press this"
+// before anyone has to think. Press feedback via active:scale; the sent state
+// breathes until the balance poll catches the drip and the panel unmounts.
+const dripLabel = (dripping: boolean, sent: boolean): string => {
+  if (dripping) {
+    return "sending…";
+  }
+  if (sent) {
+    return "on its way — a few seconds";
+  }
+  return "tap for 1 usdc — on the house";
+};
+
 const FundPanel = ({ address, room }: { address: string; room: string }) => {
   const [qr, setQr] = useState<string | null>(null);
   const [dripping, setDripping] = useState(false);
+  const [sent, setSent] = useState(false);
+  const [showManual, setShowManual] = useState(false);
 
   useEffect(() => {
     void (async () => {
@@ -98,6 +114,7 @@ const FundPanel = ({ address, room }: { address: string; room: string }) => {
     try {
       const result = await rpcClient.control.stageAirdrop({ address, room });
       if (result.ok) {
+        setSent(true);
         toast.success("1 usdc on its way — a few seconds");
       } else {
         toast.error(DRIP_ERRORS[result.reason] ?? "airdrop failed");
@@ -119,49 +136,75 @@ const FundPanel = ({ address, room }: { address: string; room: string }) => {
   };
 
   return (
-    <div className="flex flex-col gap-3 rounded-sm border border-[color:var(--signal)]/40 p-3">
-      <p className="font-sans text-[10px] uppercase tracking-[0.2em] text-[color:var(--signal)]">
-        prompts cost usdc — fund your stage wallet
+    <div className="relative flex flex-col gap-3 overflow-hidden rounded-sm border border-[color:var(--signal)]/40 p-4">
+      {/* Corner glow — quiet atmosphere tying the panel to the signal slab. */}
+      <div
+        aria-hidden
+        className="pointer-events-none absolute -right-10 -top-10 size-36 rounded-full bg-[color:var(--signal)]/10 blur-2xl"
+      />
+      <p className="font-serif text-[17px] italic leading-snug text-[color:var(--paper)]/90">
+        first one&apos;s on the house.
       </p>
-      <Button
-        className="font-sans text-[11px] uppercase tracking-[0.2em]"
-        disabled={dripping}
-        onClick={airdrop}
-        size="sm"
+      <p className="-mt-2 font-sans text-[9px] uppercase tracking-[0.22em] text-[color:var(--stone)]">
+        prompts cost usdc · your stage wallet is empty
+      </p>
+      <button
         type="button"
-      >
-        {dripping ? "sending…" : "get 1 usdc free"}
-      </Button>
-      <div className="flex items-center gap-3">
-        {qr && (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            alt="your stage wallet address"
-            className="size-24 rounded-sm bg-white p-1"
-            src={qr}
-          />
+        disabled={dripping || sent}
+        onClick={airdrop}
+        className={cn(
+          "focus-ring flex w-full flex-col items-center gap-0.5 rounded-sm bg-[color:var(--signal)] px-4 py-4 text-[color:var(--ink)] shadow-[0_0_36px_-10px_var(--signal)] transition-all active:scale-[0.98]",
+          (dripping || sent) && "animate-pulse opacity-80"
         )}
-        <div className="flex min-w-0 flex-col gap-2">
-          <button
-            className="focus-ring break-all text-left font-mono text-[10px] text-[color:var(--paper)]/80"
-            onClick={copy}
-            type="button"
-          >
-            {address}
-            <span className="ml-2 font-sans text-[9px] uppercase tracking-[0.2em] text-[color:var(--stone)]">
-              copy
-            </span>
-          </button>
-          <a
-            className="focus-ring font-sans text-[10px] uppercase tracking-[0.2em] text-[color:var(--paper)]/85 underline underline-offset-4"
-            href={USDC_FAUCET_URL}
-            rel="noreferrer"
-            target="_blank"
-          >
-            or get usdc from circle ↗
-          </a>
+      >
+        <span className="font-serif text-[18px] italic leading-none">
+          {dripLabel(dripping, sent)}
+        </span>
+        {!(dripping || sent) && (
+          <span className="font-sans text-[9px] uppercase tracking-[0.24em] opacity-70">
+            free · covers your first prompts
+          </span>
+        )}
+      </button>
+      <button
+        type="button"
+        onClick={() => setShowManual((v) => !v)}
+        className="focus-ring w-fit font-sans text-[10px] uppercase tracking-[0.2em] text-[color:var(--stone)] transition-colors hover:text-[color:var(--paper)]"
+      >
+        {showManual ? "▾ hide" : "▸ or fund it yourself"}
+      </button>
+      {showManual && (
+        <div className="flex items-center gap-3">
+          {qr && (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              alt="your stage wallet address"
+              className="size-24 rounded-sm bg-white p-1"
+              src={qr}
+            />
+          )}
+          <div className="flex min-w-0 flex-col gap-2">
+            <button
+              className="focus-ring break-all text-left font-mono text-[10px] text-[color:var(--paper)]/80"
+              onClick={copy}
+              type="button"
+            >
+              {address}
+              <span className="ml-2 font-sans text-[9px] uppercase tracking-[0.2em] text-[color:var(--stone)]">
+                copy
+              </span>
+            </button>
+            <a
+              className="focus-ring font-sans text-[10px] uppercase tracking-[0.2em] text-[color:var(--paper)]/85 underline underline-offset-4"
+              href={USDC_FAUCET_URL}
+              rel="noreferrer"
+              target="_blank"
+            >
+              or get usdc from circle ↗
+            </a>
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 };
