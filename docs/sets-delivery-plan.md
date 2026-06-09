@@ -57,6 +57,12 @@ verified via `railway` CLI + curl after each push.
 
 ## Done log
 
+- (2026-06-10) Per-set consoles: /s/<id>/control is the owner's lean
+  remote (one per show, bookmarkable); /s/<id> is the pure public face
+  (embedded mixer removed); /control is a chooser that forwards only when
+  unambiguous. One page one persona — do NOT re-embed the console in the
+  viewer or re-add newest-session guessing.
+
 - (2026-06-09) Ledger + architecture spec committed.
 - (2026-06-09) WP-1 keystone landed (09f7d6b): frame.report → currentFrameUrl,
   /control preview fixed for deck/reel playback.

@@ -1,7 +1,7 @@
 "use client";
 
-import type { FrameSetId, LiveSessionId } from "@sonara/shared/typeid";
-import { Mic, SlidersHorizontal } from "lucide-react";
+import type { FrameSetId } from "@sonara/shared/typeid";
+import { Mic } from "lucide-react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -10,17 +10,10 @@ import { toast } from "sonner";
 
 import { AppNavLinks } from "@/components/app-nav";
 import { Mark } from "@/components/brand/mark";
-import { OperatorConsole } from "@/components/control/operator-console";
 import { BlockPulse } from "@/components/stage/block-pulse";
 import { Seismograph } from "@/components/stage/seismograph";
 import { StageJoinQr } from "@/components/stage/stage-join-qr";
 import { TxTicker } from "@/components/stage/tx-ticker";
-import {
-  Sheet,
-  SheetContent,
-  SheetTitle,
-  SheetTrigger,
-} from "@/components/ui/sheet";
 import { SonaraCanvas } from "@/components/visualizer/canvas/sonara-canvas";
 import { FullscreenToggle } from "@/components/visualizer/controls/fullscreen-toggle";
 import { HideToggle } from "@/components/visualizer/controls/hide-toggle";
@@ -119,49 +112,6 @@ const TenseLabel = ({
     <span className="font-sans text-[10px] uppercase tracking-[0.24em] text-[color:var(--stone)]">
       {tense === "live" ? "live" : `replay · ${frameCount} frames`}
     </span>
-  </div>
-);
-
-// The owner's mixer, desktop shape: a scrollable hairline rail pinned to the
-// right edge of the viewport on md+. Viewers never get this far — the parent
-// gates on lens.isOwner.
-const ConsoleRail = ({ liveSessionId }: { liveSessionId: LiveSessionId }) => (
-  <aside className="absolute inset-y-0 right-0 z-30 hidden w-full max-w-sm overflow-y-auto border-l border-[color:var(--hairline)]/25 bg-[color:var(--ink)]/85 p-5 pt-8 backdrop-blur-md md:block">
-    <OperatorConsole liveSessionId={liveSessionId} />
-  </aside>
-);
-
-// Mobile shape: a bottom Sheet behind a small trigger in the top-right
-// cluster (mirrors /play's mobile controls Sheet). The console only mounts
-// while the sheet is open, so there's no hidden second poller at rest.
-const ConsoleSheet = ({ liveSessionId }: { liveSessionId: LiveSessionId }) => (
-  <div className="md:hidden">
-    <Sheet>
-      <SheetTrigger asChild>
-        <button
-          type="button"
-          aria-label="open operator console"
-          className="focus-ring flex items-center text-[color:var(--stone)] transition-colors hover:text-[color:var(--paper)]"
-        >
-          <SlidersHorizontal className="size-4" strokeWidth={1.5} />
-        </button>
-      </SheetTrigger>
-      <SheetContent
-        side="bottom"
-        className="max-h-[80svh] overflow-y-auto border-t border-[color:var(--hairline)]/30 bg-[color:var(--ink)]/95 p-5 backdrop-blur-md"
-      >
-        <span
-          aria-hidden
-          className="mx-auto -mt-2 mb-3 block h-1 w-10 rounded-full bg-[color:var(--stone)]/40"
-        />
-        <SheetTitle className="font-mono text-[10px] uppercase tracking-[0.22em] text-[color:var(--stone)]">
-          console
-        </SheetTitle>
-        <div className="mt-4">
-          <OperatorConsole liveSessionId={liveSessionId} />
-        </div>
-      </SheetContent>
-    </Sheet>
   </div>
 );
 
@@ -370,9 +320,10 @@ const lensViewModel = (lens: FoundLens, replaySet: ReplaySet | null) => {
   const live = lens.tense === "live" ? lens.live : null;
   const stage = lens.tense === "live" ? lens.stage : null;
   return {
-    consoleSessionId:
-      lens.isOwner && live ? (live.liveSessionId ?? null) : null,
     frameCount: replaySet?.frames.length ?? lens.set?.frameCount ?? 0,
+    // The console lives at its own facet (/s/<id>/control) — the viewer only
+    // shows owners the way there, never the mixer itself.
+    isOwnerLive: lens.isOwner && live !== null,
     name: lens.set?.name ?? "live session",
     nowPlaying: live?.nowPlaying ?? null,
     stageRoom:
@@ -385,17 +336,19 @@ const lensViewModel = (lens: FoundLens, replaySet: ReplaySet | null) => {
 // The found-state viewer: the real WebGL canvas full-bleed + overlay chrome,
 // in either tense.
 const LensView = ({
+  id,
   lens,
   replaySet,
   audioSource,
   setAudioSource,
 }: {
+  id: string;
   lens: FoundLens;
   replaySet: ReplaySet | null;
   audioSource: AudioSource;
   setAudioSource: (s: AudioSource) => void;
 }) => {
-  const { consoleSessionId, frameCount, name, nowPlaying, stageRoom } =
+  const { isOwnerLive, frameCount, name, nowPlaying, stageRoom } =
     lensViewModel(lens, replaySet);
   const audioConnected = audioSource.type !== "none";
   // Same projector discipline as /play: `h` toggles the chrome, Escape
@@ -439,20 +392,19 @@ const LensView = ({
               {nowPlaying.title}
             </span>
           )}
+          {isOwnerLive && (
+            <Link
+              href={`/s/${id}/control`}
+              className="focus-ring font-sans text-[10px] uppercase tracking-[0.24em] text-[color:var(--stone)] transition-colors hover:text-[color:var(--paper)]"
+            >
+              your console
+            </Link>
+          )}
           <MusicSource source={audioSource} setSource={setAudioSource} />
           <FullscreenToggle />
           <HideToggle />
-          {consoleSessionId && <ConsoleSheet liveSessionId={consoleSessionId} />}
         </div>
       </div>
-
-      {/* Owner mixer rail — md+ only; the mobile shape is the Sheet above.
-          Fades with the chrome: a clean projector hides the mixer too. */}
-      {consoleSessionId && (
-        <div className={uiVisible ? "ui-fade-in" : "ui-fade-out"}>
-          <ConsoleRail liveSessionId={consoleSessionId} />
-        </div>
-      )}
 
       {/* The Monad wire + join QR while the crowd stage is open: txs scroll
           bottom-left, "scan to drive the visuals" bottom-right — this screen
@@ -509,6 +461,7 @@ export default function SetPermalinkPage() {
   return (
     <LensView
       audioSource={audioSource}
+      id={id}
       lens={lens}
       replaySet={replaySet}
       setAudioSource={setAudioSource}

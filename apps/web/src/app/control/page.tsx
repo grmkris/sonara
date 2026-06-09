@@ -15,11 +15,11 @@ import { Button } from "@/components/ui/button";
 import { useSession } from "@/lib/auth-client";
 import { rpcClient } from "@/lib/orpc";
 
-// /control — legacy entry for the operator remote, now a resolver: it finds
-// the caller's newest live session and forwards to its /s permalink, where
-// the owner view renders the same OperatorConsole this page used to host.
-// Kept (rather than deleted) so bookmarks and the muscle-memory URL survive;
-// the auth / no-session states below are the only UI it still owns.
+// /control ("live" in the nav) — the console chooser. Every set has its own
+// console facet at /s/<setId>/control (the public face is /s/<setId>); this
+// page lists the caller's live shows and forwards only when unambiguous
+// (exactly one). The mixer itself never renders here or on the viewer page —
+// one page, one persona.
 
 type LiveSessionSummary = Awaited<
   ReturnType<AppRouterClient["control"]["liveSessions"]>
@@ -27,10 +27,10 @@ type LiveSessionSummary = Awaited<
 
 const SESSIONS_POLL_MS = 3000;
 
-// A live session's console lives at its set permalink — the set id is the
-// same uuid as the liveSessionId, re-prefixed. No extra round trip.
+// A live session's console lives at its set's control facet — the set id is
+// the same uuid as the liveSessionId, re-prefixed. No extra round trip.
 const consoleHref = (liveSessionId: LiveSessionId): string =>
-  `/s/${typeIdFromUuid("frameSet", typeIdToUuid(liveSessionId).uuid)}`;
+  `/s/${typeIdFromUuid("frameSet", typeIdToUuid(liveSessionId).uuid)}/control`;
 
 const startedAgo = (startedAt: number): string => {
   const mins = Math.max(0, Math.round((Date.now() - startedAt) / 60_000));
