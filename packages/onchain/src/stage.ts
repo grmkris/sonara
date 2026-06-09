@@ -48,7 +48,7 @@ export const roomToBytes32 = (room: string): Hex => stringToHex(room, { size: 32
 
 export const bytes32ToRoom = (hex: Hex): string => {
   // Strip the 0x, drop trailing zero-byte padding, decode the ASCII.
-  const bytes = hex.slice(2).replace(/(00)+$/u, "");
+  const bytes = hex.slice(2).replace(/(?<padding>00)+$/u, "");
   let out = "";
   for (let i = 0; i < bytes.length; i += 2) {
     out += String.fromCodePoint(Number.parseInt(bytes.slice(i, i + 2), 16));

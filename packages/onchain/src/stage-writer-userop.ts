@@ -1,4 +1,4 @@
-import { createPublicClient, http, parseGwei } from 'viem';
+import { createPublicClient, http } from 'viem';
 import type { Address, Hex } from 'viem';
 import { entryPoint07Address } from "viem/account-abstraction";
 import { privateKeyToAccount } from "viem/accounts";
@@ -20,12 +20,15 @@ const deltaToFixed = (delta01: number): number =>
 // contract is the SMART ACCOUNT address (stable per burner — fine for the queue
 // label / leaderboard), not the raw EOA.
 //
-// VERIFY the permissionless API shape against the installed version during the
-// Pimlico smoke test (task 4) — the 0.2.x account/paymaster wiring moves around.
+// Pimlico's public endpoint does NOT sponsor for free: you need a (free) API
+// key AND a gas sponsorship policy created in the Pimlico dashboard, whose id is
+// passed as `sponsorshipPolicyId`. Without it the bundler returns "Sponsorship
+// policy ID is required for this API key".
 export const createUserOpStageWriter = async (opts: {
   ownerKey: Hex;
   contract: Address;
   pimlicoApiKey?: string;
+  sponsorshipPolicyId?: string;
   rpcUrl?: string;
 }): Promise<StageWriter> => {
   const owner = privateKeyToAccount(opts.ownerKey);
@@ -50,13 +53,16 @@ export const createUserOpStageWriter = async (opts: {
     bundlerTransport: http(pimlicoUrl(opts.pimlicoApiKey)),
     chain: monadTestnet,
     paymaster: pimlico,
+    paymasterContext: opts.sponsorshipPolicyId
+      ? { sponsorshipPolicyId: opts.sponsorshipPolicyId }
+      : undefined,
     userOperation: {
-      // Fixed testnet bid keeps us off eth_gasPrice during a burst.
-      estimateFeesPerGas: () =>
-        Promise.resolve({
-          maxFeePerGas: parseGwei("52"),
-          maxPriorityFeePerGas: parseGwei("2"),
-        }),
+      // Use Pimlico's gas-price oracle so the UserOp always meets the current
+      // network floor (Monad testnet base fee moves; a hardcoded bid underpays).
+      estimateFeesPerGas: async () => {
+        const prices = await pimlico.getUserOperationGasPrice();
+        return prices.fast;
+      },
     },
   });
 

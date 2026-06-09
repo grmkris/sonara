@@ -41,7 +41,9 @@ const SetImageAnchorInput = z.union([
 // (the WS ticket converts it — see auth.router mintWsTicket), so we convert
 // before comparing. Unknown id → NOT_FOUND; someone else's session → FORBIDDEN.
 const resolveOwnedSession = (
-  registry: { getByLiveSessionId(id: string): ControllableSession | undefined },
+  registry: {
+    getByLiveSessionId: (id: string) => ControllableSession | undefined;
+  },
   userId: UserId,
   liveSessionId: string
 ): ControllableSession => {

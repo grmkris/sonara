@@ -38,6 +38,9 @@ export const useStageWriter = (): StageWriterState => {
         const writer = await createUserOpStageWriter({
           contract,
           ownerKey: getOrCreateBurnerKey(),
+          pimlicoApiKey: publicEnv.NEXT_PUBLIC_PIMLICO_API_KEY || undefined,
+          sponsorshipPolicyId:
+            publicEnv.NEXT_PUBLIC_PIMLICO_SPONSORSHIP_POLICY_ID || undefined,
         });
         if (!cancelled) {
           setState({ address: writer.address, error: null, ready: true, writer });

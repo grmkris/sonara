@@ -30,7 +30,8 @@ export const pimlicoUrl = (apiKey?: string): string =>
     ? `https://api.pimlico.io/v2/${MONAD_TESTNET_ID}/rpc?apikey=${apiKey}`
     : `https://public.pimlico.io/v2/${MONAD_TESTNET_ID}/rpc`;
 
-// Fixed gas bid for testnet (50 gwei base + 2 gwei priority). Used by the EOA
-// write path so we never block on eth_estimateGas / eth_gasPrice mid-burst.
-export const TESTNET_MAX_FEE_GWEI = 52n;
+// Fixed gas bid for testnet so we never block on eth_estimateGas / eth_gasPrice
+// mid-burst. The base fee observed on testnet is ~100 gwei (higher than the
+// docs' 50); 200 gives headroom for fluctuation. Testnet gas is ~free.
+export const TESTNET_MAX_FEE_GWEI = 200n;
 export const TESTNET_PRIORITY_FEE_GWEI = 2n;

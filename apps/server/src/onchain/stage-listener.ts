@@ -23,7 +23,7 @@ interface KnobAccum {
 }
 
 export interface StageListener {
-  close(): void;
+  close: () => void;
 }
 
 // Subscribes to SonaraStage logs over WSS and folds on-chain intent into the

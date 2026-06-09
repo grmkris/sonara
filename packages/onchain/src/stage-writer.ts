@@ -17,11 +17,11 @@ export interface StageWriter {
   // The on-chain sender these txs originate from (EOA or smart account).
   readonly address: Address;
   // delta01 is a signed step in [-1, 1] (e.g. +0.12 for a "weirder" tap).
-  nudge(room: string, knob: StageKnob, delta01: number): Promise<Hex>;
+  nudge: (room: string, knob: StageKnob, delta01: number) => Promise<Hex>;
   // value01 is an absolute level in [0, 1] (e.g. an intensity slider).
-  set(room: string, knob: StageKnob, value01: number): Promise<Hex>;
+  set: (room: string, knob: StageKnob, value01: number) => Promise<Hex>;
   // tipWei buys queue priority off-chain; omit/0 for a free FIFO prompt.
-  prompt(room: string, text: string, tipWei?: bigint): Promise<Hex>;
+  prompt: (room: string, text: string, tipWei?: bigint) => Promise<Hex>;
 }
 
 const deltaToFixed = (delta01: number): number =>
