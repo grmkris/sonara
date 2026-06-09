@@ -20,6 +20,7 @@ import {
   createPresetSlice,
 } from "./preset-slice";
 import { createSceneSlice } from "./scene-slice";
+import { createStageSlice } from "./stage-slice";
 import type { VisualizerState } from "./types";
 import { UI_VISIBLE_KEY, createUiSlice } from "./ui-slice";
 import { createVoiceSlice } from "./voice-slice";
@@ -36,6 +37,7 @@ export const useVisualizerStore = create<VisualizerState>()((...a) => ({
   ...createLibrarySlice(...a),
   ...createModelSlice(...a),
   ...createReelPlaybackSlice(...a),
+  ...createStageSlice(...a),
 }));
 
 // ---------------------------------------------------------------------

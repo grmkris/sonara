@@ -185,6 +185,12 @@ export const useWsSession = (): WsSession => {
           s.libraryAppendFromEvent(event.frame);
           break;
         }
+        case "stage.status": {
+          // Crowd stage opened/closed for this session — the /play wire
+          // overlay mounts on stageRoom and dials /ws/stage itself.
+          s.setStageRoom(event.room);
+          break;
+        }
         default: {
           break;
         }
