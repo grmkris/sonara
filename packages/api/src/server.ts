@@ -17,4 +17,5 @@ export {
   type ControlSnapshot,
   type JobStatus,
   type SessionRegistry,
+  type SessionSource,
 } from "./session-registry";

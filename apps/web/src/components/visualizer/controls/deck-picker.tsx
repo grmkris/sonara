@@ -14,20 +14,17 @@ interface DeckPickerProps {
   send: SessionSend;
 }
 
-// "Start from a look" — the deck picker that replaces the old DEMO toggle.
-// Decks are curated, pre-generated starter looks; clicking one starts the
-// client-side demo loop (no fal, no credits). Once the user commits a
-// prompt the session enters "Live" mode and frames stream from fal +
-// persist to the library; clicking another deck flips back to playback.
+// The deck-pick behaviour, extracted so the Now-Showing SourceSwitcher and
+// this picker stay in lockstep: apply the deck's look profile, clean up a
+// live session if leaving one, signal demo-on over WS.
 //
 // Internally still uses the demoMode/demoDeck slice + the demo.set WS
 // action — a 10-file state rename is a deferred cleanup; the wire shape
 // and underlying behaviour are unchanged.
-export const DeckPicker = ({ send }: DeckPickerProps) => {
+export const usePickDeck = (send: SessionSend): ((deck: string) => void) => {
   const { data: sessionData } = useSession();
   const isSignedIn = !!sessionData?.session;
   const demoMode = useVisualizerStore((s) => s.demoMode);
-  const demoDeck = useVisualizerStore((s) => s.demoDeck);
   const setDemoMode = useVisualizerStore((s) => s.setDemoMode);
   const setDemoDeck = useVisualizerStore((s) => s.setDemoDeck);
   const setPreset = useVisualizerStore((s) => s.setPreset);
@@ -38,7 +35,7 @@ export const DeckPicker = ({ send }: DeckPickerProps) => {
   // commit a prompt — demoMode flips off, isLive flips on.
   const isLive = isSignedIn && !demoMode;
 
-  const onPickDeck = useCallback(
+  return useCallback(
     (deck: string) => {
       if (!deck) {
         return;
@@ -75,6 +72,20 @@ export const DeckPicker = ({ send }: DeckPickerProps) => {
     },
     [isLive, send, setDemoDeck, setDemoMode, setPreset, clearAnchor]
   );
+};
+
+// "Start from a look" — the deck picker that replaces the old DEMO toggle.
+// Decks are curated, pre-generated starter looks; clicking one starts the
+// client-side demo loop (no fal, no credits). Once the user commits a
+// prompt the session enters "Live" mode and frames stream from fal +
+// persist to the library; clicking another deck flips back to playback.
+export const DeckPicker = ({ send }: DeckPickerProps) => {
+  const { data: sessionData } = useSession();
+  const isSignedIn = !!sessionData?.session;
+  const demoMode = useVisualizerStore((s) => s.demoMode);
+  const demoDeck = useVisualizerStore((s) => s.demoDeck);
+  const isLive = isSignedIn && !demoMode;
+  const onPickDeck = usePickDeck(send);
 
   return (
     <div className="flex flex-col gap-3">

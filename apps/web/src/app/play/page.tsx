@@ -38,6 +38,7 @@ import { useFrameReporter } from "@/hooks/use-frame-reporter";
 import { useHotkey } from "@/hooks/use-hotkey";
 import { useReelPlaybackLoop } from "@/hooks/use-reel-playback-loop";
 import { useSongRecognition } from "@/hooks/use-song-recognition";
+import { useSourceReporter } from "@/hooks/use-source-reporter";
 import { useWsSession } from "@/hooks/use-ws-session";
 import { useSession } from "@/lib/auth-client";
 import { HOTKEYS } from "@/lib/hotkeys";
@@ -151,6 +152,7 @@ export default function Page() {
   // /play is the producer: report the on-screen frame upward so /control (and
   // viewers) see it in every mode. Viewer surfaces must never mount this.
   useFrameReporter(send);
+  useSourceReporter(send);
   const { data: sessionData } = useSession();
   const isSignedIn = !!sessionData?.session;
   const [audioSource, setAudioSource] = useState<AudioSource>({ type: "none" });

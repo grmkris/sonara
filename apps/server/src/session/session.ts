@@ -1,5 +1,9 @@
 import { EventPublisher } from "@orpc/server";
-import type { ControllableSession, ControlSnapshot } from "@sonara/api/server";
+import type {
+  ControllableSession,
+  ControlSnapshot,
+  SessionSource,
+} from "@sonara/api/server";
 import {
   DECK_KEYS,
   DEFAULT_RESOLUTION,
@@ -21,14 +25,15 @@ import type {
   ServerEvent,
   TextModelKey,
 } from "@sonara/shared";
-import { typeIdGenerator } from "@sonara/shared/typeid";
-import type { LiveSessionId } from "@sonara/shared/typeid";
+import { typeIdGenerator, typeIdToUuid } from "@sonara/shared/typeid";
+import type { ImageLibraryId, LiveSessionId } from "@sonara/shared/typeid";
 
 import {
   ANCHOR_FRAME_COST_CREDITS,
   refundOnError,
   tryDebitCredit,
 } from "../credits/credit-gate";
+import { getPool } from "../db/pool";
 import { env } from "../env";
 import { streamAnchor } from "../generation/anchor-provider";
 import { streamPreview } from "../generation/fal-provider";
@@ -43,6 +48,10 @@ import { synthesizeFromTrack } from "../generation/song-muse";
 import type { SongMusePatch } from "../generation/song-muse";
 import type { Logger } from "../lib/logger";
 import { persistFrame } from "../library/persist-frame";
+import {
+  appendRecordingFrame,
+  ensureRecordingSet,
+} from "../library/recording-set";
 import { stageRooms } from "../onchain/stage-rooms";
 import { recognizeClip } from "../recognition/recognition.service";
 import { semanticDiff } from "./semantic-diff";
@@ -158,6 +167,10 @@ export class Session implements ControllableSession {
   // covering the modes the server never generates in (decks, reel replay) as
   // well as live. May be an origin-relative /library/… path for deck frames.
   private currentFrameUrl: string | null = null;
+
+  // What the projector reports it is showing (source.report) — live, a deck,
+  // a set replay, or idle. Same producer-truth contract as currentFrameUrl.
+  private currentSource: SessionSource | null = null;
 
   private send(event: ServerEvent): void {
     if (event.type === "frame.final") {
@@ -311,6 +324,7 @@ export class Session implements ControllableSession {
   getControlSnapshot(): ControlSnapshot {
     return {
       currentFrameUrl: this.currentFrameUrl ?? this.lastFrameUrl,
+      currentSource: this.currentSource,
       demoDeck: this.demoDeck,
       demoMode: this.demoMode,
       imageAnchor: this.scene.imageAnchor ?? null,
@@ -328,6 +342,12 @@ export class Session implements ControllableSession {
   // every mode. Not validated as a URL: deck frames are origin-relative paths.
   setCurrentFrame(url: string): void {
     this.currentFrameUrl = url;
+  }
+
+  // Producer-reported source (WS source.report) — sent once per transport
+  // switch, same producer-only contract as setCurrentFrame.
+  setCurrentSource(source: SessionSource): void {
+    this.currentSource = source;
   }
 
   // Set or clear the live session's image anchor. Setting clears demoMode
@@ -676,6 +696,7 @@ export class Session implements ControllableSession {
     this.activeVersion = 0;
     this.lastKeyframeAt = 0;
     this.currentFrameUrl = null;
+    this.currentSource = null;
     this.seed = rollSeed();
     this.sessionStartAt = Date.now();
     this.silentSinceAt = null;
@@ -739,6 +760,35 @@ export class Session implements ControllableSession {
       }
       this.trigger("periodic");
     }, 1000);
+  }
+
+  // Append a just-persisted frame to this performance's recording set
+  // (frame_set origin 'recording' — see library/recording-set.ts). Fire-and-
+  // forget: recording must never break or slow generation; failures log and
+  // skip. The ensure upsert is cheap and reconnect-safe, so it runs per frame.
+  private recordFrame(frameId: ImageLibraryId, tMs: number): void {
+    const { userId } = this;
+    // Anonymous sessions never persist (library-only mode); defence in depth.
+    if (userId === null) {
+      return;
+    }
+    void (async () => {
+      try {
+        const pool = getPool();
+        await ensureRecordingSet(pool, {
+          liveSessionId: this.liveSessionId,
+          startedAt: new Date(this.sessionStartAt),
+          userUuid: userId,
+        });
+        await appendRecordingFrame(pool, {
+          frameUuid: typeIdToUuid(frameId).uuid,
+          liveSessionId: this.liveSessionId,
+          tMs,
+        });
+      } catch (error) {
+        this.logger.warn({ error, frameId }, "recording-set append failed");
+      }
+    })();
   }
 
   private async trigger(source: TriggerSource): Promise<void> {
@@ -1029,6 +1079,8 @@ export class Session implements ControllableSession {
               return;
             }
             this.send({ frame: row, type: "library.appended" });
+            // Persist succeeded → append to the auto-recorded set.
+            this.recordFrame(frameId, tMs);
           } catch (error) {
             // Fire-and-forget: a persist/send failure here must never become an
             // unhandled rejection (on a single-replica in-memory server that can
@@ -1345,6 +1397,8 @@ export class Session implements ControllableSession {
               return;
             }
             this.send({ frame: row, type: "library.appended" });
+            // Persist succeeded → append to the auto-recorded set.
+            this.recordFrame(frameId, tMs);
           } catch (error) {
             // Fire-and-forget: a persist/send failure here must never become an
             // unhandled rejection (on a single-replica in-memory server that can

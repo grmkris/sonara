@@ -1,7 +1,9 @@
 import type { SessionRegistry } from "@sonara/api/server";
 import type { LiveSessionId } from "@sonara/shared/typeid";
 
+import { getPool } from "../db/pool";
 import type { Logger } from "../lib/logger";
+import { finalizeRecordingSet } from "../library/recording-set";
 import { Session } from "./session";
 
 export class SessionManager implements SessionRegistry {
@@ -66,6 +68,25 @@ export class SessionManager implements SessionRegistry {
     }
     session.close();
     this.sessions.delete(id);
+    // The session is truly evicted here (the WS close handler calls destroy;
+    // there is no reconnect grace window — a reconnect builds a new Session
+    // and ensureRecordingSet resumes status='recording' on the same set), so
+    // close out the performance's auto-recorded set. Fire-and-forget: anon
+    // sessions never persist frames, so the UPDATE simply matches nothing,
+    // but skip the round-trip anyway.
+    if (session.userId !== null) {
+      const { liveSessionId } = session;
+      void (async () => {
+        try {
+          await finalizeRecordingSet(getPool(), liveSessionId);
+        } catch (error) {
+          this.logger.warn(
+            { error, liveSessionId },
+            "recording-set finalize failed"
+          );
+        }
+      })();
+    }
   }
 
   count(): number {

@@ -11,6 +11,16 @@ import type { LiveSessionId } from "@sonara/shared/typeid";
 // so the operator remote can poll it without subscribing to the event stream.
 export type JobStatus = "idle" | "running" | "cancelled" | "error";
 
+// What the producer's projector says it is showing right now — live
+// generation, a builtin deck, a set replay, or nothing. Reported over WS
+// (source.report) on every source change, same producer-truth rationale as
+// frame.report / currentFrameUrl.
+export interface SessionSource {
+  kind: "live" | "deck" | "set" | "idle";
+  label: string | null;
+  setId?: string;
+}
+
 // Server-authoritative snapshot of a live Session, pulled over HTTP by the
 // operator remote (apps/web /control) instead of the WebSocket event stream.
 // The Display still owns the socket; this is a read-only window for a second
@@ -32,6 +42,8 @@ export interface ControlSnapshot {
   // the operator preview should prefer it. May be an origin-relative path
   // (/library/…) for deck frames — only resolvable on the web origin.
   currentFrameUrl: string | null;
+  // Producer-reported source (source.report) — null until the first report.
+  currentSource: SessionSource | null;
   // Wall-clock ms when the live Session was constructed.
   startedAt: number;
 }
@@ -49,6 +61,7 @@ export interface ControllableSession {
     input: { url: string; strength: number } | { clear: true }
   ): void;
   setCurrentFrame(url: string): void;
+  setCurrentSource(source: SessionSource): void;
   reset(): void;
   getControlSnapshot(): ControlSnapshot;
   // Push a `stage.status` event to this session's projector — emitted by the

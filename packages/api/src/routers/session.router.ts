@@ -19,6 +19,8 @@ import type {
 } from "@sonara/shared";
 import { z } from "zod";
 
+import type { SessionSource } from "../session-registry";
+
 // Structural interface for a live session. apps/server's Session class
 // implements this; the router never imports from apps/server so the package
 // stays framework-agnostic and buildable on its own.
@@ -39,6 +41,7 @@ export interface SessionLike {
   setModel(model: TextModelKey): void;
   setResolution(resolution: RenderResolution): void;
   setCurrentFrame(url: string): void;
+  setCurrentSource(source: SessionSource): void;
   reset(): void;
   subscribe(signal?: AbortSignal): AsyncGenerator<ServerEvent>;
   getSnapshot(): SonaraSceneState;
@@ -109,6 +112,17 @@ const ReportFrameInput = z.object({
   url: z.string().min(1).max(4096),
 });
 
+// Companion of frame.report: WHAT is showing (live / deck / set / idle), not
+// just which frame. label is the human name (deck label / set name); setId
+// rides along for set playback so viewers can link to the permalink.
+const ReportSourceInput = z.object({
+  source: z.object({
+    kind: z.enum(["live", "deck", "set", "idle"]),
+    label: z.string().max(200).nullable(),
+    setId: z.string().max(64).optional(),
+  }),
+});
+
 const StateOutput = z.object({
   demoDeck: DeckKeySchema.nullable(),
   // Server-authoritative demo state. Anon sessions are pinned to demoMode=true
@@ -168,6 +182,15 @@ export const sessionRouter = {
     .input(ReportFrameInput)
     .handler(({ context, input }) => {
       context.session.setCurrentFrame(input.url);
+    }),
+
+  // The producer reports its current SOURCE (live / deck / set / idle) on
+  // every transport switch, same producer-truth contract as reportFrame.
+  // Fire-and-forget.
+  reportSource: sessionOs
+    .input(ReportSourceInput)
+    .handler(({ context, input }) => {
+      context.session.setCurrentSource(input.source);
     }),
 
   reset: sessionOs.handler(({ context }) => {

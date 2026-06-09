@@ -2,11 +2,11 @@
 
 import type { SonaraSceneState } from "@sonara/shared";
 
-import { DeckPicker } from "@/components/visualizer/controls/deck-picker";
 import { IntensityDial } from "@/components/visualizer/controls/intensity-dial";
 import { ModelPicker } from "@/components/visualizer/controls/model-picker";
 import { PresetPicker } from "@/components/visualizer/controls/preset-picker";
 import { SliderRow } from "@/components/visualizer/controls/slider-row";
+import { SourceSwitcher } from "@/components/visualizer/controls/source-switcher";
 import type { SessionSend } from "@/lib/session-actions";
 import { useVisualizerStore } from "@/stores/visualizer";
 
@@ -47,8 +47,9 @@ export const ControlsPanel = ({ send }: ControlsPanelProps) => {
 
   return (
     <div className="relative flex flex-col gap-5 rounded-sm border border-[color:var(--hairline)]/25 p-4">
-      {/* Source — the look you start from. */}
-      <DeckPicker send={send} />
+      {/* Source — the Now-Showing transport: what's on the canvas (live /
+          deck / set replay / idle), with the picker + stop. */}
+      <SourceSwitcher send={send} />
 
       <Divider />
 
