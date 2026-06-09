@@ -39,15 +39,28 @@ USDC, never MON.
 | `apps/server` | listener decodes `paid`/`tip`, accumulates per-room revenue in `stageState` (exposed via `control.stageSnapshot`); MCP `sonara_prompt` notes the price (agent EOA must hold testnet USDC) |
 | `apps/web` | stage page: USDC balance chip, prompt priced in USDC, tip input in USDC, "fund your wallet" panel (smart-account address + QR + faucet link) when balance is short; host panel shows USDC raised |
 
-No new env vars: the USDC address is hardcoded per chain in `packages/onchain`,
-and the (re)deployed contract reuses `SONARA_STAGE_CONTRACT` /
+The USDC address is hardcoded per chain in `packages/onchain`, and the
+(re)deployed contract reuses `SONARA_STAGE_CONTRACT` /
 `NEXT_PUBLIC_SONARA_STAGE_CONTRACT`.
+
+## Airdrop faucet (one new env var)
+
+So the audience never leaves the show to find a faucet, the funding panel's
+primary action is **"get 1 usdc free"** → public `control.stageAirdrop`
+(open room code = capability). A server-held EOA (`STAGE_FAUCET_KEY`) sends
+1 USDC per wallet per hour, only to wallets that can't afford a single prompt
+(`apps/server/src/onchain/stage-faucet.ts`; transport:
+`createUsdcSender` in `packages/onchain`). The faucet EOA **is** the stage
+treasury (`STAGE_TREASURY` at deploy time), so every prompt payment flows back
+into the float — one browser-faucet seed sustains the loop. The Circle faucet
+link + address QR remain as the fallback path.
 
 ## Rollout checklist
 
 1. `forge test` in `packages/contracts`; `bun typecheck` at the root.
-2. Deploy: `forge script script/Deploy.s.sol:Deploy --rpc-url monad_testnet
-   --private-key $DEPLOYER_KEY --broadcast` (treasury defaults to deployer).
+2. Deploy: `STAGE_TREASURY=<faucet address> forge script
+   script/Deploy.s.sol:Deploy --rpc-url monad_testnet --private-key
+   $DEPLOYER_KEY --broadcast` (treasury defaults to deployer if unset).
 3. Update `SONARA_STAGE_CONTRACT` (server) + `NEXT_PUBLIC_SONARA_STAGE_CONTRACT`
    (web build arg) in Railway dev env; push `dev`.
 4. **Pimlico dashboard**: if the sponsorship policy restricts callable contract

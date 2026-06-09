@@ -26,8 +26,10 @@ export {
 } from "./stage";
 export {
   readStagePayment,
+  readUsdcBalance,
   readUsdcStatus,
   type StagePayment,
 } from "./stage-payment";
 export { createEoaStageWriter, type StageWriter } from "./stage-writer";
 export { createUserOpStageWriter } from "./stage-writer-userop";
+export { createUsdcSender, type UsdcSender } from "./usdc-sender";

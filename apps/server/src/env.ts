@@ -87,6 +87,10 @@ const envSchema = z.object({
   PROMPT_DWELL_MS: z.coerce.number().int().positive().default(12_000),
   // EOA key the MCP agent signs with (it pays its own gas in testnet MON).
   MCP_AGENT_KEY: z.string().default(""),
+  // EOA key the stage airdrop faucet sends USDC from (control.stageAirdrop).
+  // Needs testnet MON for gas + a USDC float; as the stage treasury, spent
+  // prompts flow back to it. Empty = no airdrops (audience uses faucet.circle.com).
+  STAGE_FAUCET_KEY: z.string().default(""),
   // Optional Pimlico key to lift the public bundler rate limit before a demo.
   PIMLICO_API_KEY: z.string().default(""),
 });

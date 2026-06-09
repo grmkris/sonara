@@ -3,8 +3,10 @@ import type { ControllableSession } from "@sonara/api/server";
 import { ClientScenePatch, DeckKeySchema } from "@sonara/shared";
 import { LiveSessionIdSchema, typeIdToUuid } from "@sonara/shared/typeid";
 import type { UserId } from "@sonara/shared/typeid";
+import { isAddress } from "viem";
 import { z } from "zod";
 
+import { stageFaucet } from "../onchain/stage-faucet";
 import { stageRooms } from "../onchain/stage-rooms";
 import { stageState } from "../onchain/stage-state";
 import { protectedProcedure, publicProcedure } from "./procedures";
@@ -205,5 +207,21 @@ export const controlRouter = {
         allowPrompts: binding?.allowPrompts ?? false,
         open: Boolean(binding),
       };
+    }),
+
+  // Public: top an audience smart account up with USDC so it can prompt
+  // without leaving the show. An open room code is the capability; the faucet
+  // itself enforces the per-wallet cooldown + "can't already afford a prompt"
+  // rule and reports failures as data (the UI toasts the reason).
+  stageAirdrop: publicProcedure
+    .input(z.object({ address: z.string(), room: z.string() }))
+    .handler(({ input }) => {
+      if (!stageRooms.resolve(input.room)) {
+        throw new ORPCError("NOT_FOUND", { message: "stage is not open" });
+      }
+      if (!isAddress(input.address)) {
+        throw new ORPCError("BAD_REQUEST", { message: "bad wallet address" });
+      }
+      return stageFaucet.drip(input.address);
     }),
 };

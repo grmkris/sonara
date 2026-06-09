@@ -12,6 +12,7 @@ import { Mark } from "@/components/brand/mark";
 import { AddressGlyph, shortAddress } from "@/components/stage/address-glyph";
 import { BlockPulse } from "@/components/stage/block-pulse";
 import { Button } from "@/components/ui/button";
+import { rpcClient } from "@/lib/orpc";
 import { createLatencyTracker } from "@/lib/stage/latency";
 import { useStageFeed } from "@/lib/stage/use-stage-feed";
 import { useStageWriter } from "@/lib/stage/use-stage-writer";
@@ -68,17 +69,43 @@ const TapButton = ({
   </button>
 );
 
-// Shown when the smart account can't cover a prompt: where to send USDC (the
-// account address, as text + QR) and the Circle testnet faucet that hands it
-// out for free.
-const FundPanel = ({ address }: { address: string }) => {
+// Why an airdrop didn't land, in stage-page voice.
+const DRIP_ERRORS: Record<string, string> = {
+  already_funded: "you can already afford a prompt",
+  cooldown: "one airdrop per hour — spend it first",
+  faucet_dry: "house faucet is empty — try the circle faucet",
+  unavailable: "airdrops are off right now — try the circle faucet",
+};
+
+// Shown when the smart account can't cover a prompt. Primary path: the house
+// faucet airdrops 1 USDC straight to this wallet (control.stageAirdrop — the
+// balance poll picks it up in a few seconds). Fallback: send USDC yourself
+// (address as text + QR) or hit the Circle testnet faucet.
+const FundPanel = ({ address, room }: { address: string; room: string }) => {
   const [qr, setQr] = useState<string | null>(null);
+  const [dripping, setDripping] = useState(false);
 
   useEffect(() => {
     void (async () => {
       setQr(await QRCode.toDataURL(address, { margin: 1, width: 240 }));
     })();
   }, [address]);
+
+  const airdrop = async (): Promise<void> => {
+    setDripping(true);
+    try {
+      const result = await rpcClient.control.stageAirdrop({ address, room });
+      if (result.ok) {
+        toast.success("1 usdc on its way — a few seconds");
+      } else {
+        toast.error(DRIP_ERRORS[result.reason] ?? "airdrop failed");
+      }
+    } catch {
+      toast.error("airdrop failed");
+    } finally {
+      setDripping(false);
+    }
+  };
 
   const copy = async (): Promise<void> => {
     try {
@@ -94,6 +121,15 @@ const FundPanel = ({ address }: { address: string }) => {
       <p className="font-sans text-[10px] uppercase tracking-[0.2em] text-[color:var(--signal)]">
         prompts cost usdc — fund your stage wallet
       </p>
+      <Button
+        className="font-sans text-[11px] uppercase tracking-[0.2em]"
+        disabled={dripping}
+        onClick={airdrop}
+        size="sm"
+        type="button"
+      >
+        {dripping ? "sending…" : "get 1 usdc free"}
+      </Button>
       <div className="flex items-center gap-3">
         {qr && (
           // eslint-disable-next-line @next/next/no-img-element
@@ -120,7 +156,7 @@ const FundPanel = ({ address }: { address: string }) => {
             rel="noreferrer"
             target="_blank"
           >
-            get free testnet usdc ↗
+            or get usdc from circle ↗
           </a>
         </div>
       </div>
@@ -134,12 +170,14 @@ const FundPanel = ({ address }: { address: string }) => {
 const PromptComposer = ({
   linked,
   address,
+  room,
   payment,
   balanceUnits,
   onSend,
 }: {
   linked: boolean;
   address: string | null;
+  room: string;
   payment: StagePayment | null;
   balanceUnits: bigint | null;
   onSend: (text: string, tipUnits: bigint, cost: bigint) => void;
@@ -229,7 +267,7 @@ const PromptComposer = ({
           {tip ? "jump the line" : "queue it"}
         </Button>
       </div>
-      {needsFunds && address && <FundPanel address={address} />}
+      {needsFunds && address && <FundPanel address={address} room={room} />}
     </section>
   );
 };
@@ -431,6 +469,7 @@ export default function StagePage() {
           linked={linked}
           onSend={sendPrompt}
           payment={payment}
+          room={room}
         />
       )}
 

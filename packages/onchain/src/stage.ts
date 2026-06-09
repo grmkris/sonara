@@ -23,6 +23,7 @@ export const usdcAbi = parseAbi([
   "function balanceOf(address owner) view returns (uint256)",
   "function allowance(address owner, address spender) view returns (uint256)",
   "function approve(address spender, uint256 value) returns (bool)",
+  "function transfer(address to, uint256 value) returns (bool)",
 ]);
 
 // USDC amounts travel as 6-decimal integer units (1 USDC = 1_000_000). These

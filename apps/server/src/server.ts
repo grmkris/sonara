@@ -23,6 +23,7 @@ import { uploadImage } from "./http/upload";
 import { logger } from "./lib/logger";
 import { createStageListener } from "./onchain/stage-listener";
 import { createStageMcp } from "./onchain/mcp-server";
+import { stageFaucet } from "./onchain/stage-faucet";
 import {
   bindStagePublisher,
   stageFeedHooks,
@@ -79,6 +80,20 @@ const stageListener =
         wssUrl: env.MONAD_RPC_WSS,
       })
     : null;
+
+// Stage airdrop faucet (control.stageAirdrop): tops audience wallets up with
+// USDC so they can prompt without leaving the show. Dormant without a key.
+if (
+  env.SONARA_STAGE_CONTRACT &&
+  isAddress(env.SONARA_STAGE_CONTRACT) &&
+  /^0x[0-9a-fA-F]{64}$/u.test(env.STAGE_FAUCET_KEY)
+) {
+  stageFaucet.configure({
+    contract: env.SONARA_STAGE_CONTRACT,
+    faucetKey: env.STAGE_FAUCET_KEY as `0x${string}`,
+    logger,
+  });
+}
 
 app.get("/health", (c) => c.json({ ok: true }));
 app.get("/", (c) => c.text("sonara server — connect to /ws via WebSocket"));

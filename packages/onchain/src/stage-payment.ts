@@ -38,6 +38,18 @@ export const readStagePayment = async (opts: {
   return { promptPriceUnits, treasury, usdc };
 };
 
+export const readUsdcBalance = (opts: {
+  usdc: Address;
+  owner: Address;
+  rpcUrl?: string;
+}): Promise<bigint> =>
+  client(opts.rpcUrl).readContract({
+    abi: usdcAbi,
+    address: opts.usdc,
+    args: [opts.owner],
+    functionName: "balanceOf",
+  });
+
 export const readUsdcStatus = async (opts: {
   usdc: Address;
   owner: Address;
