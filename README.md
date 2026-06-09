@@ -69,3 +69,9 @@ See `ARCHITECTURE.md` for the current code tour — data flow, layer-by-layer ma
 **Parked ideas** (not yet started): see `docs/mood-field-plan.md` (replace preset chip wall with a valence/arousal constellation), `docs/starter-decks.md` (drop the "demo mode" jargon), `docs/story-mode-and-image-library.md` (batch keyframes + persistent gallery), `docs/gesture-camera-input.md` (pointer/MIDI/webcam input), and `PLANS.md` (chat-platform clip sharing).
 
 **Open cleanup items:** see `ARCHITECTURE.md` smell list.
+
+## License
+
+Copyright © 2026 Kristjan Grm.
+
+Licensed under the [PolyForm Noncommercial License 1.0.0](LICENSE.md): you may use, copy, modify, and share this software for **noncommercial purposes** (personal projects, research, education, evaluation). **Any commercial use requires a separate license** — get in touch.
