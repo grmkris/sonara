@@ -3,6 +3,7 @@
 import { formatUsdc, parseUsdc } from "@sonara/onchain";
 import type { StageKnob, StagePayment } from "@sonara/onchain";
 import type { StageActivityEvent } from "@sonara/shared";
+import { Mic, MicOff } from "lucide-react";
 import { useParams } from "next/navigation";
 import QRCode from "qrcode";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -13,6 +14,7 @@ import { AddressGlyph, shortAddress } from "@/components/stage/address-glyph";
 import { BlockPulse } from "@/components/stage/block-pulse";
 import { Button } from "@/components/ui/button";
 import { rpcClient } from "@/lib/orpc";
+import { useVoiceRecognition } from "@/hooks/use-voice-recognition";
 import { createLatencyTracker } from "@/lib/stage/latency";
 import { useStageFeed } from "@/lib/stage/use-stage-feed";
 import { useStageWriter } from "@/lib/stage/use-stage-writer";
@@ -164,6 +166,49 @@ const FundPanel = ({ address, room }: { address: string; room: string }) => {
   );
 };
 
+// Mic toggle in the composer's corner. Speech-to-text is the browser's Web
+// Speech API (same hook as /play's prompt dictation) — the transcript streams
+// into the textarea, the user reviews, and the SEND still pays on-chain, so
+// dictation never auto-spends. Hidden entirely when the browser lacks
+// SpeechRecognition; the typed flow is unaffected.
+const ComposerMic = ({
+  disabled,
+  listening,
+  onToggle,
+  supported,
+}: {
+  disabled: boolean;
+  listening: boolean;
+  onToggle: () => void;
+  supported: boolean;
+}) => {
+  if (!supported) {
+    return null;
+  }
+  return (
+    <button
+      type="button"
+      aria-label={listening ? "stop dictating" : "speak your prompt"}
+      aria-pressed={listening}
+      disabled={disabled}
+      onClick={onToggle}
+      className={cn(
+        "focus-ring absolute bottom-2 right-2 flex items-center gap-1.5 rounded-sm px-1.5 py-1 transition-colors",
+        listening
+          ? "text-[color:var(--signal)]"
+          : "text-[color:var(--stone)] hover:text-[color:var(--paper)]",
+        disabled && "cursor-not-allowed opacity-40"
+      )}
+    >
+      {listening ? (
+        <MicOff className="size-4" strokeWidth={1.5} />
+      ) : (
+        <Mic className="size-4" strokeWidth={1.5} />
+      )}
+    </button>
+  );
+};
+
 // The paid part of the page: composer + tip + send gating + funding panel.
 // Owns the text/tip inputs and the affordability math; the parent owns the
 // actual on-chain fire (and the optimistic balance/tx bookkeeping).
@@ -184,6 +229,23 @@ const PromptComposer = ({
 }) => {
   const [prompt, setPrompt] = useState("");
   const [tip, setTip] = useState("");
+
+  // Voice dictation: the live transcript streams straight into `prompt`
+  // (clamped to the field's 200-char limit), so the textarea doubles as the
+  // listening display. Review-then-pay: dictation never submits by itself.
+  const promptRef = useRef<HTMLTextAreaElement | null>(null);
+  const { supported, listening, start, stop } = useVoiceRecognition({
+    onResult: (text) => setPrompt(text.slice(0, 200)),
+  });
+  const toggleMic = () => {
+    if (listening) {
+      stop();
+      return;
+    }
+    setPrompt("");
+    start();
+    promptRef.current?.focus();
+  };
 
   // What the entered tip parses to (null = malformed input), and what the
   // whole prompt would cost. Used to gate the send button before the chain
@@ -237,16 +299,34 @@ const PromptComposer = ({
           </span>
         )}
       </label>
-      <textarea
-        aria-label="scene prompt"
-        className="min-h-[64px] w-full resize-none rounded-sm border border-[color:var(--hairline)]/30 bg-transparent px-3 py-2 font-serif text-[14px] text-[color:var(--paper)] outline-none placeholder:text-[color:var(--stone)]/60 focus:border-[color:var(--paper)]/50"
-        disabled={!linked}
-        id="prompt"
-        maxLength={200}
-        onChange={(e) => setPrompt(e.target.value)}
-        placeholder="neon jellyfish drifting over a city…"
-        value={prompt}
-      />
+      <div className="relative">
+        <textarea
+          aria-label="scene prompt"
+          className="min-h-[64px] w-full resize-none rounded-sm border border-[color:var(--hairline)]/30 bg-transparent px-3 py-2 pr-10 font-serif text-[14px] text-[color:var(--paper)] outline-none placeholder:text-[color:var(--stone)]/60 focus:border-[color:var(--paper)]/50"
+          disabled={!linked}
+          id="prompt"
+          maxLength={200}
+          onChange={(e) => setPrompt(e.target.value)}
+          placeholder="neon jellyfish drifting over a city…"
+          ref={promptRef}
+          value={prompt}
+        />
+        <ComposerMic
+          disabled={!linked}
+          listening={listening}
+          onToggle={toggleMic}
+          supported={supported}
+        />
+      </div>
+      {listening && (
+        <p className="breath flex items-center gap-1.5 font-mono text-[9px] uppercase tracking-[0.22em] text-[color:var(--signal)]">
+          <span
+            aria-hidden
+            className="size-1.5 animate-pulse rounded-full bg-[color:var(--signal)]"
+          />
+          listening — speak your scene, then queue it
+        </p>
+      )}
       <div className="flex items-center gap-2">
         <input
           aria-label="tip in USDC to jump the queue"
