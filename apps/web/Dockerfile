@@ -38,6 +38,7 @@ COPY packages/db/package.json ./packages/db/
 COPY packages/logger/package.json ./packages/logger/
 COPY packages/shared/package.json ./packages/shared/
 COPY packages/test-utils/package.json ./packages/test-utils/
+COPY packages/onchain/package.json ./packages/onchain/
 
 RUN bun install --no-summary
 
@@ -52,6 +53,7 @@ COPY packages/api ./packages/api
 COPY packages/db ./packages/db
 COPY packages/logger ./packages/logger
 COPY packages/shared ./packages/shared
+COPY packages/onchain ./packages/onchain
 
 # Build. next.config.ts sets output: "standalone" so this emits a
 # self-contained server bundle at apps/web/.next/standalone.
