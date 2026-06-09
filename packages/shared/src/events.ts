@@ -224,6 +224,8 @@ export const ServerEvent = z.discriminatedUnion("type", [
   z.object({
     allowPrompts: z.boolean().optional(),
     room: z.string().nullable(),
+    // Projector join-QR overlay, host-toggled from /control. Defaults shown.
+    showQr: z.boolean().optional(),
     type: z.literal("stage.status"),
   }),
 ]);

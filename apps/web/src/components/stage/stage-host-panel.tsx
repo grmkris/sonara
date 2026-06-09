@@ -30,6 +30,8 @@ export const StageHostPanel = ({
   const [busy, setBusy] = useState(false);
   const [qr, setQr] = useState<string | null>(null);
   const [stageUrl, setStageUrl] = useState("");
+  // Mirrors the projector's join-QR overlay (openStage defaults it on).
+  const [displayQr, setDisplayQr] = useState(true);
 
   const feed = useStageFeed(room);
   const revenueUnits = BigInt(feed.revenueUnits);
@@ -70,6 +72,7 @@ export const StageHostPanel = ({
         liveSessionId,
       });
       setRoom(minted);
+      setDisplayQr(true);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "couldn't open stage");
     } finally {
@@ -86,6 +89,20 @@ export const StageHostPanel = ({
       // best-effort
     } finally {
       setBusy(false);
+    }
+  };
+
+  // Toggle the join QR on the projector (the audience scans the big screen).
+  const toggleDisplayQr = async () => {
+    const next = !displayQr;
+    setDisplayQr(next);
+    try {
+      await rpcClient.control.setStageQr({ liveSessionId, show: next });
+    } catch (error) {
+      setDisplayQr(!next);
+      toast.error(
+        error instanceof Error ? error.message : "couldn't toggle the QR"
+      );
     }
   };
 
@@ -149,6 +166,28 @@ export const StageHostPanel = ({
               <Seismograph height={20} ring={feed.ring} />
             </div>
           )}
+
+          {/* Join QR on the projector — the audience scans the big screen,
+              so the host shows it to fill the room and hides it for a clean
+              canvas once everyone is in. */}
+          <button
+            className="focus-ring flex items-center justify-between gap-3 rounded-sm border border-[color:var(--hairline)]/30 px-3 py-2 text-left transition-colors hover:border-[color:var(--paper)]/40"
+            onClick={toggleDisplayQr}
+            type="button"
+          >
+            <span className="font-sans text-[10px] uppercase tracking-[0.2em] text-[color:var(--paper)]/85">
+              join qr on display
+            </span>
+            <span
+              className={
+                displayQr
+                  ? "shrink-0 font-mono text-[9px] uppercase tracking-[0.2em] text-[color:var(--signal)]"
+                  : "shrink-0 font-mono text-[9px] uppercase tracking-[0.2em] text-[color:var(--stone)]"
+              }
+            >
+              {displayQr ? "shown" : "hidden"}
+            </span>
+          </button>
 
           {/* Shareable link (tap to copy) — for anyone who can't scan. */}
           {stageUrl && (

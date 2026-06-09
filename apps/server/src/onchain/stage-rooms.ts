@@ -13,6 +13,9 @@ import { randomBytes } from "node:crypto";
 export interface StageRoomBinding {
   liveSessionId: string;
   allowPrompts: boolean;
+  // Whether the projector overlays the join QR. Host-toggled from /control;
+  // defaults on at openStage so the room can fill, hidden once it has.
+  showQr: boolean;
 }
 
 // Crockford-ish base32 without ambiguous chars (no I/L/O/U/0/1) — easy to read
@@ -43,6 +46,7 @@ class StageRooms {
       const binding = this.byRoom.get(existing);
       if (binding) {
         binding.allowPrompts = allowPrompts;
+        binding.showQr = true;
       }
       return existing;
     }
@@ -50,9 +54,19 @@ class StageRooms {
     while (this.byRoom.has(room)) {
       room = mintCode();
     }
-    this.byRoom.set(room, { allowPrompts, liveSessionId });
+    this.byRoom.set(room, { allowPrompts, liveSessionId, showQr: true });
     this.roomByLive.set(liveSessionId, room);
     return room;
+  }
+
+  // Toggle the projector's join-QR overlay. Returns false for unknown rooms.
+  setShowQr(room: string, show: boolean): boolean {
+    const binding = this.byRoom.get(room);
+    if (!binding) {
+      return false;
+    }
+    binding.showQr = show;
+    return true;
   }
 
   close(room: string): void {
@@ -74,13 +88,17 @@ class StageRooms {
 
   // Current stage binding for a live session, if it has one — lets a session
   // tell a (re)connecting projector about its open room.
-  statusFor(liveSessionId: string): { room: string; allowPrompts: boolean } | null {
+  statusFor(
+    liveSessionId: string
+  ): { room: string; allowPrompts: boolean; showQr: boolean } | null {
     const room = this.roomByLive.get(liveSessionId);
     if (!room) {
       return null;
     }
     const binding = this.byRoom.get(room);
-    return binding ? { allowPrompts: binding.allowPrompts, room } : null;
+    return binding
+      ? { allowPrompts: binding.allowPrompts, room, showQr: binding.showQr }
+      : null;
   }
 
   resolve(room: string): StageRoomBinding | undefined {

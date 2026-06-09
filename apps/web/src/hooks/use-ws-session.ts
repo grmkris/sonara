@@ -187,8 +187,10 @@ export const useWsSession = (): WsSession => {
         }
         case "stage.status": {
           // Crowd stage opened/closed for this session — the /play wire
-          // overlay mounts on stageRoom and dials /ws/stage itself.
+          // overlay mounts on stageRoom and dials /ws/stage itself. showQr
+          // drives the projector's join-QR overlay (host-toggled).
           s.setStageRoom(event.room);
+          s.setStageShowQr(event.showQr ?? true);
           break;
         }
         default: {

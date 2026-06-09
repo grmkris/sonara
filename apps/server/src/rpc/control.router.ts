@@ -183,8 +183,30 @@ export const controlRouter = {
       );
       const room = stageRooms.open(input.liveSessionId, input.allowPrompts);
       // Tell the projector so it can mount its wire overlay + dial /ws/stage.
-      session.notifyStage(room, input.allowPrompts);
-      return { allowPrompts: input.allowPrompts, room };
+      // The join QR starts shown so the room can fill straight away.
+      session.notifyStage(room, input.allowPrompts, true);
+      return { allowPrompts: input.allowPrompts, room, showQr: true };
+    }),
+
+  // Toggle the projector's join-QR overlay (the audience scans the big
+  // screen, not the host's phone). Rides the same stage.status push.
+  setStageQr: protectedProcedure
+    .input(ByLiveSession.extend({ show: z.boolean() }))
+    .handler(({ context, input }) => {
+      const session = resolveOwnedSession(
+        context.registry,
+        context.userId,
+        input.liveSessionId
+      );
+      const status = stageRooms.statusFor(input.liveSessionId);
+      if (!status) {
+        throw new ORPCError("NOT_FOUND", {
+          message: "No open stage for that session.",
+        });
+      }
+      stageRooms.setShowQr(status.room, input.show);
+      session.notifyStage(status.room, status.allowPrompts, input.show);
+      return { showQr: input.show };
     }),
 
   closeStage: protectedProcedure

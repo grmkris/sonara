@@ -9,7 +9,10 @@ import type { VisualizerState } from "./types";
 
 export interface StageSlice {
   stageRoom: string | null;
+  // Host-toggled (from /control) join-QR overlay on the projector.
+  stageShowQr: boolean;
   setStageRoom: (room: string | null) => void;
+  setStageShowQr: (show: boolean) => void;
 }
 
 export const createStageSlice: StateCreator<
@@ -19,5 +22,7 @@ export const createStageSlice: StateCreator<
   StageSlice
 > = (set) => ({
   setStageRoom: (room) => set({ stageRoom: room }),
+  setStageShowQr: (show) => set({ stageShowQr: show }),
   stageRoom: null,
+  stageShowQr: true,
 });

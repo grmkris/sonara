@@ -11,6 +11,7 @@ import { useVisualizerStore } from "@/stores/visualizer";
 import { AddressGlyph, shortAddress } from "./address-glyph";
 import { BlockPulse } from "./block-pulse";
 import { Seismograph } from "./seismograph";
+import { StageJoinQr } from "./stage-join-qr";
 import { TxTicker } from "./tx-ticker";
 
 // The projector's Monad wire overlay — the layer the room (and the judges)
@@ -55,6 +56,7 @@ const NowPlayingCredit = ({ credit }: { credit: PromptCredit }) => (
 const StageWireInner = ({ room }: { room: string }) => {
   const feed = useStageFeed(room);
   const uiVisible = useVisualizerStore((s) => s.uiVisible);
+  const showQr = useVisualizerStore((s) => s.stageShowQr);
 
   // Hold a credit card for a few seconds whenever a new prompt takes the
   // screen; identity is who+text so re-plays of the same prompt don't flash.
@@ -73,13 +75,17 @@ const StageWireInner = ({ room }: { room: string }) => {
   }, [playingKey]);
 
   return (
-    <div
-      aria-hidden
-      className={cn(
-        "pointer-events-none absolute inset-0 z-20",
-        uiVisible ? "ui-fade-in" : "ui-fade-out"
-      )}
-    >
+    <>
+      {/* Join QR — outside the fading wrapper on purpose: hiding the chrome
+         (h) keeps the QR up; only the host's /control toggle removes it. */}
+      {showQr && <StageJoinQr room={room} />}
+      <div
+        aria-hidden
+        className={cn(
+          "pointer-events-none absolute inset-0 z-20",
+          uiVisible ? "ui-fade-in" : "ui-fade-out"
+        )}
+      >
       {/* Block odometer — just under the wordmark cluster. */}
       <BlockPulse
         blockNumber={feed.blockNumber}
@@ -96,8 +102,9 @@ const StageWireInner = ({ room }: { room: string }) => {
         </p>
       </div>
 
-      {credit && <NowPlayingCredit credit={credit} />}
-    </div>
+        {credit && <NowPlayingCredit credit={credit} />}
+      </div>
+    </>
   );
 };
 

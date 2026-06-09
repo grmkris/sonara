@@ -284,15 +284,15 @@ export class Session implements ControllableSession {
     // room code (stage bindings outlive WS connections via liveSessionId).
     const stage = stageRooms.statusFor(this.liveSessionId);
     if (stage) {
-      this.notifyStage(stage.room, stage.allowPrompts);
+      this.notifyStage(stage.room, stage.allowPrompts, stage.showQr);
     }
   }
 
   // `stage.status` push — the control router calls this when the owner opens
-  // or closes the Monad crowd stage, so the projector can mount/unmount its
-  // wire overlay and dial the public /ws/stage feed.
-  notifyStage(room: string | null, allowPrompts?: boolean): void {
-    this.send({ allowPrompts, room, type: "stage.status" });
+  // or closes the Monad crowd stage (or toggles the join QR), so the projector
+  // can mount/unmount its wire overlay + QR and dial the public /ws/stage feed.
+  notifyStage(room: string | null, allowPrompts?: boolean, showQr?: boolean): void {
+    this.send({ allowPrompts, room, showQr, type: "stage.status" });
   }
 
   // Idempotent snapshot of server-authoritative state for the client's
