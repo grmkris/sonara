@@ -12,7 +12,6 @@ import { Mark } from "@/components/brand/mark";
 import { AddressGlyph, shortAddress } from "@/components/stage/address-glyph";
 import { BlockPulse } from "@/components/stage/block-pulse";
 import { Button } from "@/components/ui/button";
-import { rpcClient } from "@/lib/orpc";
 import { createLatencyTracker } from "@/lib/stage/latency";
 import { useStageFeed } from "@/lib/stage/use-stage-feed";
 import { useStageWriter } from "@/lib/stage/use-stage-writer";
