@@ -11,6 +11,10 @@ import { toast } from "sonner";
 import { AppNavLinks } from "@/components/app-nav";
 import { Mark } from "@/components/brand/mark";
 import { OperatorConsole } from "@/components/control/operator-console";
+import { BlockPulse } from "@/components/stage/block-pulse";
+import { Seismograph } from "@/components/stage/seismograph";
+import { StageJoinQr } from "@/components/stage/stage-join-qr";
+import { TxTicker } from "@/components/stage/tx-ticker";
 import {
   Sheet,
   SheetContent,
@@ -20,10 +24,12 @@ import {
 import { SonaraCanvas } from "@/components/visualizer/canvas/sonara-canvas";
 import { FullscreenToggle } from "@/components/visualizer/controls/fullscreen-toggle";
 import { MusicSource } from "@/components/visualizer/controls/music-source";
+import { publicEnv } from "@/env";
 import { useAudioFeatures } from "@/hooks/use-audio-features";
 import type { AudioSource } from "@/hooks/use-audio-features";
 import { useReelPlaybackLoop } from "@/hooks/use-reel-playback-loop";
 import { rpcClient } from "@/lib/orpc";
+import { useStageFeed } from "@/lib/stage/use-stage-feed";
 import { useVisualizerStore } from "@/stores/visualizer";
 
 // /s/[id] — the permalink, and a projector endpoint. The set (or the live
@@ -317,6 +323,31 @@ const useViewerAudio = (): {
   return { audioSource, setAudioSource };
 };
 
+// The Monad wire, viewer edition: live on-chain activity over the public
+// per-room WS feed (/ws/stage — the room code is the capability, no auth),
+// composed from the projector overlay's own exported pieces. Mounts only
+// while the host's stage is open; pairs with the StageJoinQr bottom-right so
+// anyone looking at this screen can scan in and drive what they're seeing.
+const ViewerWire = ({ room }: { room: string }) => {
+  const feed = useStageFeed(room);
+  return (
+    <div aria-hidden className="pointer-events-none absolute inset-0 z-20">
+      <BlockPulse
+        blockNumber={feed.blockNumber}
+        className="absolute left-4 top-[150px] md:left-10 md:top-[160px]"
+      />
+      <div className="absolute bottom-24 left-4 flex w-[340px] max-w-[80vw] flex-col gap-2 md:bottom-28 md:left-10">
+        <div aria-hidden className="paper-scrim absolute -inset-4 -z-10" />
+        <TxTicker events={feed.activity} max={6} />
+        <Seismograph height={22} ring={feed.ring} />
+        <p className="font-mono text-[9px] uppercase tracking-[0.26em] text-[color:var(--stone)] tabular-nums">
+          wire · {feed.txCount} tx · room {room}
+        </p>
+      </div>
+    </div>
+  );
+};
+
 // Bottom-center wake-up call while no audio source is connected: the canvas
 // is dimmed ("asleep", same as /play's deck idle) until the viewer brings
 // the room's sound.
@@ -353,6 +384,10 @@ const LensView = ({
   const name = lens.set?.name ?? "live session";
   const frameCount = replaySet?.frames.length ?? lens.set?.frameCount ?? 0;
   const audioConnected = audioSource.type !== "none";
+  const stageRoom =
+    stage?.open && publicEnv.NEXT_PUBLIC_SONARA_STAGE_CONTRACT
+      ? stage.room
+      : null;
 
   return (
     <main className="fixed inset-0 overflow-hidden bg-[color:var(--ink)] text-[color:var(--paper)]">
@@ -384,21 +419,18 @@ const LensView = ({
       {/* Owner mixer rail — md+ only; the mobile shape is the Sheet above. */}
       {consoleSessionId && <ConsoleRail liveSessionId={consoleSessionId} />}
 
-      {/* Bottom affordances: wake-up audio CTA until sound is connected, and
-          the crowd-stage pill while the room is open. */}
-      <div className="pointer-events-none absolute inset-x-0 bottom-6 z-30 flex flex-col items-center gap-3">
-        {!audioConnected && (
+      {/* The Monad wire + join QR while the crowd stage is open: txs scroll
+          bottom-left, "scan to drive the visuals" bottom-right — this screen
+          explains itself to the room. */}
+      {stageRoom && <ViewerWire room={stageRoom} />}
+      {stageRoom && <StageJoinQr room={stageRoom} />}
+
+      {/* Bottom-center: wake-up audio CTA until sound is connected. */}
+      {!audioConnected && (
+        <div className="pointer-events-none absolute inset-x-0 bottom-6 z-30 flex justify-center">
           <AudioCta onMic={() => setAudioSource({ type: "mic" })} />
-        )}
-        {stage?.open && (
-          <Link
-            href={`/stage/${stage.room}`}
-            className="focus-ring pointer-events-auto rounded-full border border-[color:var(--hairline)]/40 bg-[color:var(--ink)]/70 px-4 py-2 font-sans text-[10px] uppercase tracking-[0.24em] text-[color:var(--paper)]/85 backdrop-blur-sm transition-colors hover:border-[color:var(--paper)]/50"
-          >
-            join the stage · {stage.room}
-          </Link>
-        )}
-      </div>
+        </div>
+      )}
     </main>
   );
 };
