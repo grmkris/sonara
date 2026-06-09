@@ -36,6 +36,13 @@
       "when": 1780893429388,
       "tag": "0004_burly_northstar",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1781033110704,
+      "tag": "0005_yielding_norman_osborn",
+      "breakpoints": true
     }
   ]
 }

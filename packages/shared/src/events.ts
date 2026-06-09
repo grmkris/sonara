@@ -4,7 +4,12 @@ import { InspectorContextSchema } from "./inspector-context";
 import { NowPlaying } from "./now-playing";
 import { SonaraSceneState } from "./scene";
 import { ResolvedScene } from "./scene-resolved";
-import { ImageLibraryIdSchema, LiveSessionIdSchema, ReelIdSchema } from "./typeid";
+import {
+  FrameSetIdSchema,
+  ImageLibraryIdSchema,
+  LiveSessionIdSchema,
+  ReelIdSchema,
+} from "./typeid";
 import { VISUAL_PRESET_NAMES } from "./visual-presets";
 
 // One persisted generated frame. Returned by the library router (list /
@@ -81,6 +86,55 @@ export const ReelSchema = z.object({
 });
 
 export type Reel = z.infer<typeof ReelSchema>;
+
+// --- Sets (frame_set): the unified playable frame collection. Subsumes
+// built-in decks (origin=builtin), session recordings (origin=recording) and
+// curated reels (origin=curated). See packages/db/src/schema/frame-set.db.ts.
+
+export const FrameSetOriginSchema = z.enum([
+  "builtin",
+  "recording",
+  "curated",
+]);
+export type FrameSetOrigin = z.infer<typeof FrameSetOriginSchema>;
+
+export const FrameSetVisibilitySchema = z.enum([
+  "private",
+  "unlisted",
+  "public",
+]);
+export type FrameSetVisibility = z.infer<typeof FrameSetVisibilitySchema>;
+
+// Lightweight summary for set lists (studio sidebar, the Now-Showing
+// dropdown). No per-frame data — just the aggregate + a presigned cover.
+export const FrameSetSummarySchema = z.object({
+  // Presigned URL of the cover frame (explicit cover, else first member).
+  // Null when the set is still empty.
+  coverUrl: z.string().nullable(),
+  createdAt: z.coerce.date(),
+  // Builtin sets only: the DeckKey whose static manifest still drives
+  // playback client-side.
+  deckKey: z.string().nullable(),
+  frameCount: z.number().int().nonnegative(),
+  id: FrameSetIdSchema,
+  // Recordings only: the live session that produced (or is producing) it.
+  liveSessionId: LiveSessionIdSchema.nullable(),
+  name: z.string(),
+  origin: FrameSetOriginSchema,
+  // recording = a live performance is still appending frames.
+  status: z.enum(["recording", "final"]),
+  visibility: FrameSetVisibilitySchema,
+});
+export type FrameSetSummary = z.infer<typeof FrameSetSummarySchema>;
+
+// A full set: summary header + ordered member frames (freshly presigned
+// urls, ordered by frame_set_frame.position). Member tMs (original replay
+// timing, recordings only) rides on LibraryFrame.tMs.
+export const FrameSetSchema = FrameSetSummarySchema.extend({
+  coverFrameId: ImageLibraryIdSchema.nullable(),
+  frames: z.array(LibraryFrameSchema),
+});
+export type FrameSet = z.infer<typeof FrameSetSchema>;
 
 // Clients may only patch user-authored fields. version/nowPlaying are
 // server-authoritative; imageAnchor goes through its dedicated mutation

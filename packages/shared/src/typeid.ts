@@ -8,12 +8,20 @@ export const idTypesMapNameToPrefix = {
   account: "acc",
   allowedEmail: "alw",
   credits: "crd",
+  // The unified "set" entity (frame_set): a named, ordered, playable
+  // collection of frames. Subsumes built-in decks, session recordings, and
+  // curated reels (origin column). "set" is the UI word; code says frameSet
+  // to dodge JS Set / SQL SET collisions.
+  frameSet: "set",
+  frameSetFrame: "fsf",
   imageLibrary: "img",
   // Visualizer WS session — minted in-memory on each Session construction.
   // Distinct from `session` (Better Auth's browser session). Used to group
   // image_library rows by live-play session for the timeline view.
   liveSession: "lse",
   // Curated collection of frames ("reel") + its ordered membership rows.
+  // Superseded by frameSet (origin='curated'); kept while the legacy tables
+  // exist — the boot converger copies reels into frame_set.
   reel: "rel",
   reelFrame: "rlf",
   session: "ses",
@@ -76,6 +84,8 @@ export type ImageLibraryId = TypeIdString<"imageLibrary">;
 export type LiveSessionId = TypeIdString<"liveSession">;
 export type ReelId = TypeIdString<"reel">;
 export type ReelFrameId = TypeIdString<"reelFrame">;
+export type FrameSetId = TypeIdString<"frameSet">;
+export type FrameSetFrameId = TypeIdString<"frameSetFrame">;
 
 export const UserIdSchema = typeIdValidator("user");
 export const SessionIdSchema = typeIdValidator("session");
@@ -88,3 +98,5 @@ export const ImageLibraryIdSchema = typeIdValidator("imageLibrary");
 export const LiveSessionIdSchema = typeIdValidator("liveSession");
 export const ReelIdSchema = typeIdValidator("reel");
 export const ReelFrameIdSchema = typeIdValidator("reelFrame");
+export const FrameSetIdSchema = typeIdValidator("frameSet");
+export const FrameSetFrameIdSchema = typeIdValidator("frameSetFrame");
