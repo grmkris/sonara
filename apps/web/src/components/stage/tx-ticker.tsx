@@ -1,6 +1,6 @@
 "use client";
 
-import { formatUsdc } from "@sonara/onchain";
+import { formatUsdc, monadTestnet } from "@sonara/onchain";
 import type { StageActivityEvent } from "@sonara/shared";
 
 import { cn } from "@/lib/utils";
@@ -10,6 +10,11 @@ import { AddressGlyph, shortAddress } from "./address-glyph";
 // Teleprinter feed of on-chain actions, newest at the BOTTOM — the paper
 // feeds upward, like the hardware. Stable seq keys mean only genuinely new
 // lines mount and run the .wire-print reveal; older lines fade with height.
+// Each line links to the tx on the chain explorer (new tab) — the wire
+// wrappers are pointer-events-none, so the anchor re-enables its own events.
+
+const txUrl = (hash: string): string =>
+  `${monadTestnet.blockExplorers.default.url}/tx/${hash}`;
 
 // "+0.50" → "+0.5", "1.00" → "1"
 const trimZeros = (units: string): string =>
@@ -37,35 +42,46 @@ const TickerLine = ({
 }) => {
   const tipped = event.kind === "prompt" && event.tip && event.tip !== "0";
   return (
-    <li
-      className={cn(
-        "wire-print flex items-baseline gap-2 whitespace-nowrap font-mono uppercase tracking-[0.18em] text-[color:var(--paper)]/85",
-        dense ? "text-[9px]" : "text-[10px]"
-      )}
-      style={{ opacity: fade }}
-    >
-      <AddressGlyph
-        address={event.who}
-        className="shrink-0 self-center"
-        size={dense ? 9 : 11}
-      />
-      <span className="text-[color:var(--stone)]">
-        {shortAddress(event.who)}
-      </span>
-      <span>{actionLabel(event)}</span>
-      {event.kind === "prompt" && event.text && (
-        <span className="max-w-[15ch] truncate font-serif normal-case italic tracking-normal text-[color:var(--paper)]/70">
-          “{event.text}”
+    <li className="wire-print" style={{ opacity: fade }}>
+      <a
+        href={txUrl(event.txHash)}
+        target="_blank"
+        rel="noreferrer"
+        title="view tx on monadscan"
+        className={cn(
+          "focus-ring group pointer-events-auto flex items-baseline gap-2 whitespace-nowrap font-mono uppercase tracking-[0.18em] text-[color:var(--paper)]/85 transition-colors hover:text-[color:var(--paper)]",
+          dense ? "text-[9px]" : "text-[10px]"
+        )}
+      >
+        <AddressGlyph
+          address={event.who}
+          className="shrink-0 self-center"
+          size={dense ? 9 : 11}
+        />
+        <span className="text-[color:var(--stone)]">
+          {shortAddress(event.who)}
         </span>
-      )}
-      {tipped && (
-        <span className="text-[color:var(--signal)]">
-          +{trimZeros(event.tip ?? "0")} USDC
+        <span>{actionLabel(event)}</span>
+        {event.kind === "prompt" && event.text && (
+          <span className="max-w-[15ch] truncate font-serif normal-case italic tracking-normal text-[color:var(--paper)]/70">
+            “{event.text}”
+          </span>
+        )}
+        {tipped && (
+          <span className="text-[color:var(--signal)]">
+            +{trimZeros(event.tip ?? "0")} USDC
+          </span>
+        )}
+        {event.agent && (
+          <span className="text-[color:var(--stone)]/80">· agent</span>
+        )}
+        <span
+          aria-hidden
+          className="text-[color:var(--stone)]/60 opacity-0 transition-opacity group-hover:opacity-100"
+        >
+          ↗
         </span>
-      )}
-      {event.agent && (
-        <span className="text-[color:var(--stone)]/80">· agent</span>
-      )}
+      </a>
     </li>
   );
 };
