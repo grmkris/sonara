@@ -5,7 +5,6 @@ import { useEffect, useState } from "react";
 
 import { publicEnv } from "@/env";
 import { useStageFeed } from "@/lib/stage/use-stage-feed";
-import { cn } from "@/lib/utils";
 import { useVisualizerStore } from "@/stores/visualizer";
 
 import { AddressGlyph, shortAddress } from "./address-glyph";
@@ -19,7 +18,8 @@ import { TxTicker } from "./tx-ticker";
 // the store, fed by stage.status): a teleprinter tx ticker + seismograph
 // bottom-left, the block odometer under the wordmark cluster, and a
 // "sent by 0x…" credit when a queued prompt takes the screen. Entirely
-// pointer-transparent and fades with the rest of the chrome (uiVisible).
+// pointer-transparent (tx links re-enable their own events) and deliberately
+// IGNORES the hide-UI chrome toggle — the wire is part of the show.
 
 const CREDIT_HOLD_MS = 6000;
 
@@ -55,7 +55,6 @@ const NowPlayingCredit = ({ credit }: { credit: PromptCredit }) => (
 
 const StageWireInner = ({ room }: { room: string }) => {
   const feed = useStageFeed(room);
-  const uiVisible = useVisualizerStore((s) => s.uiVisible);
   const showQr = useVisualizerStore((s) => s.stageShowQr);
 
   // Hold a credit card for a few seconds whenever a new prompt takes the
@@ -76,16 +75,12 @@ const StageWireInner = ({ room }: { room: string }) => {
 
   return (
     <>
-      {/* Join QR — outside the fading wrapper on purpose: hiding the chrome
-         (h) keeps the QR up; only the host's /control toggle removes it. */}
+      {/* The whole wire is show-layer, not operator chrome: hiding the UI
+         (h) keeps the QR, ticker, odometer and credits up — incoming txs ARE
+         the show. Only the host's /control QR toggle and the stage closing
+         remove anything. */}
       {showQr && <StageJoinQr room={room} />}
-      <div
-        aria-hidden
-        className={cn(
-          "pointer-events-none absolute inset-0 z-20",
-          uiVisible ? "ui-fade-in" : "ui-fade-out"
-        )}
-      >
+      <div aria-hidden className="pointer-events-none absolute inset-0 z-20">
       {/* Block odometer — just under the wordmark cluster. */}
       <BlockPulse
         blockNumber={feed.blockNumber}
