@@ -16,6 +16,12 @@ import type { Logger } from "../lib/logger";
 const DEFAULT_MODEL = "google/gemini-2.5-flash-lite";
 const MAX_OUTPUT_TOKENS = 600;
 
+// Used ONLY when the moderator flags a prompt unsafe but returns a malformed
+// scene object (rare) — a neutral SFW stand-in so we never fall through to the
+// raw prompt. One constant, not a content list.
+const DENIAL_FALLBACK_PROMPT =
+  "a friendly cartoon mascot holding a playful 'let's keep it PG' sign";
+
 const buildSystemPrompt = (): string =>
   `You parse a single user-written prompt sentence into a structured FLUX.2 prompt object. Given the user's prompt and 5 slider values, emit a SINGLE JSON object — no prose, no markdown fences. The object MUST match this schema exactly:
 
@@ -38,7 +44,8 @@ const buildSystemPrompt = (): string =>
     "lens": string,                          // 2-5 words (e.g., "50mm normal", "85mm portrait", "24mm wide")
     "depth_of_field": string                 // 2-5 words (e.g., "shallow, soft falloff", "deep focus")
   },
-  "drift_candidates": [string]               // 6-10 short atmospheric clauses (1-4 words each); will be sampled across keyframes
+  "drift_candidates": [string],              // 6-10 short atmospheric clauses (1-4 words each); will be sampled across keyframes
+  "safe": boolean                            // false ONLY if the prompt is inappropriate for a PUBLIC venue screen (see SAFETY)
 }
 
 RULES:
@@ -54,6 +61,7 @@ RULES:
     - stability < 0.4 → off-balance composition, dutch tilt
 - drift_candidates: evocative ink/paper/light/motion clauses thematically tied to subjects[0] + mood. Vary them — don't repeat words across entries.
 - Stay sumi-e / ethereal / dreamlike unless the user's prompt explicitly names a different register.
+- SAFETY (single pass — you are ALSO the moderator): judge if the prompt is appropriate for a PUBLIC venue screen. Set "safe": true for normal, artistic, abstract, or mildly edgy prompts. Set "safe": false ONLY for sexually explicit content, graphic violence/gore, hateful/harassing content, or anything sexualizing minors. When "safe" is false, DO NOT depict the request — instead fill ALL scene fields with a light-hearted, crowd-friendly SFW "request denied" visual of your OWN invention (e.g. a comedic bouncer at a velvet rope, a shrugging mascot with a "nope" sign, a googly-eyed robot holding STOP). Still emit a complete, valid object.
 - Output ONLY the JSON object. No fences. No commentary.`;
 
 const buildUserPrompt = (s: SonaraSceneState): string => {
@@ -87,10 +95,11 @@ const extractOutput = (data: unknown): string | null => {
 
 const stripFences = (text: string): string => {
   let out = text.trim();
-  const fence = /^```(?:json)?\s*\n?([\s\S]*?)\n?```$/u;
+  const fence = /^```(?:json)?\s*\n?(?<body>[\s\S]*?)\n?```$/u;
   const m = out.match(fence);
-  if (m?.[1]) {
-    out = m[1].trim();
+  const body = m?.groups?.body;
+  if (body !== undefined && body.length > 0) {
+    out = body.trim();
   }
   return out;
 };
@@ -213,13 +222,32 @@ export const expandScene = async (
       return deterministicResolve(scene);
     }
 
+    // Single-pass moderation: the LLM sets `safe:false` and authors its own
+    // funny SFW denial scene in the SAME object, so when unsafe we still just
+    // render `validated.data` (the LLM's denial) — `safe` is for logging.
+    const flaggedUnsafe =
+      parsed !== null &&
+      typeof parsed === "object" &&
+      (parsed as { safe?: unknown }).safe === false;
+
     const validated = ResolvedSceneCoreSchema.safeParse(parsed);
     if (!validated.success) {
       opts.logger.warn(
         { issues: validated.error.issues, parsed },
         "scene-expander: schema validation failed"
       );
-      return deterministicResolve(scene);
+      // If flagged unsafe but the object was malformed, never fall through to
+      // the raw prompt — seed the deterministic stand-in with a neutral phrase.
+      return flaggedUnsafe
+        ? deterministicResolve({ ...scene, prompt: DENIAL_FALLBACK_PROMPT })
+        : deterministicResolve(scene);
+    }
+
+    if (flaggedUnsafe) {
+      opts.logger.info(
+        { prompt: scene.prompt },
+        "scene-expander: prompt flagged unsafe — rendering LLM denial scene"
+      );
     }
 
     return validated.data;

@@ -178,7 +178,7 @@ export const sessionRouter = {
       context.session.setImageAnchor(input);
     }),
 
-  // A/B-switch the text-mode image model (realtime lightning-sdxl / lcm, or the
+  // A/B-switch the text-mode image model (realtime lightning-sdxl, or the
   // klein queue baseline). The session fires a frame immediately so the switch
   // is visible at once. Client re-sends its choice on every (re)connect.
   setModel: sessionOs.input(SetModelInput).handler(({ context, input }) => {

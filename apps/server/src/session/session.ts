@@ -5,6 +5,7 @@ import {
   DEFAULT_RESOLUTION,
   DEFAULT_TEXT_MODEL,
   TEXT_MODELS,
+  clampPrompt,
   deckStyle,
   defaultScene,
   libraryCadenceMs,
@@ -404,7 +405,7 @@ export class Session implements ControllableSession {
     }
     this.demoMode = false;
     this.demoDeck = null;
-    this.scene = { ...this.scene, prompt };
+    this.scene = { ...this.scene, prompt: clampPrompt(prompt) };
     if (seedFrameUrl) {
       this.handoffAnchor = true;
       this.anchorFailureCount = 0;
@@ -427,7 +428,12 @@ export class Session implements ControllableSession {
     patch: ClientScenePatch,
     origin: "client" | "voice" = "client"
   ): void {
-    const next: SonaraSceneState = { ...this.scene, ...patch };
+    // Cap the prompt server-side (defense in depth — the input also caps it).
+    const safePatch =
+      typeof patch.prompt === "string"
+        ? { ...patch, prompt: clampPrompt(patch.prompt) }
+        : patch;
+    const next: SonaraSceneState = { ...this.scene, ...safePatch };
     this.scene = next;
     this.send({ state: next, type: "scene.state" });
 
@@ -930,6 +936,11 @@ export class Session implements ControllableSession {
         if (version !== this.activeVersion) {
           return;
         }
+        // Reset the idle-cadence clock to THIS rendered frame, so the next
+        // periodic/ambient frame lands a full interval later. A deliberate
+        // prompt edit fires immediately (ungated by cadence), and this keeps it
+        // from being followed by a periodic frame stacking right on top.
+        this.lastKeyframeAt = Date.now();
         this.lastGeneratedScene = snapshot;
         const tMs = Date.now() - this.sessionStartAt;
         const frameId = typeIdGenerator("imageLibrary");

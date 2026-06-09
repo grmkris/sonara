@@ -24,7 +24,7 @@ const itemClass = cn(
 );
 
 // A/B switcher for the live-session image model + render resolution. Realtime
-// models (lightning-sdxl / lcm) stream over a warm websocket (~150-300ms);
+// models (lightning-sdxl) stream over a warm websocket (~150-300ms);
 // klein is the queue-based quality baseline. Picks are client-authoritative —
 // stored locally and re-sent to the server on (re)connect (see use-ws-session).
 export const ModelPicker = ({ send }: ModelPickerProps) => {

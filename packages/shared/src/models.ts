@@ -18,7 +18,7 @@
 
 import { z } from "zod";
 
-export const TEXT_MODEL_KEYS = ["lightning-sdxl", "lcm", "klein-9b"] as const;
+export const TEXT_MODEL_KEYS = ["lightning-sdxl", "klein-9b"] as const;
 
 export type TextModelKey = (typeof TEXT_MODEL_KEYS)[number];
 
@@ -44,14 +44,6 @@ export const TEXT_MODELS: Record<TextModelKey, TextModelConfig> = {
     label: "Klein 9B",
     steps: 4,
     transport: "queue",
-  },
-  lcm: {
-    blurb: "realtime · fastest",
-    falId: "fal-ai/fast-lcm-diffusion",
-    guidanceScale: 1.5,
-    label: "LCM",
-    steps: 6,
-    transport: "realtime",
   },
   "lightning-sdxl": {
     blurb: "realtime · balanced",

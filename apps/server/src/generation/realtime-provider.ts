@@ -3,6 +3,10 @@ import { createFalClient } from "@fal-ai/client";
 import { env } from "../env";
 import type { Logger } from "../lib/logger";
 import type { FrameStreamCallbacks } from "./fal-provider";
+import {
+  TOKEN_EXPIRATION_SECONDS_CONST,
+  cachedTokenProvider,
+} from "./fal-token";
 
 // Realtime text-mode generation. Where `fal-provider.ts` routes each frame
 // through fal's job QUEUE (submit → poll → result, multi-second), this path
@@ -41,7 +45,7 @@ export interface RealtimeStreamInput extends FrameStreamCallbacks {
   // fal endpoint id of a realtime-capable model (e.g. fal-ai/fast-lightning-sdxl).
   falModelId: string;
   steps: number;
-  // CFG scale, when the model takes one (lcm). Omitted for lightning-sdxl.
+  // CFG scale, when a model takes one. Omitted for lightning-sdxl.
   guidanceScale?: number;
   size: { width: number; height: number };
 }
@@ -74,7 +78,7 @@ const toBytes = (content: unknown): Uint8Array | undefined => {
     return Uint8Array.from(content as number[]);
   }
   if (typeof content === "object" && content !== null && "data" in content) {
-    const data = (content as { data: unknown }).data;
+    const { data } = content as { data: unknown };
     if (data instanceof Uint8Array) {
       return data;
     }
@@ -86,7 +90,7 @@ const toBytes = (content: unknown): Uint8Array | undefined => {
 };
 
 // Realtime frames come back either as a CDN url (rare) or — for the
-// lightning/lcm endpoints — inline bytes. Turn either into something the
+// lightning endpoint — inline bytes. Turn either into something the
 // browser <img> can render: a CDN url passes through; inline bytes become a
 // base64 `data:` URI (no upload, keeps the realtime latency win). persistFrame
 // later fetch()es this URI (Bun supports data: URIs) to back it up to S3.
@@ -195,6 +199,12 @@ export class RealtimeImagePool {
       // each trigger, so the throttle only added a negative-setTimeout warning
       // under Bun (calls are seconds apart) with no benefit.
       throttleInterval: 0,
+      // Supplying tokenExpirationSeconds enables the SDK's background token
+      // refresh (at 90% of this) instead of a lazy re-auth mid-stream.
+      tokenExpirationSeconds: TOKEN_EXPIRATION_SECONDS_CONST,
+      // Our cached provider reuses one token per fal app across sessions, so the
+      // warm websocket stops re-authenticating every frame (the real ~1s cost).
+      tokenProvider: cachedTokenProvider,
     });
     const pooled: PooledConnection = { conn, pending };
     this.connections.set(modelId, pooled);
