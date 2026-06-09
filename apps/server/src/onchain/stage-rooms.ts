@@ -31,6 +31,9 @@ const mintCode = (): string => {
 class StageRooms {
   private readonly byRoom = new Map<string, StageRoomBinding>();
   private readonly roomByLive = new Map<string, string>();
+  // Fired after a room binding is dropped — lets the stage feed tear down its
+  // sockets/state without control.router (or this file) importing the feed.
+  private readonly closeListeners: ((room: string) => void)[] = [];
 
   // Open (or re-open) a stage for a live session. Re-opening the same session
   // returns its existing code so a reconnecting projector keeps its QR/URL.
@@ -58,6 +61,26 @@ class StageRooms {
       this.roomByLive.delete(binding.liveSessionId);
     }
     this.byRoom.delete(room);
+    if (binding) {
+      for (const listener of this.closeListeners) {
+        listener(room);
+      }
+    }
+  }
+
+  onClose(listener: (room: string) => void): void {
+    this.closeListeners.push(listener);
+  }
+
+  // Current stage binding for a live session, if it has one — lets a session
+  // tell a (re)connecting projector about its open room.
+  statusFor(liveSessionId: string): { room: string; allowPrompts: boolean } | null {
+    const room = this.roomByLive.get(liveSessionId);
+    if (!room) {
+      return null;
+    }
+    const binding = this.byRoom.get(room);
+    return binding ? { allowPrompts: binding.allowPrompts, room } : null;
   }
 
   resolve(room: string): StageRoomBinding | undefined {
