@@ -42,19 +42,26 @@ export const FRAME_COLUMNS = {
   width: SCHEMA.imageLibrary.width,
 } as const;
 
+// Stored frame url/cover → client-readable URL. Three storage shapes coexist:
+// bare bucket keys (generated rows — re-presign for a fresh TTL),
+// origin-relative public paths (seed rows, "/library/…" — pass through; they
+// resolve on the web origin and presigning would mangle them), and absolute
+// URLs (fal uploads / legacy presigned — pass through).
+export const frameReadUrl = (stored: string): string => {
+  if (stored.startsWith("/") || stored.includes("://")) {
+    return stored;
+  }
+  return presignReadUrl(stored);
+};
+
 // Maps a DB row to the wire shape, re-presigning the stored bucket key so
 // clients always get a fresh read URL. Rows whose tMs or sessionId is null
 // (shouldn't happen for source='generated' rows, but defensive) get sensible
 // defaults so the client never sees nulls.
 export const rowToFrame = (row: FrameRow): LibraryFrame => {
-  // Bare bucket keys (new rows) get re-presigned for a fresh TTL, mirroring
-  // `url`; absolute URLs (fal uploads, public /library paths, and legacy rows
-  // that stored a full presigned URL) pass through untouched.
   let anchorUrl: string | null = null;
   if (row.anchorUrl) {
-    anchorUrl = row.anchorUrl.includes("://")
-      ? row.anchorUrl
-      : presignReadUrl(row.anchorUrl);
+    anchorUrl = frameReadUrl(row.anchorUrl);
   }
   return {
     anchorUrl,
@@ -68,7 +75,7 @@ export const rowToFrame = (row: FrameRow): LibraryFrame => {
     sessionId: (row.sessionId ?? "") as LiveSessionId,
     tMs: row.tMs ?? 0,
     triggerReason: row.triggerReason,
-    url: presignReadUrl(row.url),
+    url: frameReadUrl(row.url),
     width: row.width,
   };
 };

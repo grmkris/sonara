@@ -1,0 +1,550 @@
+import { ORPCError } from "@sonara/api/server";
+import { SCHEMA } from "@sonara/db";
+import type { Database } from "@sonara/db";
+import { FrameSetVisibilitySchema } from "@sonara/shared";
+import type { FrameSet, FrameSetSummary } from "@sonara/shared";
+import { FrameSetIdSchema, ImageLibraryIdSchema } from "@sonara/shared/typeid";
+import type {
+  FrameSetId,
+  ImageLibraryId,
+  UserId,
+} from "@sonara/shared/typeid";
+import { and, asc, desc, eq, inArray, lt, max, or, sql } from "drizzle-orm";
+import { z } from "zod";
+
+import { FRAME_COLUMNS, frameReadUrl, rowToFrame } from "./frame-mapping";
+import { protectedProcedure, publicProcedure } from "./procedures";
+
+// The unified Set surface (frame_set): built-in decks, session recordings and
+// curated cuts behind one router. Successor of reel.router (same
+// Photos→Albums model — a set references image_library rows, never copies).
+//
+// Mutation policy ("freeze"):
+//   builtin    immutable for everyone (system-owned, user_id null — the
+//              ownership check rejects all callers).
+//   recording  frame list frozen (it's the take — provenance); metadata
+//              (rename / cover / visibility / delete) stays editable. "Make a
+//              cut" (create { fromSetId }) is the edit path.
+//   curated    fully editable by the owner.
+//
+// `get` is PUBLIC (optional auth) — it's the read path behind the /s/[id]
+// permalink replay: owners see everything; everyone else needs
+// visibility != 'private'. Missing and private-to-others both surface as
+// NOT_FOUND so a private set's existence doesn't leak.
+
+const LIST_DEFAULT_LIMIT = 50;
+const LIST_MAX_LIMIT = 100;
+const NAME_MAX = 120;
+
+const SET_COLUMNS = {
+  coverFrameId: SCHEMA.frameSet.coverFrameId,
+  createdAt: SCHEMA.frameSet.createdAt,
+  deckKey: SCHEMA.frameSet.deckKey,
+  frameCount: SCHEMA.frameSet.frameCount,
+  id: SCHEMA.frameSet.id,
+  liveSessionId: SCHEMA.frameSet.liveSessionId,
+  name: SCHEMA.frameSet.name,
+  origin: SCHEMA.frameSet.origin,
+  status: SCHEMA.frameSet.status,
+  userId: SCHEMA.frameSet.userId,
+  visibility: SCHEMA.frameSet.visibility,
+} as const;
+
+type SetRow = {
+  [K in keyof typeof SET_COLUMNS]: (typeof SET_COLUMNS)[K]["_"]["data"] | null;
+} & {
+  id: FrameSetId;
+  name: string;
+  origin: "builtin" | "recording" | "curated";
+  status: "recording" | "final";
+  visibility: "private" | "unlisted" | "public";
+  frameCount: number;
+  createdAt: Date;
+};
+
+const loadSet = async (
+  db: Database,
+  setId: FrameSetId
+): Promise<SetRow | undefined> => {
+  const [row] = await db
+    .select(SET_COLUMNS)
+    .from(SCHEMA.frameSet)
+    .where(eq(SCHEMA.frameSet.id, setId))
+    .limit(1);
+  return row as SetRow | undefined;
+};
+
+// Loads a set and asserts the caller owns it. Builtin sets are system-owned
+// (userId null) so every caller gets FORBIDDEN — which is exactly the
+// immutability we want for them.
+const requireOwnedSet = async (
+  db: Database,
+  userId: UserId,
+  setId: FrameSetId
+): Promise<SetRow> => {
+  const row = await loadSet(db, setId);
+  if (!row) {
+    throw new ORPCError("NOT_FOUND", { message: "Set not found." });
+  }
+  if (row.userId !== userId) {
+    throw new ORPCError("FORBIDDEN");
+  }
+  return row;
+};
+
+// Frame-list mutations are curated-only: a recording's frame list is the
+// performance — edit it by making a cut, not by rewriting history.
+const requireEditableFrameList = (set: SetRow): void => {
+  if (set.origin !== "curated") {
+    throw new ORPCError("BAD_REQUEST", {
+      message:
+        "This set's frame list is frozen — make a cut to edit a copy of it.",
+    });
+  }
+};
+
+// Frames can only be hand-added to a set by their owner (same rule reels had).
+const requireOwnedFrame = async (
+  db: Database,
+  userId: UserId,
+  frameId: ImageLibraryId
+): Promise<void> => {
+  const [row] = await db
+    .select({ id: SCHEMA.imageLibrary.id })
+    .from(SCHEMA.imageLibrary)
+    .where(
+      and(
+        eq(SCHEMA.imageLibrary.id, frameId),
+        eq(SCHEMA.imageLibrary.userId, userId)
+      )
+    )
+    .limit(1);
+  if (!row) {
+    throw new ORPCError("NOT_FOUND", { message: "Frame not found." });
+  }
+};
+
+const canRead = (set: SetRow, userId: UserId | null): boolean =>
+  set.visibility !== "private" || (userId !== null && set.userId === userId);
+
+const toSummary = (row: SetRow, coverUrl: string | null): FrameSetSummary => ({
+  coverUrl,
+  createdAt: row.createdAt,
+  deckKey: row.deckKey,
+  frameCount: row.frameCount,
+  id: row.id,
+  liveSessionId: row.liveSessionId,
+  name: row.name,
+  origin: row.origin,
+  status: row.status,
+  visibility: row.visibility,
+});
+
+const bumpFrameCount = async (
+  db: Database,
+  setId: FrameSetId,
+  delta: number
+): Promise<void> => {
+  await db
+    .update(SCHEMA.frameSet)
+    .set({ frameCount: sql`greatest(frame_count + ${delta}, 0)` })
+    .where(eq(SCHEMA.frameSet.id, setId));
+};
+
+export const setsRouter = {
+  /**
+   * Add a frame to a curated set, appended at the end. Idempotent: re-adding
+   * a member frame is a no-op (unique (set_id, frame_id)).
+   */
+  addFrame: protectedProcedure
+    .input(z.object({ frameId: ImageLibraryIdSchema, setId: FrameSetIdSchema }))
+    .handler(async ({ context, input }) => {
+      const { db, userId } = context;
+      const set = await requireOwnedSet(db, userId, input.setId);
+      requireEditableFrameList(set);
+      await requireOwnedFrame(db, userId, input.frameId);
+
+      const [agg] = await db
+        .select({ maxPos: max(SCHEMA.frameSetFrame.position) })
+        .from(SCHEMA.frameSetFrame)
+        .where(eq(SCHEMA.frameSetFrame.setId, input.setId));
+      const nextPosition = (agg?.maxPos ?? -1) + 1;
+
+      const inserted = await db
+        .insert(SCHEMA.frameSetFrame)
+        .values({
+          frameId: input.frameId,
+          position: nextPosition,
+          setId: input.setId,
+        })
+        .onConflictDoNothing({
+          target: [SCHEMA.frameSetFrame.setId, SCHEMA.frameSetFrame.frameId],
+        })
+        .returning();
+      if (inserted.length > 0) {
+        await bumpFrameCount(db, input.setId, 1);
+      }
+      return { ok: true as const };
+    }),
+
+  /**
+   * Create a curated set. With `fromSetId` this is "make a cut": the new set
+   * is seeded with the source set's frames in order (references, no copies).
+   * The source must be readable by the caller (own it, or it's non-private).
+   */
+  create: protectedProcedure
+    .input(
+      z.object({
+        fromSetId: FrameSetIdSchema.optional(),
+        name: z.string().trim().min(1).max(NAME_MAX),
+      })
+    )
+    .handler(async ({ context, input }) => {
+      const { db, userId } = context;
+
+      let seedFrames: { frameId: ImageLibraryId; position: number }[] = [];
+      if (input.fromSetId) {
+        const source = await loadSet(db, input.fromSetId);
+        if (!(source && canRead(source, userId))) {
+          throw new ORPCError("NOT_FOUND", { message: "Set not found." });
+        }
+        const members = await db
+          .select({
+            frameId: SCHEMA.frameSetFrame.frameId,
+            position: SCHEMA.frameSetFrame.position,
+          })
+          .from(SCHEMA.frameSetFrame)
+          .where(eq(SCHEMA.frameSetFrame.setId, input.fromSetId))
+          .orderBy(asc(SCHEMA.frameSetFrame.position));
+        seedFrames = members.map((m, i) => ({
+          frameId: m.frameId,
+          position: i,
+        }));
+      }
+
+      const [row] = await db
+        .insert(SCHEMA.frameSet)
+        .values({
+          frameCount: seedFrames.length,
+          name: input.name,
+          origin: "curated",
+          userId,
+        })
+        .returning();
+      if (!row) {
+        throw new ORPCError("INTERNAL_SERVER_ERROR");
+      }
+      if (seedFrames.length > 0) {
+        await db.insert(SCHEMA.frameSetFrame).values(
+          seedFrames.map((f) => ({
+            frameId: f.frameId,
+            position: f.position,
+            setId: row.id,
+          }))
+        );
+      }
+      const set = toSummary(
+        {
+          ...row,
+          frameCount: seedFrames.length,
+        } as SetRow,
+        null
+      );
+      return { set };
+    }),
+
+  /**
+   * Full set: header + ordered member frames (fresh read urls). PUBLIC with
+   * optional auth — the /s/[id] replay path. Member tMs (the junction's
+   * original-timing offset; recordings only) overrides the frame row's own.
+   */
+  get: publicProcedure
+    .input(z.object({ setId: FrameSetIdSchema }))
+    .handler(async ({ context, input }): Promise<FrameSet> => {
+      const { db } = context;
+      const userId = (context.session?.user.id as UserId | undefined) ?? null;
+      const set = await loadSet(db, input.setId);
+      if (!(set && canRead(set, userId))) {
+        throw new ORPCError("NOT_FOUND", { message: "Set not found." });
+      }
+
+      const rows = await db
+        .select({ ...FRAME_COLUMNS, memberTMs: SCHEMA.frameSetFrame.tMs })
+        .from(SCHEMA.frameSetFrame)
+        .innerJoin(
+          SCHEMA.imageLibrary,
+          eq(SCHEMA.frameSetFrame.frameId, SCHEMA.imageLibrary.id)
+        )
+        .where(eq(SCHEMA.frameSetFrame.setId, input.setId))
+        .orderBy(asc(SCHEMA.frameSetFrame.position));
+
+      const frames = rows.map((r) => ({
+        ...rowToFrame(r),
+        tMs: r.memberTMs ?? 0,
+      }));
+      let coverUrl: string | null = frames[0]?.url ?? null;
+      if (set.coverFrameId) {
+        const explicit = frames.find((f) => f.id === set.coverFrameId);
+        if (explicit) {
+          coverUrl = explicit.url;
+        }
+      }
+      return {
+        ...toSummary(set, coverUrl),
+        coverFrameId: set.coverFrameId,
+        frames,
+      };
+    }),
+
+  /**
+   * Everything the caller can play: built-in sets (system, public) plus their
+   * own recordings and cuts, newest first. `origin` narrows to one kind.
+   * Cursor is the `createdAt` ISO string of the last row of the prior page.
+   */
+  list: protectedProcedure
+    .input(
+      z.object({
+        cursor: z.string().datetime().optional(),
+        limit: z.number().int().min(1).max(LIST_MAX_LIMIT).optional(),
+        origin: z.enum(["builtin", "recording", "curated"]).optional(),
+      })
+    )
+    .handler(async ({ context, input }) => {
+      const { db, userId } = context;
+      const limit = input.limit ?? LIST_DEFAULT_LIMIT;
+
+      const conditions = [
+        or(
+          eq(SCHEMA.frameSet.userId, userId),
+          eq(SCHEMA.frameSet.origin, "builtin")
+        ),
+      ];
+      if (input.origin) {
+        conditions.push(eq(SCHEMA.frameSet.origin, input.origin));
+      }
+      if (input.cursor) {
+        conditions.push(lt(SCHEMA.frameSet.createdAt, new Date(input.cursor)));
+      }
+
+      const rows = (await db
+        .select(SET_COLUMNS)
+        .from(SCHEMA.frameSet)
+        .where(and(...conditions))
+        .orderBy(desc(SCHEMA.frameSet.createdAt))
+        .limit(limit + 1)) as SetRow[];
+
+      const hasMore = rows.length > limit;
+      const trimmed = hasMore ? rows.slice(0, limit) : rows;
+      const setIds = trimmed.map((r) => r.id);
+
+      // Fallback cover (first member frame per set) — one DISTINCT ON query.
+      const firstFrameBySet = new Map<string, string>();
+      if (setIds.length > 0) {
+        const firstFrames = await db
+          .selectDistinctOn([SCHEMA.frameSetFrame.setId], {
+            setId: SCHEMA.frameSetFrame.setId,
+            url: SCHEMA.imageLibrary.url,
+          })
+          .from(SCHEMA.frameSetFrame)
+          .innerJoin(
+            SCHEMA.imageLibrary,
+            eq(SCHEMA.frameSetFrame.frameId, SCHEMA.imageLibrary.id)
+          )
+          .where(inArray(SCHEMA.frameSetFrame.setId, setIds))
+          .orderBy(
+            asc(SCHEMA.frameSetFrame.setId),
+            asc(SCHEMA.frameSetFrame.position)
+          );
+        for (const f of firstFrames) {
+          firstFrameBySet.set(f.setId, f.url);
+        }
+      }
+
+      // Explicit cover urls (only for sets that set one).
+      const coverIds = trimmed
+        .map((r) => r.coverFrameId)
+        .filter((id): id is ImageLibraryId => id !== null);
+      const coverUrlById = new Map<string, string>();
+      if (coverIds.length > 0) {
+        const coverRows = await db
+          .select({ id: SCHEMA.imageLibrary.id, url: SCHEMA.imageLibrary.url })
+          .from(SCHEMA.imageLibrary)
+          .where(inArray(SCHEMA.imageLibrary.id, coverIds));
+        for (const c of coverRows) {
+          coverUrlById.set(c.id, c.url);
+        }
+      }
+
+      const sets: FrameSetSummary[] = trimmed.map((r) => {
+        const stored =
+          (r.coverFrameId ? coverUrlById.get(r.coverFrameId) : undefined) ??
+          firstFrameBySet.get(r.id) ??
+          null;
+        return toSummary(r, stored ? frameReadUrl(stored) : null);
+      });
+
+      const nextCursor = hasMore
+        ? (trimmed.at(-1)?.createdAt.toISOString() ?? null)
+        : null;
+      return { nextCursor, sets };
+    }),
+
+  /** Delete a set (cascades membership; underlying frames are untouched). */
+  remove: protectedProcedure
+    .input(z.object({ setId: FrameSetIdSchema }))
+    .handler(async ({ context, input }) => {
+      const { db, userId } = context;
+      await requireOwnedSet(db, userId, input.setId);
+      await db
+        .delete(SCHEMA.frameSet)
+        .where(eq(SCHEMA.frameSet.id, input.setId));
+      return { ok: true as const };
+    }),
+
+  /** Remove a frame from a curated set (positions keep a gap; harmless). */
+  removeFrame: protectedProcedure
+    .input(z.object({ frameId: ImageLibraryIdSchema, setId: FrameSetIdSchema }))
+    .handler(async ({ context, input }) => {
+      const { db, userId } = context;
+      const set = await requireOwnedSet(db, userId, input.setId);
+      requireEditableFrameList(set);
+      const deleted = await db
+        .delete(SCHEMA.frameSetFrame)
+        .where(
+          and(
+            eq(SCHEMA.frameSetFrame.setId, input.setId),
+            eq(SCHEMA.frameSetFrame.frameId, input.frameId)
+          )
+        )
+        .returning();
+      if (deleted.length > 0) {
+        await bumpFrameCount(db, input.setId, -1);
+      }
+      return { ok: true as const };
+    }),
+
+  /** Rename. Metadata edits stay open on recordings (only the frame list is frozen). */
+  rename: protectedProcedure
+    .input(
+      z.object({
+        name: z.string().trim().min(1).max(NAME_MAX),
+        setId: FrameSetIdSchema,
+      })
+    )
+    .handler(async ({ context, input }) => {
+      const { db, userId } = context;
+      await requireOwnedSet(db, userId, input.setId);
+      await db
+        .update(SCHEMA.frameSet)
+        .set({ name: input.name })
+        .where(eq(SCHEMA.frameSet.id, input.setId));
+      return { ok: true as const };
+    }),
+
+  /**
+   * Rewrite the authored order. `orderedFrameIds` must be exactly the set's
+   * current members (same multiset). Offset-bump transaction dodges the
+   * non-deferrable unique (set_id, position) index.
+   */
+  reorder: protectedProcedure
+    .input(
+      z.object({
+        orderedFrameIds: z.array(ImageLibraryIdSchema),
+        setId: FrameSetIdSchema,
+      })
+    )
+    .handler(async ({ context, input }) => {
+      const { db, userId } = context;
+      const set = await requireOwnedSet(db, userId, input.setId);
+      requireEditableFrameList(set);
+
+      const current = await db
+        .select({ frameId: SCHEMA.frameSetFrame.frameId })
+        .from(SCHEMA.frameSetFrame)
+        .where(eq(SCHEMA.frameSetFrame.setId, input.setId));
+
+      const currentSorted = current.map((r) => r.frameId).toSorted();
+      const inputSorted = input.orderedFrameIds.toSorted();
+      const sameSet =
+        currentSorted.length === inputSorted.length &&
+        currentSorted.every((id, i) => id === inputSorted[i]);
+      if (!sameSet) {
+        throw new ORPCError("BAD_REQUEST", {
+          message: "orderedFrameIds must match the set's current frames.",
+        });
+      }
+
+      const OFFSET = 1_000_000;
+      await db.transaction(async (tx) => {
+        for (const [i, frameId] of input.orderedFrameIds.entries()) {
+          await tx
+            .update(SCHEMA.frameSetFrame)
+            .set({ position: i + OFFSET })
+            .where(
+              and(
+                eq(SCHEMA.frameSetFrame.setId, input.setId),
+                eq(SCHEMA.frameSetFrame.frameId, frameId)
+              )
+            );
+        }
+        for (const [i, frameId] of input.orderedFrameIds.entries()) {
+          await tx
+            .update(SCHEMA.frameSetFrame)
+            .set({ position: i })
+            .where(
+              and(
+                eq(SCHEMA.frameSetFrame.setId, input.setId),
+                eq(SCHEMA.frameSetFrame.frameId, frameId)
+              )
+            );
+        }
+      });
+      return { ok: true as const };
+    }),
+
+  /** Set (or change) the cover frame. Must be a member of the set. */
+  setCover: protectedProcedure
+    .input(z.object({ frameId: ImageLibraryIdSchema, setId: FrameSetIdSchema }))
+    .handler(async ({ context, input }) => {
+      const { db, userId } = context;
+      await requireOwnedSet(db, userId, input.setId);
+      const [member] = await db
+        .select({ id: SCHEMA.frameSetFrame.id })
+        .from(SCHEMA.frameSetFrame)
+        .where(
+          and(
+            eq(SCHEMA.frameSetFrame.setId, input.setId),
+            eq(SCHEMA.frameSetFrame.frameId, input.frameId)
+          )
+        )
+        .limit(1);
+      if (!member) {
+        throw new ORPCError("BAD_REQUEST", {
+          message: "That frame is not in this set.",
+        });
+      }
+      await db
+        .update(SCHEMA.frameSet)
+        .set({ coverFrameId: input.frameId })
+        .where(eq(SCHEMA.frameSet.id, input.setId));
+      return { ok: true as const };
+    }),
+
+  /** Who can see this set at /s/<id>: private (owner), unlisted, or public. */
+  setVisibility: protectedProcedure
+    .input(
+      z.object({
+        setId: FrameSetIdSchema,
+        visibility: FrameSetVisibilitySchema,
+      })
+    )
+    .handler(async ({ context, input }) => {
+      const { db, userId } = context;
+      await requireOwnedSet(db, userId, input.setId);
+      await db
+        .update(SCHEMA.frameSet)
+        .set({ visibility: input.visibility })
+        .where(eq(SCHEMA.frameSet.id, input.setId));
+      return { ok: true as const };
+    }),
+};

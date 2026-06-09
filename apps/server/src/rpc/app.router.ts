@@ -6,6 +6,7 @@ import { creditsRouter } from "./credits.router";
 import { libraryRouter } from "./library.router";
 import { publicProcedure } from "./procedures";
 import { reelRouter } from "./reel.router";
+import { setsRouter } from "./sets.router";
 
 // The HTTP (oRPC over fetch) router. Mounted by the server's Hono app at
 // /rpc and reached from the browser through the Caddy gateway (same-origin).
@@ -18,7 +19,10 @@ export const appRouter = {
   credits: creditsRouter,
   healthCheck: publicProcedure.handler(() => "OK" as const),
   library: libraryRouter,
+  // Legacy reel surface — superseded by `sets` (frame_set); removed once
+  // /studio reads sets. See docs/sets-delivery-plan.md.
   reels: reelRouter,
+  sets: setsRouter,
 };
 
 export type AppRouter = typeof appRouter;
