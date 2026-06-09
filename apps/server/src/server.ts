@@ -10,17 +10,25 @@ import { runMigrations } from "@sonara/db/migrator";
 import { SERVICE_URLS, verifyTicket } from "@sonara/shared";
 import { LiveSessionIdSchema } from "@sonara/shared/typeid";
 import type { LiveSessionId, UserId } from "@sonara/shared/typeid";
+import type { ServerWebSocket } from "bun";
 import { Hono } from "hono";
 
 import { isAddress } from "viem";
 
 import { getAuth } from "./auth/auth";
+import { migrateFrameSetsOnBoot } from "./db/frame-set-boot-migrate";
 import { seedLibraryOnBoot } from "./db/library-boot-seed";
 import { env } from "./env";
 import { uploadImage } from "./http/upload";
 import { logger } from "./lib/logger";
 import { createStageListener } from "./onchain/stage-listener";
 import { createStageMcp } from "./onchain/mcp-server";
+import {
+  bindStagePublisher,
+  stageFeedHooks,
+  tryUpgradeStageFeed,
+} from "./onchain/stage-feed";
+import type { StageFeedWsData } from "./onchain/stage-feed";
 import { appRouter } from "./rpc/app.router";
 import { SessionManager } from "./session/session-manager";
 
@@ -36,6 +44,11 @@ logger.info("migrations applied");
 // circuits when the row count already covers the seed. Keeps prod (and any
 // fresh local DB) usable for DEMO mode with no manual railway-run.
 await seedLibraryOnBoot(logger);
+
+// Converge decks / derived sessions / reels into the unified frame_set
+// tables (idempotent; see frame-set-boot-migrate.ts). Must run after the
+// library seed so builtin sets pick up the seed frames.
+await migrateFrameSetsOnBoot(logger);
 
 const port = env.PORT;
 
@@ -120,7 +133,8 @@ app.all("/rpc/*", async (c) => {
 // ws.data.
 const wsHandler = new WsRPCHandler<SessionContext>(sessionRouter);
 
-interface WsData {
+interface SessionWsData {
+  kind: "session";
   sessionId: string;
   // raw UUID for authenticated users; null for anonymous demo sessions.
   // An anon ticket is still HMAC-signed by the web app — null just means
@@ -133,9 +147,19 @@ interface WsData {
   liveSessionId: LiveSessionId | null;
 }
 
+// One Bun.serve handles two socket kinds: the oRPC session wire (/ws) and the
+// public read-only stage feed (/ws/stage). The hooks below branch on `kind`.
+type WsData = SessionWsData | StageFeedWsData;
+
 const server = Bun.serve<WsData, never>({
   async fetch(req, srv) {
     const url = new URL(req.url);
+    // Public per-room stage feed — no ticket; the room code is the capability
+    // (same trust model as control.stageSnapshot). All logic lives in
+    // onchain/stage-feed.ts.
+    if (url.pathname === "/ws/stage") {
+      return tryUpgradeStageFeed(req, srv);
+    }
     if (url.pathname === "/ws") {
       // Require a short-lived HMAC ticket minted by apps/web after sign-in.
       // No ticket → no connection, even if the user guesses the URL.
@@ -163,7 +187,12 @@ const server = Bun.serve<WsData, never>({
         ? liveSessionParse.data
         : null;
       const upgraded = srv.upgrade(req, {
-        data: { liveSessionId, sessionId, userId: payload.userId },
+        data: {
+          kind: "session" as const,
+          liveSessionId,
+          sessionId,
+          userId: payload.userId,
+        },
       });
       return upgraded
         ? undefined
@@ -176,12 +205,22 @@ const server = Bun.serve<WsData, never>({
   port,
   websocket: {
     close(ws) {
+      // Narrowing ws.data doesn't narrow the ServerWebSocket wrapper — cast
+      // behind the kind guard.
+      if (ws.data.kind === "stage") {
+        stageFeedHooks.close(ws as ServerWebSocket<StageFeedWsData>);
+        return;
+      }
       const { sessionId } = ws.data;
       wsHandler.close(ws);
       manager.destroy(sessionId);
       logger.info({ sessionId }, "ws closed");
     },
     async message(ws, raw) {
+      // Stage feed sockets are read-only — clients have nothing to say.
+      if (ws.data.kind === "stage") {
+        return;
+      }
       const { sessionId } = ws.data;
       const session = manager.get(sessionId);
       if (!session) {
@@ -193,12 +232,20 @@ const server = Bun.serve<WsData, never>({
       });
     },
     open(ws) {
+      if (ws.data.kind === "stage") {
+        stageFeedHooks.open(ws as ServerWebSocket<StageFeedWsData>);
+        return;
+      }
       const { liveSessionId, sessionId, userId } = ws.data;
       manager.create(sessionId, userId, liveSessionId);
       logger.info({ liveSessionId, sessionId, userId }, "ws opened");
     },
   },
 });
+
+// Late-bind server.publish into the stage feed: the listener exists before
+// Bun.serve returns, so feed publishes no-op (but still record) until here.
+bindStagePublisher(server);
 
 logger.info(
   { appEnv: env.APP_ENV, port, wsUrl: SERVICE_URLS[env.APP_ENV].ws },
