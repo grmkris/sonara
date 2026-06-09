@@ -1,6 +1,7 @@
 "use client";
 
 import { ORPCError } from "@orpc/client";
+import { deckLabel } from "@sonara/shared";
 import type { LiveSessionId } from "@sonara/shared/typeid";
 import { typeIdFromUuid, typeIdToUuid } from "@sonara/shared/typeid";
 import Link from "next/link";
@@ -25,6 +26,19 @@ type LiveSessionSummary = Awaited<
 >["sessions"][number];
 
 const SESSIONS_POLL_MS = 3000;
+
+// A live session's console lives at its set permalink — the set id is the
+// same uuid as the liveSessionId, re-prefixed. No extra round trip.
+const consoleHref = (liveSessionId: LiveSessionId): string =>
+  `/s/${typeIdFromUuid("frameSet", typeIdToUuid(liveSessionId).uuid)}`;
+
+const startedAgo = (startedAt: number): string => {
+  const mins = Math.max(0, Math.round((Date.now() - startedAt) / 60_000));
+  if (mins < 1) {
+    return "just now";
+  }
+  return mins < 60 ? `${mins}m ago` : `${Math.round(mins / 60)}h ago`;
+};
 
 // The `control` router is protected, so an expired cookie surfaces here as an
 // ORPCError with code UNAUTHORIZED — which we must show, not swallow. ORPCError
@@ -93,15 +107,18 @@ export default function ControlPage() {
     };
   }, [isSignedIn]);
 
-  // Forward to the newest session's permalink. The set id is derivable from
-  // the liveSessionId (same uuid, set_ prefix) — no extra round trip.
+  // Forward to the console ONLY when it's unambiguous (exactly one live
+  // session). Two or more — a stray /play tab, a second device — render the
+  // picker below instead of silently guessing the newest; polling keeps
+  // running, so when the list shrinks back to one this auto-resolves.
   useEffect(() => {
-    const newest = sessions[0]?.liveSessionId as LiveSessionId | undefined;
-    if (!newest) {
+    if (sessions.length !== 1) {
       return;
     }
-    const setId = typeIdFromUuid("frameSet", typeIdToUuid(newest).uuid);
-    router.replace(`/s/${setId}`);
+    const only = sessions[0]?.liveSessionId as LiveSessionId | undefined;
+    if (only) {
+      router.replace(consoleHref(only));
+    }
   }, [sessions, router]);
 
   if (isPending) {
@@ -192,6 +209,39 @@ export default function ControlPage() {
               watching for your projector…
             </p>
           </div>
+        </div>
+      </Shell>
+    );
+  }
+
+  if (sessions.length > 1) {
+    return (
+      <Shell>
+        <div className="flex w-full max-w-md flex-col gap-4">
+          <p className="text-center font-serif text-[17px] normal-case tracking-normal text-[color:var(--paper)]/85">
+            {sessions.length} shows are live — which console?
+          </p>
+          <ul className="flex flex-col gap-1.5">
+            {sessions.map((s) => (
+              <li key={s.liveSessionId}>
+                <Link
+                  href={consoleHref(s.liveSessionId as LiveSessionId)}
+                  className="focus-ring flex items-baseline justify-between gap-3 rounded-sm border border-[color:var(--hairline)]/30 px-3 py-2.5 transition-colors hover:border-[color:var(--paper)]/40"
+                >
+                  <span className="line-clamp-1 font-serif text-[13px] normal-case italic tracking-normal text-[color:var(--paper)]/85">
+                    {s.prompt ||
+                      (s.demoDeck ? `${deckLabel(s.demoDeck)} · deck` : "untitled show")}
+                  </span>
+                  <span className="shrink-0 font-mono text-[9px] uppercase tracking-[0.18em] text-[color:var(--stone)]">
+                    started {startedAgo(s.startedAt)}
+                  </span>
+                </Link>
+              </li>
+            ))}
+          </ul>
+          <p className="text-center font-sans text-[10px] normal-case tracking-[0.06em] text-[color:var(--stone)]">
+            stray tab? close its play screen and this list shrinks.
+          </p>
         </div>
       </Shell>
     );

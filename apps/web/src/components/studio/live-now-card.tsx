@@ -12,7 +12,7 @@ import { rpcClient } from "@/lib/orpc";
 const POLL_MS = 5000;
 
 export const LiveNowCard = () => {
-  const [live, setLive] = useState(false);
+  const [liveCount, setLiveCount] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -21,7 +21,7 @@ export const LiveNowCard = () => {
       try {
         const { sessions } = await rpcClient.control.liveSessions();
         if (!cancelled) {
-          setLive(sessions.length > 0);
+          setLiveCount(sessions.length);
         }
       } catch {
         // transient / auth hiccup — keep the last state, retry next tick.
@@ -40,7 +40,7 @@ export const LiveNowCard = () => {
     };
   }, []);
 
-  if (!live) {
+  if (liveCount === 0) {
     return null;
   }
 
@@ -53,7 +53,9 @@ export const LiveNowCard = () => {
         aria-hidden
         className="breath size-1.5 rounded-full bg-[color:var(--signal)]"
       />
-      live now — open your console
+      {liveCount === 1
+        ? "live now — open your console"
+        : `${liveCount} shows live — choose your console`}
     </Link>
   );
 };
