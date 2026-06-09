@@ -22,3 +22,10 @@ coverage
 .mcp.json
 skills-lock.json
 
+
+# local scratch/session artifacts
+.kdports
+.logs/
+*.png
+!apps/**/*.png
+!packages/**/*.png
