@@ -66,12 +66,19 @@ const loadSet = async (
   db: Database,
   setId: FrameSetId
 ): Promise<SetRow | undefined> => {
-  const [row] = await db
-    .select(SET_COLUMNS)
-    .from(SCHEMA.frameSet)
-    .where(eq(SCHEMA.frameSet.id, setId))
-    .limit(1);
-  return row as SetRow | undefined;
+  // The typeid validator only checks the prefix; an undecodable suffix makes
+  // the typeId column's toDriver throw mid-query. `get` is public — malformed
+  // ids must read as "not found", never a 500.
+  try {
+    const [row] = await db
+      .select(SET_COLUMNS)
+      .from(SCHEMA.frameSet)
+      .where(eq(SCHEMA.frameSet.id, setId))
+      .limit(1);
+    return row as SetRow | undefined;
+  } catch {
+    return undefined;
+  }
 };
 
 // Loads a set and asserts the caller owns it. Builtin sets are system-owned

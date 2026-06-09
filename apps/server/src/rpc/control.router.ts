@@ -282,6 +282,15 @@ export const controlRouter = {
       } | null = null;
       let liveSessionId: string | null = null;
 
+      // A prefix-valid but undecodable suffix makes typeIdToUuid throw (both
+      // directly and inside drizzle's typeId toDriver) — on a public endpoint
+      // that must read as "not found", never a 500.
+      try {
+        typeIdToUuid(input.id as FrameSetId);
+      } catch {
+        return { exists: false as const };
+      }
+
       if (input.id.startsWith("set_")) {
         const [row] = await context.db
           .select({
