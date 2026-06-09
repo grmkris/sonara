@@ -15,8 +15,10 @@ import type { Logger } from "../lib/logger";
 // seed keeps the whole demo loop running. A server-local singleton configured
 // at boot, same rationale as stageRooms / stageState.
 
-// One drip is 1 USDC — tops a wallet up enough for ~20 base-price prompts.
-const AIRDROP_UNITS = 1_000_000n;
+// One drip is 0.2 USDC — four base-price prompts: plenty per person, and
+// the float stretches 5× further (the treasury recycles prompt payments,
+// so smaller drips keep the loop self-sustaining for a bigger crowd).
+const AIRDROP_UNITS = 200_000n;
 // One drip per smart account per hour — enough for a show, dull to farm.
 const COOLDOWN_MS = 60 * 60 * 1000;
 

@@ -80,7 +80,7 @@ const DRIP_ERRORS: Record<string, string> = {
 };
 
 // Shown when the smart account can't cover a prompt. Primary path: the house
-// faucet airdrops 1 USDC straight to this wallet (control.stageAirdrop — the
+// faucet airdrops 0.2 USDC straight to this wallet (control.stageAirdrop — the
 // balance poll picks it up in a few seconds). Fallback: send USDC yourself
 // (address as text + QR) or hit the Circle testnet faucet.
 // The big tap: full-width signal slab with a soft glow — deliberately the
@@ -94,7 +94,7 @@ const dripLabel = (dripping: boolean, sent: boolean): string => {
   if (sent) {
     return "on its way — a few seconds";
   }
-  return "tap for 1 usdc — on the house";
+  return "tap for 0.2 usdc — on the house";
 };
 
 const FundPanel = ({ address, room }: { address: string; room: string }) => {
@@ -115,7 +115,7 @@ const FundPanel = ({ address, room }: { address: string; room: string }) => {
       const result = await rpcClient.control.stageAirdrop({ address, room });
       if (result.ok) {
         setSent(true);
-        toast.success("1 usdc on its way — a few seconds");
+        toast.success("usdc on its way — a few seconds");
       } else {
         toast.error(DRIP_ERRORS[result.reason] ?? "airdrop failed");
       }
@@ -162,7 +162,7 @@ const FundPanel = ({ address, room }: { address: string; room: string }) => {
         </span>
         {!(dripping || sent) && (
           <span className="font-sans text-[9px] uppercase tracking-[0.24em] opacity-70">
-            free · covers your first prompts
+            free · covers your next prompts
           </span>
         )}
       </button>
