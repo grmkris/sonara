@@ -1,8 +1,14 @@
 import { ORPCError } from "@sonara/api/server";
 import type { ControllableSession } from "@sonara/api/server";
+import { SCHEMA } from "@sonara/db";
 import { ClientScenePatch, DeckKeySchema } from "@sonara/shared";
 import { LiveSessionIdSchema, typeIdToUuid } from "@sonara/shared/typeid";
-import type { UserId } from "@sonara/shared/typeid";
+import type {
+  FrameSetId,
+  LiveSessionId,
+  UserId,
+} from "@sonara/shared/typeid";
+import { eq } from "drizzle-orm";
 import { isAddress } from "viem";
 import { z } from "zod";
 
@@ -223,5 +229,117 @@ export const controlRouter = {
         throw new ORPCError("BAD_REQUEST", { message: "bad wallet address" });
       }
       return stageFaucet.drip(input.address);
+    }),
+
+  // Public: the /s/[id] permalink resolver. Accepts a set_ id (a recording's
+  // set uuid = its lse uuid, so the link exists from the first frame) or a
+  // bare lse_ id (anon producers have no recording set — live tense only).
+  //
+  // Tense rules: a registry hit on the set's liveSessionId → LIVE — readable
+  // by anyone holding the id (the link is the capability, same trust model as
+  // a stage room code). No registry hit → REPLAY — honors set visibility
+  // (owner always; others need non-private). Missing and private-to-others
+  // both come back exists:false so a private set's existence doesn't leak.
+  // Replay frames are NOT inlined — the page fetches sets.get (same gate).
+  lens: publicProcedure
+    .input(z.object({ id: z.string().min(8).max(64) }))
+    .handler(async ({ context, input }) => {
+      let setRow: {
+        frameCount: number;
+        id: FrameSetId;
+        liveSessionId: LiveSessionId | null;
+        name: string;
+        origin: "builtin" | "recording" | "curated";
+        status: "recording" | "final";
+        userId: UserId | null;
+        visibility: "private" | "unlisted" | "public";
+      } | null = null;
+      let liveSessionId: string | null = null;
+
+      if (input.id.startsWith("set_")) {
+        const [row] = await context.db
+          .select({
+            frameCount: SCHEMA.frameSet.frameCount,
+            id: SCHEMA.frameSet.id,
+            liveSessionId: SCHEMA.frameSet.liveSessionId,
+            name: SCHEMA.frameSet.name,
+            origin: SCHEMA.frameSet.origin,
+            status: SCHEMA.frameSet.status,
+            userId: SCHEMA.frameSet.userId,
+            visibility: SCHEMA.frameSet.visibility,
+          })
+          .from(SCHEMA.frameSet)
+          .where(eq(SCHEMA.frameSet.id, input.id as FrameSetId))
+          .limit(1);
+        if (!row) {
+          return { exists: false as const };
+        }
+        setRow = row;
+        ({ liveSessionId } = row);
+      } else if (input.id.startsWith("lse_")) {
+        liveSessionId = input.id;
+      } else {
+        return { exists: false as const };
+      }
+
+      const callerId = (context.session?.user.id as UserId | undefined) ?? null;
+      const set = setRow
+        ? {
+            frameCount: setRow.frameCount,
+            id: setRow.id,
+            name: setRow.name,
+            origin: setRow.origin,
+            status: setRow.status,
+            visibility: setRow.visibility,
+          }
+        : null;
+
+      const session = liveSessionId
+        ? context.registry.getByLiveSessionId(liveSessionId)
+        : undefined;
+      if (session) {
+        const snap = session.getControlSnapshot();
+        const isOwner =
+          callerId !== null && session.userId === typeIdToUuid(callerId).uuid;
+        const room = stageRooms.roomFor(liveSessionId as string);
+        const binding = room ? stageRooms.resolve(room) : undefined;
+        return {
+          exists: true as const,
+          isOwner,
+          live: {
+            currentFrameUrl: snap.currentFrameUrl,
+            currentSource: snap.currentSource,
+            jobStatus: snap.jobStatus,
+            liveSessionId: snap.liveSessionId,
+            nowPlaying: snap.nowPlaying,
+          },
+          set,
+          stage: room
+            ? {
+                ...stageState.get(room),
+                allowPrompts: binding?.allowPrompts ?? false,
+                open: true,
+                room,
+              }
+            : null,
+          tense: "live" as const,
+        };
+      }
+
+      if (!setRow) {
+        return { exists: false as const };
+      }
+      const isOwner = callerId !== null && setRow.userId === callerId;
+      if (setRow.visibility === "private" && !isOwner) {
+        return { exists: false as const };
+      }
+      return {
+        exists: true as const,
+        isOwner,
+        live: null,
+        set,
+        stage: null,
+        tense: "replay" as const,
+      };
     }),
 };

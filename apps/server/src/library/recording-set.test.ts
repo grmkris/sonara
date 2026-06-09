@@ -132,7 +132,8 @@ describe("recording-set", () => {
     expect(created.rows[0]?.name).toBe("2026-06-09 · 14:05");
     expect(created.rows[0]?.origin).toBe("recording");
     expect(created.rows[0]?.status).toBe("recording");
-    expect(created.rows[0]?.visibility).toBe("private");
+    // Born unlisted: the /s link shared during the show must survive it.
+    expect(created.rows[0]?.visibility).toBe("unlisted");
 
     await appendRecordingFrame(pool, {
       frameUuid: frameUuids[0] as string,

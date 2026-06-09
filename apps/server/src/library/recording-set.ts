@@ -18,6 +18,11 @@ const recordingName = (startedAt: Date): string =>
 // frame append; ON CONFLICT resumes status='recording' so a reconnect (or a
 // performance the boot converger already finalized) keeps appending to the
 // same set.
+//
+// Live recordings are born 'unlisted', not 'private': the /s/<set_id> link
+// shared DURING the show must keep working as a replay after it ends — the
+// link is the capability. (Converger-backfilled legacy sessions stay private;
+// nobody ever held their links.) The owner can flip to private to kill a link.
 export const ensureRecordingSet = async (
   pool: PoolLike,
   opts: { liveSessionId: LiveSessionId; userUuid: string; startedAt: Date }
@@ -26,7 +31,7 @@ export const ensureRecordingSet = async (
   await pool.query(
     `INSERT INTO frame_set
        (id, live_session_id, name, origin, status, user_id, visibility)
-     VALUES ($1::uuid, $2, $3, 'recording', 'recording', $4::uuid, 'private')
+     VALUES ($1::uuid, $2, $3, 'recording', 'recording', $4::uuid, 'unlisted')
      ON CONFLICT (id) DO UPDATE SET status = 'recording'`,
     [setUuid, opts.liveSessionId, recordingName(opts.startedAt), opts.userUuid]
   );
