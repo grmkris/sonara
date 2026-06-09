@@ -51,6 +51,9 @@ export interface ControllableSession {
   setCurrentFrame(url: string): void;
   reset(): void;
   getControlSnapshot(): ControlSnapshot;
+  // Push a `stage.status` event to this session's projector — emitted by the
+  // control router when the owner opens/closes the Monad crowd stage.
+  notifyStage(room: string | null, allowPrompts?: boolean): void;
 }
 
 // Lookup surface over the live in-memory sessions. apps/server's

@@ -168,19 +168,30 @@ export const controlRouter = {
     .input(ByLiveSession.extend({ allowPrompts: z.boolean().default(true) }))
     .handler(({ context, input }) => {
       // Assert ownership before exposing the session to the crowd.
-      resolveOwnedSession(context.registry, context.userId, input.liveSessionId);
+      const session = resolveOwnedSession(
+        context.registry,
+        context.userId,
+        input.liveSessionId
+      );
       const room = stageRooms.open(input.liveSessionId, input.allowPrompts);
+      // Tell the projector so it can mount its wire overlay + dial /ws/stage.
+      session.notifyStage(room, input.allowPrompts);
       return { allowPrompts: input.allowPrompts, room };
     }),
 
   closeStage: protectedProcedure
     .input(ByLiveSession)
     .handler(({ context, input }) => {
-      resolveOwnedSession(context.registry, context.userId, input.liveSessionId);
+      const session = resolveOwnedSession(
+        context.registry,
+        context.userId,
+        input.liveSessionId
+      );
       const room = stageRooms.roomFor(input.liveSessionId);
       if (room) {
         stageRooms.close(room);
       }
+      session.notifyStage(null);
     }),
 
   // Public: the projector overlay + audience page poll this for the live tx

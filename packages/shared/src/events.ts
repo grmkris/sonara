@@ -217,6 +217,15 @@ export const ServerEvent = z.discriminatedUnion("type", [
     frame: LibraryFrameSchema,
     type: z.literal("library.appended"),
   }),
+  // Monad stage lifecycle for THIS session: emitted when the owner opens or
+  // closes the crowd stage (control.openStage/closeStage) and on (re)connect
+  // while a room is open. `room: null` means no stage. The projector uses it
+  // to dial the public /ws/stage feed for its wire overlay.
+  z.object({
+    allowPrompts: z.boolean().optional(),
+    room: z.string().nullable(),
+    type: z.literal("stage.status"),
+  }),
 ]);
 
 export type ServerEvent = z.infer<typeof ServerEvent>;

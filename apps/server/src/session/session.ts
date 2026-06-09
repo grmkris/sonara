@@ -43,6 +43,7 @@ import { synthesizeFromTrack } from "../generation/song-muse";
 import type { SongMusePatch } from "../generation/song-muse";
 import type { Logger } from "../lib/logger";
 import { persistFrame } from "../library/persist-frame";
+import { stageRooms } from "../onchain/stage-rooms";
 import { recognizeClip } from "../recognition/recognition.service";
 import { semanticDiff } from "./semantic-diff";
 
@@ -266,6 +267,19 @@ export class Session implements ControllableSession {
   init(): void {
     this.send({ state: this.scene, type: "scene.state" });
     this.send({ status: "idle", type: "job.status" });
+    // A projector reconnecting while its crowd stage is open must relearn the
+    // room code (stage bindings outlive WS connections via liveSessionId).
+    const stage = stageRooms.statusFor(this.liveSessionId);
+    if (stage) {
+      this.notifyStage(stage.room, stage.allowPrompts);
+    }
+  }
+
+  // `stage.status` push — the control router calls this when the owner opens
+  // or closes the Monad crowd stage, so the projector can mount/unmount its
+  // wire overlay and dial the public /ws/stage feed.
+  notifyStage(room: string | null, allowPrompts?: boolean): void {
+    this.send({ allowPrompts, room, type: "stage.status" });
   }
 
   // Idempotent snapshot of server-authoritative state for the client's
