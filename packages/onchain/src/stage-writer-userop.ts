@@ -34,9 +34,16 @@ export const createUserOpStageWriter = async (opts: {
   pimlicoApiKey?: string;
   sponsorshipPolicyId?: string;
   rpcUrl?: string;
+  // Known smart-account address for this owner (e.g. cached from a previous
+  // visit) — passing it skips the on-chain derivation reads entirely.
+  address?: Address;
 }): Promise<StageWriter> => {
   const owner = privateKeyToAccount(opts.ownerKey);
-  const transport = http(opts.rpcUrl ?? monadTestnet.rpcUrls.default.http[0]);
+  // batch: true folds the derivation's concurrent reads into one request —
+  // this runs on audience phones sharing one rate-limited RPC budget.
+  const transport = http(opts.rpcUrl ?? monadTestnet.rpcUrls.default.http[0], {
+    batch: true,
+  });
   const publicClient = createPublicClient({ chain: monadTestnet, transport });
 
   const entryPoint = { address: entryPoint07Address, version: "0.7" } as const;
@@ -46,6 +53,7 @@ export const createUserOpStageWriter = async (opts: {
   });
 
   const account = await toSafeSmartAccount({
+    address: opts.address,
     client: publicClient,
     entryPoint,
     owners: [owner],

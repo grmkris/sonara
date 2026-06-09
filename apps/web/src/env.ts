@@ -17,6 +17,10 @@ const clientEnvSchema = z.object({
   // the /stage page still loads but on-chain writes will fail to sponsor.
   NEXT_PUBLIC_PIMLICO_API_KEY: z.string().default(""),
   NEXT_PUBLIC_PIMLICO_SPONSORSHIP_POLICY_ID: z.string().default(""),
+  // Dedicated Monad RPC for the audience wallet path (Alchemy key — per-key
+  // rate limits instead of the public endpoint's 15 req/s per IP, which one
+  // venue wifi exhausts). Empty falls back to the public RPC.
+  NEXT_PUBLIC_MONAD_RPC: z.string().default(""),
   // SonaraStage contract address (Monad testnet). Empty disables the on-chain
   // stage UI. Inlined at build time, so referenced as a literal below.
   NEXT_PUBLIC_SONARA_STAGE_CONTRACT: z.string().default(""),
@@ -24,6 +28,7 @@ const clientEnvSchema = z.object({
 
 export const publicEnv = clientEnvSchema.parse({
   NEXT_PUBLIC_APP_ENV: process.env.NEXT_PUBLIC_APP_ENV,
+  NEXT_PUBLIC_MONAD_RPC: process.env.NEXT_PUBLIC_MONAD_RPC,
   NEXT_PUBLIC_PIMLICO_API_KEY: process.env.NEXT_PUBLIC_PIMLICO_API_KEY,
   NEXT_PUBLIC_PIMLICO_SPONSORSHIP_POLICY_ID:
     process.env.NEXT_PUBLIC_PIMLICO_SPONSORSHIP_POLICY_ID,

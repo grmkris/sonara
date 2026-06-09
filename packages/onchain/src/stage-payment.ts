@@ -18,10 +18,15 @@ export interface StagePayment {
   promptPriceUnits: bigint;
 }
 
+// batch: true folds concurrent readContract calls (the Promise.all groups
+// below) into ONE JSON-RPC batch request — these helpers run on audience
+// phones where the venue shares a single rate-limited RPC budget.
 const client = (rpcUrl?: string) =>
   createPublicClient({
     chain: monadTestnet,
-    transport: http(rpcUrl ?? monadTestnet.rpcUrls.default.http[0]),
+    transport: http(rpcUrl ?? monadTestnet.rpcUrls.default.http[0], {
+      batch: true,
+    }),
   });
 
 export const readStagePayment = async (opts: {

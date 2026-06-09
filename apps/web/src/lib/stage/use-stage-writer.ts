@@ -5,11 +5,28 @@ import type { StagePayment, StageWriter } from '@sonara/onchain';
 import { useCallback, useEffect, useState } from "react";
 import { isAddress } from "viem";
 import type { Address } from "viem";
+import { privateKeyToAccount } from "viem/accounts";
 
 import { publicEnv } from "../../env";
 import { getOrCreateBurnerKey } from "./burner";
 
-const BALANCE_POLL_MS = 5000;
+const BALANCE_POLL_MS = 15_000;
+
+// Optional dedicated RPC (Alchemy) — per-key rate limits instead of the
+// public endpoint's 15 req/s per IP, which one venue wifi exhausts.
+const RPC_URL = publicEnv.NEXT_PUBLIC_MONAD_RPC || undefined;
+
+// Init backoff (ms) when the RPC throttles the smart-account derivation —
+// without this one rate-limited read left the page dead on "linking…".
+const INIT_RETRY_DELAYS = [1000, 2000, 4000, 8000, 12_000];
+
+// Smart-account addresses are deterministic per burner owner (Safe 1.4.1) —
+// cache them so repeat visits skip the on-chain derivation reads entirely.
+const aaCacheKey = (ownerAddress: string): string =>
+  `sonara.stage.aa.v1-safe141.${ownerAddress.toLowerCase()}`;
+
+const sleep = (ms: number): Promise<void> =>
+  new Promise((resolve) => setTimeout(resolve, ms));
 
 export interface StageWriterState {
   writer: StageWriter | null;
@@ -49,26 +66,57 @@ export const useStageWriter = (): StageWriterState => {
     }
     let cancelled = false;
     const init = async (): Promise<void> => {
-      try {
-        const writer = await createUserOpStageWriter({
-          contract,
-          ownerKey: getOrCreateBurnerKey(),
-          pimlicoApiKey: publicEnv.NEXT_PUBLIC_PIMLICO_API_KEY || undefined,
-          sponsorshipPolicyId:
-            publicEnv.NEXT_PUBLIC_PIMLICO_SPONSORSHIP_POLICY_ID || undefined,
-        });
-        if (!cancelled) {
-          setState({ address: writer.address, error: null, ready: true, writer });
-        }
-      } catch (error: unknown) {
-        if (!cancelled) {
-          setState({
-            address: null,
-            error: error instanceof Error ? error.message : "wallet init failed",
-            ready: true,
-            writer: null,
+      // Cached smart-account address (deterministic per burner OWNER) lets
+      // the writer skip its derivation reads — repeat visits link instantly.
+      const ownerKey = getOrCreateBurnerKey();
+      const cacheKey = aaCacheKey(privateKeyToAccount(ownerKey).address);
+      const cached = window.localStorage.getItem(cacheKey);
+      let lastError: unknown = null;
+      for (let attempt = 0; attempt <= INIT_RETRY_DELAYS.length; attempt += 1) {
+        try {
+          const writer = await createUserOpStageWriter({
+            address:
+              cached && isAddress(cached) ? (cached as Address) : undefined,
+            contract,
+            ownerKey,
+            pimlicoApiKey: publicEnv.NEXT_PUBLIC_PIMLICO_API_KEY || undefined,
+            rpcUrl: RPC_URL,
+            sponsorshipPolicyId:
+              publicEnv.NEXT_PUBLIC_PIMLICO_SPONSORSHIP_POLICY_ID || undefined,
           });
+          window.localStorage.setItem(cacheKey, writer.address);
+          if (!cancelled) {
+            setState({
+              address: writer.address,
+              error: null,
+              ready: true,
+              writer,
+            });
+          }
+          return;
+        } catch (error: unknown) {
+          // Usually the RPC throttling the derivation burst (15 req/s per IP
+          // on the public endpoint) — back off and retry; the UI keeps
+          // showing "linking…" until we give up for real.
+          lastError = error;
+          const delay = INIT_RETRY_DELAYS[attempt];
+          if (delay === undefined || cancelled) {
+            break;
+          }
+          await sleep(delay + Math.random() * 500);
+          if (cancelled) {
+            return;
+          }
         }
+      }
+      if (!cancelled) {
+        setState({
+          address: null,
+          error:
+            lastError instanceof Error ? lastError.message : "wallet init failed",
+          ready: true,
+          writer: null,
+        });
       }
     };
     void init();
@@ -88,9 +136,14 @@ export const useStageWriter = (): StageWriterState => {
     let timer: ReturnType<typeof setTimeout> | null = null;
     const poll = async (): Promise<void> => {
       try {
+        // A locked/backgrounded phone shouldn't spend the room's shared RPC
+        // budget — skip the tick entirely; spendLocally keeps the UI honest.
+        if (document.hidden) {
+          return;
+        }
         let info = payment;
         if (!info) {
-          info = await readStagePayment({ contract });
+          info = await readStagePayment({ contract, rpcUrl: RPC_URL });
           if (cancelled) {
             return;
           }
@@ -98,6 +151,7 @@ export const useStageWriter = (): StageWriterState => {
         }
         const { balanceUnits: balance } = await readUsdcStatus({
           owner: owner as Address,
+          rpcUrl: RPC_URL,
           spender: contract,
           usdc: info.usdc,
         });

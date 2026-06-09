@@ -17,6 +17,11 @@ wire within a second.**
 1. Railway env has `SONARA_STAGE_CONTRACT` / `NEXT_PUBLIC_SONARA_STAGE_CONTRACT`
    (Monad testnet, USDC-paid prompts) + `MCP_AGENT_KEY` (funded EOA) +
    Pimlico keys. Faucet treasury holds USDC for airdrops.
+   `NEXT_PUBLIC_MONAD_RPC` points at the dedicated Alchemy endpoint —
+   per-KEY rate limits, so a room full of phones on one wifi IP can't
+   throttle each other (the public RPC caps at 15 req/s **per IP**). Phones
+   also retry linking with backoff, repeat visitors link instantly (cached
+   smart account), and locked phones stop polling entirely.
 2. Open `/play`, go live with a prompt so visuals are generating.
 3. On `/control`: confirm the session preview is moving.
 4. Optional: have Claude Code connected to `https://<host>/api/mcp` for the
