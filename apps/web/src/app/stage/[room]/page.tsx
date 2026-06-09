@@ -1,10 +1,11 @@
 "use client";
 
-import type { StageKnob } from "@sonara/onchain";
+import { formatUsdc, parseUsdc } from "@sonara/onchain";
+import type { StageKnob, StagePayment } from "@sonara/onchain";
 import { useParams } from "next/navigation";
+import QRCode from "qrcode";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
-import { parseEther } from "viem";
 
 import { Mark } from "@/components/brand/mark";
 import { Button } from "@/components/ui/button";
@@ -14,12 +15,15 @@ import { cn } from "@/lib/utils";
 
 // /stage/[room] — the audience remote. Anyone with the room code drives the
 // projector by emitting Monad txs (gasless, via a sponsored smart account).
-// Knob taps shape the look instantly (the projector's shader reacts in ~1s);
-// prompts join a queue so everyone gets a turn. No wallet, no gas, no sign-in.
+// Knob taps shape the look instantly and stay free; prompts cost USDC (base
+// price + optional tip for queue priority), pulled from the smart account —
+// still no wallet app, no gas, no sign-in. Short on USDC? The funding panel
+// shows the account address + the Circle testnet faucet.
 
 const SNAPSHOT_POLL_MS = 1500;
 const SLIDER_THROTTLE_MS = 200;
 const NUDGE_STEP = 0.12;
+const USDC_FAUCET_URL = "https://faucet.circle.com";
 
 type StageSnapshot = Awaited<ReturnType<typeof rpcClient.control.stageSnapshot>>;
 
@@ -58,15 +62,180 @@ const TapButton = ({
   </button>
 );
 
+// Shown when the smart account can't cover a prompt: where to send USDC (the
+// account address, as text + QR) and the Circle testnet faucet that hands it
+// out for free.
+const FundPanel = ({ address }: { address: string }) => {
+  const [qr, setQr] = useState<string | null>(null);
+
+  useEffect(() => {
+    void (async () => {
+      setQr(await QRCode.toDataURL(address, { margin: 1, width: 240 }));
+    })();
+  }, [address]);
+
+  const copy = async (): Promise<void> => {
+    try {
+      await navigator.clipboard.writeText(address);
+      toast.success("address copied");
+    } catch {
+      toast.error("couldn't copy — long-press to copy");
+    }
+  };
+
+  return (
+    <div className="flex flex-col gap-3 rounded-sm border border-[color:var(--signal)]/40 p-3">
+      <p className="font-sans text-[10px] uppercase tracking-[0.2em] text-[color:var(--signal)]">
+        prompts cost usdc — fund your stage wallet
+      </p>
+      <div className="flex items-center gap-3">
+        {qr && (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            alt="your stage wallet address"
+            className="size-24 rounded-sm bg-white p-1"
+            src={qr}
+          />
+        )}
+        <div className="flex min-w-0 flex-col gap-2">
+          <button
+            className="focus-ring break-all text-left font-mono text-[10px] text-[color:var(--paper)]/80"
+            onClick={copy}
+            type="button"
+          >
+            {address}
+            <span className="ml-2 font-sans text-[9px] uppercase tracking-[0.2em] text-[color:var(--stone)]">
+              copy
+            </span>
+          </button>
+          <a
+            className="focus-ring font-sans text-[10px] uppercase tracking-[0.2em] text-[color:var(--paper)]/85 underline underline-offset-4"
+            href={USDC_FAUCET_URL}
+            rel="noreferrer"
+            target="_blank"
+          >
+            get free testnet usdc ↗
+          </a>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// The paid part of the page: composer + tip + send gating + funding panel.
+// Owns the text/tip inputs and the affordability math; the parent owns the
+// actual on-chain fire (and the optimistic balance/tx bookkeeping).
+const PromptComposer = ({
+  linked,
+  address,
+  payment,
+  balanceUnits,
+  onSend,
+}: {
+  linked: boolean;
+  address: string | null;
+  payment: StagePayment | null;
+  balanceUnits: bigint | null;
+  onSend: (text: string, tipUnits: bigint, cost: bigint) => void;
+}) => {
+  const [prompt, setPrompt] = useState("");
+  const [tip, setTip] = useState("");
+
+  // What the entered tip parses to (null = malformed input), and what the
+  // whole prompt would cost. Used to gate the send button before the chain
+  // rejects an unaffordable transferFrom.
+  const promptPrice = payment?.promptPriceUnits ?? null;
+  const tipUnits = (() => {
+    if (!tip) {
+      return 0n;
+    }
+    try {
+      return parseUsdc(tip);
+    } catch {
+      return null;
+    }
+  })();
+  const cost =
+    promptPrice !== null && tipUnits !== null ? promptPrice + tipUnits : null;
+  const canAfford =
+    cost !== null && balanceUnits !== null && balanceUnits >= cost;
+  const needsFunds =
+    promptPrice !== null && balanceUnits !== null && balanceUnits < promptPrice;
+
+  const send = () => {
+    const text = prompt.trim();
+    if (!text) {
+      return;
+    }
+    if (tipUnits === null) {
+      toast.error("bad tip amount");
+      return;
+    }
+    if (cost === null || !canAfford) {
+      toast.error("not enough usdc — fund your stage wallet");
+      return;
+    }
+    onSend(text, tipUnits, cost);
+    setPrompt("");
+    setTip("");
+  };
+
+  return (
+    <section className="flex flex-col gap-2">
+      <label
+        className="font-sans text-[10px] uppercase tracking-[0.2em] text-[color:var(--stone)]"
+        htmlFor="prompt"
+      >
+        send a scene to the queue
+        {promptPrice !== null && (
+          <span className="ml-2 text-[color:var(--paper)]/70">
+            · {formatUsdc(promptPrice)} usdc
+          </span>
+        )}
+      </label>
+      <textarea
+        aria-label="scene prompt"
+        className="min-h-[64px] w-full resize-none rounded-sm border border-[color:var(--hairline)]/30 bg-transparent px-3 py-2 font-serif text-[14px] text-[color:var(--paper)] outline-none placeholder:text-[color:var(--stone)]/60 focus:border-[color:var(--paper)]/50"
+        disabled={!linked}
+        id="prompt"
+        maxLength={200}
+        onChange={(e) => setPrompt(e.target.value)}
+        placeholder="neon jellyfish drifting over a city…"
+        value={prompt}
+      />
+      <div className="flex items-center gap-2">
+        <input
+          aria-label="tip in USDC to jump the queue"
+          className="w-24 rounded-sm border border-[color:var(--hairline)]/30 bg-transparent px-2 py-1.5 font-mono text-[11px] text-[color:var(--paper)] outline-none placeholder:text-[color:var(--stone)]/60 focus:border-[color:var(--paper)]/50"
+          disabled={!linked}
+          inputMode="decimal"
+          onChange={(e) => setTip(e.target.value)}
+          placeholder="tip usdc"
+          value={tip}
+        />
+        <Button
+          className="flex-1 font-sans text-[11px] uppercase tracking-[0.2em]"
+          disabled={!linked || !prompt.trim() || !canAfford}
+          onClick={send}
+          size="sm"
+          type="button"
+        >
+          {tip ? "jump the line" : "queue it"}
+        </Button>
+      </div>
+      {needsFunds && address && <FundPanel address={address} />}
+    </section>
+  );
+};
+
 export default function StagePage() {
   const params = useParams<{ room: string }>();
-  const {room} = params;
-  const { writer, ready, error: writerError, address } = useStageWriter();
+  const { room } = params;
+  const { writer, ready, error: writerError, address, payment, balanceUnits, spendLocally } =
+    useStageWriter();
 
   const [snap, setSnap] = useState<StageSnapshot | null>(null);
   const [localTx, setLocalTx] = useState(0);
-  const [prompt, setPrompt] = useState("");
-  const [tip, setTip] = useState("");
   const lastSliderAt = useRef(0);
 
   // Poll the public stage snapshot (tx counter + prompt queue).
@@ -124,26 +293,15 @@ export default function StagePage() {
     fire((w) => w.set(room, "intensity", value));
   };
 
-  const sendPrompt = () => {
-    const text = prompt.trim();
-    if (!text) {
-      return;
-    }
-    let tipWei = 0n;
-    try {
-      tipWei = tip ? parseEther(tip) : 0n;
-    } catch {
-      toast.error("bad tip amount");
-      return;
-    }
-    fire((w) => w.prompt(room, text, tipWei));
-    setPrompt("");
-    setTip("");
-    toast.success("prompt queued");
+  const sendPrompt = (text: string, tipUnits: bigint, cost: bigint) => {
+    fire((w) => w.prompt(room, text, tipUnits));
+    spendLocally(cost);
+    toast.success(`prompt queued · ${formatUsdc(cost)} usdc`);
   };
 
   const txCount = Math.max(localTx, snap?.txCount ?? 0);
   const linked = ready && !!writer;
+  const raisedUnits = BigInt(snap?.revenueUnits ?? "0");
 
   return (
     <Shell>
@@ -169,6 +327,11 @@ export default function StagePage() {
             )}
           />
           {linked ? "gasless · linked" : "linking…"}
+          {balanceUnits !== null && (
+            <span className="text-[color:var(--paper)]/85">
+              · {formatUsdc(balanceUnits)} usdc
+            </span>
+          )}
         </span>
       </header>
 
@@ -187,6 +350,11 @@ export default function StagePage() {
           <p className="font-mono text-[28px] tabular-nums leading-none text-[color:var(--paper)]">
             {txCount}
           </p>
+          {raisedUnits > 0n && (
+            <p className="mt-1 font-mono text-[9px] uppercase tracking-[0.18em] text-[color:var(--stone)]">
+              {formatUsdc(raisedUnits)} usdc raised
+            </p>
+          )}
         </div>
         <div className="max-w-[55%] text-right">
           <p className="font-sans text-[9px] uppercase tracking-[0.26em] text-[color:var(--stone)]">
@@ -220,7 +388,7 @@ export default function StagePage() {
         />
       </section>
 
-      {/* Knob taps. */}
+      {/* Knob taps — free, always. */}
       <section className="grid grid-cols-2 gap-2">
         {KNOB_TAPS.map(({ knob, up, down }) => (
           <div className="flex items-stretch gap-1" key={knob}>
@@ -234,46 +402,15 @@ export default function StagePage() {
         ))}
       </section>
 
-      {/* Prompt + tip-to-jump. */}
+      {/* Prompt — paid in USDC; tip (also USDC) jumps the queue. */}
       {snap?.allowPrompts !== false && (
-        <section className="flex flex-col gap-2">
-          <label
-            className="font-sans text-[10px] uppercase tracking-[0.2em] text-[color:var(--stone)]"
-            htmlFor="prompt"
-          >
-            send a scene to the queue
-          </label>
-          <textarea
-            aria-label="scene prompt"
-            className="min-h-[64px] w-full resize-none rounded-sm border border-[color:var(--hairline)]/30 bg-transparent px-3 py-2 font-serif text-[14px] text-[color:var(--paper)] outline-none placeholder:text-[color:var(--stone)]/60 focus:border-[color:var(--paper)]/50"
-            disabled={!linked}
-            id="prompt"
-            maxLength={200}
-            onChange={(e) => setPrompt(e.target.value)}
-            placeholder="neon jellyfish drifting over a city…"
-            value={prompt}
-          />
-          <div className="flex items-center gap-2">
-            <input
-              aria-label="tip in MON to jump the queue"
-              className="w-24 rounded-sm border border-[color:var(--hairline)]/30 bg-transparent px-2 py-1.5 font-mono text-[11px] text-[color:var(--paper)] outline-none placeholder:text-[color:var(--stone)]/60 focus:border-[color:var(--paper)]/50"
-              disabled={!linked}
-              inputMode="decimal"
-              onChange={(e) => setTip(e.target.value)}
-              placeholder="tip MON"
-              value={tip}
-            />
-            <Button
-              className="flex-1 font-sans text-[11px] uppercase tracking-[0.2em]"
-              disabled={!linked || !prompt.trim()}
-              onClick={sendPrompt}
-              size="sm"
-              type="button"
-            >
-              {tip ? "jump the line" : "queue it"}
-            </Button>
-          </div>
-        </section>
+        <PromptComposer
+          address={address}
+          balanceUnits={balanceUnits}
+          linked={linked}
+          onSend={sendPrompt}
+          payment={payment}
+        />
       )}
 
       {/* Up next. */}

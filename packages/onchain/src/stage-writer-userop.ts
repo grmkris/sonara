@@ -1,4 +1,4 @@
-import { createPublicClient, http } from 'viem';
+import { createPublicClient, encodeFunctionData, http, maxUint256 } from 'viem';
 import type { Address, Hex } from 'viem';
 import { entryPoint07Address } from "viem/account-abstraction";
 import { privateKeyToAccount } from "viem/accounts";
@@ -7,8 +7,9 @@ import { toSafeSmartAccount } from "permissionless/accounts";
 import { createPimlicoClient } from "permissionless/clients/pimlico";
 
 import { monadTestnet, pimlicoUrl } from "./chain";
-import { knobIndex, roomToBytes32, sonaraStageAbi, toFixedPoint } from './stage';
+import { knobIndex, roomToBytes32, sonaraStageAbi, toFixedPoint, usdcAbi } from './stage';
 import type { StageKnob } from './stage';
+import { readStagePayment, readUsdcStatus } from "./stage-payment";
 import type { StageWriter } from "./stage-writer";
 
 const deltaToFixed = (delta01: number): number =>
@@ -18,12 +19,15 @@ const deltaToFixed = (delta01: number): number =>
 // bundles + sponsors the UserOp so the user pays zero gas, sees no popup, and
 // needs no MON. This is the audience-phone path. NOTE: msg.sender inside the
 // contract is the SMART ACCOUNT address (stable per burner — fine for the queue
-// label / leaderboard), not the raw EOA.
+// label / leaderboard), not the raw EOA. Prompts cost USDC, which the smart
+// account must hold; the first prompt batches the one-time USDC approve into
+// the same sponsored UserOp, so paying never needs MON either.
 //
 // Pimlico's public endpoint does NOT sponsor for free: you need a (free) API
 // key AND a gas sponsorship policy created in the Pimlico dashboard, whose id is
 // passed as `sponsorshipPolicyId`. Without it the bundler returns "Sponsorship
-// policy ID is required for this API key".
+// policy ID is required for this API key". If the policy restricts callable
+// targets, it must allow the USDC token too (for that batched approve).
 export const createUserOpStageWriter = async (opts: {
   ownerKey: Hex;
   contract: Address;
@@ -66,6 +70,31 @@ export const createUserOpStageWriter = async (opts: {
     },
   });
 
+  // Payment config (which USDC token) — immutable on the contract, read once.
+  let payment: ReturnType<typeof readStagePayment> | null = null;
+  const paymentInfo = () => {
+    payment ??= readStagePayment({ contract: opts.contract, rpcUrl: opts.rpcUrl });
+    return payment;
+  };
+
+  // Whether the stage contract can already pull the smart account's USDC.
+  // Checked once (shared promise — a prompt burst reads at most once); after
+  // we batch an approve(max) we assume it lands and stop prepending it.
+  let allowanceOk: Promise<boolean> | null = null;
+  const hasAllowance = (): Promise<boolean> => {
+    allowanceOk ??= (async () => {
+      const { usdc } = await paymentInfo();
+      const { allowanceUnits } = await readUsdcStatus({
+        owner: account.address,
+        rpcUrl: opts.rpcUrl,
+        spender: opts.contract,
+        usdc,
+      });
+      return allowanceUnits >= maxUint256 / 2n;
+    })();
+    return allowanceOk;
+  };
+
   return {
     address: account.address,
     nudge: (room, knob: StageKnob, delta01) =>
@@ -75,14 +104,36 @@ export const createUserOpStageWriter = async (opts: {
         args: [roomToBytes32(room), knobIndex(knob), deltaToFixed(delta01)],
         functionName: "nudge",
       }) as Promise<Hex>,
-    prompt: (room, text, tipWei = 0n) =>
-      smart.writeContract({
-        abi: sonaraStageAbi,
-        address: opts.contract,
-        args: [roomToBytes32(room), text],
-        functionName: "prompt",
-        value: tipWei,
-      }) as Promise<Hex>,
+    prompt: async (room, text, tipUnits = 0n) => {
+      const promptCall = {
+        data: encodeFunctionData({
+          abi: sonaraStageAbi,
+          args: [roomToBytes32(room), text, tipUnits],
+          functionName: "prompt",
+        }),
+        to: opts.contract,
+      };
+      const approved = await hasAllowance();
+      const { usdc } = await paymentInfo();
+      const calls = approved
+        ? [promptCall]
+        : [
+            {
+              data: encodeFunctionData({
+                abi: usdcAbi,
+                args: [opts.contract, maxUint256],
+                functionName: "approve",
+              }),
+              to: usdc,
+            },
+            promptCall,
+          ];
+      const hash = await smart.sendUserOperation({ calls });
+      if (!approved) {
+        allowanceOk = Promise.resolve(true);
+      }
+      return hash;
+    },
     set: (room, knob: StageKnob, value01) =>
       smart.writeContract({
         abi: sonaraStageAbi,

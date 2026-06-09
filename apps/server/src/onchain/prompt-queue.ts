@@ -1,7 +1,8 @@
 // Per-room prompt queue. On-chain Prompt events enqueue here; the scheduler
 // rotates them onto the live session so EVERY submitter gets a turn on the
-// projector (not just the latest). A non-zero tip buys priority — paid prompts
-// jump ahead of free ones, but free prompts always still play.
+// projector (not just the latest). Every prompt pays the base USDC price; a
+// non-zero tip buys priority — tipped prompts jump ahead of base-price ones,
+// but base-price prompts always still play.
 //
 // Pure logic with an injected clock so it's unit-testable; the listener drives
 // it with a periodic tick() and supplies onPlay (which calls session.applyPatch
@@ -11,7 +12,7 @@ export interface QueuedPrompt {
   text: string;
   // on-chain sender (smart-account address under AA)
   who: string;
-  // wei; priority key
+  // 6-dec USDC units; priority key
   tip: bigint;
   enqueuedAt: number;
 }
@@ -19,7 +20,7 @@ export interface QueuedPrompt {
 export interface PromptView {
   text: string;
   who: string;
-  // wei as string for JSON
+  // 6-dec USDC units as string for JSON
   tip: string;
 }
 
@@ -43,7 +44,7 @@ const view = (e: QueuedPrompt): PromptView => ({
   who: e.who,
 });
 
-// paid-first, then oldest-first.
+// tipped-first, then oldest-first.
 const higherPriority = (a: QueuedPrompt, b: QueuedPrompt): boolean =>
   a.tip > b.tip || (a.tip === b.tip && a.enqueuedAt < b.enqueuedAt);
 

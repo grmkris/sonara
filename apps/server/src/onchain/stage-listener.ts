@@ -130,12 +130,18 @@ export const createStageListener = (opts: {
     accum.deltas.delete(knob);
   };
 
+  // `paid` is the total USDC the contract pulled (base price + tip); `tip` is
+  // the priority portion. The payment already happened on-chain by the time we
+  // see the event, so an un-queueable prompt (room closed, prompts disabled)
+  // is still counted as revenue — the room just doesn't play it.
   const onPrompt = (
     room: string,
     who: Address,
     text: string,
+    paid: bigint,
     tip: bigint
   ): void => {
+    stageState.addRevenue(room, paid);
     const resolved = resolve(room);
     if (!resolved?.allowPrompts) {
       return;
@@ -199,13 +205,14 @@ export const createStageListener = (opts: {
           args.room === undefined ||
           args.who === undefined ||
           args.text === undefined ||
+          args.paid === undefined ||
           args.tip === undefined
         ) {
           continue;
         }
         const room = bytes32ToRoom(args.room);
         stageState.bump(room);
-        onPrompt(room, args.who, args.text, args.tip);
+        onPrompt(room, args.who, args.text, args.paid, args.tip);
       }
     },
   });

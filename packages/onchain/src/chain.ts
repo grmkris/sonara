@@ -21,6 +21,14 @@ export const monadTestnet = defineChain({
   testnet: true,
 });
 
+// Circle-issued (native, not bridged) USDC. 6 decimals on both networks.
+// Sources: developers.circle.com/stablecoins/usdc-contract-addresses.
+export const MONAD_TESTNET_USDC =
+  "0x534b2f3A21130d7a60830c2Df862319e593943A3" as const;
+export const MONAD_MAINNET_USDC =
+  "0x754704Bc059F8C67012fEd69BC8A327a5aafb603" as const;
+export const USDC_DECIMALS = 6;
+
 // Pimlico bundler + paymaster for Monad testnet. The public endpoint sponsors
 // testnet UserOps for free with no API key; pass a key to lift the public
 // rate limit (recommended before a live demo). One URL serves both the bundler

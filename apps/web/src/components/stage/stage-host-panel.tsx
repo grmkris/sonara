@@ -1,5 +1,6 @@
 "use client";
 
+import { formatUsdc } from "@sonara/onchain";
 import type { LiveSessionId } from "@sonara/shared/typeid";
 import QRCode from "qrcode";
 import { useEffect, useState } from "react";
@@ -26,6 +27,7 @@ export const StageHostPanel = ({
   const [busy, setBusy] = useState(false);
   const [qr, setQr] = useState<string | null>(null);
   const [txCount, setTxCount] = useState(0);
+  const [revenueUnits, setRevenueUnits] = useState(0n);
   const [nowPlaying, setNowPlaying] = useState<string | null>(null);
   const [upNext, setUpNext] = useState(0);
   const [stageUrl, setStageUrl] = useState("");
@@ -65,6 +67,7 @@ export const StageHostPanel = ({
         const snap = await rpcClient.control.stageSnapshot({ room });
         if (!cancelled) {
           setTxCount(snap.txCount);
+          setRevenueUnits(BigInt(snap.revenueUnits));
           setNowPlaying(snap.nowPlaying?.text ?? null);
           setUpNext(snap.upNext.length);
         }
@@ -154,6 +157,7 @@ export const StageHostPanel = ({
               </span>
               <span className="font-mono text-[9px] uppercase tracking-[0.18em] text-[color:var(--stone)]">
                 {txCount} on-chain taps · {upNext} queued
+                {revenueUnits > 0n && ` · ${formatUsdc(revenueUnits)} usdc`}
               </span>
               {nowPlaying && (
                 <span className="line-clamp-1 font-serif text-[12px] italic text-[color:var(--paper)]/80">

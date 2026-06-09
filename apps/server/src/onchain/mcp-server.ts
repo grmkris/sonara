@@ -13,8 +13,10 @@ import { stageState } from "./stage-state";
 // MCP server: lets an AI agent (e.g. Claude Code) VJ a live Sonara session by
 // emitting the SAME on-chain SonaraStage txs the audience does — the agent is
 // just another participant on the chain control plane. Tools are signed by the
-// server-held agent EOA (MCP_AGENT_KEY), which pays its own testnet gas; the
-// room code is the capability (no extra auth, same as the audience page).
+// server-held agent EOA (MCP_AGENT_KEY), which pays its own testnet gas — and,
+// for prompts, the USDC price (fund it at faucet.circle.com; the writer
+// handles the one-time approve). The room code is the capability (no extra
+// auth, same as the audience page).
 //
 // Mounted on Hono at /api/mcp via @hono/mcp's StreamableHTTPTransport. Stateless
 // (a fresh McpServer per request, invok's pattern); the EOA writer — and its
@@ -101,7 +103,7 @@ export const createStageMcp = (opts: {
       "sonara_prompt",
       {
         description:
-          "Submit a scene prompt to the room's queue (e.g. 'neon jellyfish drifting over a rain-soaked city'). It takes the projector for its turn in the queue. Sends an on-chain Monad tx.",
+          "Submit a scene prompt to the room's queue (e.g. 'neon jellyfish drifting over a rain-soaked city'). It takes the projector for its turn in the queue. Sends an on-chain Monad tx that pays the stage's USDC prompt price from the agent wallet.",
         inputSchema: {
           room: z.string(),
           text: z.string().min(1).max(200).describe("the scene to render"),
