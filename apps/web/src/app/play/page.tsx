@@ -7,6 +7,7 @@ import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import { Mark } from "@/components/brand/mark";
+import { StageWire } from "@/components/stage/stage-wire";
 import { Button } from "@/components/ui/button";
 import {
   Sheet,
@@ -418,6 +419,9 @@ export default function Page() {
 
       {/* Replay overlay (exit control); only renders while a replay is active. */}
       <ReelPlaybackHud />
+
+      {/* Monad wire overlay; only renders while the crowd stage is open. */}
+      <StageWire />
     </main>
   );
 }
