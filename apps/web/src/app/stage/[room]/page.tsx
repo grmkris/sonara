@@ -2,14 +2,19 @@
 
 import { formatUsdc, parseUsdc } from "@sonara/onchain";
 import type { StageKnob, StagePayment } from "@sonara/onchain";
+import type { StageActivityEvent } from "@sonara/shared";
 import { useParams } from "next/navigation";
 import QRCode from "qrcode";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import { Mark } from "@/components/brand/mark";
+import { AddressGlyph, shortAddress } from "@/components/stage/address-glyph";
+import { BlockPulse } from "@/components/stage/block-pulse";
 import { Button } from "@/components/ui/button";
 import { rpcClient } from "@/lib/orpc";
+import { createLatencyTracker } from "@/lib/stage/latency";
+import { useStageFeed } from "@/lib/stage/use-stage-feed";
 import { useStageWriter } from "@/lib/stage/use-stage-writer";
 import { cn } from "@/lib/utils";
 
@@ -19,13 +24,15 @@ import { cn } from "@/lib/utils";
 // price + optional tip for queue priority), pulled from the smart account —
 // still no wallet app, no gas, no sign-in. Short on USDC? The funding panel
 // shows the account address + the Circle testnet faucet.
+//
+// Live state arrives over the public /ws/stage feed (no polling): tx counter,
+// queue, block heartbeat — plus this device's own "tap → on-chain" latency,
+// measured against the feed and linked to the explorer.
 
-const SNAPSHOT_POLL_MS = 1500;
 const SLIDER_THROTTLE_MS = 200;
 const NUDGE_STEP = 0.12;
 const USDC_FAUCET_URL = "https://faucet.circle.com";
-
-type StageSnapshot = Awaited<ReturnType<typeof rpcClient.control.stageSnapshot>>;
+const EXPLORER_TX_URL = "https://testnet.monadexplorer.com/tx/";
 
 // A "weirder / softer" tap pair for one knob.
 const KNOB_TAPS: { knob: StageKnob; down: string; up: string }[] = [
@@ -234,36 +241,27 @@ export default function StagePage() {
   const { writer, ready, error: writerError, address, payment, balanceUnits, spendLocally } =
     useStageWriter();
 
-  const [snap, setSnap] = useState<StageSnapshot | null>(null);
   const [localTx, setLocalTx] = useState(0);
   const lastSliderAt = useRef(0);
 
-  // Poll the public stage snapshot (tx counter + prompt queue).
-  useEffect(() => {
-    let cancelled = false;
-    let timer: ReturnType<typeof setTimeout> | null = null;
-    const poll = async (): Promise<void> => {
-      try {
-        const next = await rpcClient.control.stageSnapshot({ room });
-        if (!cancelled) {
-          setSnap(next);
-        }
-      } catch {
-        // transient — keep last snapshot, retry next tick.
-      } finally {
-        if (!cancelled) {
-          timer = setTimeout(poll, SNAPSHOT_POLL_MS);
-        }
+  // "tap → on-chain" latency: mark every send, match the first feed event
+  // from our own smart account. Honest end-to-end (bundler included).
+  const trackerRef = useRef(createLatencyTracker());
+  const [latency, setLatency] = useState<{ ms: number; txHash: string } | null>(
+    null
+  );
+  const onActivity = useCallback(
+    (event: StageActivityEvent) => {
+      const ms = trackerRef.current.match(event.who, address);
+      if (ms !== null) {
+        setLatency({ ms, txHash: event.txHash });
       }
-    };
-    void poll();
-    return () => {
-      cancelled = true;
-      if (timer) {
-        clearTimeout(timer);
-      }
-    };
-  }, [room]);
+    },
+    [address]
+  );
+
+  // Live room state over the public stage feed WebSocket.
+  const feed = useStageFeed(room, onActivity);
 
   // Fire a write fire-and-forget; bump the optimistic counter, surface failures.
   const fire = useCallback(
@@ -271,9 +269,11 @@ export default function StagePage() {
       if (!writer) {
         return;
       }
+      const mark = trackerRef.current.markSend();
       setLocalTx((n) => n + 1);
       // oxlint-disable-next-line prefer-await-to-then, prefer-await-to-callbacks -- fire-and-forget: a tap must not block the UI on tx inclusion
       action(writer).catch((error: unknown) => {
+        trackerRef.current.cancel(mark);
         setLocalTx((n) => Math.max(0, n - 1));
         toast.error(error instanceof Error ? error.message : "tx failed");
       });
@@ -299,9 +299,9 @@ export default function StagePage() {
     toast.success(`prompt queued · ${formatUsdc(cost)} usdc`);
   };
 
-  const txCount = Math.max(localTx, snap?.txCount ?? 0);
+  const txCount = Math.max(localTx, feed.txCount);
   const linked = ready && !!writer;
-  const raisedUnits = BigInt(snap?.revenueUnits ?? "0");
+  const raisedUnits = BigInt(feed.revenueUnits);
 
   return (
     <Shell>
@@ -313,25 +313,32 @@ export default function StagePage() {
             {room}
           </span>
         </span>
-        <span
-          className={cn(
-            "flex items-center gap-1.5 font-mono text-[9px] uppercase tracking-[0.22em]",
-            linked ? "text-[color:var(--paper)]/70" : "text-[color:var(--stone)]"
-          )}
-        >
+        <span className="flex flex-col items-end gap-1">
           <span
-            aria-hidden
             className={cn(
-              "size-1.5 rounded-full",
-              linked ? "bg-[color:var(--signal)]" : "bg-[color:var(--stone)]/60"
+              "flex items-center gap-1.5 font-mono text-[9px] uppercase tracking-[0.22em]",
+              linked
+                ? "text-[color:var(--paper)]/70"
+                : "text-[color:var(--stone)]"
             )}
-          />
-          {linked ? "gasless · linked" : "linking…"}
-          {balanceUnits !== null && (
-            <span className="text-[color:var(--paper)]/85">
-              · {formatUsdc(balanceUnits)} usdc
-            </span>
-          )}
+          >
+            <span
+              aria-hidden
+              className={cn(
+                "size-1.5 rounded-full",
+                linked
+                  ? "bg-[color:var(--signal)]"
+                  : "bg-[color:var(--stone)]/60"
+              )}
+            />
+            {linked ? "gasless · linked" : "linking…"}
+            {balanceUnits !== null && (
+              <span className="text-[color:var(--paper)]/85">
+                · {formatUsdc(balanceUnits)} usdc
+              </span>
+            )}
+          </span>
+          <BlockPulse blockNumber={feed.blockNumber} dense />
         </span>
       </header>
 
@@ -355,13 +362,28 @@ export default function StagePage() {
               {formatUsdc(raisedUnits)} usdc raised
             </p>
           )}
+          {latency && (
+            <a
+              className="wire-print focus-ring mt-1 flex items-center gap-1.5 font-mono text-[9px] uppercase tracking-[0.18em] text-[color:var(--paper)]/80"
+              href={`${EXPLORER_TX_URL}${latency.txHash}`}
+              key={latency.txHash}
+              rel="noreferrer"
+              target="_blank"
+            >
+              <span
+                aria-hidden
+                className="size-1 rounded-full bg-[color:var(--signal)]"
+              />
+              tap → on-chain · {(latency.ms / 1000).toFixed(2)}s ↗
+            </a>
+          )}
         </div>
         <div className="max-w-[55%] text-right">
           <p className="font-sans text-[9px] uppercase tracking-[0.26em] text-[color:var(--stone)]">
             now playing
           </p>
           <p className="mt-1 line-clamp-2 font-serif text-[13px] italic leading-snug text-[color:var(--paper)]/85">
-            {snap?.nowPlaying?.text ?? "—"}
+            {feed.queue.nowPlaying?.text ?? "—"}
           </p>
         </div>
       </section>
@@ -403,7 +425,7 @@ export default function StagePage() {
       </section>
 
       {/* Prompt — paid in USDC; tip (also USDC) jumps the queue. */}
-      {snap?.allowPrompts !== false && (
+      {feed.allowPrompts && (
         <PromptComposer
           address={address}
           balanceUnits={balanceUnits}
@@ -413,19 +435,27 @@ export default function StagePage() {
         />
       )}
 
-      {/* Up next. */}
-      {snap && snap.upNext.length > 0 && (
+      {/* Up next — attributed to its on-chain sender. */}
+      {feed.queue.upNext.length > 0 && (
         <section className="flex flex-col gap-1.5">
           <p className="font-sans text-[9px] uppercase tracking-[0.26em] text-[color:var(--stone)]">
-            up next · {snap.upNext.length}
+            up next · {feed.queue.upNext.length}
           </p>
-          {snap.upNext.slice(0, 5).map((p, i) => (
+          {feed.queue.upNext.slice(0, 5).map((p, i) => (
             <p
               className="flex items-center gap-2 font-serif text-[12px] text-[color:var(--paper)]/70"
               key={`${p.who}-${i}`}
             >
-              {p.tip !== "0" && <span aria-hidden>💰</span>}
+              <AddressGlyph address={p.who} className="shrink-0" size={10} />
+              <span className="shrink-0 font-mono text-[9px] uppercase tracking-[0.14em] text-[color:var(--stone)]">
+                {shortAddress(p.who)}
+              </span>
               <span className="line-clamp-1">{p.text}</span>
+              {p.tip !== "0" && (
+                <span className="shrink-0 font-mono text-[9px] uppercase tracking-[0.14em] text-[color:var(--signal)]">
+                  +{formatUsdc(BigInt(p.tip))} usdc
+                </span>
+              )}
             </p>
           ))}
         </section>

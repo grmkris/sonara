@@ -9,13 +9,16 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { publicEnv } from "@/env";
 import { rpcClient } from "@/lib/orpc";
+import { useStageFeed } from "@/lib/stage/use-stage-feed";
+
+import { Seismograph } from "./seismograph";
+import { TxTicker } from "./tx-ticker";
 
 // Owner-side stage control on the operator remote: open this live session to
 // the crowd (mints a room code), show the QR people scan to drive the visuals
-// over Monad txs, and watch the on-chain tap counter + prompt queue climb.
-// Reuses control.openStage/closeStage/stageSnapshot — no canvas coupling.
-
-const POLL_MS = 1500;
+// over Monad txs, and watch the wire — live tx ticker, room pulse, per-kind
+// counts — climb. Opens/closes via control.openStage/closeStage; live state
+// rides the public /ws/stage feed (no polling).
 
 export const StageHostPanel = ({
   liveSessionId,
@@ -26,11 +29,11 @@ export const StageHostPanel = ({
   const [room, setRoom] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [qr, setQr] = useState<string | null>(null);
-  const [txCount, setTxCount] = useState(0);
-  const [revenueUnits, setRevenueUnits] = useState(0n);
-  const [nowPlaying, setNowPlaying] = useState<string | null>(null);
-  const [upNext, setUpNext] = useState(0);
   const [stageUrl, setStageUrl] = useState("");
+
+  const feed = useStageFeed(room);
+  const revenueUnits = BigInt(feed.revenueUnits);
+  const nowPlaying = feed.queue.nowPlaying?.text ?? null;
 
   // Build the shareable URL + QR once a room is minted.
   useEffect(() => {
@@ -54,39 +57,6 @@ export const StageHostPanel = ({
       toast.error("couldn't copy — long-press to copy");
     }
   };
-
-  // Poll live stage state while open.
-  useEffect(() => {
-    if (!room) {
-      return;
-    }
-    let cancelled = false;
-    let timer: ReturnType<typeof setTimeout> | null = null;
-    const poll = async (): Promise<void> => {
-      try {
-        const snap = await rpcClient.control.stageSnapshot({ room });
-        if (!cancelled) {
-          setTxCount(snap.txCount);
-          setRevenueUnits(BigInt(snap.revenueUnits));
-          setNowPlaying(snap.nowPlaying?.text ?? null);
-          setUpNext(snap.upNext.length);
-        }
-      } catch {
-        // transient
-      } finally {
-        if (!cancelled) {
-          timer = setTimeout(poll, POLL_MS);
-        }
-      }
-    };
-    void poll();
-    return () => {
-      cancelled = true;
-      if (timer) {
-        clearTimeout(timer);
-      }
-    };
-  }, [room]);
 
   if (!configured || !liveSessionId) {
     return null;
@@ -156,8 +126,13 @@ export const StageHostPanel = ({
                 {room}
               </span>
               <span className="font-mono text-[9px] uppercase tracking-[0.18em] text-[color:var(--stone)]">
-                {txCount} on-chain taps · {upNext} queued
+                {feed.txCount} on-chain taps · {feed.queue.upNext.length}{" "}
+                queued
                 {revenueUnits > 0n && ` · ${formatUsdc(revenueUnits)} usdc`}
+              </span>
+              <span className="font-mono text-[9px] uppercase tracking-[0.18em] text-[color:var(--stone)] tabular-nums">
+                {feed.kindCounts.nudge} nudges · {feed.kindCounts.set} sets ·{" "}
+                {feed.kindCounts.prompt} prompts
               </span>
               {nowPlaying && (
                 <span className="line-clamp-1 font-serif text-[12px] italic text-[color:var(--paper)]/80">
@@ -166,6 +141,14 @@ export const StageHostPanel = ({
               )}
             </div>
           </div>
+
+          {/* The wire — last few on-chain actions + the room's pulse. */}
+          {feed.activity.length > 0 && (
+            <div className="flex flex-col gap-2 border-t border-[color:var(--hairline)]/20 pt-3">
+              <TxTicker dense events={feed.activity} max={5} />
+              <Seismograph height={20} ring={feed.ring} />
+            </div>
+          )}
 
           {/* Shareable link (tap to copy) — for anyone who can't scan. */}
           {stageUrl && (
