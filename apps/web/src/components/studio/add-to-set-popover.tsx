@@ -1,6 +1,6 @@
 "use client";
 
-import type { FrameSetSummary, LibraryFrame } from "@sonara/shared";
+import type { LibraryFrame } from "@sonara/shared";
 import type { FrameSetId } from "@sonara/shared/typeid";
 import { Plus } from "lucide-react";
 import { useState } from "react";
@@ -12,6 +12,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import { useCuratedSetsPicker } from "@/hooks/use-curated-sets-picker";
 import { rpcClient } from "@/lib/orpc";
 
 // Inspector action: add this frame to a curated set. Opening fetches the
@@ -20,27 +21,14 @@ import { rpcClient } from "@/lib/orpc";
 // curated set (recordings are frozen; make a cut to edit those).
 export const AddToSetPopover = ({ frame }: { frame: LibraryFrame }) => {
   const [open, setOpen] = useState(false);
-  const [sets, setSets] = useState<FrameSetSummary[]>([]);
-  const [loading, setLoading] = useState(false);
+  const { createSet, loading, refresh, sets } = useCuratedSetsPicker();
   const [creating, setCreating] = useState(false);
   const [draft, setDraft] = useState("");
-
-  const loadSets = async () => {
-    setLoading(true);
-    try {
-      const { sets: s } = await rpcClient.sets.list({ origin: "curated" });
-      setSets(s);
-    } catch {
-      toast.error("couldn't load sets");
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const onOpenChange = (next: boolean) => {
     setOpen(next);
     if (next) {
-      void loadSets();
+      void refresh();
     } else {
       setCreating(false);
       setDraft("");
@@ -67,7 +55,7 @@ export const AddToSetPopover = ({ frame }: { frame: LibraryFrame }) => {
     }
     setOpen(false);
     try {
-      const { set: created } = await rpcClient.sets.create({ name });
+      const created = await createSet(name);
       await rpcClient.sets.addFrame({ frameId: frame.id, setId: created.id });
       toast(`added to “${created.name}”`, { duration: 1600 });
     } catch {

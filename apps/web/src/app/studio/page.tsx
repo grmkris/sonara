@@ -15,6 +15,7 @@ import { ErrorState } from "@/components/studio/error-state";
 import { FrameInspector } from "@/components/studio/frame-inspector";
 import { FrameInspectorContent } from "@/components/studio/frame-inspector-content";
 import { LiveNowCard } from "@/components/studio/live-now-card";
+import { SelectionBar } from "@/components/studio/selection-bar";
 import { SetEditor } from "@/components/studio/set-editor";
 import { SetsList } from "@/components/studio/sets-list";
 import { RecordingTimeline } from "@/components/studio/recording-timeline";
@@ -22,6 +23,7 @@ import { RecordingsList } from "@/components/studio/recordings-list";
 import { StudioSidebarTabs } from "@/components/studio/studio-sidebar-tabs";
 import type { StudioTab } from "@/components/studio/studio-sidebar-tabs";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
+import { useFrameSelection } from "@/hooks/use-frame-selection";
 import { useIsMobile } from "@/hooks/use-is-mobile";
 import { useSession } from "@/lib/auth-client";
 import { rpcClient } from "@/lib/orpc";
@@ -85,6 +87,34 @@ const HeaderCount = ({
       {totalFrames} frame{totalFrames === 1 ? "" : "s"} · {recordings.length}{" "}
       recording{recordings.length === 1 ? "" : "s"}
     </span>
+  );
+};
+
+// Visibility gate for the floating selection bar — extracted so its
+// conditionals don't inflate StudioInner's complexity.
+const StudioSelectionBar = ({
+  selectMode,
+  selectedFrameIds,
+  onClear,
+  onAdded,
+  onCreatedFromSelection,
+}: {
+  selectMode: boolean;
+  selectedFrameIds: string[];
+  onClear: () => void;
+  onAdded: (target: { id: string; name: string }) => void;
+  onCreatedFromSelection: (set: FrameSetSummary) => void;
+}) => {
+  if (!selectMode || selectedFrameIds.length === 0) {
+    return null;
+  }
+  return (
+    <SelectionBar
+      selectedFrameIds={selectedFrameIds}
+      onClear={onClear}
+      onAdded={onAdded}
+      onCreatedFromSelection={onCreatedFromSelection}
+    />
   );
 };
 
@@ -287,6 +317,49 @@ const StudioInner = () => {
       tab === "sets" ? (setDetail?.frames ?? []) : (recordingDetail?.frames ?? []);
     return pool.find((f) => f.id === selectedFrameId) ?? null;
   }, [tab, recordingDetail, setDetail, selectedFrameId]);
+
+  // --- Multi-select curation ---
+  const displayOrder = useMemo(() => {
+    const pool =
+      tab === "sets" ? (setDetail?.frames ?? []) : (recordingDetail?.frames ?? []);
+    return pool.map((f) => f.id as string);
+  }, [tab, recordingDetail, setDetail]);
+
+  // Hopping recordings/sets drops the selection (selectionResetKey) but keeps
+  // select mode — the multi-recording flow; switching tabs exits the mode.
+  const {
+    clear: clearSelection,
+    selectMode,
+    selectedFrameIds,
+    toggleFrame: onToggleFrame,
+    toggleMode: onToggleSelectMode,
+  } = useFrameSelection({
+    displayOrder,
+    modeResetKey: tab,
+    selectionResetKey: `${tab}|${selectedRecordingId}|${selectedSetId}`,
+  });
+
+  // A batch landed in `target`: keep select mode (next recording, same set),
+  // drop the selection, and refresh whatever shows the target's frame count.
+  const onSelectionAdded = useCallback(
+    (target: { id: string; name: string }) => {
+      clearSelection();
+      refreshSets();
+      if (selectedSetId === target.id) {
+        retrySetDetail();
+      }
+    },
+    [clearSelection, refreshSets, selectedSetId, retrySetDetail]
+  );
+
+  const onSelectionCreated = useCallback(
+    (created: FrameSetSummary) => {
+      clearSelection();
+      refreshSets();
+      router.push(setsHref(created.id));
+    },
+    [clearSelection, refreshSets, router]
+  );
 
   // --- Navigation handlers ---
   const onTab = useCallback(
@@ -594,6 +667,10 @@ const StudioInner = () => {
         onSelectFrame={onSelectFrame}
         onMakeCut={onMakeCut}
         onVisibilityChange={onRecordingVisibility}
+        selectMode={selectMode}
+        selectedFrameIds={selectedFrameIds}
+        onToggleFrame={onToggleFrame}
+        onToggleSelectMode={onToggleSelectMode}
       />
     );
   };
@@ -688,6 +765,10 @@ const StudioInner = () => {
               onRemoveFrame={onRemoveFrame}
               onSetCover={onSetCover}
               onVisibilityChange={onSetVisibility}
+              selectMode={selectMode}
+              selectedFrameIds={selectedFrameIds}
+              onToggleFrame={onToggleFrame}
+              onToggleSelectMode={onToggleSelectMode}
             />
           )}
         </section>
@@ -699,6 +780,15 @@ const StudioInner = () => {
           </aside>
         )}
       </div>
+
+      {/* Floating multi-select action bar */}
+      <StudioSelectionBar
+        selectMode={selectMode}
+        selectedFrameIds={selectedFrameIds}
+        onClear={clearSelection}
+        onAdded={onSelectionAdded}
+        onCreatedFromSelection={onSelectionCreated}
+      />
 
       {/* Mobile inspector — Sheet from the right. Gated on the breakpoint:
           the Sheet's BACKDROP is not responsive-classed, so mounting it on

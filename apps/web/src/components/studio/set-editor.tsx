@@ -9,6 +9,7 @@ import { useEffect, useState } from "react";
 import { cn } from "@/lib/utils";
 
 import { ErrorState } from "./error-state";
+import { SelectModeToggle } from "./select-mode-toggle";
 import { SetEmptyDraft } from "./set-empty-draft";
 import { SetFrameTile } from "./set-frame-tile";
 import { SetShareControls } from "./set-share-controls";
@@ -28,7 +29,15 @@ interface SetEditorProps {
   onRemoveFrame?: (frameId: string) => void;
   onSetCover?: (frameId: string) => void;
   onVisibilityChange?: (visibility: FrameSetVisibility) => void;
+  // Multi-select curation mode (page-owned state) — optional so read-only
+  // embeds stay untouched.
+  selectMode?: boolean;
+  selectedFrameIds?: string[];
+  onToggleFrame?: (frameId: string, shiftKey: boolean) => void;
+  onToggleSelectMode?: () => void;
 }
+
+const EMPTY_SELECTION: string[] = [];
 
 const Hint = ({ children }: { children: string }) => (
   <div className="px-10 py-16 font-sans text-[10px] uppercase tracking-[0.22em] text-[color:var(--stone)]">
@@ -53,6 +62,10 @@ export const SetEditor = ({
   onRemoveFrame,
   onSetCover,
   onVisibilityChange,
+  selectMode = false,
+  selectedFrameIds = EMPTY_SELECTION,
+  onToggleFrame,
+  onToggleSelectMode,
 }: SetEditorProps) => {
   const [renaming, setRenaming] = useState(false);
   const [draftName, setDraftName] = useState("");
@@ -139,6 +152,12 @@ export const SetEditor = ({
               onVisibilityChange={onVisibilityChange}
             />
           )}
+          {onToggleSelectMode && frameSet.frames.length > 0 && (
+            <SelectModeToggle
+              active={selectMode}
+              onToggle={onToggleSelectMode}
+            />
+          )}
           {frameSet.frames.length > 0 && (
             <Link
               href={`/play?set=${encodeURIComponent(frameSet.id)}`}
@@ -189,6 +208,9 @@ export const SetEditor = ({
               onSetCover={onSetCover}
               canMovePrev={i > 0}
               canMoveNext={i < frameSet.frames.length - 1}
+              selectMode={selectMode}
+              checked={selectedFrameIds.includes(frame.id)}
+              onToggle={onToggleFrame}
             />
           ))}
         </div>

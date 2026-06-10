@@ -8,6 +8,7 @@ import { useMemo } from "react";
 import { formatDuration, formatMmSs } from "@/lib/format-time";
 
 import { FrameCard } from "./frame-card";
+import { SelectModeToggle } from "./select-mode-toggle";
 import { SetShareControls } from "./set-share-controls";
 
 interface RecordingTimelineProps {
@@ -17,6 +18,11 @@ interface RecordingTimelineProps {
   onSelectFrame: (frameId: string) => void;
   onMakeCut: () => void;
   onVisibilityChange: (visibility: FrameSetVisibility) => void;
+  // Multi-select curation mode (page-owned state).
+  selectMode: boolean;
+  selectedFrameIds: string[];
+  onToggleFrame: (frameId: string, shiftKey: boolean) => void;
+  onToggleSelectMode: () => void;
 }
 
 const FRAME_SIZE_DESKTOP = 56;
@@ -107,6 +113,10 @@ export const RecordingTimeline = ({
   onSelectFrame,
   onMakeCut,
   onVisibilityChange,
+  selectMode,
+  selectedFrameIds,
+  onToggleFrame,
+  onToggleSelectMode,
 }: RecordingTimelineProps) => {
   const frames = recording?.frames ?? [];
   const layout = useMemo(
@@ -158,6 +168,7 @@ export const RecordingTimeline = ({
             visibility={recording.visibility}
             onVisibilityChange={onVisibilityChange}
           />
+          <SelectModeToggle active={selectMode} onToggle={onToggleSelectMode} />
           <button
             type="button"
             onClick={onMakeCut}
@@ -191,6 +202,9 @@ export const RecordingTimeline = ({
               leftPct={entry.leftPct}
               stackIdx={entry.stackIdx}
               size={FRAME_SIZE_DESKTOP}
+              selectMode={selectMode}
+              checked={selectedFrameIds.includes(entry.frame.id)}
+              onToggle={onToggleFrame}
             />
           ))}
         </div>

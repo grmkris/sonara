@@ -43,6 +43,7 @@ import { protectedProcedure, publicProcedure } from "./procedures";
 const LIST_DEFAULT_LIMIT = 50;
 const LIST_MAX_LIMIT = 100;
 const NAME_MAX = 120;
+const BATCH_FRAMES_MAX = 200;
 
 const SET_COLUMNS = {
   coverFrameId: SCHEMA.frameSet.coverFrameId,
@@ -139,6 +140,32 @@ const requireOwnedFrame = async (
   }
 };
 
+// Batch form of requireOwnedFrame: every frame must exist AND belong to the
+// caller — verified in ONE query. A single foreign/missing id anywhere in the
+// list rejects the whole batch (same NOT_FOUND shape as the single-frame
+// check, so existence of someone else's frame doesn't leak). Returns the
+// input deduped in first-occurrence order — the order inserts should use.
+const requireOwnedFrames = async (
+  db: Database,
+  userId: UserId,
+  frameIds: ImageLibraryId[]
+): Promise<ImageLibraryId[]> => {
+  const unique = [...new Set(frameIds)];
+  const rows = await db
+    .select({ id: SCHEMA.imageLibrary.id })
+    .from(SCHEMA.imageLibrary)
+    .where(
+      and(
+        inArray(SCHEMA.imageLibrary.id, unique),
+        eq(SCHEMA.imageLibrary.userId, userId)
+      )
+    );
+  if (rows.length !== unique.length) {
+    throw new ORPCError("NOT_FOUND", { message: "Frame not found." });
+  }
+  return unique;
+};
+
 const canRead = (set: SetRow, userId: UserId | null): boolean =>
   set.visibility !== "private" || (userId !== null && set.userId === userId);
 
@@ -203,13 +230,73 @@ export const setsRouter = {
     }),
 
   /**
-   * Create a curated set. With `fromSetId` this is "make a cut": the new set
-   * is seeded with the source set's frames in order (references, no copies).
-   * The source must be readable by the caller (own it, or it's non-private).
+   * Batch addFrame: append many frames to a curated set in INPUT order,
+   * positions allocated after the current max. Idempotent per frame — frames
+   * already in the set are skipped (unique (set_id, frame_id)) and `added`
+   * reflects only the real inserts. All-or-nothing on validation: one foreign
+   * frame anywhere in the list rejects the whole batch.
+   */
+  addFrames: protectedProcedure
+    .input(
+      z.object({
+        frameIds: z.array(ImageLibraryIdSchema).min(1).max(BATCH_FRAMES_MAX),
+        setId: FrameSetIdSchema,
+      })
+    )
+    .handler(async ({ context, input }) => {
+      const { db, userId } = context;
+      const set = await requireOwnedSet(db, userId, input.setId);
+      requireEditableFrameList(set);
+      const frameIds = await requireOwnedFrames(db, userId, input.frameIds);
+
+      const added = await db.transaction(async (tx) => {
+        const [agg] = await tx
+          .select({ maxPos: max(SCHEMA.frameSetFrame.position) })
+          .from(SCHEMA.frameSetFrame)
+          .where(eq(SCHEMA.frameSetFrame.setId, input.setId));
+        const basePosition = (agg?.maxPos ?? -1) + 1;
+
+        const inserted = await tx
+          .insert(SCHEMA.frameSetFrame)
+          .values(
+            frameIds.map((frameId, i) => ({
+              frameId,
+              position: basePosition + i,
+              setId: input.setId,
+            }))
+          )
+          .onConflictDoNothing({
+            target: [SCHEMA.frameSetFrame.setId, SCHEMA.frameSetFrame.frameId],
+          })
+          .returning();
+        if (inserted.length > 0) {
+          await tx
+            .update(SCHEMA.frameSet)
+            .set({ frameCount: sql`greatest(frame_count + ${inserted.length}, 0)` })
+            .where(eq(SCHEMA.frameSet.id, input.setId));
+        }
+        return inserted.length;
+      });
+      return { added, ok: true as const };
+    }),
+
+  /**
+   * Create a curated set. Two optional seed sources:
+   *   - `frameIds`  — explicit frames (owned by the caller), in input order.
+   *   - `fromSetId` — "make a cut": the source set's frames in order
+   *                   (references, no copies). The source must be readable by
+   *                   the caller (own it, or it's non-private).
+   * They're meant to be mutually exclusive; if both are given, `frameIds`
+   * wins (the explicit selection is the more specific intent).
    */
   create: protectedProcedure
     .input(
       z.object({
+        frameIds: z
+          .array(ImageLibraryIdSchema)
+          .min(1)
+          .max(BATCH_FRAMES_MAX)
+          .optional(),
         fromSetId: FrameSetIdSchema.optional(),
         name: z.string().trim().min(1).max(NAME_MAX),
       })
@@ -218,7 +305,10 @@ export const setsRouter = {
       const { db, userId } = context;
 
       let seedFrames: { frameId: ImageLibraryId; position: number }[] = [];
-      if (input.fromSetId) {
+      if (input.frameIds) {
+        const owned = await requireOwnedFrames(db, userId, input.frameIds);
+        seedFrames = owned.map((frameId, i) => ({ frameId, position: i }));
+      } else if (input.fromSetId) {
         const source = await loadSet(db, input.fromSetId);
         if (!(source && canRead(source, userId))) {
           throw new ORPCError("NOT_FOUND", { message: "Set not found." });

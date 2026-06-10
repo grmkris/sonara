@@ -161,6 +161,135 @@ describe("addFrame / removeFrame / frameCount", () => {
   });
 });
 
+describe("addFrames (batch)", () => {
+  test("appends in input order and reports the insert count", async () => {
+    const setId = await newCut();
+    const { added } = await a.addFrames({
+      frameIds: [
+        A[2] as ImageLibraryId,
+        A[0] as ImageLibraryId,
+        A[3] as ImageLibraryId,
+      ],
+      setId,
+    });
+    expect(added).toBe(3);
+    const set = await a.get({ setId });
+    expect(set.frames.map((f) => f.id)).toEqual([
+      A[2] as ImageLibraryId,
+      A[0] as ImageLibraryId,
+      A[3] as ImageLibraryId,
+    ]);
+    expect(set.frameCount).toBe(3);
+  });
+
+  test("overlapping re-add counts only the new frames", async () => {
+    const setId = await newCut();
+    await a.addFrame({ frameId: A[0] as ImageLibraryId, setId });
+    const { added } = await a.addFrames({
+      frameIds: [
+        A[0] as ImageLibraryId,
+        A[1] as ImageLibraryId,
+        A[2] as ImageLibraryId,
+      ],
+      setId,
+    });
+    expect(added).toBe(2);
+    const set = await a.get({ setId });
+    expect(set.frames.map((f) => f.id)).toEqual([
+      A[0] as ImageLibraryId,
+      A[1] as ImageLibraryId,
+      A[2] as ImageLibraryId,
+    ]);
+    expect(set.frameCount).toBe(3);
+
+    // Full overlap: nothing inserted, count untouched.
+    const again = await a.addFrames({
+      frameIds: [A[1] as ImageLibraryId, A[2] as ImageLibraryId],
+      setId,
+    });
+    expect(again.added).toBe(0);
+    const unchanged = await a.get({ setId });
+    expect(unchanged.frameCount).toBe(3);
+  });
+
+  test("a foreign frame anywhere rejects the whole batch — nothing inserted", async () => {
+    const setId = await newCut();
+    const foreign = await insertFrame(db, { tMs: 0, userId: userB });
+    expect(
+      a.addFrames({
+        frameIds: [A[0] as ImageLibraryId, foreign, A[1] as ImageLibraryId],
+        setId,
+      })
+    ).rejects.toThrow("not found");
+    const set = await a.get({ setId });
+    expect(set.frames.length).toBe(0);
+    expect(set.frameCount).toBe(0);
+  });
+
+  test("recording sets are frozen for batch adds too", async () => {
+    const recId = await insertSet({
+      frames: [{ id: A[0] as ImageLibraryId, tMs: 0 }],
+      liveSessionId: typeIdGenerator("liveSession"),
+      origin: "recording",
+      userId: userA,
+    });
+    expect(
+      a.addFrames({ frameIds: [A[1] as ImageLibraryId], setId: recId })
+    ).rejects.toThrow("frozen");
+  });
+});
+
+describe("create with frameIds (new set from selection)", () => {
+  test("seeds the new set with the given frames in input order", async () => {
+    const { set } = await a.create({
+      frameIds: [
+        A[3] as ImageLibraryId,
+        A[1] as ImageLibraryId,
+        A[0] as ImageLibraryId,
+      ],
+      name: "selection cut",
+    });
+    expect(set.frameCount).toBe(3);
+    const cut = await a.get({ setId: set.id });
+    expect(cut.origin).toBe("curated");
+    expect(cut.frames.map((f) => f.id)).toEqual([
+      A[3] as ImageLibraryId,
+      A[1] as ImageLibraryId,
+      A[0] as ImageLibraryId,
+    ]);
+  });
+
+  test("ownership is enforced on seed frames", async () => {
+    const foreign = await insertFrame(db, { tMs: 0, userId: userB });
+    expect(
+      a.create({
+        frameIds: [A[0] as ImageLibraryId, foreign],
+        name: "steal frames",
+      })
+    ).rejects.toThrow("not found");
+  });
+
+  test("frameIds wins over fromSetId when both are given", async () => {
+    const recId = await insertSet({
+      frames: [
+        { id: A[0] as ImageLibraryId, tMs: 0 },
+        { id: A[1] as ImageLibraryId, tMs: 1000 },
+      ],
+      liveSessionId: typeIdGenerator("liveSession"),
+      origin: "recording",
+      userId: userA,
+    });
+    const { set } = await a.create({
+      frameIds: [A[2] as ImageLibraryId],
+      fromSetId: recId,
+      name: "both seeds",
+    });
+    expect(set.frameCount).toBe(1);
+    const cut = await a.get({ setId: set.id });
+    expect(cut.frames.map((f) => f.id)).toEqual([A[2] as ImageLibraryId]);
+  });
+});
+
 describe("freeze policy", () => {
   test("recording frame list is frozen; metadata stays editable", async () => {
     const recId = await insertSet({
