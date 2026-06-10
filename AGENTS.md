@@ -5,7 +5,7 @@ Conventions for working in this repo. Read this before making non-trivial change
 ## Quick orient
 
 - `apps/gateway` — Caddy reverse proxy (`caddy:2-alpine`). The single public entry. Path-routes `/api/auth/*`, `/rpc/*`, `/api/upload/*`, `/ws` to the server and everything else to web, over `*.railway.internal`. So the browser sees one origin → cookies first-party, no CORS.
-- `apps/web` — Next.js 16, thin frontend. Renders the landing page at `/` and the visualizer at `/play`. No DB, no secrets, no business logic — just UI + a little SSR. Consumes the server via the oRPC client (`/rpc`), the Better Auth React client (`/api/auth`), and the WebSocket (`/ws`), all same-origin through the gateway.
+- `apps/web` — Next.js 16, thin frontend. Renders the landing page at `/`, the visualizer at `/play`, the set library at `/studio`, and the set permalink at `/s/[id]`. No DB, no secrets, no business logic — just UI + a little SSR. Consumes the server via the oRPC client (`/rpc`), the Better Auth React client (`/api/auth`), and the WebSocket (`/ws`), all same-origin through the gateway.
 - `apps/server` — Bun + Hono + native WebSocket. **Single source of truth.** Owns Better Auth (`/api/auth/*`, incl. the Dodo webhook), the oRPC HTTP router (`/rpc` — credits, `mintWsTicket`), image upload (`/api/upload/image`), the live `Session`, fal generation, STT, song recognition, credit gating. Runs Drizzle migrations on boot.
 - `packages/api` — generic oRPC primitives, the shared `sessionRouter`, the WS bridge.
 - `packages/db` — Drizzle schema (`auth.db.ts`, `credits.db.ts`), migrations folder, `createDb` + `runMigrations` helpers. Imported by the **server** only (web no longer touches the DB).
@@ -242,6 +242,16 @@ Pre-generated, deck-organised images that bypass fal during client demos. Zero p
 - **Assets**: WebPs live under `apps/web/public/library/<deck>/<typeid>.webp` and ship with the Next build. Database `url` column stores the relative path — same on dev and prod.
 - **Seeding fresh prompts** (calls fal): `cd apps/server && bun run seed:library` (optionally `--deck <key> --limit <n> --model <id> --dry-run`). Re-runs are idempotent via `sha256(deck::prompt)` in `prompt_hash`.
 - **Seeding from the committed export** (no fal, replay-safe): `bun run export:library` after a fal seed dumps `apps/server/scripts/library-seed.json` (commit it). `bun run seed:library -- --from-export` replays it. Production fill-up: `railway run --service server -- bun run scripts/seed-library.ts -- --from-export`.
+
+## Sets (`frame_set`)
+
+One entity for everything playable (see `docs/sets-architecture.md`). What used to be three concepts — built-in *decks*, archived *sessions*, curated *reels* — is a **Set**, distinguished only by `origin: 'builtin' | 'recording' | 'curated'`. UI word is "set"; code/schema say `frameSet` / `frame_set`, typeid prefix `set_` (never a bare `set` — collides with JS `Set` / SQL `SET`; ungreppable).
+
+- **Schema**: `packages/db/src/schema/frame-set.db.ts`. Sets *reference* `image_library` rows via `frame_set_frame` (Photos→Albums — never copied). `t_ms` on junction rows drives cadence: present → original timing, null → fixed loop.
+- **Router**: `apps/server/src/rpc/sets.router.ts` — successor of the reel router. Mutation policy: builtin immutable; **recording frame lists are frozen** (it's the take — metadata stays editable; "make a cut" seeds a curated set instead); curated fully owner-editable. `sets.get` is **public** (visibility-gated; private-to-others = `NOT_FOUND` so existence doesn't leak).
+- **Recordings are auto-captured**: going live as a signed-in producer creates a `origin: recording` set and appends frames with real `t_ms` as the show happens; `status` flips `recording → final` at the end. No "save" step. (Anon/demo sessions generate nothing new — nothing to record.)
+- **Permalink**: `/s/<set_id>` — live view while the show runs (via the `lens` procedure in `control.router.ts`), replay forever after; the link never dies. `/s/<id>/control` is the owner's console facet over the `control.*` HTTP router.
+- Built-in decks exist twice on purpose: the deck registry (`packages/shared/src/decks.ts`) still drives the client-native demo loop, **and** each deck is seeded as a `origin: builtin` set row (`frame_set_deck_key_idx`) so it shows in the unified picker. The boot seed converges both.
 
 ## Don't touch
 

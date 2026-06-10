@@ -5,7 +5,7 @@ import { useMemo } from "react";
 
 import { cn } from "@/lib/utils";
 
-interface SessionsListProps {
+interface RecordingsListProps {
   recordings: FrameSetSummary[];
   loading: boolean;
   bootstrapped: boolean;
@@ -49,13 +49,13 @@ const formatTime = (date: Date): string => {
 // Left-rail list of recording sets (auto-captured live performances), grouped
 // by date band (today / yesterday / this week / older). Each card shows:
 // cover thumb, name, frame count. Click selects the recording.
-export const SessionsList = ({
+export const RecordingsList = ({
   recordings,
   loading,
   bootstrapped,
   selectedRecordingId,
   onSelect,
-}: SessionsListProps) => {
+}: RecordingsListProps) => {
   const grouped = useMemo(() => {
     const now = new Date();
     const map = new Map<DateBand, FrameSetSummary[]>();

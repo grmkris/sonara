@@ -21,7 +21,7 @@ import { MusicSource } from "@/components/visualizer/controls/music-source";
 import { publicEnv } from "@/env";
 import { useAudioFeatures } from "@/hooks/use-audio-features";
 import type { AudioSource } from "@/hooks/use-audio-features";
-import { useReelPlaybackLoop } from "@/hooks/use-reel-playback-loop";
+import { useSetPlaybackLoop } from "@/hooks/use-set-playback-loop";
 import { rpcClient } from "@/lib/orpc";
 import { useStageFeed } from "@/lib/stage/use-stage-feed";
 import { cn } from "@/lib/utils";
@@ -224,7 +224,7 @@ const useLiveFrameFeed = (
 };
 
 // Replay rides the existing set-playback machinery: load the frames into the
-// store and let useReelPlaybackLoop (mounted by the page) drive pushFrame at
+// store and let useSetPlaybackLoop (mounted by the page) drive pushFrame at
 // the right cadence — original timing for recordings, fixed loop otherwise.
 // Viewer-local only: the loop writes to the store, never to the server.
 const useReplayPlayback = (replaySet: ReplaySet | null): void => {
@@ -233,14 +233,14 @@ const useReplayPlayback = (replaySet: ReplaySet | null): void => {
       return;
     }
     const s = useVisualizerStore.getState();
-    s.startReelPlayback({
+    s.startSetPlayback({
       cadence: replaySet.origin === "recording" ? "original" : "fixed",
       frames: replaySet.frames,
       id: replaySet.id,
       name: replaySet.name,
     });
     return () => {
-      useVisualizerStore.getState().stopReelPlayback();
+      useVisualizerStore.getState().stopSetPlayback();
     };
   }, [replaySet]);
 };
@@ -439,7 +439,7 @@ export default function SetPermalinkPage() {
 
   // The viewer's render pipeline: set-playback loop (inert until replay
   // loads frames), live frame feed, and local audio analysis.
-  useReelPlaybackLoop();
+  useSetPlaybackLoop();
   useLiveFrameFeed(
     tense,
     lens?.exists && lens.tense === "live"

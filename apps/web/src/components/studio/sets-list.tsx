@@ -7,7 +7,7 @@ import { useState } from "react";
 
 import { cn } from "@/lib/utils";
 
-interface ReelsListProps {
+interface SetsListProps {
   sets: FrameSetSummary[];
   loading: boolean;
   bootstrapped: boolean;
@@ -18,14 +18,14 @@ interface ReelsListProps {
 
 // Left-rail list of curated sets. Each card shows the cover thumb, name, and
 // frame count. A "new set" affordance reveals an inline input. Click selects.
-export const ReelsList = ({
+export const SetsList = ({
   sets,
   loading,
   bootstrapped,
   selectedSetId,
   onSelect,
   onCreate,
-}: ReelsListProps) => {
+}: SetsListProps) => {
   const [creating, setCreating] = useState(false);
   const [draftName, setDraftName] = useState("");
 

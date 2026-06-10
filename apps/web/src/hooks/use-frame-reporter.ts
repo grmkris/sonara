@@ -7,7 +7,7 @@ import { useVisualizerStore } from "@/stores/visualizer";
 
 // Reports the frame actually on screen up to the server (frame.report) so the
 // /control preview — and any future viewer — can render it in EVERY mode,
-// including the ones the server never generates in (decks, reel replay).
+// including the ones the server never generates in (decks, set replay).
 //
 // Mount this ONLY on the producer (/play). Viewer surfaces must never report —
 // they'd overwrite the producer's truth with their own polled copy.

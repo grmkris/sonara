@@ -44,7 +44,7 @@ const readOrMintLiveSessionId = (): LiveSessionId => {
 export interface WsSession {
   send: SessionSend;
   // Mint a fresh durable liveSessionId and reconnect under it — begins a new
-  // logical performance (its own /studio entry + reel target). Distinct from
+  // logical performance (its own /studio entry + set target). Distinct from
   // session.reset, which clears the scene but keeps the session id.
   startNewSession: () => void;
 }

@@ -10,7 +10,7 @@ import { formatDuration, formatMmSs } from "@/lib/format-time";
 import { FrameCard } from "./frame-card";
 import { SetShareControls } from "./set-share-controls";
 
-interface SessionTimelineProps {
+interface RecordingTimelineProps {
   recording: FrameSet | null;
   loading: boolean;
   selectedFrameId: string | null;
@@ -100,14 +100,14 @@ const computeLayout = (frames: LibraryFrame[]): Layout => {
 // every 1min for <30min, every 5min for longer). Frames that cluster within
 // 1% of total duration stack vertically with the older one beneath. A
 // recording's frame list is frozen — "make a cut" derives an editable set.
-export const SessionTimeline = ({
+export const RecordingTimeline = ({
   recording,
   loading,
   selectedFrameId,
   onSelectFrame,
   onMakeCut,
   onVisibilityChange,
-}: SessionTimelineProps) => {
+}: RecordingTimelineProps) => {
   const frames = recording?.frames ?? [];
   const layout = useMemo(
     () => computeLayout(recording?.frames ?? []),

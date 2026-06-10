@@ -102,12 +102,12 @@ Run signed-in on dev.sonara.fm unless noted. ✅ = expected.
 
 # Part B — Automated test backlog (prioritized)
 
-**Current coverage:** `credits.service`, `credit-gate`, `ws-ticket`, **`reel.router` (13 cases, done)**, and `prompt-queue` (per the onchain map). **No e2e exists.** Runner: `bun test` + pglite (`@sonara/test-utils`); the established pattern is in-memory pglite + hand DDL + a 30s hook timeout (pglite cold-start) + `mock.module` for storage/external deps; oRPC routers are tested in-process via `createRouterClient`.
+**Current coverage:** `credits.service`, `credit-gate`, `ws-ticket`, `prompt-queue`, `stage-activity`, and — on the shared harness — **`sets.router`** (succeeds the old `reel.router` suite, ownership incl.), **`lens`**, **`stage-rooms`**, `control-ownership`, `frame-mapping`, `recording-set`, `frame-set-boot-migrate`. **No e2e exists.** Runner: `bun test` + the shared harness in `@sonara/test-utils`: `test-db` boots an in-memory PGlite with the **real migrations** from `packages/db/drizzle` applied (partial unique indexes, FKs, defaults match prod — no hand-written DDL drift); `getTestDb()` is a process-wide **singleton** (bun runs test files sequentially, so one WASM cold-start) and suites isolate via `reset()` (cached `TRUNCATE … RESTART IDENTITY CASCADE`); `factories` (`createTestUser` / `insertFrame` / `insertSet` / `insertLegacyReel`) seed rows; `orpc`'s `makeServerCtx` builds the request context for in-process router tests via `createRouterClient`. `mock.module` still covers storage/external deps.
 
 ## P0 — server unit/integration (cheap, high-value, do first)
-- [ ] **`library.router`** — sessions grouping (one session per `session_id`; `durationMs` from `tMs`), `bySession` ordering, cursor pagination, **example-session fallback** when empty, ownership (cross-user returns own data only). *(Mirror `reel.router.test.ts` harness.)*
+- [ ] **`library.router`** — sessions grouping (one session per `session_id`; `durationMs` from `tMs`), `bySession` ordering, cursor pagination, **example-session fallback** when empty, ownership (cross-user returns own data only). *(Mirror the `sets.router.test.ts` harness.)*
 - [ ] **`prompt-queue`** — confirm/extend: paid-first ordering, FIFO within tier, dedup, one-in-flight-per-sender, cap eviction (`onDrop`), dwell rotation via injected clock.
-- [ ] **`stage-rooms`** — mint/reuse same code per liveSessionId, `resolve`/`roomFor`, close invalidates.
+- [x] ~~**`stage-rooms`** — mint/reuse same code per liveSessionId, `resolve`/`roomFor`, close invalidates.~~ ✓ covered (`stage-rooms.test.ts`).
 - [ ] **knob coalescing** (`stage-listener` fold logic, extracted/pure) — nudge sum + set last-write-wins → one clamped patch; dead-room GC.
 - [ ] **`models.ts`** — model key → transport/falId/steps routing; default resolution; unknown key rejected (allowlist).
 - [ ] **`credit-gate`** — extend: paid→free-tier fallback ordering, denial cooldown `shouldEmit`, refund no-op for free-tier.

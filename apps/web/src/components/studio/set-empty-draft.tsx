@@ -3,7 +3,7 @@
 // Shown when a curated set has no frames yet. Sets are filled from the
 // inspector's "add to set" action on any frame, or by making a cut of a
 // recording.
-export const ReelEmptyDraft = () => (
+export const SetEmptyDraft = () => (
   <div className="flex h-full flex-col items-start justify-center gap-5 px-10 py-16">
     <span className="font-mono text-[10px] uppercase tracking-[0.28em] text-[color:var(--stone)]">
       empty set

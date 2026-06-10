@@ -10,16 +10,16 @@ const MIN_CADENCE_MS = 600;
 const MAX_CADENCE_MS = 6000;
 
 /**
- * Client-side reel/session replay. Mirrors useDemoFrameLoop: a single producer
+ * Client-side set replay. Mirrors useDemoFrameLoop: a single producer
  * that pushes a fixed, ordered frame list onto the same crossfade pipeline
  * (pushFrame → markImageLoaded in the canvas), looping. No server, no fal
- * calls, no audio. Active state + the frame list come from the reel-playback
- * slice (set by ReelPlaybackConsumer). Mounted once in the play page.
+ * calls, no audio. Active state + the frame list come from the set-playback
+ * slice (set by SetPlaybackConsumer). Mounted once in the play page.
  */
-export const useReelPlaybackLoop = (): void => {
-  const active = useVisualizerStore((s) => s.reelPlaybackActive);
-  const frames = useVisualizerStore((s) => s.reelPlaybackFrames);
-  const cadence = useVisualizerStore((s) => s.reelPlaybackCadence);
+export const useSetPlaybackLoop = (): void => {
+  const active = useVisualizerStore((s) => s.setPlaybackActive);
+  const frames = useVisualizerStore((s) => s.setPlaybackFrames);
+  const cadence = useVisualizerStore((s) => s.setPlaybackCadence);
 
   useEffect(() => {
     const store = useVisualizerStore;

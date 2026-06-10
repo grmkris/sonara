@@ -29,15 +29,15 @@ import { MusicSource } from "@/components/visualizer/controls/music-source";
 import { NowPlaying } from "@/components/visualizer/controls/now-playing";
 import { PromptInput } from "@/components/visualizer/controls/prompt-input";
 import { ShareLink } from "@/components/visualizer/controls/share-link";
-import { ReelPlaybackConsumer } from "@/components/visualizer/reel-playback-consumer";
-import { ReelPlaybackHud } from "@/components/visualizer/reel-playback-hud";
+import { SetPlaybackConsumer } from "@/components/visualizer/set-playback-consumer";
+import { SetPlaybackHud } from "@/components/visualizer/set-playback-hud";
 import { StudioActionConsumer } from "@/components/visualizer/studio-action-consumer";
 import { useAudioFeatures } from "@/hooks/use-audio-features";
 import type { AudioSource } from "@/hooks/use-audio-features";
 import { useDemoFrameLoop } from "@/hooks/use-demo-frame-loop";
 import { useFrameReporter } from "@/hooks/use-frame-reporter";
 import { useHotkey } from "@/hooks/use-hotkey";
-import { useReelPlaybackLoop } from "@/hooks/use-reel-playback-loop";
+import { useSetPlaybackLoop } from "@/hooks/use-set-playback-loop";
 import { useSongRecognition } from "@/hooks/use-song-recognition";
 import { useSourceReporter } from "@/hooks/use-source-reporter";
 import { useWsSession } from "@/hooks/use-ws-session";
@@ -147,9 +147,9 @@ export default function Page() {
   // manifest, so it works on slow/no internet (the server never generates in
   // demo mode).
   useDemoFrameLoop();
-  // Client-side reel/session replay producer (inert until a ?reel=/?session=
-  // param activates it via ReelPlaybackConsumer).
-  useReelPlaybackLoop();
+  // Client-side set replay producer (inert until a ?set= param — or a legacy
+  // param, retired in C5 — activates it via SetPlaybackConsumer).
+  useSetPlaybackLoop();
   // /play is the producer: report the on-screen frame upward so /control (and
   // viewers) see it in every mode. Viewer surfaces must never mount this.
   useFrameReporter(send);
@@ -418,13 +418,13 @@ export default function Page() {
         <StudioActionConsumer send={send} />
       </Suspense>
 
-      {/* Consumes ?reel= / ?session= replay params; drives the playback loop. */}
+      {/* Consumes ?set= replay params (+ legacy params, retired in C5); drives the playback loop. */}
       <Suspense fallback={null}>
-        <ReelPlaybackConsumer />
+        <SetPlaybackConsumer />
       </Suspense>
 
       {/* Replay overlay (exit control); only renders while a replay is active. */}
-      <ReelPlaybackHud />
+      <SetPlaybackHud />
 
       {/* Monad wire overlay; only renders while the crowd stage is open. */}
       <StageWire />

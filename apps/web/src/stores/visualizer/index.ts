@@ -11,7 +11,7 @@ import { createInspectorSlice } from "./inspector-slice";
 import { createLibrarySlice } from "./library-slice";
 import { createModelSlice, readModelPrefs } from "./model-slice";
 import { createPlaybackSlice } from "./playback-slice";
-import { createReelPlaybackSlice } from "./reel-playback-slice";
+import { createSetPlaybackSlice } from "./set-playback-slice";
 import {
   PRESET_KEY,
   PRESET_MODE_KEY,
@@ -36,7 +36,7 @@ export const useVisualizerStore = create<VisualizerState>()((...a) => ({
   ...createImageAnchorSlice(...a),
   ...createLibrarySlice(...a),
   ...createModelSlice(...a),
-  ...createReelPlaybackSlice(...a),
+  ...createSetPlaybackSlice(...a),
   ...createStageSlice(...a),
 }));
 

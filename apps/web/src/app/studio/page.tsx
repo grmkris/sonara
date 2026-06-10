@@ -15,10 +15,10 @@ import { ErrorState } from "@/components/studio/error-state";
 import { FrameInspector } from "@/components/studio/frame-inspector";
 import { FrameInspectorContent } from "@/components/studio/frame-inspector-content";
 import { LiveNowCard } from "@/components/studio/live-now-card";
-import { ReelEditor } from "@/components/studio/reel-editor";
-import { ReelsList } from "@/components/studio/reels-list";
-import { SessionTimeline } from "@/components/studio/session-timeline";
-import { SessionsList } from "@/components/studio/sessions-list";
+import { SetEditor } from "@/components/studio/set-editor";
+import { SetsList } from "@/components/studio/sets-list";
+import { RecordingTimeline } from "@/components/studio/recording-timeline";
+import { RecordingsList } from "@/components/studio/recordings-list";
 import { StudioSidebarTabs } from "@/components/studio/studio-sidebar-tabs";
 import type { StudioTab } from "@/components/studio/studio-sidebar-tabs";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
@@ -585,7 +585,7 @@ const StudioInner = () => {
       return <ErrorState onRetry={retry} />;
     }
     return (
-      <SessionTimeline
+      <RecordingTimeline
         recording={recordingDetail}
         loading={recordingLoading}
         selectedFrameId={selectedFrameId}
@@ -629,7 +629,7 @@ const StudioInner = () => {
           <LiveNowCard />
           <StudioSidebarTabs tab={tab} onTab={onTab} />
           {tab === "recordings" ? (
-            <SessionsList
+            <RecordingsList
               recordings={recordings}
               loading={recordingsLoading}
               bootstrapped={recordingsBootstrapped}
@@ -637,7 +637,7 @@ const StudioInner = () => {
               onSelect={onSelectRecording}
             />
           ) : (
-            <ReelsList
+            <SetsList
               sets={curatedSets}
               loading={setsLoading}
               bootstrapped={setsBootstrapped}
@@ -672,7 +672,7 @@ const StudioInner = () => {
           {tab === "recordings" ? (
             renderRecordingsCenter()
           ) : (
-            <ReelEditor
+            <SetEditor
               frameSet={setDetail}
               loading={setDetailLoading}
               error={setDetailError}

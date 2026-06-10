@@ -9,11 +9,11 @@ import { useEffect, useState } from "react";
 import { cn } from "@/lib/utils";
 
 import { ErrorState } from "./error-state";
-import { ReelEmptyDraft } from "./reel-empty-draft";
-import { ReelFrameTile } from "./reel-frame-tile";
+import { SetEmptyDraft } from "./set-empty-draft";
+import { SetFrameTile } from "./set-frame-tile";
 import { SetShareControls } from "./set-share-controls";
 
-interface ReelEditorProps {
+interface SetEditorProps {
   frameSet: FrameSet | null;
   loading: boolean;
   error: boolean;
@@ -39,7 +39,7 @@ const Hint = ({ children }: { children: string }) => (
 // Center pane for the sets tab: the selected curated set's frames in authored
 // order, plus header actions (play, share, rename, delete) when edit handlers
 // are supplied.
-export const ReelEditor = ({
+export const SetEditor = ({
   frameSet,
   loading,
   error,
@@ -53,7 +53,7 @@ export const ReelEditor = ({
   onRemoveFrame,
   onSetCover,
   onVisibilityChange,
-}: ReelEditorProps) => {
+}: SetEditorProps) => {
   const [renaming, setRenaming] = useState(false);
   const [draftName, setDraftName] = useState("");
 
@@ -163,7 +163,7 @@ export const ReelEditor = ({
       </header>
 
       {frameSet.frames.length === 0 ? (
-        <ReelEmptyDraft />
+        <SetEmptyDraft />
       ) : (
         <div
           className={cn(
@@ -172,7 +172,7 @@ export const ReelEditor = ({
           )}
         >
           {frameSet.frames.map((frame, i) => (
-            <ReelFrameTile
+            <SetFrameTile
               key={frame.id}
               frame={frame}
               index={i}

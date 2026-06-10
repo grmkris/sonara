@@ -4,13 +4,13 @@ import { X } from "lucide-react";
 
 import { useVisualizerStore } from "@/stores/visualizer";
 
-// Visible while a reel/session replay is running: a small centered pill naming
+// Visible while a set replay is running: a small centered pill naming
 // what's playing with an explicit exit. Stopping restores the prior demo state
-// (see the reel-playback slice) so the canvas returns to normal.
-export const ReelPlaybackHud = () => {
-  const active = useVisualizerStore((s) => s.reelPlaybackActive);
-  const name = useVisualizerStore((s) => s.reelPlaybackName);
-  const stop = useVisualizerStore((s) => s.stopReelPlayback);
+// (see the set-playback slice) so the canvas returns to normal.
+export const SetPlaybackHud = () => {
+  const active = useVisualizerStore((s) => s.setPlaybackActive);
+  const name = useVisualizerStore((s) => s.setPlaybackName);
+  const stop = useVisualizerStore((s) => s.stopSetPlayback);
 
   if (!active) {
     return null;

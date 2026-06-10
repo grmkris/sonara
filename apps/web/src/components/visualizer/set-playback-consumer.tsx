@@ -14,18 +14,19 @@ import { useVisualizerStore } from "@/stores/visualizer";
 //
 //   ?set=<setId>         → a frame set; recordings replay on their original
 //                          timing, curated/builtin sets on a fixed cadence
-//   ?reel=<reelId>       → legacy curated reel link (reel ids live on as
+//   ?reel=<reelId>       → legacy param, retired in C5 (reel ids live on as
 //                          set ids — same uuid), fixed cadence
-//   ?session=<sessionId> → legacy live-session link, original timing
+//   ?session=<sessionId> → legacy param, retired in C5 (live-session link),
+//                          original timing
 //
 // Playback is purely client-side (no WS action, no generation): we fetch the
-// ordered frames and hand them to the reel-playback slice; useReelPlaybackLoop
+// ordered frames and hand them to the set-playback slice; useSetPlaybackLoop
 // pushes them through the same crossfade pipeline. Lives in its own Suspense
 // boundary so useSearchParams doesn't gate the rest of the page.
-export const ReelPlaybackConsumer = () => {
+export const SetPlaybackConsumer = () => {
   const params = useSearchParams();
   const router = useRouter();
-  const startReelPlayback = useVisualizerStore((s) => s.startReelPlayback);
+  const startSetPlayback = useVisualizerStore((s) => s.startSetPlayback);
 
   // Snapshot the params on first mount so we don't react to the clear we make
   // ourselves below.
@@ -55,9 +56,10 @@ export const ReelPlaybackConsumer = () => {
     let cancelled = false;
     const run = async () => {
       try {
-        // Legacy ?reel= links keep working: the migration kept each reel's
-        // uuid as its set id, so a rel_ id converts to the set_ id of the
-        // same row and both params resolve through sets.get.
+        // Legacy ?reel= links keep working until C5 retires them: the
+        // migration kept each reel's uuid as its set id, so a rel_ id converts
+        // to the set_ id of the same row and both params resolve through
+        // sets.get.
         const replaySetId: FrameSetId | null =
           (setId as FrameSetId | null) ??
           (reel
@@ -74,7 +76,7 @@ export const ReelPlaybackConsumer = () => {
             toast("that set is empty");
             return;
           }
-          startReelPlayback({
+          startSetPlayback({
             cadence: data.origin === "recording" ? "original" : "fixed",
             frames: data.frames,
             id: data.id,
@@ -91,7 +93,7 @@ export const ReelPlaybackConsumer = () => {
             toast("that session has no frames");
             return;
           }
-          startReelPlayback({
+          startSetPlayback({
             cadence: "original",
             frames,
             id: session,
@@ -114,7 +116,7 @@ export const ReelPlaybackConsumer = () => {
     return () => {
       cancelled = true;
     };
-  }, [router, startReelPlayback]);
+  }, [router, startSetPlayback]);
 
   return null;
 };

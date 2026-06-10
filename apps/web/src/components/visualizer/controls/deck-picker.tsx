@@ -79,6 +79,10 @@ export const usePickDeck = (send: SessionSend): ((deck: string) => void) => {
 // client-side demo loop (no fal, no credits). Once the user commits a
 // prompt the session enters "Live" mode and frames stream from fal +
 // persist to the library; clicking another deck flips back to playback.
+//
+// Coexists with SourceSwitcher on purpose: DeckPicker is the remote console's
+// deck row, dispatching over the control.* HTTP transport; SourceSwitcher is
+// /play's local transport over every source incl. sets.
 export const DeckPicker = ({ send }: DeckPickerProps) => {
   const { data: sessionData } = useSession();
   const isSignedIn = !!sessionData?.session;

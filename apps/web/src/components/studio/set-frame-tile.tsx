@@ -5,7 +5,7 @@ import { ChevronLeft, ChevronRight, ImageIcon, X } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 
-interface ReelFrameTileProps {
+interface SetFrameTileProps {
   frame: LibraryFrame;
   index: number;
   selected: boolean;
@@ -20,10 +20,10 @@ interface ReelFrameTileProps {
   canMoveNext?: boolean;
 }
 
-// One frame within the reel editor grid. Click selects (opens the inspector).
+// One frame within the set editor grid. Click selects (opens the inspector).
 // When edit handlers are passed, hover reveals reorder / remove / set-cover
 // controls.
-export const ReelFrameTile = ({
+export const SetFrameTile = ({
   frame,
   index,
   selected,
@@ -35,7 +35,7 @@ export const ReelFrameTile = ({
   onSetCover,
   canMovePrev,
   canMoveNext,
-}: ReelFrameTileProps) => {
+}: SetFrameTileProps) => {
   const editable = !!(onMovePrev || onMoveNext || onRemove || onSetCover);
   return (
     <div className="group relative">
@@ -112,7 +112,7 @@ export const ReelFrameTile = ({
               <button
                 type="button"
                 onClick={() => onRemove(frame.id)}
-                aria-label="remove from reel"
+                aria-label="remove from set"
                 className="focus-ring pointer-events-auto rounded-sm p-0.5 text-[color:var(--paper)]/85 hover:text-[color:var(--signal)]"
               >
                 <X className="size-3.5" strokeWidth={1.5} />

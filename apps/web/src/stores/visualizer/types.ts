@@ -5,7 +5,7 @@ import type { LibrarySlice } from "./library-slice";
 import type { ModelSlice } from "./model-slice";
 import type { PlaybackSlice } from "./playback-slice";
 import type { PresetSlice } from "./preset-slice";
-import type { ReelPlaybackSlice } from "./reel-playback-slice";
+import type { SetPlaybackSlice } from "./set-playback-slice";
 import type { SceneSlice } from "./scene-slice";
 import type { StageSlice } from "./stage-slice";
 import type { UiSlice } from "./ui-slice";
@@ -24,5 +24,5 @@ export type VisualizerState = SceneSlice &
   ImageAnchorSlice &
   LibrarySlice &
   ModelSlice &
-  ReelPlaybackSlice &
+  SetPlaybackSlice &
   StageSlice;

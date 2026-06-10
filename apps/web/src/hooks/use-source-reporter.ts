@@ -25,11 +25,11 @@ type ReportedSource = Extract<
 // replay wins (it forces demoMode off), then deck playback, then live (a
 // generation prompt exists), else idle.
 const deriveSource = (s: VisualizerState): ReportedSource => {
-  if (s.reelPlaybackActive) {
+  if (s.setPlaybackActive) {
     return {
       kind: "set",
-      label: s.reelPlaybackName,
-      ...(s.reelPlaybackId ? { setId: s.reelPlaybackId } : {}),
+      label: s.setPlaybackName,
+      ...(s.setPlaybackId ? { setId: s.setPlaybackId } : {}),
     };
   }
   if (s.demoMode && s.demoDeck) {
