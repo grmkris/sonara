@@ -8,6 +8,7 @@ import type { SessionContext } from "@sonara/api/server";
 import { createDb } from "@sonara/db";
 import { runMigrations } from "@sonara/db/migrator";
 import { SERVICE_URLS, verifyTicket } from "@sonara/shared";
+import type { WsRole } from "@sonara/shared";
 import { LiveSessionIdSchema } from "@sonara/shared/typeid";
 import type { LiveSessionId, UserId } from "@sonara/shared/typeid";
 import type { ServerWebSocket } from "bun";
@@ -160,6 +161,11 @@ interface SessionWsData {
   // session_id. Validated as a well-formed liveSession typeid; null when a
   // client doesn't supply one (old/direct client) → the Session mints its own.
   liveSessionId: LiveSessionId | null;
+  // Durable stage this connection attaches to — resolved + ownership-checked
+  // at ticket mint time (auth.router). Null for anon and for legacy tickets
+  // minted by the previous build (≤5 min TTL window).
+  stageId: string | null;
+  role: WsRole;
 }
 
 // One Bun.serve handles two socket kinds: the oRPC session wire (/ws) and the
@@ -205,7 +211,9 @@ const server = Bun.serve<WsData, never>({
         data: {
           kind: "session" as const,
           liveSessionId,
+          role: payload.role ?? "screen",
           sessionId,
+          stageId: payload.stageId ?? null,
           userId: payload.userId,
         },
       });

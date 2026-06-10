@@ -7,11 +7,21 @@
 // where sig = HMAC-SHA256(secret, `${headerJson}.${payloadJson}`).
 // Deliberately NOT a JWT — no alg=none footgun, no library required.
 
+// Connection roles. Only the screen (projector/producer) exists today;
+// operator/watcher arrive with the rooms phases.
+export type WsRole = "screen";
+
 export interface WsTicketPayload {
   // raw UUID for authenticated users; null for anonymous demo sessions.
   // Server uses non-null as-is in pg queries; null means "skip credits + fal,
   // demo library only" (see apps/server/src/session/session.ts).
   userId: string | null;
+  // stg_ typeid of the stage this connection attaches to, resolved and
+  // ownership-checked at mint time (auth.router mintWsTicket). Null for anon.
+  // Optional on verify: tickets minted by the previous build (≤5 min TTL)
+  // predate the field.
+  stageId?: string | null;
+  role?: WsRole;
   // epoch ms
   exp: number;
   // epoch ms
@@ -64,6 +74,8 @@ const hmac = async (secret: string, data: string): Promise<string> => {
 
 export interface SignTicketArgs {
   userId: string | null;
+  stageId?: string | null;
+  role?: WsRole;
   secret: string;
   // default 5 minutes
   ttlMs?: number;
@@ -71,11 +83,19 @@ export interface SignTicketArgs {
 
 export const signTicket = async ({
   userId,
+  stageId = null,
+  role = "screen",
   secret,
   ttlMs = 5 * 60 * 1000,
 }: SignTicketArgs): Promise<string> => {
   const now = Date.now();
-  const payload: WsTicketPayload = { exp: now + ttlMs, iat: now, userId };
+  const payload: WsTicketPayload = {
+    exp: now + ttlMs,
+    iat: now,
+    role,
+    stageId,
+    userId,
+  };
   const payloadB64 = base64UrlEncode(TEXT.encode(JSON.stringify(payload)));
   const sig = await hmac(secret, `${HEADER_B64}.${payloadB64}`);
   return `${HEADER_B64}.${payloadB64}.${sig}`;
@@ -126,5 +146,14 @@ export const verifyTicket = async (
   ) {
     return null;
   }
-  return payload;
+  const stageIdOk =
+    payload.stageId === undefined ||
+    payload.stageId === null ||
+    typeof payload.stageId === "string";
+  const roleOk = payload.role === undefined || payload.role === "screen";
+  if (!(stageIdOk && roleOk)) {
+    return null;
+  }
+  // Default legacy payloads (previous build's tickets, ≤5 min in the wild).
+  return { role: "screen", stageId: null, ...payload };
 };
