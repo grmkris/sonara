@@ -3,12 +3,13 @@
 import { ORPCError } from "@orpc/client";
 import { deckLabel } from "@sonara/shared";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { Suspense, useCallback, useEffect, useState } from "react";
 import type { AppRouterClient } from "server/rpc";
 
 import { AppNavLinks } from "@/components/app-nav";
 import { Mark } from "@/components/brand/mark";
+import { StageManager } from "@/components/control/stage-manager";
 import { Button } from "@/components/ui/button";
 import { useSession } from "@/lib/auth-client";
 import { rpcClient } from "@/lib/orpc";
@@ -43,6 +44,20 @@ const startedAgo = (startedAt: number): string => {
 const isUnauthorized = (error: unknown): boolean =>
   error instanceof ORPCError && error.code === "UNAUTHORIZED";
 
+// ?manage=1 suppresses the 1-live auto-forward so the stage list is reachable
+// even mid-gig (the console header links here). useSearchParams must live in
+// its own Suspense boundary (Next 16).
+const ManageFlag = ({ onManage }: { onManage: () => void }) => {
+  const searchParams = useSearchParams();
+  const manage = searchParams.get("manage") === "1";
+  useEffect(() => {
+    if (manage) {
+      onManage();
+    }
+  }, [manage, onManage]);
+  return null;
+};
+
 const Shell = ({ children }: { children: React.ReactNode }) => (
   <main className="flex min-h-svh flex-col bg-[color:var(--ink)] px-6 text-[color:var(--stone)]">
     <header className="flex items-center justify-between pt-7">
@@ -65,6 +80,12 @@ export default function ControlPage() {
 
   const [stages, setStages] = useState<StageEntry[] | null>(null);
   const [authExpired, setAuthExpired] = useState(false);
+  const [manage, setManage] = useState(false);
+  const onManage = useCallback(() => setManage(true), []);
+  // Bumped after rename/create so the list refreshes immediately (the 3s poll
+  // would catch up anyway; this just feels right).
+  const [refreshNonce, setRefreshNonce] = useState(0);
+  const onChanged = useCallback(() => setRefreshNonce((n) => n + 1), []);
 
   // Discover the caller's stages; keep polling so the page resolves the
   // moment a screen connects somewhere.
@@ -102,7 +123,7 @@ export default function ControlPage() {
         clearTimeout(timer);
       }
     };
-  }, [isSignedIn]);
+  }, [isSignedIn, refreshNonce]);
 
   const liveStages = (stages ?? []).filter((s) => s.live);
 
@@ -110,14 +131,14 @@ export default function ControlPage() {
   // a second named stage mid-gig — render the picker; polling keeps running,
   // so when the list shrinks back to one this auto-resolves.
   useEffect(() => {
-    if (liveStages.length !== 1) {
+    if (manage || liveStages.length !== 1) {
       return;
     }
     const [only] = liveStages;
     if (only) {
       router.replace(consoleHref(only));
     }
-  }, [liveStages, router]);
+  }, [liveStages, router, manage]);
 
   if (isPending) {
     return <Shell>loading…</Shell>;
@@ -167,15 +188,42 @@ export default function ControlPage() {
     return <Shell>loading…</Shell>;
   }
 
-  if (liveStages.length === 0) {
+  if (manage || liveStages.length === 0) {
     return (
       <Shell>
-        <div className="flex max-w-md flex-col gap-8">
-          <p className="text-center font-serif text-[17px] text-[color:var(--paper)]/85">
-            nothing live yet.
-          </p>
+        <div className="flex w-full max-w-md flex-col gap-8">
+          <Suspense fallback={null}>
+            <ManageFlag onManage={onManage} />
+          </Suspense>
+          {liveStages.length > 0 && (
+            <div className="flex flex-col items-center gap-2">
+              <p className="text-center font-serif text-[15px] normal-case tracking-normal text-[color:var(--paper)]/85">
+                {liveStages.length === 1
+                  ? "one stage is live."
+                  : `${liveStages.length} stages are live.`}
+              </p>
+              <Button asChild variant="ghost" size="sm">
+                <Link
+                  href={
+                    liveStages.length === 1 && liveStages[0]
+                      ? consoleHref(liveStages[0])
+                      : "/control"
+                  }
+                  className="font-sans text-[11px] uppercase tracking-[0.24em]"
+                >
+                  open the console
+                </Link>
+              </Button>
+            </div>
+          )}
+          {liveStages.length === 0 && (
+            <p className="text-center font-serif text-[17px] text-[color:var(--paper)]/85">
+              nothing live yet.
+            </p>
+          )}
 
           {/* The common case first: one device — this screen IS the show. */}
+          {liveStages.length === 0 && (
           <div className="flex flex-col gap-2">
             <p className="font-sans text-[10px] uppercase tracking-[0.26em] text-[color:var(--stone)]">
               one screen?
@@ -192,8 +240,10 @@ export default function ControlPage() {
               </Link>
             </Button>
           </div>
+          )}
 
           {/* Two devices: projector runs /play; this page catches it. */}
+          {liveStages.length === 0 && (
           <div className="flex flex-col gap-2">
             <p className="font-sans text-[10px] uppercase tracking-[0.26em] text-[color:var(--stone)]">
               two screens?
@@ -211,6 +261,9 @@ export default function ControlPage() {
               watching for your projector…
             </p>
           </div>
+          )}
+
+          <StageManager stages={stages} onChanged={onChanged} />
         </div>
       </Shell>
     );
@@ -251,6 +304,8 @@ export default function ControlPage() {
             each row is a stage you named — close its screen and the list
             shrinks.
           </p>
+
+          <StageManager stages={stages} onChanged={onChanged} />
         </div>
       </Shell>
     );

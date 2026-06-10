@@ -85,12 +85,20 @@ const LiveStageConsole = ({ stage }: { stage: StageEntry }) => {
         <span className="font-sans text-[10px] uppercase tracking-[0.24em] text-[color:var(--stone)]">
           {stage.name} · {stage.code}
         </span>
-        <Link
-          href={`/stage/${stage.code}`}
-          className="focus-ring font-sans text-[10px] uppercase tracking-[0.24em] text-[color:var(--stone)] transition-colors hover:text-[color:var(--paper)]"
-        >
-          crowd page ↗
-        </Link>
+        <span className="flex items-center gap-4">
+          <Link
+            href="/control?manage=1"
+            className="focus-ring font-sans text-[10px] uppercase tracking-[0.24em] text-[color:var(--stone)] transition-colors hover:text-[color:var(--paper)]"
+          >
+            stages
+          </Link>
+          <Link
+            href={`/stage/${stage.code}`}
+            className="focus-ring font-sans text-[10px] uppercase tracking-[0.24em] text-[color:var(--stone)] transition-colors hover:text-[color:var(--paper)]"
+          >
+            crowd page ↗
+          </Link>
+        </span>
       </div>
       <StageConsole
         variant="detached"
