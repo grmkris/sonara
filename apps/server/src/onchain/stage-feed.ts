@@ -19,7 +19,7 @@ import { stageState } from "./stage-state";
 // Deliberately a SEPARATE socket from /ws (the oRPC session wire): the
 // rooms-and-roles plan's transport rule is "never raw frames on the oRPC
 // socket", and the room code — not an auth ticket — is the capability here,
-// exactly like control.stageSnapshot. Bun's native pub/sub is the fan-out:
+// exactly like stage.snapshot. Bun's native pub/sub is the fan-out:
 // each socket subscribes to its room topic + the global block topic; the
 // listener publishes via server.publish. Everything lives in this module so
 // server.ts only gains delegation lines (that file is being rewritten by the
@@ -97,7 +97,7 @@ const socketsByRoom = new Map<string, Set<ServerWebSocket<StageFeedWsData>>>();
 // fetch-side handler for GET /ws/stage?room=… . Bun contract: returning a
 // Response means rejected; undefined means the upgrade succeeded and the
 // websocket hooks take over. Unknown/closed room → 404 (the room code is the
-// capability — same trust model as control.stageSnapshot).
+// capability — same trust model as stage.snapshot).
 export const tryUpgradeStageFeed = (
   req: Request,
   server: StageUpgrader

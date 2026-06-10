@@ -78,7 +78,7 @@ const DRIP_ERRORS: Record<string, string> = {
 };
 
 // Shown when the smart account can't cover a prompt. Primary path: the house
-// faucet drips testnet USDC straight to this wallet (control.stageAirdrop).
+// faucet drips testnet USDC straight to this wallet (stage.airdrop).
 // Fallback: send USDC yourself (address as text + QR) or the Circle faucet.
 // The top-up: a bright, friendly "free credits" slab backed by the house
 // faucet — deliberately NOT styled like a real payment button (a pay-sheet
@@ -108,7 +108,7 @@ const FundPanel = ({
   const topUp = async (): Promise<void> => {
     setPhase("confirming");
     try {
-      const result = await rpcClient.control.stageAirdrop({ address, room });
+      const result = await rpcClient.stage.airdrop({ address, room });
       if (result.ok) {
         onCredited(BigInt(result.units));
         setPhase("paid");

@@ -41,7 +41,7 @@ import { useVisualizerStore } from "@/stores/visualizer";
 // (frame.report / source.report) and its audio.features go nowhere (noop
 // send); the projector-producer (/play) is the only voice to the server.
 
-type Lens = Awaited<ReturnType<AppRouterClient["control"]["lens"]>>;
+type Lens = Awaited<ReturnType<AppRouterClient["sets"]["lens"]>>;
 type FoundLens = Extract<Lens, { exists: true }>;
 type ReplaySet = Awaited<ReturnType<AppRouterClient["sets"]["get"]>>;
 
@@ -127,7 +127,7 @@ const useLensPoll = (id: string): Lens | null => {
     const poll = async (): Promise<void> => {
       let wait = LIVE_POLL_MS;
       try {
-        const next = await rpcClient.control.lens({ id });
+        const next = await rpcClient.sets.lens({ id });
         if (cancelled) {
           return;
         }

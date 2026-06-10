@@ -10,7 +10,7 @@ import { publicEnv } from "../../env";
 
 // Live connection to the public per-room stage feed (/ws/stage?room=…) — the
 // push channel behind the Monad "wire" UI. No ticket: the room code is the
-// capability, same as control.stageSnapshot. partysocket re-dials with
+// capability, same as stage.snapshot. partysocket re-dials with
 // backoff; the seq cursor makes the hello backlog idempotent across
 // reconnects (and React strict-mode's double-effect in dev).
 

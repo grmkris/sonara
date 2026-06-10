@@ -21,7 +21,7 @@ import { cn } from "@/lib/utils";
 // bookmarkable; with several shows running, each has its own console URL —
 // no "newest session" guessing anywhere.
 
-type Lens = Awaited<ReturnType<AppRouterClient["control"]["lens"]>>;
+type Lens = Awaited<ReturnType<AppRouterClient["sets"]["lens"]>>;
 
 const Shell = ({
   children,
@@ -117,7 +117,7 @@ export default function SetConsolePage() {
     let cancelled = false;
     void (async () => {
       try {
-        const next = await rpcClient.control.lens({ id });
+        const next = await rpcClient.sets.lens({ id });
         if (!cancelled) {
           setLens(next);
         }

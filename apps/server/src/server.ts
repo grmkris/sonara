@@ -81,7 +81,7 @@ const stageListener =
       })
     : null;
 
-// Stage airdrop faucet (control.stageAirdrop): tops audience wallets up with
+// Stage airdrop faucet (stage.airdrop): tops audience wallets up with
 // USDC so they can prompt without leaving the show. Dormant without a key.
 if (
   env.SONARA_STAGE_CONTRACT &&
@@ -170,7 +170,7 @@ const server = Bun.serve<WsData, never>({
   async fetch(req, srv) {
     const url = new URL(req.url);
     // Public per-room stage feed — no ticket; the room code is the capability
-    // (same trust model as control.stageSnapshot). All logic lives in
+    // (same trust model as stage.snapshot). All logic lives in
     // onchain/stage-feed.ts.
     if (url.pathname === "/ws/stage") {
       return tryUpgradeStageFeed(req, srv);

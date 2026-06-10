@@ -17,7 +17,7 @@ import { TxTicker } from "./tx-ticker";
 // Owner-side stage control on the operator remote: open this live session to
 // the crowd (mints a room code), show the QR people scan to drive the visuals
 // over Monad txs, and watch the wire — live tx ticker, room pulse, per-kind
-// counts — climb. Opens/closes via control.openStage/closeStage; live state
+// counts — climb. Opens/closes via stage.open/close; live state
 // rides the public /ws/stage feed (no polling).
 
 export const StageHostPanel = ({
@@ -30,7 +30,7 @@ export const StageHostPanel = ({
   const [busy, setBusy] = useState(false);
   const [qr, setQr] = useState<string | null>(null);
   const [stageUrl, setStageUrl] = useState("");
-  // Mirrors the projector's join-QR overlay (openStage defaults it on).
+  // Mirrors the projector's join-QR overlay (stage.open defaults it on).
   const [displayQr, setDisplayQr] = useState(true);
 
   const feed = useStageFeed(room);
@@ -67,7 +67,7 @@ export const StageHostPanel = ({
   const open = async () => {
     setBusy(true);
     try {
-      const { room: minted } = await rpcClient.control.openStage({
+      const { room: minted } = await rpcClient.stage.open({
         allowPrompts: true,
         liveSessionId,
       });
@@ -83,7 +83,7 @@ export const StageHostPanel = ({
   const close = async () => {
     setBusy(true);
     try {
-      await rpcClient.control.closeStage({ liveSessionId });
+      await rpcClient.stage.close({ liveSessionId });
       setRoom(null);
     } catch {
       // best-effort
@@ -97,7 +97,7 @@ export const StageHostPanel = ({
     const next = !displayQr;
     setDisplayQr(next);
     try {
-      await rpcClient.control.setStageQr({ liveSessionId, show: next });
+      await rpcClient.stage.setQr({ liveSessionId, show: next });
     } catch (error) {
       setDisplayQr(!next);
       toast.error(

@@ -20,8 +20,8 @@ import { getTestDb } from "@sonara/test-utils/test-db";
 import type { TestDb } from "@sonara/test-utils/test-db";
 
 import { stageRooms } from "../onchain/stage-rooms";
-import { controlRouter } from "./control.router";
 import type { ServerHttpContext } from "./procedures";
+import { setsRouter } from "./sets.router";
 
 // /s/[id] permalink resolver. The registry is the live half of the world — a
 // Map of fake ControllableSessions stands in for the SessionManager, while the
@@ -79,7 +79,7 @@ const mkCtx = (userId: UserId | null): ServerHttpContext =>
   makeServerCtx({ db, registry, userId }) as ServerHttpContext;
 
 const makeClient = (userId: UserId | null) =>
-  createRouterClient(controlRouter, { context: mkCtx(userId) });
+  createRouterClient(setsRouter, { context: mkCtx(userId) });
 
 type ControlClient = ReturnType<typeof makeClient>;
 let owner: ControlClient;

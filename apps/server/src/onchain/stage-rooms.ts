@@ -1,7 +1,7 @@
 import { randomBytes } from "node:crypto";
 
 // Binds a short, shareable room code to one live session. The session owner
-// "opens the stage" (control.openStage) to mint a code; the on-chain listener
+// "opens the stage" (stage.open) to mint a code; the on-chain listener
 // resolves room -> liveSessionId here, then looks up the live Session via the
 // SessionManager registry. Kept as a server-local singleton (NOT in the oRPC
 // context) so this feature touches neither packages/api nor the WS context.
@@ -14,7 +14,7 @@ export interface StageRoomBinding {
   liveSessionId: string;
   allowPrompts: boolean;
   // Whether the projector overlays the join QR. Host-toggled from /control;
-  // defaults on at openStage so the room can fill, hidden once it has.
+  // defaults on at stage.open so the room can fill, hidden once it has.
   showQr: boolean;
 }
 

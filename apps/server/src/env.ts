@@ -80,14 +80,14 @@ const envSchema = z.object({
   // Monad "stage" (on-chain visual control). All optional — when MONAD_RPC_WSS
   // and SONARA_STAGE_CONTRACT are both set, the server starts the on-chain
   // event listener at boot; otherwise the feature is dormant (no listener, the
-  // control.openStage endpoint still mints rooms but nothing drives them).
+  // stage.open endpoint still mints rooms but nothing drives them).
   MONAD_RPC_WSS: z.string().default("wss://testnet-rpc.monad.xyz"),
   SONARA_STAGE_CONTRACT: z.string().default(""),
   // How long each queued prompt holds the projector before the next advances.
   PROMPT_DWELL_MS: z.coerce.number().int().positive().default(12_000),
   // EOA key the MCP agent signs with (it pays its own gas in testnet MON).
   MCP_AGENT_KEY: z.string().default(""),
-  // EOA key the stage airdrop faucet sends USDC from (control.stageAirdrop).
+  // EOA key the stage airdrop faucet sends USDC from (stage.airdrop).
   // Needs testnet MON for gas + a USDC float; as the stage treasury, spent
   // prompts flow back to it. Empty = no airdrops (audience uses faucet.circle.com).
   STAGE_FAUCET_KEY: z.string().default(""),
