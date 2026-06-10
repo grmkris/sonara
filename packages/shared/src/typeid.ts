@@ -23,6 +23,10 @@ export const idTypesMapNameToPrefix = {
   // old links only — migration 0006 copied reels into frame_set with the
   // same uuid, so legacy ids remap to set ids by a literal prefix swap.
   session: "ses",
+  // A **stage** is the durable place an account performs at — named, with a
+  // permanent 5-char join code (the QR handle). Live runs (lse_) and their
+  // recording sets hang off a stage. See docs/rooms-and-roles-plan.md rev 2.
+  stage: "stg",
   usageLedger: "usg",
   user: "usr",
   verification: "ver",
@@ -82,6 +86,7 @@ export type ImageLibraryId = TypeIdString<"imageLibrary">;
 export type LiveSessionId = TypeIdString<"liveSession">;
 export type FrameSetId = TypeIdString<"frameSet">;
 export type FrameSetFrameId = TypeIdString<"frameSetFrame">;
+export type StageId = TypeIdString<"stage">;
 
 export const UserIdSchema = typeIdValidator("user");
 export const SessionIdSchema = typeIdValidator("session");
@@ -94,3 +99,4 @@ export const ImageLibraryIdSchema = typeIdValidator("imageLibrary");
 export const LiveSessionIdSchema = typeIdValidator("liveSession");
 export const FrameSetIdSchema = typeIdValidator("frameSet");
 export const FrameSetFrameIdSchema = typeIdValidator("frameSetFrame");
+export const StageIdSchema = typeIdValidator("stage");

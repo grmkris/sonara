@@ -5,6 +5,7 @@ import type {
   FrameSetId,
   ImageLibraryId,
   LiveSessionId,
+  StageId,
   UserId,
 } from "@sonara/shared/typeid";
 
@@ -31,6 +32,29 @@ export const createTestUser = async (
   };
   await db.insert(SCHEMA.user).values(row);
   return { email: row.email, id, name: row.name };
+};
+
+// Codes default to a slice of the row uuid-ish id so parallel inserts never
+// collide on stage_code_idx; pass a fixed code when a test needs one.
+export const createTestStage = async (
+  db: Database,
+  opts: {
+    code?: string;
+    isDefault?: boolean;
+    name?: string;
+    userId: UserId;
+  }
+): Promise<{ code: string; id: StageId; name: string }> => {
+  const id = typeIdGenerator("stage") as StageId;
+  const row = {
+    code: opts.code ?? id.slice(-5).toUpperCase(),
+    id,
+    isDefault: opts.isDefault ?? false,
+    name: opts.name ?? "Test stage",
+    userId: opts.userId,
+  };
+  await db.insert(SCHEMA.stage).values(row);
+  return { code: row.code, id, name: row.name };
 };
 
 // userId null + a "/library/..." url models a shipped seed frame; the default

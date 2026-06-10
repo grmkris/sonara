@@ -4,6 +4,7 @@ import type {
   FrameSetId,
   ImageLibraryId,
   LiveSessionId,
+  StageId,
   UserId,
 } from "@sonara/shared/typeid";
 import { sql } from "drizzle-orm";
@@ -18,6 +19,7 @@ import {
 import { baseEntityFields, typeId } from "../utils";
 import { user } from "./auth.db";
 import { imageLibrary } from "./image-library.db";
+import { stage } from "./stage.db";
 
 // A **set** (frame_set) is the unified playable frame collection — the single
 // entity behind what the UI used to split into built-in decks, session
@@ -63,6 +65,12 @@ export const frameSet = pgTable(
     origin: text("origin", {
       enum: ["builtin", "recording", "curated"],
     }).notNull(),
+    // Recordings only: which stage this set was performed on. Null for
+    // builtins, curated sets, and pre-stage recordings. set-null on stage
+    // delete — removing a stage never destroys its recordings.
+    stageId: typeId("stage", "stage_id")
+      .references(() => stage.id, { onDelete: "set null" })
+      .$type<StageId>(),
     // recording = a live performance is still appending frames; final =
     // frozen. Builtin/curated sets are always final.
     status: text("status", { enum: ["recording", "final"] })
@@ -93,6 +101,11 @@ export const frameSet = pgTable(
     uniqueIndex("frame_set_deck_key_idx")
       .on(table.deckKey)
       .where(sql`origin = 'builtin'`),
+    // "Sets performed on this stage", newest first.
+    index("frame_set_stage_created_idx").on(
+      table.stageId,
+      table.createdAt.desc()
+    ),
   ]
 );
 
