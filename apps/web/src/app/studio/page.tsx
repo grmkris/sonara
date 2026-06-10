@@ -22,6 +22,7 @@ import { RecordingsList } from "@/components/studio/recordings-list";
 import { StudioSidebarTabs } from "@/components/studio/studio-sidebar-tabs";
 import type { StudioTab } from "@/components/studio/studio-sidebar-tabs";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
+import { useIsMobile } from "@/hooks/use-is-mobile";
 import { useSession } from "@/lib/auth-client";
 import { rpcClient } from "@/lib/orpc";
 import { cn } from "@/lib/utils";
@@ -92,6 +93,7 @@ const StudioInner = () => {
   const isSignedIn = !!sessionData?.session;
   const sp = useSearchParams();
   const router = useRouter();
+  const isMobile = useIsMobile();
 
   const tab: StudioTab = sp.get("tab") === "sets" ? "sets" : "recordings";
   const selectedRecordingId = sp.get("recording");
@@ -698,9 +700,12 @@ const StudioInner = () => {
         )}
       </div>
 
-      {/* Mobile inspector — Sheet from the right. */}
+      {/* Mobile inspector — Sheet from the right. Gated on the breakpoint:
+          the Sheet's BACKDROP is not responsive-classed, so mounting it on
+          desktop (where only its content was md:hidden) dimmed the page and
+          swallowed every click while the inline aside showed the inspector. */}
       <Sheet
-        open={!!selectedFrame}
+        open={isMobile && !!selectedFrame}
         onOpenChange={(open) => {
           if (!open) {
             onCloseInspector();
