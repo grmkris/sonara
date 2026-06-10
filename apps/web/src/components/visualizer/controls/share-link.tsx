@@ -25,6 +25,15 @@ import { useVisualizerStore } from "@/stores/visualizer";
 // automatically and renders nothing before the first connect (correct —
 // there is no set to share yet). Live now, replay forever after.
 
+const copy = async (text: string): Promise<void> => {
+  try {
+    await navigator.clipboard.writeText(text);
+    toast.success("link copied");
+  } catch {
+    toast.error("couldn't copy — long-press to copy");
+  }
+};
+
 const setIdFromRun = (liveRun: string | null): string | null => {
   const parsed = liveRun ? LiveSessionIdSchema.safeParse(liveRun) : null;
   if (!parsed?.success) {
@@ -33,7 +42,10 @@ const setIdFromRun = (liveRun: string | null): string | null => {
   return typeIdFromUuid("frameSet", typeIdToUuid(parsed.data).uuid);
 };
 
-export const ShareLink = () => {
+// stageCode (when the screen knows its stage) makes the PERMANENT crowd URL
+// the headline share — printable once, survives every set — with this set's
+// replay permalink as the secondary copy row.
+export const ShareLink = ({ stageCode = null }: { stageCode?: string | null }) => {
   const liveRun = useVisualizerStore((s) => s.liveRun);
   const setId = setIdFromRun(liveRun);
   const [url, setUrl] = useState("");
@@ -43,21 +55,21 @@ export const ShareLink = () => {
     if (!(open && setId)) {
       return;
     }
-    const nextUrl = `${window.location.origin}/s/${setId}`;
+    // QR + primary row: the stage's crowd page when available (permanent),
+    // else this set's permalink (legacy runs).
+    const nextUrl = stageCode
+      ? `${window.location.origin}/stage/${stageCode}`
+      : `${window.location.origin}/s/${setId}`;
     setUrl(nextUrl);
     void (async () => {
       setQr(await QRCode.toDataURL(nextUrl, { margin: 1, width: 240 }));
     })();
   };
 
-  const copy = async (): Promise<void> => {
-    try {
-      await navigator.clipboard.writeText(url);
-      toast.success("link copied");
-    } catch {
-      toast.error("couldn't copy — long-press to copy");
-    }
-  };
+  const replayUrl =
+    typeof window === "undefined" || !setId
+      ? ""
+      : `${window.location.origin}/s/${setId}`;
 
   if (!setId) {
     return null;
@@ -91,7 +103,7 @@ export const ShareLink = () => {
           {url && (
             <button
               type="button"
-              onClick={copy}
+              onClick={() => void copy(url)}
               className="focus-ring flex items-center justify-between gap-3 rounded-sm border border-[color:var(--hairline)]/30 px-3 py-2 text-left transition-colors hover:border-[color:var(--paper)]/40"
             >
               <span className="break-all font-mono text-[10px] text-[color:var(--paper)]/80">
@@ -102,8 +114,24 @@ export const ShareLink = () => {
               </span>
             </button>
           )}
+          {stageCode && replayUrl && (
+            <button
+              type="button"
+              onClick={() => void copy(replayUrl)}
+              className="focus-ring flex items-center justify-between gap-3 rounded-sm border border-[color:var(--hairline)]/30 px-3 py-2 text-left transition-colors hover:border-[color:var(--paper)]/40"
+            >
+              <span className="break-all font-mono text-[10px] text-[color:var(--stone)]">
+                this set&apos;s replay link
+              </span>
+              <span className="shrink-0 font-sans text-[9px] uppercase tracking-[0.2em] text-[color:var(--stone)]">
+                copy
+              </span>
+            </button>
+          )}
           <p className="font-sans text-[9px] uppercase leading-relaxed tracking-[0.2em] text-[color:var(--stone)]">
-            anyone with the link can watch — now live, later the replay
+            {stageCode
+              ? "your stage's permanent link — print it once"
+              : "anyone with the link can watch — now live, later the replay"}
           </p>
         </div>
       </PopoverContent>

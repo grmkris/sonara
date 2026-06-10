@@ -37,6 +37,7 @@ import type { AudioSource } from "@/hooks/use-audio-features";
 import { useDemoFrameLoop } from "@/hooks/use-demo-frame-loop";
 import { useFrameReporter } from "@/hooks/use-frame-reporter";
 import { useHotkey } from "@/hooks/use-hotkey";
+import { useOwnStage } from "@/hooks/use-own-stage";
 import { useSetPlaybackLoop } from "@/hooks/use-set-playback-loop";
 import { useSongRecognition } from "@/hooks/use-song-recognition";
 import { useSourceReporter } from "@/hooks/use-source-reporter";
@@ -162,6 +163,10 @@ export const StageScreen = ({ code }: { code: string | null }) => {
   useSourceReporter(send);
   const { data: sessionData } = useSession();
   const isSignedIn = !!sessionData?.session;
+  // Which of MY stages this screen performs on — binds the host panel
+  // (crowd open/close under the permanent code) and the crowd-first share.
+  const ownStage = useOwnStage(code, isSignedIn);
+  const hostTarget = ownStage ? { stageId: ownStage.stageId } : null;
   const [audioSource, setAudioSource] = useState<AudioSource>({ type: "none" });
 
   // Console footer actions. "New set" closes the current recording segment
@@ -322,7 +327,7 @@ export const StageScreen = ({ code }: { code: string | null }) => {
           {/* Operator remote: drive this session from a phone so the projector
               stays a clean canvas (hide the HUD with the toggle beside this).
               Signed-in only — control needs an owned live session. */}
-          {isSignedIn && <ShareLink />}
+          {isSignedIn && <ShareLink stageCode={ownStage?.code ?? null} />}
           {isSignedIn && <RemoteLink />}
           <UserControls />
           <FullscreenToggle />
@@ -352,6 +357,7 @@ export const StageScreen = ({ code }: { code: string | null }) => {
                 <StageConsole
                   variant="attached"
                   send={send}
+                  hostTarget={hostTarget}
                   onNewSet={onNewSet}
                   onReset={onReset}
                 />
@@ -393,6 +399,7 @@ export const StageScreen = ({ code }: { code: string | null }) => {
             <StageConsole
               variant="attached"
               send={send}
+              hostTarget={hostTarget}
               onNewSet={onNewSet}
               onReset={onReset}
             />

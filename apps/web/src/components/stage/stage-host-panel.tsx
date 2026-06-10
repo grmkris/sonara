@@ -1,7 +1,6 @@
 "use client";
 
 import { formatUsdc } from "@sonara/onchain";
-import type { LiveSessionId } from "@sonara/shared/typeid";
 import QRCode from "qrcode";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
@@ -14,16 +13,19 @@ import { useStageFeed } from "@/lib/stage/use-stage-feed";
 import { Seismograph } from "./seismograph";
 import { TxTicker } from "./tx-ticker";
 
-// Owner-side stage control on the operator remote: open this live session to
-// the crowd (mints a room code), show the QR people scan to drive the visuals
-// over Monad txs, and watch the wire — live tx ticker, room pulse, per-kind
-// counts — climb. Opens/closes via stage.open/close; live state
+import type { ControlTarget } from "@/lib/control-actions";
+
+// Owner-side stage control on the console: open this stage to the crowd
+// (stage-keyed targets use the stage's PERMANENT code — printable QR; legacy
+// run targets mint a per-gig code), show the QR people scan to drive the
+// visuals over Monad txs, and watch the wire — live tx ticker, room pulse,
+// per-kind counts — climb. Opens/closes via stage.open/close; live state
 // rides the public /ws/stage feed (no polling).
 
 export const StageHostPanel = ({
-  liveSessionId,
+  target,
 }: {
-  liveSessionId: LiveSessionId | null;
+  target: ControlTarget | null;
 }) => {
   const configured = !!publicEnv.NEXT_PUBLIC_SONARA_STAGE_CONTRACT;
   const [room, setRoom] = useState<string | null>(null);
@@ -60,7 +62,7 @@ export const StageHostPanel = ({
     }
   };
 
-  if (!configured || !liveSessionId) {
+  if (!(configured && target)) {
     return null;
   }
 
@@ -68,8 +70,8 @@ export const StageHostPanel = ({
     setBusy(true);
     try {
       const { room: minted } = await rpcClient.stage.open({
+        ...target,
         allowPrompts: true,
-        liveSessionId,
       });
       setRoom(minted);
       setDisplayQr(true);
@@ -83,7 +85,7 @@ export const StageHostPanel = ({
   const close = async () => {
     setBusy(true);
     try {
-      await rpcClient.stage.close({ liveSessionId });
+      await rpcClient.stage.close(target);
       setRoom(null);
     } catch {
       // best-effort
@@ -97,7 +99,7 @@ export const StageHostPanel = ({
     const next = !displayQr;
     setDisplayQr(next);
     try {
-      await rpcClient.stage.setQr({ liveSessionId, show: next });
+      await rpcClient.stage.setQr({ ...target, show: next });
     } catch (error) {
       setDisplayQr(!next);
       toast.error(

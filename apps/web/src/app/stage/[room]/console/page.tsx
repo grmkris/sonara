@@ -105,7 +105,7 @@ const LiveStageConsole = ({ stage }: { stage: StageEntry }) => {
         send={send}
         snapshot={snapshot}
         connected={connected}
-        liveSessionId={snapshot?.liveSessionId ?? null}
+        hostTarget={{ stageId: stage.stageId }}
         onNewSet={() => send({ type: "set.new" })}
         onReset={() => send({ type: "session.reset" })}
       />

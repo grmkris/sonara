@@ -137,7 +137,7 @@ const LiveConsole = ({
         send={send}
         snapshot={snapshot}
         connected={connected}
-        liveSessionId={liveSessionId}
+        hostTarget={{ liveSessionId }}
       />
     </Shell>
   );

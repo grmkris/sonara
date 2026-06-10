@@ -3,7 +3,6 @@
 import { deckLabel } from "@sonara/shared";
 import type { DeckKey, SonaraSceneState } from "@sonara/shared";
 import type { ControlSnapshot } from "@sonara/api/server";
-import type { LiveSessionId } from "@sonara/shared/typeid";
 
 import { StageHostPanel } from "@/components/stage/stage-host-panel";
 import { Button } from "@/components/ui/button";
@@ -13,6 +12,7 @@ import { PresetPicker } from "@/components/visualizer/controls/preset-picker";
 import { PromptInput } from "@/components/visualizer/controls/prompt-input";
 import { SliderRow } from "@/components/visualizer/controls/slider-row";
 import { SourceSwitcher } from "@/components/visualizer/controls/source-switcher";
+import type { ControlTarget } from "@/lib/control-actions";
 import type { SessionSend } from "@/lib/session-actions";
 import { cn } from "@/lib/utils";
 import { useVisualizerStore } from "@/stores/visualizer";
@@ -45,8 +45,9 @@ export interface StageConsoleProps {
   // pure presenter and can never accidentally double-poll.
   snapshot?: ControlSnapshot | null;
   connected?: boolean;
-  // Stage host panel binding (re-keyed to stageId in W6).
-  liveSessionId?: LiveSessionId | null;
+  // Stage host panel binding: stage-keyed (permanent crowd code) or legacy
+  // run-keyed (per-gig minted code).
+  hostTarget?: ControlTarget | null;
   // Footer actions — rendered only when wired by the mount.
   onNewSet?: () => void;
   onReset?: () => void;
@@ -216,7 +217,7 @@ export const StageConsole = ({
   variant,
   snapshot = null,
   connected = false,
-  liveSessionId = null,
+  hostTarget = null,
   onNewSet,
   onReset,
 }: StageConsoleProps) => {
@@ -234,7 +235,7 @@ export const StageConsole = ({
           connected={connected}
         />
 
-        <StageHostPanel liveSessionId={liveSessionId} />
+        <StageHostPanel target={hostTarget} />
 
         <div className="flex flex-col gap-5">
           <PromptInput send={send} />
@@ -275,10 +276,10 @@ export const StageConsole = ({
         <FeelControls send={send} />
       </div>
 
-      {liveSessionId !== null && (
+      {hostTarget !== null && (
         <>
           <Divider />
-          <StageHostPanel liveSessionId={liveSessionId} />
+          <StageHostPanel target={hostTarget} />
         </>
       )}
 
