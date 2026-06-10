@@ -8,7 +8,8 @@ import type { AppRouterClient } from "server/rpc";
 
 import { AppNavLinks } from "@/components/app-nav";
 import { Mark } from "@/components/brand/mark";
-import { OperatorConsole } from "@/components/control/operator-console";
+import { StageConsole } from "@/components/stage-console/stage-console";
+import { useRemoteSession } from "@/hooks/use-remote-session";
 import { Button } from "@/components/ui/button";
 import { useSession } from "@/lib/auth-client";
 import { rpcClient } from "@/lib/orpc";
@@ -97,6 +98,42 @@ const Notice = ({
   </div>
 );
 
+// The page owns the remote binding (1s snapshot poll over the control
+// router); StageConsole is a pure presenter mounted `detached`.
+const LiveConsole = ({
+  id,
+  liveSessionId,
+  name,
+}: {
+  id: string;
+  liveSessionId: LiveSessionId;
+  name: string;
+}) => {
+  const { send, snapshot, connected } = useRemoteSession(liveSessionId);
+  return (
+    <Shell pill={<ConnectedPill connected={connected} />}>
+      <div className="-mt-2 flex items-center justify-between">
+        <span className="font-sans text-[10px] uppercase tracking-[0.24em] text-[color:var(--stone)]">
+          {name}
+        </span>
+        <Link
+          href={`/s/${id}`}
+          className="focus-ring font-sans text-[10px] uppercase tracking-[0.24em] text-[color:var(--stone)] transition-colors hover:text-[color:var(--paper)]"
+        >
+          public page ↗
+        </Link>
+      </div>
+      <StageConsole
+        variant="detached"
+        send={send}
+        snapshot={snapshot}
+        connected={connected}
+        liveSessionId={liveSessionId}
+      />
+    </Shell>
+  );
+};
+
 export default function SetConsolePage() {
   const params = useParams<{ id: string }>();
   const { id } = params;
@@ -104,11 +141,10 @@ export default function SetConsolePage() {
   const isSignedIn = !!sessionData?.session;
 
   // One lens read on mount decides the gate (live? mine?); afterwards the
-  // console's own ~1s snapshot poll (useRemoteSession inside OperatorConsole)
+  // console's own ~1s snapshot poll (useRemoteSession in LiveConsole below)
   // is the liveness signal — no second poll loop here.
   const [lens, setLens] = useState<Lens | null>(null);
   const [failed, setFailed] = useState(false);
-  const [connected, setConnected] = useState(false);
 
   useEffect(() => {
     if (!isSignedIn) {
@@ -187,22 +223,10 @@ export default function SetConsolePage() {
   }
 
   return (
-    <Shell pill={<ConnectedPill connected={connected} />}>
-      <div className="-mt-2 flex items-center justify-between">
-        <span className="font-sans text-[10px] uppercase tracking-[0.24em] text-[color:var(--stone)]">
-          {lens.set?.name ?? "live session"}
-        </span>
-        <Link
-          href={`/s/${id}`}
-          className="focus-ring font-sans text-[10px] uppercase tracking-[0.24em] text-[color:var(--stone)] transition-colors hover:text-[color:var(--paper)]"
-        >
-          public page ↗
-        </Link>
-      </div>
-      <OperatorConsole
-        liveSessionId={lens.live.liveSessionId as LiveSessionId}
-        onConnectedChange={setConnected}
-      />
-    </Shell>
+    <LiveConsole
+      id={id}
+      liveSessionId={lens.live.liveSessionId as LiveSessionId}
+      name={lens.set?.name ?? "live session"}
+    />
   );
 }

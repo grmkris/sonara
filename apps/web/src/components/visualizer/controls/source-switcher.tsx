@@ -12,6 +12,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { usePickDeck } from "@/components/visualizer/controls/deck-picker";
+import { startSetReplayById } from "@/lib/apply-source";
 import { useSession } from "@/lib/auth-client";
 import { rpcClient } from "@/lib/orpc";
 import type { SessionSend } from "@/lib/session-actions";
@@ -20,6 +21,12 @@ import { useVisualizerStore } from "@/stores/visualizer";
 
 interface SourceSwitcherProps {
   send: SessionSend;
+  // "local": this device owns the canvas — set picks start the client replay
+  // loop here. "remote": a detached console driving another screen — set
+  // picks are hidden until the source.set bridge lands (W5); deck picks
+  // already travel via the unified send (demo.set → control.setDemoMode).
+  mode?: "local" | "remote";
+  showSets?: boolean;
 }
 
 // The Now-Showing transport: one control naming what the canvas is showing
@@ -67,7 +74,11 @@ const SetRows = ({
   </ul>
 );
 
-export const SourceSwitcher = ({ send }: SourceSwitcherProps) => {
+export const SourceSwitcher = ({
+  send,
+  mode = "local",
+  showSets = mode === "local",
+}: SourceSwitcherProps) => {
   const { data: sessionData } = useSession();
   const isSignedIn = !!sessionData?.session;
   const demoMode = useVisualizerStore((s) => s.demoMode);
@@ -128,7 +139,7 @@ export const SourceSwitcher = ({ send }: SourceSwitcherProps) => {
 
   const onOpenChange = (next: boolean) => {
     setOpen(next);
-    if (next && isSignedIn) {
+    if (next && isSignedIn && showSets) {
       void loadSets();
     }
   };
@@ -144,21 +155,7 @@ export const SourceSwitcher = ({ send }: SourceSwitcherProps) => {
 
   const onPickSet = async (summary: FrameSetSummary) => {
     setOpen(false);
-    try {
-      const data = await rpcClient.sets.get({ setId: summary.id });
-      if (data.frames.length === 0) {
-        toast("that set is empty");
-        return;
-      }
-      useVisualizerStore.getState().startSetPlayback({
-        cadence: data.origin === "recording" ? "original" : "fixed",
-        frames: data.frames,
-        id: data.id,
-        name: data.name,
-      });
-    } catch {
-      toast.error("couldn't load that set");
-    }
+    await startSetReplayById(summary.id);
   };
 
   const recordings = sets.filter((s) => s.origin === "recording");
@@ -223,6 +220,7 @@ export const SourceSwitcher = ({ send }: SourceSwitcherProps) => {
           </div>
 
           {isSignedIn &&
+            showSets &&
             (loading && sets.length === 0 ? (
               <div className="border-t border-[color:var(--hairline)]/30 px-3 py-3 font-sans text-[10px] uppercase tracking-[0.22em] text-[color:var(--stone)]">
                 loading…

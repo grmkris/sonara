@@ -21,7 +21,7 @@ import { AudioRibbon } from "@/components/visualizer/audio/audio-ribbon";
 import { GhostOverlay } from "@/components/visualizer/canvas/ghost-overlay";
 import { ScanSweep } from "@/components/visualizer/canvas/scan-sweep";
 import { SonaraCanvas } from "@/components/visualizer/canvas/sonara-canvas";
-import { ControlsPanel } from "@/components/visualizer/controls/controls-panel";
+import { StageConsole } from "@/components/stage-console/stage-console";
 import { DemoRecorder } from "@/components/visualizer/controls/demo-recorder";
 import { FullscreenToggle } from "@/components/visualizer/controls/fullscreen-toggle";
 import { HideToggle } from "@/components/visualizer/controls/hide-toggle";
@@ -157,6 +157,18 @@ export default function Page() {
   const { data: sessionData } = useSession();
   const isSignedIn = !!sessionData?.session;
   const [audioSource, setAudioSource] = useState<AudioSource>({ type: "none" });
+
+  // Console footer actions. "New session" starts a fresh logical performance
+  // (own /studio entry); "reset" only clears the current scene. Both drop the
+  // local audio source so the next take re-arms deliberately.
+  const onNewSet = useCallback(() => {
+    setAudioSource({ type: "none" });
+    startNewSession();
+  }, [startNewSession]);
+  const onReset = useCallback(() => {
+    setAudioSource({ type: "none" });
+    send({ type: "session.reset" });
+  }, [send]);
 
   const onAudioError = useCallback(
     (err: unknown) => {
@@ -311,7 +323,12 @@ export default function Page() {
                 controls
               </SheetTitle>
               <div className="mt-4 overflow-y-auto pr-1">
-                <ControlsPanel send={send} />
+                <StageConsole
+                  variant="attached"
+                  send={send}
+                  onNewSet={onNewSet}
+                  onReset={onReset}
+                />
               </div>
             </SheetContent>
           </Sheet>
@@ -347,7 +364,12 @@ export default function Page() {
              Sheet (see header) at narrower widths. */}
           <div className="relative hidden w-[260px] shrink-0 flex-col gap-10 md:flex">
             <div aria-hidden className="paper-scrim absolute -inset-6 -z-10" />
-            <ControlsPanel send={send} />
+            <StageConsole
+              variant="attached"
+              send={send}
+              onNewSet={onNewSet}
+              onReset={onReset}
+            />
           </div>
         </section>
 
@@ -374,34 +396,8 @@ export default function Page() {
             <div className="flex items-center gap-3 sm:gap-6">
               <MusicSource source={audioSource} setSource={setAudioSource} />
             </div>
-            <div className="flex items-center gap-3 sm:gap-5">
-              {/* Start a fresh logical performance: mints a new durable
-                  liveSessionId and reconnects under it, so the next set is its
-                  own /studio entry instead of appending to this one. Distinct
-                  from reset (which only clears the current scene). */}
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => {
-                  setAudioSource({ type: "none" });
-                  startNewSession();
-                }}
-                className="font-sans text-[10px] uppercase tracking-[0.24em] text-[color:var(--stone)] hover:text-[color:var(--paper)]"
-              >
-                new session
-              </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => {
-                  setAudioSource({ type: "none" });
-                  send({ type: "session.reset" });
-                }}
-                className="font-sans text-[10px] uppercase tracking-[0.24em] text-[color:var(--stone)] hover:text-[color:var(--paper)]"
-              >
-                reset · ⌫
-              </Button>
-            </div>
+            {/* new-session / reset moved into the console footer (StageConsole)
+                so the attached and detached consoles carry the same actions. */}
           </div>
         </section>
       </div>
