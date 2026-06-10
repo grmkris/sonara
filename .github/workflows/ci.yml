@@ -50,6 +50,17 @@ jobs:
       - name: Run tests
         env:
           NODE_ENV: test
+          # apps/server/src/env.ts parses eagerly and strictly on import, and
+          # several modules under test (db/pool → env) sit in test import
+          # graphs. CI has no .env, so the required keys get dummies here —
+          # tests never USE them (pools/clients are injected by the harness).
+          # Until C1 removed apps/server's `bun test || echo` fallback, this
+          # gap silently zeroed out every server test failure in CI.
+          APP_ENV: local
+          DATABASE_URL: postgres://test:test@localhost:5432/test
+          BETTER_AUTH_SECRET: ci-test-secret-not-used-by-tests
+          FAL_KEY: ci-test-key
+          AUDD_API_KEY: ci-test-key
         run: |
           n=0
           until [ "$n" -ge 3 ]; do
