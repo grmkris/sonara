@@ -142,7 +142,9 @@ const Logotype = () => {
 };
 
 export default function Page() {
-  const { send, startNewSession } = useWsSession();
+  // null code = your default stage (signed-in) / anon pseudo-stage. Run
+  // identity is server-owned — see use-ws-session.
+  const { send, newSet, takenOver, reclaim } = useWsSession({ code: null });
   // Demo is client-native: the browser drives demo frames from a static
   // manifest, so it works on slow/no internet (the server never generates in
   // demo mode).
@@ -158,13 +160,14 @@ export default function Page() {
   const isSignedIn = !!sessionData?.session;
   const [audioSource, setAudioSource] = useState<AudioSource>({ type: "none" });
 
-  // Console footer actions. "New session" starts a fresh logical performance
-  // (own /studio entry); "reset" only clears the current scene. Both drop the
-  // local audio source so the next take re-arms deliberately.
+  // Console footer actions. "New set" closes the current recording segment
+  // and starts the next one (own /studio entry) — no reconnect; "reset" only
+  // clears the current scene. Both drop the local audio source so the next
+  // take re-arms deliberately.
   const onNewSet = useCallback(() => {
     setAudioSource({ type: "none" });
-    startNewSession();
-  }, [startNewSession]);
+    newSet();
+  }, [newSet]);
   const onReset = useCallback(() => {
     setAudioSource({ type: "none" });
     send({ type: "session.reset" });
@@ -265,6 +268,25 @@ export default function Page() {
       {/* Editorial paper grain — fixed, very faint, blended with overlay so it
          tints both the dark background and the generated image consistently. */}
       <div aria-hidden className="grain-overlay" />
+
+      {/* Another device attached as this stage's screen — this tab demoted
+          to a passive notice (producers are silenced in use-ws-session).
+          Reclaiming kicks the other device in turn. */}
+      {takenOver && (
+        <div className="absolute inset-0 z-50 flex flex-col items-center justify-center gap-5 bg-[color:var(--ink)]/85 backdrop-blur-sm">
+          <p className="font-serif text-[17px] italic text-[color:var(--paper)]/90">
+            this stage&apos;s screen moved to another device.
+          </p>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={reclaim}
+            className="font-sans text-[11px] uppercase tracking-[0.24em] text-[color:var(--stone)] hover:text-[color:var(--paper)]"
+          >
+            reclaim the screen here
+          </Button>
+        </div>
+      )}
 
       {/* Corner-reveal trigger: an invisible 200×48 div anchored top-right.
          While the UI is hidden, mousing into it brings the chrome back —

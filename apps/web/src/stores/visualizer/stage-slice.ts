@@ -11,8 +11,14 @@ export interface StageSlice {
   stageRoom: string | null;
   // Host-toggled (from /control) join-QR overlay on the projector.
   stageShowQr: boolean;
+  // Current run id (lse_), server-owned — learned from the `run.started`
+  // event on every (re)connect and after "new set". ShareLink derives the
+  // recording set's permalink from it (set uuid = lse uuid). Null until the
+  // first connect.
+  liveRun: string | null;
   setStageRoom: (room: string | null) => void;
   setStageShowQr: (show: boolean) => void;
+  setLiveRun: (liveSessionId: string | null) => void;
 }
 
 export const createStageSlice: StateCreator<
@@ -21,6 +27,8 @@ export const createStageSlice: StateCreator<
   [],
   StageSlice
 > = (set) => ({
+  liveRun: null,
+  setLiveRun: (liveSessionId) => set({ liveRun: liveSessionId }),
   setStageRoom: (room) => set({ stageRoom: room }),
   setStageShowQr: (show) => set({ stageShowQr: show }),
   stageRoom: null,

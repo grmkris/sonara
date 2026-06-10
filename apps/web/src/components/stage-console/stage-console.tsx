@@ -172,7 +172,7 @@ const Footer = ({
           onClick={onNewSet}
           className="font-sans text-[10px] uppercase tracking-[0.24em] text-[color:var(--stone)] hover:text-[color:var(--paper)]"
         >
-          new session
+          new set
         </Button>
       )}
       {onReset && (

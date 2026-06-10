@@ -7,7 +7,7 @@ import {
 } from "@sonara/shared/typeid";
 import { Share2 } from "lucide-react";
 import QRCode from "qrcode";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { toast } from "sonner";
 
 import {
@@ -15,24 +15,18 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import { useVisualizerStore } from "@/stores/visualizer";
 
 // Share affordance on /play (signed-in only): the permalink to THIS
 // performance's recording set — /s/<set_id>. The set id is derivable client
 // side because a recording set reuses its live session's uuid (see
-// sets-architecture.md), and the durable liveSessionId already lives in
-// sessionStorage. Live now, replay forever after — the link never dies.
+// sets-architecture.md). Run identity is server-owned: it arrives via the
+// `run.started` event into the store, so the link tracks "new set" swaps
+// automatically and renders nothing before the first connect (correct —
+// there is no set to share yet). Live now, replay forever after.
 
-const LIVE_SESSION_STORAGE_KEY = "sonara.liveSessionId";
-
-// The recording set's id from the tab's durable liveSessionId. Validate on
-// read — a corrupted value would mint a dead link. Null = nothing to share
-// (no session storage yet, or garbage).
-const readSetId = (): string | null => {
-  if (typeof window === "undefined") {
-    return null;
-  }
-  const raw = window.sessionStorage.getItem(LIVE_SESSION_STORAGE_KEY);
-  const parsed = raw ? LiveSessionIdSchema.safeParse(raw) : null;
+const setIdFromRun = (liveRun: string | null): string | null => {
+  const parsed = liveRun ? LiveSessionIdSchema.safeParse(liveRun) : null;
   if (!parsed?.success) {
     return null;
   }
@@ -40,27 +34,16 @@ const readSetId = (): string | null => {
 };
 
 export const ShareLink = () => {
-  const [setId, setSetId] = useState<string | null>(null);
+  const liveRun = useVisualizerStore((s) => s.liveRun);
+  const setId = setIdFromRun(liveRun);
   const [url, setUrl] = useState("");
   const [qr, setQr] = useState<string | null>(null);
 
-  // sessionStorage isn't readable during SSR — resolve after mount (decides
-  // whether the button renders at all), then re-resolve on every open so a
-  // "new session" mid-visit shares the fresh set, not the old one.
-  useEffect(() => {
-    setSetId(readSetId());
-  }, []);
-
   const onOpenChange = (open: boolean) => {
-    if (!open) {
+    if (!(open && setId)) {
       return;
     }
-    const next = readSetId();
-    setSetId(next);
-    if (!next) {
-      return;
-    }
-    const nextUrl = `${window.location.origin}/s/${next}`;
+    const nextUrl = `${window.location.origin}/s/${setId}`;
     setUrl(nextUrl);
     void (async () => {
       setQr(await QRCode.toDataURL(nextUrl, { margin: 1, width: 240 }));

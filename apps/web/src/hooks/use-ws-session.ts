@@ -1,8 +1,6 @@
 "use client";
 
 import type { ServerEvent } from "@sonara/shared";
-import { LiveSessionIdSchema, typeIdGenerator } from "@sonara/shared/typeid";
-import type { LiveSessionId } from "@sonara/shared/typeid";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
@@ -16,48 +14,36 @@ import { useVisualizerStore } from "@/stores/visualizer";
 const isKnownPreset = (name: string): name is PresetName =>
   (PRESET_NAMES as readonly string[]).includes(name);
 
-// The durable liveSessionId lives in sessionStorage: one id per browser tab =
-// one logical performance. It survives reload + WS reconnect (so a Wi-Fi drop
-// mid-set doesn't fragment /studio history), and a new tab / explicit
-// startNewSession() begins a fresh session. The server adopts it on the /ws
-// upgrade; absent → the server mints its own.
-const LIVE_SESSION_STORAGE_KEY = "sonara.liveSessionId";
-
-const readOrMintLiveSessionId = (): LiveSessionId => {
-  if (typeof window === "undefined") {
-    return typeIdGenerator("liveSession");
-  }
-  const existing = window.sessionStorage.getItem(LIVE_SESSION_STORAGE_KEY);
-  // Validate on read: a corrupted/garbage value would be rejected server-side,
-  // which silently re-mints per reconnect and re-fragments history (the exact
-  // thing this feature fixes). Re-mint here so the client only ever sends a
-  // well-formed id the server will adopt.
-  const parsed = existing ? LiveSessionIdSchema.safeParse(existing) : null;
-  if (parsed?.success) {
-    return parsed.data;
-  }
-  const minted = typeIdGenerator("liveSession");
-  window.sessionStorage.setItem(LIVE_SESSION_STORAGE_KEY, minted);
-  return minted;
-};
+// Server close code for "another screen took over this stage" — the one close
+// the client must NOT auto-reconnect from (it would kick the new screen right
+// back: ping-pong). Reclaiming is an explicit user action.
+const TAKEN_OVER_CLOSE_CODE = 4409;
 
 export interface WsSession {
   send: SessionSend;
-  // Mint a fresh durable liveSessionId and reconnect under it — begins a new
-  // logical performance (its own /studio entry + set target). Distinct from
-  // session.reset, which clears the scene but keeps the session id.
-  startNewSession: () => void;
+  // "New set": finalize the current recording segment and start the next one
+  // — same connection, same scene; the new run id arrives via `run.started`.
+  // Distinct from session.reset, which clears the scene but keeps the run.
+  newSet: () => void;
+  // Another device took over this stage's screen (latched until reclaim).
+  takenOver: boolean;
+  // Re-attach as the screen — kicks the other device in turn.
+  reclaim: () => void;
 }
 
-export const useWsSession = (): WsSession => {
+// Run identity is SERVER-owned: the client never mints or stores an lse_ id.
+// `target.code` names the stage to attach to (null = your default stage /
+// anon pseudo-stage); the current run id flows back via `run.started` into
+// the store's `liveRun`.
+export const useWsSession = (target: { code: string | null }): WsSession => {
   const sendRef = useRef<SessionSend>(() => {
     // noop
   });
-  // Durable id held in state so startNewSession() can re-mint and force a
-  // clean reconnect under the new id (it's in the connect effect's deps).
-  const [liveSessionId, setLiveSessionId] = useState<LiveSessionId>(
-    readOrMintLiveSessionId
-  );
+  const reconnectRef = useRef<() => void>(() => {
+    // noop
+  });
+  const [takenOver, setTakenOver] = useState(false);
+  const { code } = target;
 
   useEffect(() => {
     const store = useVisualizerStore;
@@ -193,6 +179,21 @@ export const useWsSession = (): WsSession => {
           s.setStageShowQr(event.showQr ?? true);
           break;
         }
+        case "run.started": {
+          // Server-owned run identity — on every (re)connect init and after
+          // "new set". ShareLink derives the recording permalink from it.
+          s.setLiveRun(event.liveSessionId);
+          break;
+        }
+        case "screen.takenOver": {
+          // Rides the shared publisher, so the NEW screen sees it too — only
+          // the kicked connection demotes itself. The authoritative signal is
+          // the 4409 close (handled below); this is the early UI latch.
+          if (event.connectionId === sessionId) {
+            setTakenOver(true);
+          }
+          break;
+        }
         default: {
           break;
         }
@@ -209,7 +210,7 @@ export const useWsSession = (): WsSession => {
         return;
       }
 
-      conn = createSessionConnection(sessionId, liveSessionId);
+      conn = createSessionConnection(sessionId, { code });
       const { socket, client } = conn;
 
       sendRef.current = (action: SessionAction) => {
@@ -218,8 +219,20 @@ export const useWsSession = (): WsSession => {
           console.warn("[ws] dispatch failed", error);
         });
       };
+      reconnectRef.current = () => {
+        socket.reconnect();
+      };
 
       socket.addEventListener("open", () => {
+        // (Re)attaching as the screen — clear a previous takeover demotion
+        // and restore the producer send path.
+        setTakenOver(false);
+        sendRef.current = (action: SessionAction) => {
+          // oxlint-disable-next-line prefer-await-to-then, prefer-await-to-callbacks -- REVIEW: SessionSend is sync fire-and-forget; cannot await here
+          dispatchSessionAction(client, action).catch((error) => {
+            console.warn("[ws] dispatch failed", error);
+          });
+        };
         store.getState().setConnected(true);
         // Fire hello on every (re)connect so the server can re-init its
         // side idempotently. The state() pull below will hydrate demoMode
@@ -236,8 +249,19 @@ export const useWsSession = (): WsSession => {
         sendRef.current({ model: st.model, type: "model.set" });
         sendRef.current({ resolution: st.resolution, type: "resolution.set" });
       });
-      socket.addEventListener("close", () => {
+      socket.addEventListener("close", (ev: { code?: number }) => {
         store.getState().setConnected(false);
+        if (ev.code === TAKEN_OVER_CLOSE_CODE) {
+          // Kicked by another screen. Stop partysocket's retry loop (a
+          // reconnect would kick the other device right back) and silence
+          // the producers — a demoted tab must not keep pushing
+          // frame.report / audio.features into the new screen's run.
+          setTakenOver(true);
+          sendRef.current = () => {
+            // demoted — producer sends are dropped until reclaim
+          };
+          socket.close();
+        }
       });
 
       // Events iterator: restart whenever it drops (socket reconnect, transient
@@ -320,22 +344,24 @@ export const useWsSession = (): WsSession => {
       sendRef.current = () => {
         // noop
       };
+      reconnectRef.current = () => {
+        // noop
+      };
     };
-    // Re-runs when liveSessionId changes (startNewSession): tears down the old
-    // socket and reconnects under the fresh id. Otherwise one WS per tab.
-  }, [liveSessionId]);
+    // One WS per tab; re-runs only if the page retargets to another stage.
+  }, [code]);
 
   const send = useCallback((action: SessionAction) => {
     sendRef.current(action);
   }, []);
 
-  const startNewSession = useCallback(() => {
-    const next = typeIdGenerator("liveSession");
-    if (typeof window !== "undefined") {
-      window.sessionStorage.setItem(LIVE_SESSION_STORAGE_KEY, next);
-    }
-    setLiveSessionId(next);
+  const newSet = useCallback(() => {
+    sendRef.current({ type: "set.new" });
   }, []);
 
-  return { send, startNewSession };
+  const reclaim = useCallback(() => {
+    reconnectRef.current();
+  }, []);
+
+  return { newSet, reclaim, send, takenOver };
 };

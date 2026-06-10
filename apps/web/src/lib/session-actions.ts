@@ -16,6 +16,9 @@ export type SessionAction =
   | { type: "voice.patch"; patch: ClientScenePatch }
   | { type: "audio.features"; features: AudioFeatures }
   | { type: "session.reset" }
+  // "New set": finalize the current recording segment, start the next run in
+  // place. The new id arrives via the `run.started` event — no reconnect.
+  | { type: "set.new" }
   | { type: "frame.report"; url: string }
   | {
       type: "source.report";
@@ -61,6 +64,9 @@ export const dispatchSessionAction = (
     }
     case "session.reset": {
       return client.reset();
+    }
+    case "set.new": {
+      return client.newSet();
     }
     case "frame.report": {
       return client.reportFrame({ url: action.url });
