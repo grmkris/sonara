@@ -18,7 +18,15 @@
     },
     "test": {
       "outputs": [],
-      "cache": false
+      "cache": false,
+      "env": [
+        "NODE_ENV",
+        "APP_ENV",
+        "DATABASE_URL",
+        "BETTER_AUTH_SECRET",
+        "FAL_KEY",
+        "AUDD_API_KEY"
+      ]
     },
     "dev": {
       "cache": false,

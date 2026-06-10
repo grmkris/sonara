@@ -53,8 +53,9 @@ let sharedPromise: Promise<TestDb> | null = null;
 // Process-wide singleton: bun runs test files sequentially in one process, so
 // sharing a single migrated PGlite avoids the WASM cold-start per file. Files
 // isolate themselves via reset() (beforeEach, or beforeAll for cumulative
-// suites). close() on the shared handle is a no-op — the instance dies with
-// the process.
+// suites). close() on the shared handle is a no-op — individual files must
+// never close it (they'd kill it for the files after them); the real
+// teardown happens once at process drain.
 export const getTestDb = (): Promise<TestDb> => {
   if (shared) {
     return Promise.resolve(shared);
@@ -68,4 +69,18 @@ export const getTestDb = (): Promise<TestDb> => {
     return shared;
   })();
   return sharedPromise;
+};
+
+// Real teardown for the shared instance. bun exits 99 when a PGlite WASM
+// handle is still open at the end of `bun test` (even with every test
+// green), and per-file afterAll can't own this (it would kill the singleton
+// for the files after it) — call this from a global preload's afterAll
+// (bunfig.toml [test] preload), which runs once after ALL files.
+export const closeSharedTestDb = async (): Promise<void> => {
+  const t = shared ?? (sharedPromise ? await sharedPromise : null);
+  shared = null;
+  sharedPromise = null;
+  if (t) {
+    await t.pg.close();
+  }
 };

@@ -1,0 +1,4 @@
+[test]
+# Global lifecycle for the test run — see test-setup.ts (closes the shared
+# PGlite after all files; otherwise bun exits 99 on the dangling handle).
+preload = ["./test-setup.ts"]
