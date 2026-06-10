@@ -332,15 +332,20 @@ const PromptComposer = ({
   };
 
   return (
-    <section className="flex flex-col gap-2">
+    <section className="relative flex flex-col gap-2.5 overflow-hidden rounded-sm border border-[color:var(--signal)]/35 p-4">
+      {/* Corner glow — the composer is the headline act of the page. */}
+      <div
+        aria-hidden
+        className="pointer-events-none absolute -left-10 -top-10 size-36 rounded-full bg-[color:var(--signal)]/10 blur-2xl"
+      />
       <label
-        className="font-sans text-[10px] uppercase tracking-[0.2em] text-[color:var(--stone)]"
+        className="font-serif text-[17px] italic leading-snug text-[color:var(--paper)]/90"
         htmlFor="prompt"
       >
-        send a scene to the queue
+        put your scene on the wall.
         {promptPrice !== null && (
-          <span className="ml-2 text-[color:var(--paper)]/70">
-            · {formatUsdc(promptPrice)} usdc
+          <span className="ml-2 font-sans text-[9px] uppercase not-italic tracking-[0.22em] text-[color:var(--stone)]">
+            {formatUsdc(promptPrice)} usdc
           </span>
         )}
       </label>
@@ -561,6 +566,20 @@ export default function StagePage() {
         </div>
       </section>
 
+      {/* Prompt FIRST — it's the headline act (paid in USDC; tip jumps the
+          queue). The free knobs live below so they can't steal focus. */}
+      {feed.allowPrompts && (
+        <PromptComposer
+          address={address}
+          balanceUnits={balanceUnits}
+          linked={linked}
+          onCredited={creditLocally}
+          onSend={sendPrompt}
+          payment={payment}
+          room={room}
+        />
+      )}
+
       {/* Intensity — "how much image is generated". */}
       <section className="flex flex-col gap-2">
         <label
@@ -596,19 +615,6 @@ export default function StagePage() {
           </div>
         ))}
       </section>
-
-      {/* Prompt — paid in USDC; tip (also USDC) jumps the queue. */}
-      {feed.allowPrompts && (
-        <PromptComposer
-          address={address}
-          balanceUnits={balanceUnits}
-          linked={linked}
-          onCredited={creditLocally}
-          onSend={sendPrompt}
-          payment={payment}
-          room={room}
-        />
-      )}
 
       {/* Up next — attributed to its on-chain sender. */}
       {feed.queue.upNext.length > 0 && (
