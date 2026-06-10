@@ -305,8 +305,10 @@ export class Session implements ControllableSession {
     // here (and again from startNewRun). Idempotent on reconnect/resume.
     this.send({ liveSessionId: this.liveSessionId, type: "run.started" });
     // A projector reconnecting while its crowd stage is open must relearn the
-    // room code (stage bindings outlive WS connections via liveSessionId).
-    const stage = stageRooms.statusFor(this.liveSessionId);
+    // room code (stage bindings outlive WS connections).
+    const stage = this.stageId
+      ? stageRooms.statusForStage(this.stageId)
+      : stageRooms.statusFor(this.liveSessionId);
     if (stage) {
       this.notifyStage(stage.room, stage.allowPrompts, stage.showQr);
     }

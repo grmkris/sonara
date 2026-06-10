@@ -1,21 +1,27 @@
 import { randomBytes } from "node:crypto";
 
-// Binds a short, shareable room code to one live session. The session owner
-// "opens the stage" (stage.open) to mint a code; the on-chain listener
-// resolves room -> liveSessionId here, then looks up the live Session via the
-// SessionManager registry. Kept as a server-local singleton (NOT in the oRPC
-// context) so this feature touches neither packages/api nor the WS context.
+// Crowd-access runtime state, keyed by room code. Two binding flavors during
+// the stages rollout:
 //
-// In-memory and ephemeral — a room lives only while its session does; closing
-// the stage or the session disappearing just drops the binding. That's fine:
-// the stage is a live-performance surface, not durable state.
+//   stage-keyed   the code is the stage row's PERMANENT code (stage table) —
+//                 printable QR, survives "new set" run swaps because the
+//                 binding targets the durable stageId, not a run id.
+//   legacy        pre-stages clients: a per-gig code minted at open, bound to
+//                 the run's liveSessionId. Deleted in the post-W2 cleanup.
+//
+// In-memory either way — open/closed, allowPrompts and showQr are runtime
+// flags ("runtime state is NOT persisted", rooms-and-roles rev 2): a deploy
+// closes the crowd, the permanent code itself lives in Postgres.
 
 export interface StageRoomBinding {
-  liveSessionId: string;
   allowPrompts: boolean;
-  // Whether the projector overlays the join QR. Host-toggled from /control;
-  // defaults on at stage.open so the room can fill, hidden once it has.
+  // Legacy runs only — resolved via registry.getByLiveSessionId.
+  liveSessionId: string | null;
+  // Whether the projector overlays the join QR. Host-toggled from the
+  // console; defaults on at open so the room can fill, hidden once it has.
   showQr: boolean;
+  // Durable runs — resolved via registry.getByStageId (survives new-set).
+  stageId: string | null;
 }
 
 // Crockford-ish base32 without ambiguous chars (no I/L/O/U/0/1) — easy to read
@@ -34,15 +40,41 @@ export const mintCode = (): string => {
   ).join("");
 };
 
+interface StageStatus {
+  room: string;
+  allowPrompts: boolean;
+  showQr: boolean;
+}
+
 class StageRooms {
   private readonly byRoom = new Map<string, StageRoomBinding>();
   private readonly roomByLive = new Map<string, string>();
+  private readonly roomByStage = new Map<string, string>();
   // Fired after a room binding is dropped — lets the stage feed tear down its
-  // sockets/state without control.router (or this file) importing the feed.
+  // sockets/state without the routers (or this file) importing the feed.
   private readonly closeListeners: ((room: string) => void)[] = [];
 
-  // Open (or re-open) a stage for a live session. Re-opening the same session
-  // returns its existing code so a reconnecting projector keeps its QR/URL.
+  // Open crowd access on a durable stage under its PERMANENT code. Re-opening
+  // refreshes flags and re-shows the QR; the code never changes.
+  openForStage(code: string, stageId: string, allowPrompts: boolean): void {
+    const existing = this.byRoom.get(code);
+    if (existing) {
+      existing.allowPrompts = allowPrompts;
+      existing.showQr = true;
+      return;
+    }
+    this.byRoom.set(code, {
+      allowPrompts,
+      liveSessionId: null,
+      showQr: true,
+      stageId,
+    });
+    this.roomByStage.set(stageId, code);
+  }
+
+  // LEGACY: open a per-gig room for a run (pre-stages clients). Re-opening
+  // the same session returns its existing code so a reconnecting projector
+  // keeps its QR/URL. Deleted in the post-W2 cleanup.
   open(liveSessionId: string, allowPrompts: boolean): string {
     const existing = this.roomByLive.get(liveSessionId);
     if (existing) {
@@ -57,7 +89,12 @@ class StageRooms {
     while (this.byRoom.has(room)) {
       room = mintCode();
     }
-    this.byRoom.set(room, { allowPrompts, liveSessionId, showQr: true });
+    this.byRoom.set(room, {
+      allowPrompts,
+      liveSessionId,
+      showQr: true,
+      stageId: null,
+    });
     this.roomByLive.set(liveSessionId, room);
     return room;
   }
@@ -74,8 +111,11 @@ class StageRooms {
 
   close(room: string): void {
     const binding = this.byRoom.get(room);
-    if (binding) {
+    if (binding?.liveSessionId) {
       this.roomByLive.delete(binding.liveSessionId);
+    }
+    if (binding?.stageId) {
+      this.roomByStage.delete(binding.stageId);
     }
     this.byRoom.delete(room);
     if (binding) {
@@ -89,15 +129,20 @@ class StageRooms {
     this.closeListeners.push(listener);
   }
 
-  // Current stage binding for a live session, if it has one — lets a session
+  // Current stage binding for a LEGACY run, if it has one — lets a session
   // tell a (re)connecting projector about its open room.
-  statusFor(
-    liveSessionId: string
-  ): { room: string; allowPrompts: boolean; showQr: boolean } | null {
+  statusFor(liveSessionId: string): StageStatus | null {
     const room = this.roomByLive.get(liveSessionId);
-    if (!room) {
-      return null;
-    }
+    return room ? this.statusOf(room) : null;
+  }
+
+  // Same, keyed by the durable stage.
+  statusForStage(stageId: string): StageStatus | null {
+    const room = this.roomByStage.get(stageId);
+    return room ? this.statusOf(room) : null;
+  }
+
+  private statusOf(room: string): StageStatus | null {
     const binding = this.byRoom.get(room);
     return binding
       ? { allowPrompts: binding.allowPrompts, room, showQr: binding.showQr }
@@ -110,6 +155,10 @@ class StageRooms {
 
   roomFor(liveSessionId: string): string | undefined {
     return this.roomByLive.get(liveSessionId);
+  }
+
+  roomForStage(stageId: string): string | undefined {
+    return this.roomByStage.get(stageId);
   }
 }
 

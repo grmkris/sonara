@@ -54,7 +54,14 @@ export const createStageListener = (opts: {
     if (!binding) {
       return null;
     }
-    const session = registry.getByLiveSessionId(binding.liveSessionId);
+    // Stage-keyed bindings survive "new set" run swaps (the stage is the
+    // durable target); legacy bindings still resolve by run id.
+    let session: ControllableSession | undefined;
+    if (binding.stageId) {
+      session = registry.getByStageId(binding.stageId);
+    } else if (binding.liveSessionId) {
+      session = registry.getByLiveSessionId(binding.liveSessionId);
+    }
     if (!session) {
       return null;
     }

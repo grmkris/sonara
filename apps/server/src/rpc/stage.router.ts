@@ -1,21 +1,32 @@
 import { ORPCError } from "@sonara/api/server";
-import { LiveSessionIdSchema } from "@sonara/shared/typeid";
+import { LiveSessionIdSchema, StageIdSchema } from "@sonara/shared/typeid";
 import { isAddress } from "viem";
 import { z } from "zod";
 
 import { stageFaucet } from "../onchain/stage-faucet";
 import { stageRooms } from "../onchain/stage-rooms";
 import { stageState } from "../onchain/stage-state";
+import { getOwnedStage } from "../stage/stage-service";
 import { resolveOwnedSession } from "./owned-session";
+import { resolveOwnedStageRun } from "./owned-stage";
 import { protectedProcedure, publicProcedure } from "./procedures";
 
 // Monad "stage": let the crowd (and AI agents) drive a session over on-chain
-// txs. The owner opens a stage to mint a short room code; anyone with the
-// code emits SonaraStage events that the listener folds in. Opening requires
-// owning the session; reading the live state does not (the room code is the
-// capability the audience page already holds).
+// txs. Dual-keyed during the stages rollout:
+//
+//   { stageId }        crowd access opens under the stage row's PERMANENT
+//                      code (printable QR; survives reconnects, redeploy-
+//                      minted runs, and "new set"). Requires the stage to be
+//                      live (a screen attached its run) so the projector can
+//                      mount the wire overlay.
+//   { liveSessionId }  legacy clients: per-gig minted code bound to the run.
+//                      Deleted in the post-W2 cleanup.
+//
+// Reading live state stays public — the room code IS the capability the
+// audience page already holds.
 
 const ByLiveSession = z.object({ liveSessionId: LiveSessionIdSchema });
+const ByTarget = z.union([z.object({ stageId: StageIdSchema }), ByLiveSession]);
 
 export const stageRouter = {
   // Public: top an audience smart account up with USDC so it can prompt
@@ -35,8 +46,19 @@ export const stageRouter = {
     }),
 
   close: protectedProcedure
-    .input(ByLiveSession)
-    .handler(({ context, input }) => {
+    .input(ByTarget)
+    .handler(async ({ context, input }) => {
+      if ("stageId" in input) {
+        // Ownership only — closing crowd access must work even if the run
+        // already ended (grace expiry); notify the screen only when live.
+        await getOwnedStage(context.db, context.userId, input.stageId);
+        const room = stageRooms.roomForStage(input.stageId);
+        if (room) {
+          stageRooms.close(room);
+        }
+        context.registry.getByStageId(input.stageId)?.notifyStage(null);
+        return;
+      }
       const session = resolveOwnedSession(
         context.registry,
         context.userId,
@@ -50,9 +72,26 @@ export const stageRouter = {
     }),
 
   open: protectedProcedure
-    .input(ByLiveSession.extend({ allowPrompts: z.boolean().default(true) }))
-    .handler(({ context, input }) => {
-      // Assert ownership before exposing the session to the crowd.
+    .input(ByTarget.and(z.object({ allowPrompts: z.boolean().default(true) })))
+    .handler(async ({ context, input }) => {
+      if ("stageId" in input) {
+        // The stage must be live — the crowd drives a running show, and the
+        // projector has to mount its wire overlay.
+        const session = await resolveOwnedStageRun(
+          { db: context.db, registry: context.registry },
+          context.userId,
+          input.stageId
+        );
+        const stage = await getOwnedStage(
+          context.db,
+          context.userId,
+          input.stageId
+        );
+        stageRooms.openForStage(stage.code, stage.id, input.allowPrompts);
+        session.notifyStage(stage.code, input.allowPrompts, true);
+        return { allowPrompts: input.allowPrompts, room: stage.code, showQr: true };
+      }
+      // LEGACY: assert ownership before exposing the session to the crowd.
       const session = resolveOwnedSession(
         context.registry,
         context.userId,
@@ -68,8 +107,24 @@ export const stageRouter = {
   // Toggle the projector's join-QR overlay (the audience scans the big
   // screen, not the host's phone). Rides the same stage.status push.
   setQr: protectedProcedure
-    .input(ByLiveSession.extend({ show: z.boolean() }))
-    .handler(({ context, input }) => {
+    .input(ByTarget.and(z.object({ show: z.boolean() })))
+    .handler(async ({ context, input }) => {
+      if ("stageId" in input) {
+        const session = await resolveOwnedStageRun(
+          { db: context.db, registry: context.registry },
+          context.userId,
+          input.stageId
+        );
+        const status = stageRooms.statusForStage(input.stageId);
+        if (!status) {
+          throw new ORPCError("NOT_FOUND", {
+            message: "This stage isn't open to the crowd.",
+          });
+        }
+        stageRooms.setShowQr(status.room, input.show);
+        session.notifyStage(status.room, status.allowPrompts, input.show);
+        return { showQr: input.show };
+      }
       const session = resolveOwnedSession(
         context.registry,
         context.userId,

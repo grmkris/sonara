@@ -41,6 +41,7 @@ describe("stageRooms", () => {
       allowPrompts: false,
       liveSessionId: lse,
       showQr: true,
+      stageId: null,
     });
   });
 
@@ -69,5 +70,45 @@ describe("stageRooms", () => {
     const roomA = openRoom(typeIdGenerator("liveSession"));
     const roomB = openRoom(typeIdGenerator("liveSession"));
     expect(roomA).not.toBe(roomB);
+  });
+
+  test("stage-keyed: opens under the permanent code, no minting", () => {
+    const stageId = typeIdGenerator("stage");
+    stageRooms.openForStage("QQQX7", stageId, true);
+    opened.push("QQQX7");
+
+    expect(stageRooms.roomForStage(stageId)).toBe("QQQX7");
+    expect(stageRooms.resolve("QQQX7")).toEqual({
+      allowPrompts: true,
+      liveSessionId: null,
+      showQr: true,
+      stageId,
+    });
+    expect(stageRooms.statusForStage(stageId)).toEqual({
+      allowPrompts: true,
+      room: "QQQX7",
+      showQr: true,
+    });
+
+    // Re-open refreshes flags + re-shows the QR; the code never changes.
+    stageRooms.setShowQr("QQQX7", false);
+    stageRooms.openForStage("QQQX7", stageId, false);
+    expect(stageRooms.resolve("QQQX7")).toMatchObject({
+      allowPrompts: false,
+      showQr: true,
+    });
+  });
+
+  test("stage-keyed close unbinds the stage direction + fires listeners", () => {
+    const stageId = typeIdGenerator("stage");
+    let closedRoom: string | null = null;
+    stageRooms.onClose((room) => {
+      closedRoom = room;
+    });
+    stageRooms.openForStage("QQQX8", stageId, true);
+    stageRooms.close("QQQX8");
+    expect(stageRooms.resolve("QQQX8")).toBeUndefined();
+    expect(stageRooms.roomForStage(stageId)).toBeUndefined();
+    expect(closedRoom).toBe("QQQX8" as never);
   });
 });

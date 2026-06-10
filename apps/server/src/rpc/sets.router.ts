@@ -507,7 +507,9 @@ export const setsRouter = {
         const snap = session.getControlSnapshot();
         const isOwner =
           callerId !== null && session.userId === typeIdToUuid(callerId).uuid;
-        const room = stageRooms.roomFor(liveSessionId as string);
+        const room = session.stageId
+          ? stageRooms.roomForStage(session.stageId)
+          : stageRooms.roomFor(liveSessionId as string);
         const binding = room ? stageRooms.resolve(room) : undefined;
         const stageCode = await durableStageCode(context.db, session.stageId);
         return {
