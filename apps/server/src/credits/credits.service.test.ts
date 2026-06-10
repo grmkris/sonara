@@ -7,8 +7,11 @@ import {
   test,
 } from "bun:test";
 
-import { createPgLite, pgliteAsPool } from "@sonara/test-utils";
-import type { TestPg } from "@sonara/test-utils";
+import { typeIdGenerator, typeIdToUuid } from "@sonara/shared/typeid";
+import type { UserId } from "@sonara/shared/typeid";
+import { createTestUser } from "@sonara/test-utils/factories";
+import { getTestDb } from "@sonara/test-utils/test-db";
+import type { TestDb } from "@sonara/test-utils/test-db";
 
 import {
   __setPoolForTests,
@@ -18,59 +21,34 @@ import {
   tryConsumeFreeTier,
 } from "./credits.service";
 
-const SCHEMA_SQL = `
-CREATE TABLE credits (
-  id uuid PRIMARY KEY NOT NULL,
-  user_id uuid NOT NULL,
-  balance_frames integer DEFAULT 0 NOT NULL,
-  created_at timestamp with time zone DEFAULT now() NOT NULL,
-  updated_at timestamp with time zone DEFAULT now() NOT NULL
-);
-CREATE UNIQUE INDEX credits_user_id_idx ON credits (user_id);
+// The credits service works in raw-uuid space; derive the actor uuids from
+// real typeids so the user-row factory inserts round-trip cleanly.
+const USER_ID = typeIdGenerator("user") as UserId;
+const USER2_ID = typeIdGenerator("user") as UserId;
+const USER = typeIdToUuid(USER_ID).uuid;
+const USER2 = typeIdToUuid(USER2_ID).uuid;
 
-CREATE TABLE usage_ledger (
-  id uuid PRIMARY KEY NOT NULL,
-  user_id uuid NOT NULL,
-  kind text NOT NULL,
-  delta integer NOT NULL,
-  amount_cents integer,
-  tx_hash text,
-  chain_id text,
-  created_at timestamp with time zone DEFAULT now() NOT NULL
-);
-
-CREATE TABLE free_tier_ledger (
-  user_id uuid NOT NULL,
-  window_start timestamp with time zone NOT NULL,
-  usage_count integer DEFAULT 0 NOT NULL,
-  PRIMARY KEY (user_id, window_start)
-);
-`;
-
-const USER = "00000000-0000-0000-0000-000000000001";
-const USER2 = "00000000-0000-0000-0000-000000000002";
-
-let pg: TestPg;
+let t: TestDb;
 
 beforeAll(async () => {
-  pg = createPgLite();
-  await pg.exec(SCHEMA_SQL);
-  __setPoolForTests(pgliteAsPool(pg));
-});
+  t = await getTestDb();
+  __setPoolForTests(t.pool);
+}, 30_000);
 
-afterAll(async () => {
+afterAll(() => {
   __setPoolForTests(null);
-  await pg.close();
 });
 
 beforeEach(async () => {
-  await pg.exec(
-    `DELETE FROM usage_ledger; DELETE FROM credits; DELETE FROM free_tier_ledger;`
-  );
+  await t.reset();
+  // Real migrations FK credits/usage_ledger/free_tier_ledger.user_id to
+  // "user".id — the raw-uuid actors need backing user rows.
+  await createTestUser(t.db, { id: USER_ID });
+  await createTestUser(t.db, { id: USER2_ID });
 });
 
 const seedCredits = async (userId: string, frames: number): Promise<void> => {
-  await pg.query(
+  await t.pg.query(
     `INSERT INTO credits (id, user_id, balance_frames)
      VALUES (gen_random_uuid(), $1, $2)`,
     [userId, frames]
@@ -78,7 +56,7 @@ const seedCredits = async (userId: string, frames: number): Promise<void> => {
 };
 
 const ledgerCount = async (): Promise<number> => {
-  const res = await pg.query<{ count: string }>(
+  const res = await t.pg.query<{ count: string }>(
     `SELECT COUNT(*)::text AS count FROM usage_ledger`
   );
   return Number(res.rows[0]?.count ?? 0);
@@ -137,7 +115,7 @@ describe("tryConsumeFreeTier", () => {
   test("rolls over on a new hour window", async () => {
     expect(await tryConsumeFreeTier(USER, 1)).toBe(true);
     expect(await tryConsumeFreeTier(USER, 1)).toBe(false);
-    await pg.query(
+    await t.pg.query(
       `UPDATE free_tier_ledger
          SET window_start = window_start - interval '1 hour'
          WHERE user_id = $1`,
@@ -148,7 +126,7 @@ describe("tryConsumeFreeTier", () => {
 
   test("appends a kind=free row to usage_ledger on success", async () => {
     expect(await tryConsumeFreeTier(USER, 3)).toBe(true);
-    const res = await pg.query<{ kind: string; delta: number }>(
+    const res = await t.pg.query<{ kind: string; delta: number }>(
       `SELECT kind, delta FROM usage_ledger WHERE user_id = $1`,
       [USER]
     );
@@ -162,7 +140,7 @@ describe("refundFrame", () => {
   test("increments balance_frames by cost + writes a refund ledger row", async () => {
     await seedCredits(USER, 4);
     expect(await refundFrame(USER, 1)).toBe(5);
-    const res = await pg.query<{ kind: string; delta: number }>(
+    const res = await t.pg.query<{ kind: string; delta: number }>(
       `SELECT kind, delta FROM usage_ledger WHERE user_id = $1`,
       [USER]
     );
@@ -185,7 +163,7 @@ describe("refundFrame", () => {
     await seedCredits(USER, 10);
     expect(await debitFrame(USER, 1)).toBe(9);
     expect(await refundFrame(USER, 1)).toBe(10);
-    const res = await pg.query<{ sum: string }>(
+    const res = await t.pg.query<{ sum: string }>(
       `SELECT COALESCE(SUM(delta), 0)::text AS sum FROM usage_ledger WHERE user_id = $1`,
       [USER]
     );

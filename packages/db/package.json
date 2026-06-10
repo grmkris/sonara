@@ -8,7 +8,8 @@
   "exports": {
     ".": "./src/index.ts",
     "./schema": "./src/schema/index.ts",
-    "./migrator": "./src/migrator.ts"
+    "./migrator": "./src/migrator.ts",
+    "./migrations-path": "./src/migrations-path.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",

@@ -163,6 +163,9 @@
       "version": "0.1.0",
       "dependencies": {
         "@electric-sql/pglite": "^0.5.1",
+        "@sonara/db": "workspace:*",
+        "@sonara/shared": "workspace:*",
+        "drizzle-orm": "^0.45.2",
       },
       "devDependencies": {
         "typescript": "^6.0.3",

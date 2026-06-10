@@ -1,101 +1,29 @@
 import { beforeAll, describe, expect, test } from "bun:test";
 
+import type { Database } from "@sonara/db";
 import { DECKS } from "@sonara/shared";
 import { typeIdGenerator, typeIdToUuid } from "@sonara/shared/typeid";
-import type { LiveSessionId } from "@sonara/shared/typeid";
-import { createPgLite, pgliteAsPool } from "@sonara/test-utils";
-import type { PoolShim, TestPg } from "@sonara/test-utils";
+import type {
+  ImageLibraryId,
+  LiveSessionId,
+  UserId,
+} from "@sonara/shared/typeid";
+import type { PoolShim } from "@sonara/test-utils";
+import {
+  createTestUser,
+  insertFrame,
+  insertLegacyReel,
+} from "@sonara/test-utils/factories";
+import { getTestDb } from "@sonara/test-utils/test-db";
 
 import type { Logger } from "../lib/logger";
 import { migrateFrameSetsOnBoot } from "./frame-set-boot-migrate";
 
-// Tables the converger touches (+ FK targets), including the partial unique
-// indexes — ON CONFLICT (deck_key) WHERE origin='builtin' needs the matching
-// arbiter index to exist or Postgres rejects the insert with 42P10.
-const DDL = `
-CREATE TABLE "user" (
-  id uuid PRIMARY KEY NOT NULL,
-  name text NOT NULL,
-  email text NOT NULL UNIQUE,
-  email_verified boolean NOT NULL DEFAULT false,
-  image text,
-  dodo_customer_id text,
-  created_at timestamptz NOT NULL DEFAULT now(),
-  updated_at timestamptz NOT NULL DEFAULT now()
-);
-CREATE TABLE image_library (
-  id uuid PRIMARY KEY NOT NULL,
-  deck text NOT NULL,
-  prompt text NOT NULL,
-  prompt_hash text NOT NULL,
-  model text NOT NULL,
-  seed integer,
-  url text NOT NULL,
-  width integer NOT NULL,
-  height integer NOT NULL,
-  palette text[],
-  status text NOT NULL DEFAULT 'active',
-  source text NOT NULL DEFAULT 'seed',
-  user_id uuid REFERENCES "user"(id) ON DELETE cascade,
-  session_id text,
-  t_ms integer,
-  position integer,
-  source_url text,
-  trigger_reason text,
-  anchor_url text,
-  inspector_context jsonb,
-  created_at timestamptz NOT NULL DEFAULT now(),
-  updated_at timestamptz NOT NULL DEFAULT now()
-);
-CREATE TABLE reel (
-  id uuid PRIMARY KEY NOT NULL,
-  cover_frame_id uuid REFERENCES image_library(id) ON DELETE set null,
-  name text NOT NULL,
-  user_id uuid NOT NULL REFERENCES "user"(id) ON DELETE cascade,
-  created_at timestamptz NOT NULL DEFAULT now(),
-  updated_at timestamptz NOT NULL DEFAULT now()
-);
-CREATE TABLE reel_frame (
-  id uuid PRIMARY KEY NOT NULL,
-  frame_id uuid NOT NULL REFERENCES image_library(id) ON DELETE cascade,
-  position integer NOT NULL,
-  reel_id uuid NOT NULL REFERENCES reel(id) ON DELETE cascade,
-  created_at timestamptz NOT NULL DEFAULT now(),
-  updated_at timestamptz NOT NULL DEFAULT now(),
-  CONSTRAINT reel_frame_reel_position_idx UNIQUE (reel_id, position),
-  CONSTRAINT reel_frame_reel_frame_idx UNIQUE (reel_id, frame_id)
-);
-CREATE TABLE frame_set (
-  cover_frame_id uuid REFERENCES image_library(id) ON DELETE set null,
-  deck_key text,
-  frame_count integer NOT NULL DEFAULT 0,
-  id uuid PRIMARY KEY NOT NULL,
-  live_session_id text,
-  name text NOT NULL,
-  origin text NOT NULL,
-  status text NOT NULL DEFAULT 'final',
-  user_id uuid REFERENCES "user"(id) ON DELETE cascade,
-  visibility text NOT NULL DEFAULT 'private',
-  created_at timestamptz NOT NULL DEFAULT now(),
-  updated_at timestamptz NOT NULL DEFAULT now()
-);
-CREATE UNIQUE INDEX frame_set_live_session_idx
-  ON frame_set (live_session_id) WHERE live_session_id IS NOT NULL;
-CREATE UNIQUE INDEX frame_set_deck_key_idx
-  ON frame_set (deck_key) WHERE origin = 'builtin';
-CREATE TABLE frame_set_frame (
-  frame_id uuid NOT NULL REFERENCES image_library(id) ON DELETE cascade,
-  id uuid PRIMARY KEY NOT NULL,
-  position integer NOT NULL,
-  set_id uuid NOT NULL REFERENCES frame_set(id) ON DELETE cascade,
-  t_ms integer,
-  created_at timestamptz NOT NULL DEFAULT now(),
-  updated_at timestamptz NOT NULL DEFAULT now(),
-  CONSTRAINT frame_set_frame_set_position_idx UNIQUE (set_id, position),
-  CONSTRAINT frame_set_frame_set_frame_idx UNIQUE (set_id, frame_id)
-);
-`;
-
+// Real schema via the shared harness — migration 0004 creates the legacy
+// reel/reel_frame tables, and the migrated frame_set partial unique indexes
+// are the arbiters the converger's ON CONFLICT clauses need (42P10
+// otherwise). Tests are cumulative (converge → idempotency → rerun-append),
+// so reset() runs once in beforeAll, not per test.
 const noopLogger = {
   debug: () => {},
   error: () => {},
@@ -103,93 +31,57 @@ const noopLogger = {
   warn: () => {},
 } as unknown as Logger;
 
-const newFrameUuid = (): string =>
-  typeIdToUuid(typeIdGenerator("imageLibrary")).uuid;
-
-let pg: TestPg;
+let db: Database;
 let pool: PoolShim;
 
-const userUuid = typeIdToUuid(typeIdGenerator("user")).uuid;
+const userId = typeIdGenerator("user") as UserId;
 const sessionId = typeIdGenerator("liveSession") as LiveSessionId;
-const reelUuid = typeIdToUuid(typeIdGenerator("reel")).uuid;
-const seedFrames = [newFrameUuid(), newFrameUuid()];
-const liveFrames = [newFrameUuid(), newFrameUuid(), newFrameUuid()];
+let reelUuid: string;
+const seedFrames: string[] = [];
+const liveFrameIds: ImageLibraryId[] = [];
+const liveFrames: string[] = [];
 
-const insertFrame = async (opts: {
-  id: string;
-  deck: string;
-  source: "seed" | "generated";
-  sessionId?: string;
-  tMs?: number | null;
-  userId?: string;
-}): Promise<void> => {
-  await pool.query(
-    `INSERT INTO image_library
-       (id, deck, prompt, prompt_hash, model, url, width, height, source,
-        user_id, session_id, t_ms)
-     VALUES ($1::uuid, $2, 'p', $3, 'm', '/library/x.webp', 64, 64, $4,
-        $5::uuid, $6, $7)`,
-    [
-      opts.id,
-      opts.deck,
-      `hash-${opts.id}`,
-      opts.source,
-      opts.userId ?? null,
-      opts.sessionId ?? null,
-      opts.tMs ?? null,
-    ]
-  );
-};
+const insertNoirFrame = (opts: {
+  source: "generated" | "seed";
+  tMs?: number;
+}): Promise<ImageLibraryId> =>
+  insertFrame(db, {
+    deck: "noir",
+    sessionId: opts.source === "generated" ? sessionId : undefined,
+    source: opts.source,
+    tMs: opts.tMs,
+    url: "/library/x.webp",
+    userId: opts.source === "generated" ? userId : undefined,
+  });
 
 beforeAll(async () => {
-  pg = createPgLite();
-  await pg.exec(DDL);
-  pool = pgliteAsPool(pg);
+  const t = await getTestDb();
+  ({ db, pool } = t);
+  await t.reset();
 
-  await pool.query(
-    `INSERT INTO "user" (id, name, email) VALUES ($1::uuid, 'u', 'u@test')`,
-    [userUuid]
-  );
+  await createTestUser(db, { id: userId });
   // Built-in seed frames for one deck.
-  await insertFrame({ deck: "noir", id: seedFrames[0] as string, source: "seed" });
-  await insertFrame({ deck: "noir", id: seedFrames[1] as string, source: "seed" });
+  for (let i = 0; i < 2; i += 1) {
+    const id = await insertNoirFrame({ source: "seed" });
+    seedFrames.push(typeIdToUuid(id).uuid);
+  }
   // A legacy live session (3 generated frames, out-of-order tMs on purpose).
-  await insertFrame({
-    deck: "noir",
-    id: liveFrames[0] as string,
-    sessionId,
-    source: "generated",
-    tMs: 2500,
-    userId: userUuid,
-  });
-  await insertFrame({
-    deck: "noir",
-    id: liveFrames[1] as string,
-    sessionId,
-    source: "generated",
-    tMs: 0,
-    userId: userUuid,
-  });
-  await insertFrame({
-    deck: "noir",
-    id: liveFrames[2] as string,
-    sessionId,
-    source: "generated",
-    tMs: 1000,
-    userId: userUuid,
-  });
+  for (const tMs of [2500, 0, 1000]) {
+    const id = await insertNoirFrame({ source: "generated", tMs });
+    liveFrameIds.push(id);
+    liveFrames.push(typeIdToUuid(id).uuid);
+  }
   // A legacy reel holding two of the live frames in authored order.
-  await pool.query(
-    `INSERT INTO reel (id, name, user_id) VALUES ($1::uuid, 'best of', $2::uuid)`,
-    [reelUuid, userUuid]
-  );
-  await pool.query(
-    `INSERT INTO reel_frame (id, reel_id, frame_id, position)
-     VALUES (gen_random_uuid(), $1::uuid, $2::uuid, 0),
-            (gen_random_uuid(), $1::uuid, $3::uuid, 1)`,
-    [reelUuid, liveFrames[2], liveFrames[0]]
-  );
-});
+  const reelId = await insertLegacyReel(db, {
+    frames: [
+      liveFrameIds[2] as ImageLibraryId,
+      liveFrameIds[0] as ImageLibraryId,
+    ],
+    name: "best of",
+    userId,
+  });
+  reelUuid = typeIdToUuid(reelId).uuid;
+}, 30_000);
 
 describe("migrateFrameSetsOnBoot", () => {
   test("converges builtins, recordings and reels into frame_set", async () => {
@@ -257,8 +149,7 @@ describe("migrateFrameSetsOnBoot", () => {
   });
 
   test("appends newly seeded frames past max(position) on rerun", async () => {
-    const extra = newFrameUuid();
-    await insertFrame({ deck: "noir", id: extra, source: "seed" });
+    const extra = typeIdToUuid(await insertNoirFrame({ source: "seed" })).uuid;
     await migrateFrameSetsOnBoot(noopLogger, pool);
 
     const noirMembers = await pool.query<{ frame_id: string; position: number }>(

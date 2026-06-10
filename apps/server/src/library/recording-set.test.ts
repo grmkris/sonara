@@ -1,9 +1,10 @@
 import { beforeAll, describe, expect, test } from "bun:test";
 
 import { typeIdGenerator, typeIdToUuid } from "@sonara/shared/typeid";
-import type { LiveSessionId } from "@sonara/shared/typeid";
-import { createPgLite, pgliteAsPool } from "@sonara/test-utils";
-import type { PoolShim, TestPg } from "@sonara/test-utils";
+import type { LiveSessionId, UserId } from "@sonara/shared/typeid";
+import type { PoolShim } from "@sonara/test-utils";
+import { createTestUser, insertFrame } from "@sonara/test-utils/factories";
+import { getTestDb } from "@sonara/test-utils/test-db";
 
 import {
   appendRecordingFrame,
@@ -11,106 +12,34 @@ import {
   finalizeRecordingSet,
 } from "./recording-set";
 
-// Tables the recording path touches (+ FK targets) — same DDL blocks as
-// frame-set-boot-migrate.test.ts, minus the legacy reel tables.
-const DDL = `
-CREATE TABLE "user" (
-  id uuid PRIMARY KEY NOT NULL,
-  name text NOT NULL,
-  email text NOT NULL UNIQUE,
-  email_verified boolean NOT NULL DEFAULT false,
-  image text,
-  dodo_customer_id text,
-  created_at timestamptz NOT NULL DEFAULT now(),
-  updated_at timestamptz NOT NULL DEFAULT now()
-);
-CREATE TABLE image_library (
-  id uuid PRIMARY KEY NOT NULL,
-  deck text NOT NULL,
-  prompt text NOT NULL,
-  prompt_hash text NOT NULL,
-  model text NOT NULL,
-  seed integer,
-  url text NOT NULL,
-  width integer NOT NULL,
-  height integer NOT NULL,
-  palette text[],
-  status text NOT NULL DEFAULT 'active',
-  source text NOT NULL DEFAULT 'seed',
-  user_id uuid REFERENCES "user"(id) ON DELETE cascade,
-  session_id text,
-  t_ms integer,
-  position integer,
-  source_url text,
-  trigger_reason text,
-  anchor_url text,
-  inspector_context jsonb,
-  created_at timestamptz NOT NULL DEFAULT now(),
-  updated_at timestamptz NOT NULL DEFAULT now()
-);
-CREATE TABLE frame_set (
-  cover_frame_id uuid REFERENCES image_library(id) ON DELETE set null,
-  deck_key text,
-  frame_count integer NOT NULL DEFAULT 0,
-  id uuid PRIMARY KEY NOT NULL,
-  live_session_id text,
-  name text NOT NULL,
-  origin text NOT NULL,
-  status text NOT NULL DEFAULT 'final',
-  user_id uuid REFERENCES "user"(id) ON DELETE cascade,
-  visibility text NOT NULL DEFAULT 'private',
-  created_at timestamptz NOT NULL DEFAULT now(),
-  updated_at timestamptz NOT NULL DEFAULT now()
-);
-CREATE UNIQUE INDEX frame_set_live_session_idx
-  ON frame_set (live_session_id) WHERE live_session_id IS NOT NULL;
-CREATE UNIQUE INDEX frame_set_deck_key_idx
-  ON frame_set (deck_key) WHERE origin = 'builtin';
-CREATE TABLE frame_set_frame (
-  frame_id uuid NOT NULL REFERENCES image_library(id) ON DELETE cascade,
-  id uuid PRIMARY KEY NOT NULL,
-  position integer NOT NULL,
-  set_id uuid NOT NULL REFERENCES frame_set(id) ON DELETE cascade,
-  t_ms integer,
-  created_at timestamptz NOT NULL DEFAULT now(),
-  updated_at timestamptz NOT NULL DEFAULT now(),
-  CONSTRAINT frame_set_frame_set_position_idx UNIQUE (set_id, position),
-  CONSTRAINT frame_set_frame_set_frame_idx UNIQUE (set_id, frame_id)
-);
-`;
-
-let pg: TestPg;
+// Real schema via the shared harness. Tests in this file are cumulative
+// (ensure → append → finalize → re-ensure), so reset() runs once in
+// beforeAll, not per test.
 let pool: PoolShim;
 
-const userUuid = typeIdToUuid(typeIdGenerator("user")).uuid;
+const userId = typeIdGenerator("user") as UserId;
+const userUuid = typeIdToUuid(userId).uuid;
 const liveSessionId = typeIdGenerator("liveSession") as LiveSessionId;
 const setUuid = typeIdToUuid(liveSessionId).uuid;
 const startedAt = new Date("2026-06-09T14:05:30Z");
-const frameUuids = [
-  typeIdToUuid(typeIdGenerator("imageLibrary")).uuid,
-  typeIdToUuid(typeIdGenerator("imageLibrary")).uuid,
-];
+const frameUuids: string[] = [];
 
 beforeAll(async () => {
-  pg = createPgLite();
-  await pg.exec(DDL);
-  pool = pgliteAsPool(pg);
+  const t = await getTestDb();
+  ({ pool } = t);
+  await t.reset();
 
-  await pool.query(
-    `INSERT INTO "user" (id, name, email) VALUES ($1::uuid, 'u', 'u@test')`,
-    [userUuid]
-  );
-  for (const id of frameUuids) {
-    await pool.query(
-      `INSERT INTO image_library
-         (id, deck, prompt, prompt_hash, model, url, width, height, source,
-          user_id, session_id)
-       VALUES ($1::uuid, 'live', 'p', $2, 'm', '/library/x.webp', 64, 64,
-          'generated', $3::uuid, $4)`,
-      [id, `hash-${id}`, userUuid, liveSessionId]
-    );
+  await createTestUser(t.db, { id: userId });
+  for (let i = 0; i < 2; i += 1) {
+    const frameId = await insertFrame(t.db, {
+      deck: "live",
+      sessionId: liveSessionId,
+      url: "/library/x.webp",
+      userId,
+    });
+    frameUuids.push(typeIdToUuid(frameId).uuid);
   }
-});
+}, 30_000);
 
 describe("recording-set", () => {
   test("ensure → append ×2 → finalize records the performance", async () => {

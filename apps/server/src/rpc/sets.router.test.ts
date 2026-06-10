@@ -1,12 +1,4 @@
-import {
-  afterAll,
-  beforeAll,
-  beforeEach,
-  describe,
-  expect,
-  mock,
-  test,
-} from "bun:test";
+import { beforeAll, beforeEach, describe, expect, mock, test } from "bun:test";
 
 import { createRouterClient, ORPCError } from "@orpc/server";
 import { SCHEMA } from "@sonara/db";
@@ -18,10 +10,15 @@ import type {
   LiveSessionId,
   UserId,
 } from "@sonara/shared/typeid";
-import { createPgLite } from "@sonara/test-utils";
-import type { TestPg } from "@sonara/test-utils";
+import {
+  createTestUser,
+  insertFrame,
+  insertSet as insertSetRow,
+} from "@sonara/test-utils/factories";
+import { makeServerCtx } from "@sonara/test-utils/orpc";
+import { getTestDb } from "@sonara/test-utils/test-db";
+import type { TestDb } from "@sonara/test-utils/test-db";
 import { eq } from "drizzle-orm";
-import { drizzle } from "drizzle-orm/pglite";
 
 import type { ServerHttpContext } from "./procedures";
 import type { setsRouter as SetsRouterValue } from "./sets.router";
@@ -35,90 +32,18 @@ mock.module("../storage/bucket", () => ({
   uploadBytes: () => Promise.resolve(),
 }));
 
-// Tables the sets router touches (+ FK targets), incl. the unique indexes the
-// idempotent inserts and the reorder offset-bump rely on.
-const DDL = `
-CREATE TABLE "user" (
-  id uuid PRIMARY KEY NOT NULL,
-  name text NOT NULL,
-  email text NOT NULL UNIQUE,
-  email_verified boolean NOT NULL DEFAULT false,
-  image text,
-  dodo_customer_id text,
-  created_at timestamptz NOT NULL DEFAULT now(),
-  updated_at timestamptz NOT NULL DEFAULT now()
-);
-CREATE TABLE image_library (
-  id uuid PRIMARY KEY NOT NULL,
-  deck text NOT NULL,
-  prompt text NOT NULL,
-  prompt_hash text NOT NULL,
-  model text NOT NULL,
-  seed integer,
-  url text NOT NULL,
-  width integer NOT NULL,
-  height integer NOT NULL,
-  palette text[],
-  status text NOT NULL DEFAULT 'active',
-  source text NOT NULL DEFAULT 'seed',
-  user_id uuid REFERENCES "user"(id) ON DELETE cascade,
-  session_id text,
-  t_ms integer,
-  position integer,
-  source_url text,
-  trigger_reason text,
-  anchor_url text,
-  inspector_context jsonb,
-  created_at timestamptz NOT NULL DEFAULT now(),
-  updated_at timestamptz NOT NULL DEFAULT now()
-);
-CREATE TABLE frame_set (
-  cover_frame_id uuid REFERENCES image_library(id) ON DELETE set null,
-  deck_key text,
-  frame_count integer NOT NULL DEFAULT 0,
-  id uuid PRIMARY KEY NOT NULL,
-  live_session_id text,
-  name text NOT NULL,
-  origin text NOT NULL,
-  status text NOT NULL DEFAULT 'final',
-  user_id uuid REFERENCES "user"(id) ON DELETE cascade,
-  visibility text NOT NULL DEFAULT 'private',
-  created_at timestamptz NOT NULL DEFAULT now(),
-  updated_at timestamptz NOT NULL DEFAULT now()
-);
-CREATE UNIQUE INDEX frame_set_live_session_idx
-  ON frame_set (live_session_id) WHERE live_session_id IS NOT NULL;
-CREATE UNIQUE INDEX frame_set_deck_key_idx
-  ON frame_set (deck_key) WHERE origin = 'builtin';
-CREATE TABLE frame_set_frame (
-  frame_id uuid NOT NULL REFERENCES image_library(id) ON DELETE cascade,
-  id uuid PRIMARY KEY NOT NULL,
-  position integer NOT NULL,
-  set_id uuid NOT NULL REFERENCES frame_set(id) ON DELETE cascade,
-  t_ms integer,
-  created_at timestamptz NOT NULL DEFAULT now(),
-  updated_at timestamptz NOT NULL DEFAULT now(),
-  CONSTRAINT frame_set_frame_set_position_idx UNIQUE (set_id, position),
-  CONSTRAINT frame_set_frame_set_frame_idx UNIQUE (set_id, frame_id)
-);
-`;
-
-let pg: TestPg;
+let t: TestDb;
 let db: Database;
 let setsRouter: typeof SetsRouterValue;
 
 const userA = typeIdGenerator("user") as UserId;
 const userB = typeIdGenerator("user") as UserId;
+const sessionId = typeIdGenerator("liveSession") as LiveSessionId;
 const A: ImageLibraryId[] = [];
 let seedFrameId: ImageLibraryId;
 
 const mkCtx = (userId: UserId | null): ServerHttpContext =>
-  ({
-    db,
-    registry: {} as ServerHttpContext["registry"],
-    session: userId ? { user: { id: userId } } : null,
-    userId: userId as UserId,
-  }) as ServerHttpContext;
+  makeServerCtx({ db, userId }) as ServerHttpContext;
 
 const makeClient = (userId: UserId | null) =>
   createRouterClient(setsRouter, { context: mkCtx(userId) });
@@ -128,57 +53,32 @@ let a: SetsClient;
 let b: SetsClient;
 let anon: SetsClient;
 
-const insertFrame = async (
-  owner: UserId | null,
-  i: number,
-  overrides: Partial<{ source: string; url: string }> = {}
-): Promise<ImageLibraryId> => {
-  const id = typeIdGenerator("imageLibrary") as ImageLibraryId;
-  await db.insert(SCHEMA.imageLibrary).values({
-    deck: "wild",
-    height: 768,
-    id,
-    model: "test",
-    prompt: `frame ${i}`,
-    promptHash: `gen:test:${owner ?? "sys"}:${i}`,
-    sessionId: "lse_testsession00000000000000" as LiveSessionId,
-    source: (overrides.source ?? "generated") as "generated",
-    tMs: i * 1000,
-    url: overrides.url ?? `generated/${owner}/${id}.webp`,
-    userId: owner,
-    width: 768,
-  });
-  return id;
-};
-
 beforeAll(async () => {
-  pg = createPgLite();
-  await pg.exec(DDL);
-  db = drizzle(pg, { schema: SCHEMA }) as unknown as Database;
+  t = await getTestDb();
+  ({ db } = t);
   ({ setsRouter } = await import("./sets.router"));
   a = makeClient(userA);
   b = makeClient(userB);
   anon = makeClient(null);
-
-  await db.insert(SCHEMA.user).values([
-    { email: "a@test.dev", emailVerified: true, id: userA, name: "A" },
-    { email: "b@test.dev", emailVerified: true, id: userB, name: "B" },
-  ]);
-  for (let i = 0; i < 4; i += 1) {
-    A.push(await insertFrame(userA, i));
-  }
-  seedFrameId = await insertFrame(null, 50, {
-    source: "seed",
-    url: "/library/wild/img_test.webp",
-  });
 }, 30_000);
 
-afterAll(async () => {
-  await pg.close();
-});
-
+// The shared reset() truncates everything (users and frames included), so the
+// base fixtures are re-seeded per test rather than once in beforeAll.
 beforeEach(async () => {
-  await pg.exec("DELETE FROM frame_set_frame; DELETE FROM frame_set;");
+  await t.reset();
+  await createTestUser(db, { email: "a@test.dev", id: userA, name: "A" });
+  await createTestUser(db, { email: "b@test.dev", id: userB, name: "B" });
+  A.length = 0;
+  for (let i = 0; i < 4; i += 1) {
+    A.push(
+      await insertFrame(db, { sessionId, tMs: i * 1000, userId: userA })
+    );
+  }
+  seedFrameId = await insertFrame(db, {
+    source: "seed",
+    tMs: 50_000,
+    url: "/library/wild/img_test.webp",
+  });
 }, 30_000);
 
 const newCut = async (name = "my cut"): Promise<FrameSetId> => {
@@ -186,41 +86,14 @@ const newCut = async (name = "my cut"): Promise<FrameSetId> => {
   return set.id;
 };
 
-// Insert a recording / builtin row directly (those are created by the boot
-// converger or the live path, not by this router).
-const insertSet = async (opts: {
+const insertSet = (opts: {
   origin: "builtin" | "recording" | "curated";
   userId?: UserId | null;
   visibility?: "private" | "unlisted" | "public";
   deckKey?: string;
-  liveSessionId?: string;
+  liveSessionId?: LiveSessionId;
   frames?: { id: ImageLibraryId; tMs?: number }[];
-}): Promise<FrameSetId> => {
-  const [row] = await db
-    .insert(SCHEMA.frameSet)
-    .values({
-      deckKey: opts.deckKey,
-      frameCount: opts.frames?.length ?? 0,
-      liveSessionId: opts.liveSessionId as LiveSessionId | undefined,
-      name: `${opts.origin} set`,
-      origin: opts.origin,
-      userId: opts.userId ?? null,
-      visibility: opts.visibility ?? "private",
-    })
-    .returning();
-  const setId = (row as { id: FrameSetId }).id;
-  if (opts.frames?.length) {
-    await db.insert(SCHEMA.frameSetFrame).values(
-      opts.frames.map((f, i) => ({
-        frameId: f.id,
-        position: i,
-        setId,
-        tMs: f.tMs ?? null,
-      }))
-    );
-  }
-  return setId;
-};
+}): Promise<FrameSetId> => insertSetRow(db, opts);
 
 describe("create / list / get", () => {
   test("create returns an empty summary and shows up in list", async () => {

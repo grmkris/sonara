@@ -14,7 +14,7 @@
     "typecheck": "tsc --noEmit",
     "lint": "oxlint",
     "fix": "oxlint --fix",
-    "test": "bun test || echo 'no tests yet'",
+    "test": "bun test",
     "ingest-demo": "bun run src/scripts/ingest-demo.ts",
     "seed:library": "bun run scripts/seed-library.ts",
     "gen:deck": "bun run scripts/gen-deck-offline.ts",

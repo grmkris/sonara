@@ -8,7 +8,10 @@
   "exports": {
     ".": "./src/index.ts",
     "./pg-lite": "./src/pg-lite.ts",
-    "./pg-pool-shim": "./src/pg-pool-shim.ts"
+    "./pg-pool-shim": "./src/pg-pool-shim.ts",
+    "./test-db": "./src/test-db.ts",
+    "./factories": "./src/factories.ts",
+    "./orpc": "./src/orpc.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
@@ -16,7 +19,10 @@
     "fix": "oxlint --fix"
   },
   "dependencies": {
-    "@electric-sql/pglite": "^0.5.1"
+    "@electric-sql/pglite": "^0.5.1",
+    "@sonara/db": "workspace:*",
+    "@sonara/shared": "workspace:*",
+    "drizzle-orm": "^0.45.2"
   },
   "devDependencies": {
     "typescript": "^6.0.3"

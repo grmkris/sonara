@@ -8,8 +8,11 @@ import {
 } from "bun:test";
 
 import { createLogger } from "@sonara/logger";
-import { createPgLite, pgliteAsPool } from "@sonara/test-utils";
-import type { TestPg } from "@sonara/test-utils";
+import { typeIdGenerator, typeIdToUuid } from "@sonara/shared/typeid";
+import type { UserId } from "@sonara/shared/typeid";
+import { createTestUser } from "@sonara/test-utils/factories";
+import { getTestDb } from "@sonara/test-utils/test-db";
+import type { TestDb } from "@sonara/test-utils/test-db";
 
 import {
   CREDIT_DENIAL_COOLDOWN_MS,
@@ -18,60 +21,33 @@ import {
 } from "./credit-gate";
 import { __setPoolForTests } from "./credits.service";
 
-const SCHEMA_SQL = `
-CREATE TABLE credits (
-  id uuid PRIMARY KEY NOT NULL,
-  user_id uuid NOT NULL,
-  balance_frames integer DEFAULT 0 NOT NULL,
-  created_at timestamp with time zone DEFAULT now() NOT NULL,
-  updated_at timestamp with time zone DEFAULT now() NOT NULL
-);
-CREATE UNIQUE INDEX credits_user_id_idx ON credits (user_id);
-
-CREATE TABLE usage_ledger (
-  id uuid PRIMARY KEY NOT NULL,
-  user_id uuid NOT NULL,
-  kind text NOT NULL,
-  delta integer NOT NULL,
-  amount_cents integer,
-  tx_hash text,
-  chain_id text,
-  created_at timestamp with time zone DEFAULT now() NOT NULL
-);
-
-CREATE TABLE free_tier_ledger (
-  user_id uuid NOT NULL,
-  window_start timestamp with time zone NOT NULL,
-  usage_count integer DEFAULT 0 NOT NULL,
-  PRIMARY KEY (user_id, window_start)
-);
-`;
-
-const USER = "00000000-0000-0000-0000-000000000001";
+// The credit gate works in raw-uuid space; derive the actor uuid from a real
+// typeid so the user-row factory insert round-trips cleanly.
+const USER_ID = typeIdGenerator("user") as UserId;
+const USER = typeIdToUuid(USER_ID).uuid;
 const NOW = 1_700_000_000_000;
 const logger = createLogger({ level: "silent", name: "test" });
 
-let pg: TestPg;
+let t: TestDb;
 
 beforeAll(async () => {
-  pg = createPgLite();
-  await pg.exec(SCHEMA_SQL);
-  __setPoolForTests(pgliteAsPool(pg));
-});
+  t = await getTestDb();
+  __setPoolForTests(t.pool);
+}, 30_000);
 
-afterAll(async () => {
+afterAll(() => {
   __setPoolForTests(null);
-  await pg.close();
 });
 
 beforeEach(async () => {
-  await pg.exec(
-    `DELETE FROM usage_ledger; DELETE FROM credits; DELETE FROM free_tier_ledger;`
-  );
+  await t.reset();
+  // Real migrations FK credits/usage_ledger/free_tier_ledger.user_id to
+  // "user".id — the raw-uuid actor needs a backing user row.
+  await createTestUser(t.db, { id: USER_ID });
 });
 
 const seedCredits = async (userId: string, frames: number): Promise<void> => {
-  await pg.query(
+  await t.pg.query(
     `INSERT INTO credits (id, user_id, balance_frames)
      VALUES (gen_random_uuid(), $1, $2)`,
     [userId, frames]
