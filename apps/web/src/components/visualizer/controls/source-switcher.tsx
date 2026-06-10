@@ -155,6 +155,15 @@ export const SourceSwitcher = ({
 
   const onPickSet = async (summary: FrameSetSummary) => {
     setOpen(false);
+    if (mode === "remote") {
+      // The screen applies it (source.set event) and confirms via
+      // source.report — never start a local replay on the console device.
+      send({
+        source: { kind: "set", label: summary.name, setId: summary.id },
+        type: "source.set",
+      });
+      return;
+    }
     await startSetReplayById(summary.id);
   };
 

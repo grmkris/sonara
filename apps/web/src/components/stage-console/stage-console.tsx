@@ -239,7 +239,7 @@ export const StageConsole = ({
         <div className="flex flex-col gap-5">
           <PromptInput send={send} />
           <Divider />
-          <SourceSwitcher send={send} mode="remote" />
+          <SourceSwitcher send={send} mode="remote" showSets />
           <Divider />
           <IntensityDial send={send} />
           <Divider />

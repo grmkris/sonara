@@ -19,6 +19,16 @@ export type SessionAction =
   // "New set": finalize the current recording segment, start the next run in
   // place. The new id arrives via the `run.started` event — no reconnect.
   | { type: "set.new" }
+  // Remote source switch (detached console / studio): relayed server-side to
+  // the screen as a `source.set` event. Local (attached) picks never dispatch
+  // this — they start playback directly (apply-source.ts).
+  | {
+      type: "source.set";
+      source:
+        | { kind: "set"; setId: string; label: string | null }
+        | { kind: "deck"; deck: DeckKey }
+        | { kind: "idle" };
+    }
   | { type: "frame.report"; url: string }
   | {
       type: "source.report";
@@ -67,6 +77,11 @@ export const dispatchSessionAction = (
     }
     case "set.new": {
       return client.newSet();
+    }
+    case "source.set": {
+      // Producer-side: never sent over the WS (the attached console applies
+      // sources locally); only the control-router dispatcher maps this.
+      return Promise.resolve();
     }
     case "frame.report": {
       return client.reportFrame({ url: action.url });

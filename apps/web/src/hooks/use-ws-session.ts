@@ -1,9 +1,10 @@
 "use client";
 
-import type { ServerEvent } from "@sonara/shared";
+import type { DeckKey, ServerEvent } from "@sonara/shared";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
+import { startSetReplayById } from "@/lib/apply-source";
 import { createSessionConnection } from "@/lib/orpc-ws";
 import { PRESET_NAMES } from "@/lib/render/presets";
 import type { PresetName } from "@/lib/render/presets";
@@ -183,6 +184,25 @@ export const useWsSession = (target: { code: string | null }): WsSession => {
           // Server-owned run identity — on every (re)connect init and after
           // "new set". ShareLink derives the recording permalink from it.
           s.setLiveRun(event.liveSessionId);
+          break;
+        }
+        case "source.set": {
+          // Remote source switch (console set rows / studio "activate on
+          // <stage>"). Apply exactly like a local pick; source.report then
+          // confirms producer-truth back to the server.
+          const { source } = event;
+          if (s.setPlaybackActive) {
+            s.stopSetPlayback();
+          }
+          if (source.kind === "set" && source.setId) {
+            void startSetReplayById(source.setId);
+          } else if (source.kind === "deck" && source.deck) {
+            s.setDemoMode(true);
+            s.setDemoDeck(source.deck as DeckKey);
+          } else if (source.kind === "idle" && s.demoMode) {
+            s.setDemoMode(false);
+            s.setDemoDeck(null);
+          }
           break;
         }
         case "screen.takenOver": {

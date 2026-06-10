@@ -8,6 +8,7 @@ import { useEffect, useState } from "react";
 
 import { cn } from "@/lib/utils";
 
+import { ActivateOnStage } from "./activate-on-stage";
 import { ErrorState } from "./error-state";
 import { SelectModeToggle } from "./select-mode-toggle";
 import { SetEmptyDraft } from "./set-empty-draft";
@@ -159,12 +160,15 @@ export const SetEditor = ({
             />
           )}
           {frameSet.frames.length > 0 && (
+            <ActivateOnStage setId={frameSet.id} />
+          )}
+          {frameSet.frames.length > 0 && (
             <Link
               href={`/play?set=${encodeURIComponent(frameSet.id)}`}
               className="focus-ring font-sans inline-flex items-center gap-1.5 border border-[color:var(--hairline)]/40 px-3 py-1.5 text-[10px] uppercase tracking-[0.22em] text-[color:var(--paper)]/85 transition-colors hover:border-[color:var(--paper)]/70 hover:text-[color:var(--paper)]"
             >
               <Play className="size-3" strokeWidth={1.5} />
-              play
+              preview
             </Link>
           )}
           {onDelete && (

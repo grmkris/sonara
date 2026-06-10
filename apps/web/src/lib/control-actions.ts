@@ -41,6 +41,12 @@ export const dispatchControlAction = (
         ? c.newSet({ stageId: target.stageId })
         : Promise.resolve();
     }
+    case "source.set": {
+      // Stage-addressed only, same rationale as set.new.
+      return "stageId" in target
+        ? c.setSource({ source: action.source, stageId: target.stageId })
+        : Promise.resolve();
+    }
     case "demo.set": {
       return c.setDemoMode({ ...target, deck: action.deck, on: action.on });
     }
