@@ -2,8 +2,13 @@ import { beforeAll, describe, expect, test } from "bun:test";
 
 import { typeIdGenerator, typeIdToUuid } from "@sonara/shared/typeid";
 import type { LiveSessionId, UserId } from "@sonara/shared/typeid";
+import type { Database } from "@sonara/db";
 import type { PoolShim } from "@sonara/test-utils";
-import { createTestUser, insertFrame } from "@sonara/test-utils/factories";
+import {
+  createTestStage,
+  createTestUser,
+  insertFrame,
+} from "@sonara/test-utils/factories";
 import { getTestDb } from "@sonara/test-utils/test-db";
 
 import {
@@ -16,6 +21,7 @@ import {
 // (ensure → append → finalize → re-ensure), so reset() runs once in
 // beforeAll, not per test.
 let pool: PoolShim;
+let db: Database;
 
 const userId = typeIdGenerator("user") as UserId;
 const userUuid = typeIdToUuid(userId).uuid;
@@ -26,7 +32,7 @@ const frameUuids: string[] = [];
 
 beforeAll(async () => {
   const t = await getTestDb();
-  ({ pool } = t);
+  ({ db, pool } = t);
   await t.reset();
 
   await createTestUser(t.db, { id: userId });
@@ -139,5 +145,37 @@ describe("recording-set", () => {
       [setUuid]
     );
     expect(rows.rows[0]?.status).toBe("final");
+  });
+
+  test("stage stamp fills once and never moves on re-ensure", async () => {
+    // Pre-stage resume: the first ensure had no stage (legacy run, stageUuid
+    // null in the rows above) — a later re-ensure with a stage FILLS it…
+    const stage = await createTestStage(db, { userId });
+    const stageUuid = typeIdToUuid(stage.id).uuid;
+    await ensureRecordingSet(pool, {
+      liveSessionId,
+      stageUuid,
+      startedAt,
+      userUuid,
+    });
+    const filled = await pool.query<{ stage_id: string | null }>(
+      "SELECT stage_id FROM frame_set WHERE id = $1::uuid",
+      [setUuid]
+    );
+    expect(filled.rows[0]?.stage_id).toBe(stageUuid);
+
+    // …but a subsequent ensure with a DIFFERENT stage never moves it.
+    const other = await createTestStage(db, { userId });
+    await ensureRecordingSet(pool, {
+      liveSessionId,
+      stageUuid: typeIdToUuid(other.id).uuid,
+      startedAt,
+      userUuid,
+    });
+    const kept = await pool.query<{ stage_id: string | null }>(
+      "SELECT stage_id FROM frame_set WHERE id = $1::uuid",
+      [setUuid]
+    );
+    expect(kept.rows[0]?.stage_id).toBe(stageUuid);
   });
 });

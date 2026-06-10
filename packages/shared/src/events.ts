@@ -179,6 +179,22 @@ export const ServerEvent = z.discriminatedUnion("type", [
     showQr: z.boolean().optional(),
     type: z.literal("stage.status"),
   }),
+  // The server-owned run identity for this connection — emitted on every
+  // (re)connect init and again when a new run starts ("new set" / setSource).
+  // The client derives the recording set's permalink from it (set uuid = lse
+  // uuid) instead of minting ids locally.
+  z.object({
+    liveSessionId: z.string(),
+    type: z.literal("run.started"),
+  }),
+  // A second screen attached to this stage and took over as producer. Rides
+  // the shared session publisher, so BOTH screens see it: the one whose
+  // connection id matches demotes itself to a passive notice; the new screen
+  // ignores it. The kicked socket is also closed with code 4409.
+  z.object({
+    connectionId: z.string(),
+    type: z.literal("screen.takenOver"),
+  }),
 ]);
 
 export type ServerEvent = z.infer<typeof ServerEvent>;

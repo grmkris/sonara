@@ -9,6 +9,7 @@ import { createDb } from "@sonara/db";
 import { runMigrations } from "@sonara/db/migrator";
 import { SERVICE_URLS, verifyTicket } from "@sonara/shared";
 import type { WsRole } from "@sonara/shared";
+import type { AttachedWs } from "./session/session-manager";
 import { LiveSessionIdSchema } from "@sonara/shared/typeid";
 import type { LiveSessionId, UserId } from "@sonara/shared/typeid";
 import type { ServerWebSocket } from "bun";
@@ -166,6 +167,10 @@ interface SessionWsData {
   // minted by the previous build (≤5 min TTL window).
   stageId: string | null;
   role: WsRole;
+  // Registry key this connection attaches under (see SessionManager): the
+  // stage id, `anon:<anonId>`, or `conn:<wsId>` for legacy clients. Computed
+  // once at upgrade so open/message/close agree.
+  key: string;
 }
 
 // One Bun.serve handles two socket kinds: the oRPC session wire (/ws) and the
@@ -207,8 +212,28 @@ const server = Bun.serve<WsData, never>({
       const liveSessionId = liveSessionParse?.success
         ? liveSessionParse.data
         : null;
+      // Registry keying. A client that sends ?liveSessionId= is a LEGACY
+      // client (pre-stages web) — it gets verbatim per-socket semantics
+      // (`conn:` key, finalize on close) so its sessionStorage identity and
+      // multi-tab behavior stay byte-identical until the new web ships.
+      // New clients never send it: authed ones key by the ticket's stage,
+      // anon ones by their localStorage-stable anonStageId.
+      const anonIdRaw = url.searchParams.get("anonStageId");
+      const anonId =
+        anonIdRaw && /^[A-Za-z0-9_-]{8,64}$/u.test(anonIdRaw)
+          ? anonIdRaw
+          : null;
+      let key = `conn:${sessionId}`;
+      if (liveSessionId === null) {
+        if (payload.stageId) {
+          key = payload.stageId;
+        } else if (payload.userId === null && anonId) {
+          key = `anon:${anonId}`;
+        }
+      }
       const upgraded = srv.upgrade(req, {
         data: {
+          key,
           kind: "session" as const,
           liveSessionId,
           role: payload.role ?? "screen",
@@ -234,20 +259,20 @@ const server = Bun.serve<WsData, never>({
         stageFeedHooks.close(ws as ServerWebSocket<StageFeedWsData>);
         return;
       }
-      const { sessionId } = ws.data;
+      const { key, sessionId } = ws.data;
       wsHandler.close(ws);
-      manager.destroy(sessionId);
-      logger.info({ sessionId }, "ws closed");
+      manager.detach(key, ws as unknown as AttachedWs);
+      logger.info({ key, sessionId }, "ws closed");
     },
     async message(ws, raw) {
       // Stage feed sockets are read-only — clients have nothing to say.
       if (ws.data.kind === "stage") {
         return;
       }
-      const { sessionId } = ws.data;
-      const session = manager.get(sessionId);
+      const { key, sessionId } = ws.data;
+      const session = manager.getByKey(key);
       if (!session) {
-        logger.warn({ sessionId }, "message with no session");
+        logger.warn({ key, sessionId }, "message with no session");
         return;
       }
       await wsHandler.message(ws, raw, {
@@ -259,9 +284,18 @@ const server = Bun.serve<WsData, never>({
         stageFeedHooks.open(ws as ServerWebSocket<StageFeedWsData>);
         return;
       }
-      const { liveSessionId, sessionId, userId } = ws.data;
-      manager.create(sessionId, userId, liveSessionId);
-      logger.info({ liveSessionId, sessionId, userId }, "ws opened");
+      const { key, liveSessionId, sessionId, stageId, userId } = ws.data;
+      const { resumed } = manager.attach({
+        key,
+        liveSessionId,
+        stageId,
+        userId,
+        ws: ws as unknown as AttachedWs,
+      });
+      logger.info(
+        { key, liveSessionId, resumed, sessionId, userId },
+        "ws opened"
+      );
     },
   },
 });

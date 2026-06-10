@@ -37,8 +37,12 @@ const userB = typeIdGenerator("user") as UserId;
 const sessions = new Map<string, ControllableSession>();
 const registry: SessionRegistry = {
   getByLiveSessionId: (id) => sessions.get(id),
+  getByStageId: (stageId) =>
+    [...sessions.values()].find((s) => s.stageId === stageId),
   listByUserId: (rawUserId) =>
     [...sessions.values()].filter((s) => s.userId === rawUserId),
+  screenAttached: (stageId) =>
+    [...sessions.values()].some((s) => s.stageId === stageId),
 };
 
 // Minimal live Session standing — every ControllableSession method is a noop;
@@ -71,6 +75,8 @@ const makeFakeSession = (opts: {
     setCurrentSource: () => {},
     setDemoMode: () => {},
     setImageAnchor: () => {},
+    stageId: null,
+    startNewRun: () => opts.liveSessionId,
     userId: opts.userId,
   };
 };

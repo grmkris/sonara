@@ -26,7 +26,11 @@ import type {
   TextModelKey,
 } from "@sonara/shared";
 import { typeIdGenerator, typeIdToUuid } from "@sonara/shared/typeid";
-import type { ImageLibraryId, LiveSessionId } from "@sonara/shared/typeid";
+import type {
+  ImageLibraryId,
+  LiveSessionId,
+  StageId,
+} from "@sonara/shared/typeid";
 
 import {
   ANCHOR_FRAME_COST_CREDITS,
@@ -51,6 +55,7 @@ import { persistFrame } from "../library/persist-frame";
 import {
   appendRecordingFrame,
   ensureRecordingSet,
+  finalizeRecordingSet,
 } from "../library/recording-set";
 import { stageRooms } from "../onchain/stage-rooms";
 import { recognizeClip } from "../recognition/recognition.service";
@@ -68,6 +73,10 @@ export interface SessionOpts {
   // one session_id across reconnects; absent/null (old/direct client, or an
   // unvalidated id) → fresh mint.
   liveSessionId?: LiveSessionId | null;
+  // Durable stage (stg_ typeid) this run is performed on — from the WS
+  // ticket. Null for anon and for legacy clients (conn-keyed). Stamped onto
+  // the recording set so /studio can group sets by stage.
+  stageId?: string | null;
 }
 
 // `source` is the granular reason a trigger fired — used only for logging and
@@ -216,14 +225,25 @@ export class Session implements ControllableSession {
   private sessionStartAt = Date.now();
   private lastCreditDenialAt = 0;
 
-  // Stable identifier for this live session — one logical performance. The
-  // client owns it (sessionStorage) and re-sends it on every (re)connect, so
-  // it survives reconnects / reloads / redeploys and the user's library-row
-  // grouping (image_library.session_id) stays ONE session instead of
-  // fragmenting per WS connect. Assigned in the constructor from opts, falling
-  // back to a fresh mint when a client doesn't supply one. reset() keeps it.
-  // Distinct from opts.id (the ephemeral per-tab WS-connection id).
-  readonly liveSessionId: LiveSessionId;
+  // Stable identifier for this live session — one logical performance
+  // segment ("a set"). Legacy clients own it (sessionStorage) and re-send it
+  // on every (re)connect; stage-keyed clients get a server mint, learn it via
+  // the `run.started` event, and resume it through the registry's grace
+  // window. Mutable only through startNewRun() ("new set" — same Session,
+  // same publisher, fresh segment). reset() keeps it. Distinct from opts.id
+  // (the ephemeral per-tab WS-connection id).
+  liveSessionId: LiveSessionId;
+
+  // Durable stage this run plays on (stg_ typeid; null = anon/legacy). Lets
+  // the stage subsystem and lens resolve session → stage without a registry
+  // scan, and stamps recording sets with their stage.
+  readonly stageId: string | null;
+
+  // Whether a screen (producer WS) is currently attached. The registry flips
+  // this on detach/resume; while false the periodic tick must not fire —
+  // otherwise a graced run keeps burning paid fal generations with nobody
+  // watching for up to the whole grace window.
+  private attached = true;
 
   // DEMO mode state. Frame-driving is client-side now (use-demo-frame-loop);
   // the server only tracks these to relay in the connect snapshot + anon pinning.
@@ -258,6 +278,7 @@ export class Session implements ControllableSession {
     this.id = opts.id;
     this.userId = opts.userId;
     this.liveSessionId = opts.liveSessionId ?? typeIdGenerator("liveSession");
+    this.stageId = opts.stageId ?? null;
     this.logger = opts.logger.child({
       anon: opts.userId === null,
       sessionId: opts.id,
@@ -280,12 +301,61 @@ export class Session implements ControllableSession {
   init(): void {
     this.send({ state: this.scene, type: "scene.state" });
     this.send({ status: "idle", type: "job.status" });
+    // The client never mints run identity — it learns the current segment
+    // here (and again from startNewRun). Idempotent on reconnect/resume.
+    this.send({ liveSessionId: this.liveSessionId, type: "run.started" });
     // A projector reconnecting while its crowd stage is open must relearn the
     // room code (stage bindings outlive WS connections via liveSessionId).
     const stage = stageRooms.statusFor(this.liveSessionId);
     if (stage) {
       this.notifyStage(stage.room, stage.allowPrompts, stage.showQr);
     }
+  }
+
+  // Registry hook: producer WS attached/detached. Gates the periodic
+  // auto-trigger so a graced (screenless) run never generates.
+  setAttached(attached: boolean): void {
+    this.attached = attached;
+  }
+
+  isAttached(): boolean {
+    return this.attached;
+  }
+
+  // Takeover signal — rides the shared publisher so both the kicked and the
+  // new screen receive it; clients compare connectionId with their own.
+  notifyTakenOver(connectionId: string): void {
+    this.send({ connectionId, type: "screen.takenOver" });
+  }
+
+  // "New set": close out the current recording segment and start the next
+  // one in place. Same Session object (the long-lived events iterator stays
+  // subscribed to this publisher), same scene — only the run identity and
+  // the timing origin change. The previous set finalizes fire-and-forget.
+  startNewRun(): LiveSessionId {
+    const previous = this.liveSessionId;
+    this.activeJob?.abort();
+    if (this.userId !== null) {
+      void (async () => {
+        try {
+          await finalizeRecordingSet(getPool(), previous);
+        } catch (error) {
+          this.logger.warn(
+            { error, liveSessionId: previous },
+            "recording-set finalize failed on new run"
+          );
+        }
+      })();
+    }
+    this.liveSessionId = typeIdGenerator("liveSession");
+    this.sessionStartAt = Date.now();
+    this.lastKeyframeAt = 0;
+    this.send({ liveSessionId: this.liveSessionId, type: "run.started" });
+    this.logger.info(
+      { from: previous, to: this.liveSessionId },
+      "new run started"
+    );
+    return this.liveSessionId;
   }
 
   // `stage.status` push — the control router calls this when the owner opens
@@ -753,6 +823,11 @@ export class Session implements ControllableSession {
       if (this.demoMode) {
         return;
       }
+      // No screen attached (reconnect grace window) → nobody is watching;
+      // never burn paid generations into the void.
+      if (!this.attached) {
+        return;
+      }
       const hasAudio = now - this.lastAudioAt < 5000;
       const hasScene = this.scene.prompt.trim().length > 0;
       if (!hasAudio && !hasScene) {
@@ -777,6 +852,9 @@ export class Session implements ControllableSession {
         const pool = getPool();
         await ensureRecordingSet(pool, {
           liveSessionId: this.liveSessionId,
+          stageUuid: this.stageId
+            ? typeIdToUuid(this.stageId as StageId).uuid
+            : null,
           startedAt: new Date(this.sessionStartAt),
           userUuid: userId,
         });

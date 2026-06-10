@@ -35,8 +35,12 @@ interface PatchCall {
 const sessions = new Map<string, ControllableSession>();
 const registry: SessionRegistry = {
   getByLiveSessionId: (id) => sessions.get(id),
+  getByStageId: (stageId) =>
+    [...sessions.values()].find((s) => s.stageId === stageId),
   listByUserId: (rawUserId) =>
     [...sessions.values()].filter((s) => s.userId === rawUserId),
+  screenAttached: (stageId) =>
+    [...sessions.values()].some((s) => s.stageId === stageId),
 };
 
 // Fake Session that records applyPatch calls so "own session succeeds" can
@@ -72,6 +76,8 @@ const registerSession = (
     setCurrentSource: () => {},
     setDemoMode: () => {},
     setImageAnchor: () => {},
+    stageId: null,
+    startNewRun: () => liveSessionId,
     userId: typeIdToUuid(ownerId).uuid,
   });
   return { calls, liveSessionId };

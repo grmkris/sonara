@@ -54,6 +54,8 @@ export interface ControlSnapshot {
 export interface ControllableSession {
   readonly userId: string | null;
   readonly liveSessionId: LiveSessionId;
+  // Durable stage (stg_ typeid) this run plays on; null for anon/legacy runs.
+  readonly stageId: string | null;
   applyPatch(patch: ClientScenePatch, origin?: "client" | "voice"): void;
   goLive(prompt: string, seedFrameUrl: string | null): void;
   setDemoMode(on: boolean, deck: DeckKey | null): void;
@@ -68,6 +70,9 @@ export interface ControllableSession {
   // control router when the owner opens/closes the Monad crowd stage or
   // toggles the projector's join-QR overlay.
   notifyStage(room: string | null, allowPrompts?: boolean, showQr?: boolean): void;
+  // "New set": finalize the current recording segment and start the next run
+  // in place (same Session, same publisher). Returns the new run id.
+  startNewRun(): LiveSessionId;
 }
 
 // Lookup surface over the live in-memory sessions. apps/server's
@@ -77,4 +82,10 @@ export interface SessionRegistry {
   // rawUserId is the raw UUID (matching Session.userId), NOT the typeid.
   listByUserId(rawUserId: string): ControllableSession[];
   getByLiveSessionId(liveSessionId: string): ControllableSession | undefined;
+  // Stage-keyed lookups (stage-keyed runs only; legacy conn-keyed runs are
+  // reachable via the two methods above).
+  getByStageId(stageId: string): ControllableSession | undefined;
+  // A graced run still exists (lens reads it live) but has no screen — the
+  // console's "no screen connected" copy keys off this.
+  screenAttached(stageId: string): boolean;
 }

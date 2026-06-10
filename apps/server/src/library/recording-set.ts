@@ -25,15 +25,31 @@ const recordingName = (startedAt: Date): string =>
 // nobody ever held their links.) The owner can flip to private to kill a link.
 export const ensureRecordingSet = async (
   pool: PoolLike,
-  opts: { liveSessionId: LiveSessionId; userUuid: string; startedAt: Date }
+  opts: {
+    liveSessionId: LiveSessionId;
+    userUuid: string;
+    startedAt: Date;
+    // The stage (uuid form) this run plays on; null for legacy/anon runs.
+    // COALESCE keeps an existing stamp — a resume can only fill, never move
+    // a recording to a different stage.
+    stageUuid?: string | null;
+  }
 ): Promise<void> => {
   const setUuid = typeIdToUuid(opts.liveSessionId).uuid;
   await pool.query(
     `INSERT INTO frame_set
-       (id, live_session_id, name, origin, status, user_id, visibility)
-     VALUES ($1::uuid, $2, $3, 'recording', 'recording', $4::uuid, 'unlisted')
-     ON CONFLICT (id) DO UPDATE SET status = 'recording'`,
-    [setUuid, opts.liveSessionId, recordingName(opts.startedAt), opts.userUuid]
+       (id, live_session_id, name, origin, stage_id, status, user_id, visibility)
+     VALUES ($1::uuid, $2, $3, 'recording', $5::uuid, 'recording', $4::uuid, 'unlisted')
+     ON CONFLICT (id) DO UPDATE
+       SET status = 'recording',
+           stage_id = COALESCE(frame_set.stage_id, EXCLUDED.stage_id)`,
+    [
+      setUuid,
+      opts.liveSessionId,
+      recordingName(opts.startedAt),
+      opts.userUuid,
+      opts.stageUuid ?? null,
+    ]
   );
 };
 
