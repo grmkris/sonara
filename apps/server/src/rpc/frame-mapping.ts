@@ -5,8 +5,8 @@ import type { ImageLibraryId, LiveSessionId } from "@sonara/shared/typeid";
 import { presignReadUrl } from "../storage/bucket";
 
 // Shared image_library → wire-frame mapping, used by both the library router
-// (gallery / session timeline) and the reel router (curated collections). Kept
-// here so the column set + presign logic can't drift between the two.
+// (gallery) and the sets router (recordings / curated cuts). Kept here so the
+// column set + presign logic can't drift between the two.
 
 export interface FrameRow {
   id: ImageLibraryId;
@@ -25,7 +25,7 @@ export interface FrameRow {
 }
 
 // The image_library columns every frame-returning query selects. Usable in a
-// plain select or a joined select (reel_frame ⨝ image_library).
+// plain select or a joined select (frame_set_frame ⨝ image_library).
 export const FRAME_COLUMNS = {
   anchorUrl: SCHEMA.imageLibrary.anchorUrl,
   createdAt: SCHEMA.imageLibrary.createdAt,

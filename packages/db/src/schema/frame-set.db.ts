@@ -35,7 +35,8 @@ import { imageLibrary } from "./image-library.db";
 //              the show ends (status → final) — router-enforced, not a DB
 //              constraint.
 //   curated    hand-built ("make a cut"). The reel successor; legacy reels
-//              are copied in by the boot converger with uuid = reel uuid.
+//              were copied in (uuid = reel uuid) by migration 0006, which
+//              then dropped the reel tables — old rel_ links still resolve.
 export const frameSet = pgTable(
   "frame_set",
   {

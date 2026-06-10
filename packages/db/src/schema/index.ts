@@ -11,4 +11,3 @@ export * from "./auth.db";
 export * from "./credits.db";
 export * from "./frame-set.db";
 export * from "./image-library.db";
-export * from "./reel.db";

@@ -6,10 +6,10 @@ import type { Logger } from "../lib/logger";
 import { getPool } from "./pool";
 import type { PoolLike } from "./pool";
 
-// Idempotent converger of the legacy three-concept world (built-in decks,
-// derived sessions, reels) into the unified frame_set tables. Runs on every
-// server boot after migrations + the library seed — same rationale: prod and
-// any fresh DB converge to the same state with no manual railway-run.
+// Idempotent converger of the legacy two-concept world (built-in decks,
+// derived sessions) into the unified frame_set tables. Runs on every server
+// boot after migrations + the library seed — same rationale: prod and any
+// fresh DB converge to the same state with no manual railway-run.
 //
 // Idempotency comes from deterministic ids + ON CONFLICT DO NOTHING:
 //   builtin    one set per DeckKey, guarded by the partial unique index on
@@ -17,22 +17,20 @@ import type { PoolLike } from "./pool";
 //   recording  set uuid = the lse_ typeid's uuid, so re-deriving from the
 //              same session always hits the same row — and a share permalink
 //              (/s/<set_id>) is computable from a liveSessionId alone.
-//   curated    set uuid = the legacy reel's uuid; junction row uuid = the
-//              reel_frame uuid. Pure SQL copy, no app-side loop.
 //
 // Junction inserts use a bare ON CONFLICT DO NOTHING (covers both the
 // (set_id, frame_id) and (set_id, position) unique indexes); new frames
 // append past max(position), so reruns converge instead of colliding.
 //
-// The legacy reel/reel_frame tables are left untouched — dropping them is a
-// separate cleanup once nothing reads them.
+// (The curated step — legacy reels → curated sets — moved into migration
+// 0006, which copies then DROPs the reel/reel_frame tables; uuid identity
+// made it pure SQL, so nothing here reads them anymore.)
 export const migrateFrameSetsOnBoot = async (
   logger: Logger,
   pool: PoolLike = getPool()
 ): Promise<void> => {
   let builtins = 0;
   let recordings = 0;
-  let curated = 0;
 
   // 1) Built-in decks → builtin sets (one per DeckKey, public, system-owned).
   for (const deck of DECKS) {
@@ -104,24 +102,7 @@ export const migrateFrameSetsOnBoot = async (
     );
   }
 
-  // 3) Legacy reels → curated sets. uuid identity makes this a pure SQL copy.
-  const copiedSets = await pool.query(
-    `INSERT INTO frame_set
-       (id, cover_frame_id, name, origin, status, user_id, visibility, created_at)
-     SELECT r.id, r.cover_frame_id, r.name, 'curated', 'final', r.user_id,
-            'private', r.created_at
-     FROM reel r
-     ON CONFLICT (id) DO NOTHING`
-  );
-  curated += copiedSets.rowCount ?? 0;
-  await pool.query(
-    `INSERT INTO frame_set_frame (id, set_id, frame_id, position, t_ms, created_at)
-     SELECT rf.id, rf.reel_id, rf.frame_id, rf.position, NULL, rf.created_at
-     FROM reel_frame rf
-     ON CONFLICT DO NOTHING`
-  );
-
-  // 4) Reconverge the denormalized member counts (also self-heals any drift
+  // 3) Reconverge the denormalized member counts (also self-heals any drift
   // from the live append path).
   await pool.query(
     `UPDATE frame_set fs SET frame_count = c.n
@@ -130,8 +111,5 @@ export const migrateFrameSetsOnBoot = async (
      WHERE c.set_id = fs.id AND fs.frame_count <> c.n`
   );
 
-  logger.info(
-    { builtins, curated, recordings },
-    "frame_set boot-converge complete"
-  );
+  logger.info({ builtins, recordings }, "frame_set boot-converge complete");
 };

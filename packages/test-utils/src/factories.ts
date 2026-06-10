@@ -5,7 +5,6 @@ import type {
   FrameSetId,
   ImageLibraryId,
   LiveSessionId,
-  ReelId,
   UserId,
 } from "@sonara/shared/typeid";
 
@@ -105,30 +104,4 @@ export const insertSet = async (
     );
   }
   return setId;
-};
-
-// Legacy reel fixture for the boot-converger test. The reel/reel_frame tables
-// come from migration 0004 — real schema, no extra DDL needed.
-export const insertLegacyReel = async (
-  db: Database,
-  opts: {
-    frames: ImageLibraryId[];
-    name?: string;
-    userId: UserId;
-  }
-): Promise<ReelId> => {
-  const id = typeIdGenerator("reel") as ReelId;
-  await db.insert(SCHEMA.reel).values({
-    id,
-    name: opts.name ?? "best of",
-    userId: opts.userId,
-  });
-  if (opts.frames.length) {
-    await db
-      .insert(SCHEMA.reelFrame)
-      .values(
-        opts.frames.map((frameId, i) => ({ frameId, position: i, reelId: id }))
-      );
-  }
-  return id;
 };

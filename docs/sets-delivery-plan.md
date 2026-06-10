@@ -30,7 +30,8 @@ monad-showcase, visuals-roadmap, testing.
   sessions-list, …) are deferred — UI wording is fully "recordings / sets",
   but the module names still say reel/session. Pure-rename cleanup PR later.
 - Legacy `?reel=`/`?session=` replay params and `library.sessions`/`bySession`
-  RPCs still exist (old links keep working); drop in the rename cleanup.
+  RPCs — retired in C5 (see Done log); the params live on as a prefix-swap
+  shim so old links keep working.
 
 Execution is **serial per WP** (one working tree, no worktrees). Each WP lands
 green (`bun run ci:local`) and is pushed before the next starts; dev deploy
@@ -56,6 +57,19 @@ verified via `railway` CLI + curl after each push.
 - Anon sessions stay constructor-pinned to demo; `source` switching respects it.
 
 ## Done log
+
+- (2026-06-10) C5 shipped — reels fully retired. Migration 0006 is
+  COPY-THEN-DROP in one file (reel → frame_set curated copy, then
+  `DROP TABLE reel/reel_frame`), so a prod promotion that runs 0005+0006
+  back-to-back (before any boot converger) cannot lose data. Retired with
+  it: the `?reel=`/`?session=` fetch branches (now a 2-line prefix-swap
+  shim onto `sets.get`), the `library.sessions`/`bySession` RPCs +
+  example-sessions, the Reel*/SessionSummary shared types, the
+  reel/reelFrame typeid prefixes, the converger's curated step, and the
+  `insertLegacyReel` fixture. Old /studio links keep resolving forever
+  because uuid identity was preserved (curated set uuid = reel uuid,
+  recording set uuid = lse uuid) — rel_/lse_ ids remap to set_ ids by a
+  literal prefix swap.
 
 - (2026-06-10) Per-set consoles: /s/<id>/control is the owner's lean
   remote (one per show, bookmarkable); /s/<id> is the pure public face

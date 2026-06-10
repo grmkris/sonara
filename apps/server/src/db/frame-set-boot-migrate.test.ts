@@ -9,21 +9,18 @@ import type {
   UserId,
 } from "@sonara/shared/typeid";
 import type { PoolShim } from "@sonara/test-utils";
-import {
-  createTestUser,
-  insertFrame,
-  insertLegacyReel,
-} from "@sonara/test-utils/factories";
+import { createTestUser, insertFrame } from "@sonara/test-utils/factories";
 import { getTestDb } from "@sonara/test-utils/test-db";
 
 import type { Logger } from "../lib/logger";
 import { migrateFrameSetsOnBoot } from "./frame-set-boot-migrate";
 
-// Real schema via the shared harness — migration 0004 creates the legacy
-// reel/reel_frame tables, and the migrated frame_set partial unique indexes
-// are the arbiters the converger's ON CONFLICT clauses need (42P10
-// otherwise). Tests are cumulative (converge → idempotency → rerun-append),
-// so reset() runs once in beforeAll, not per test.
+// Real schema via the shared harness — migrations 0000–0006 run in full, so
+// the legacy reel/reel_frame tables are created (0004) and then copy-then-
+// dropped (0006) inside every test run; the migrated frame_set partial
+// unique indexes are the arbiters the converger's ON CONFLICT clauses need
+// (42P10 otherwise). Tests are cumulative (converge → idempotency →
+// rerun-append), so reset() runs once in beforeAll, not per test.
 const noopLogger = {
   debug: () => {},
   error: () => {},
@@ -36,9 +33,7 @@ let pool: PoolShim;
 
 const userId = typeIdGenerator("user") as UserId;
 const sessionId = typeIdGenerator("liveSession") as LiveSessionId;
-let reelUuid: string;
 const seedFrames: string[] = [];
-const liveFrameIds: ImageLibraryId[] = [];
 const liveFrames: string[] = [];
 
 const insertNoirFrame = (opts: {
@@ -68,23 +63,23 @@ beforeAll(async () => {
   // A legacy live session (3 generated frames, out-of-order tMs on purpose).
   for (const tMs of [2500, 0, 1000]) {
     const id = await insertNoirFrame({ source: "generated", tMs });
-    liveFrameIds.push(id);
     liveFrames.push(typeIdToUuid(id).uuid);
   }
-  // A legacy reel holding two of the live frames in authored order.
-  const reelId = await insertLegacyReel(db, {
-    frames: [
-      liveFrameIds[2] as ImageLibraryId,
-      liveFrameIds[0] as ImageLibraryId,
-    ],
-    name: "best of",
-    userId,
-  });
-  reelUuid = typeIdToUuid(reelId).uuid;
 }, 30_000);
 
 describe("migrateFrameSetsOnBoot", () => {
-  test("converges builtins, recordings and reels into frame_set", async () => {
+  test("the legacy reel tables are gone after migrations (0006 ran)", async () => {
+    // Pins that the harness actually applied the copy-then-drop migration —
+    // the reel/reel_frame tables exist mid-run (0004) but must not survive.
+    const tables = await pool.query<{ table_name: string }>(
+      `SELECT table_name FROM information_schema.tables
+       WHERE table_schema = 'public'
+         AND table_name IN ('reel', 'reel_frame')`
+    );
+    expect(tables.rows.length).toBe(0);
+  });
+
+  test("converges builtins and recordings into frame_set", async () => {
     await migrateFrameSetsOnBoot(noopLogger, pool);
 
     const sets = await pool.query<{
@@ -96,8 +91,8 @@ describe("migrateFrameSetsOnBoot", () => {
       visibility: string;
     }>(`SELECT id, deck_key, frame_count, live_session_id, origin, visibility
         FROM frame_set`);
-    // One builtin per shipped deck + one recording + one curated copy.
-    expect(sets.rows.length).toBe(DECKS.length + 2);
+    // One builtin per shipped deck + one recording.
+    expect(sets.rows.length).toBe(DECKS.length + 1);
 
     const noir = sets.rows.find(
       (s) => s.origin === "builtin" && s.deck_key === "noir"
@@ -119,20 +114,6 @@ describe("migrateFrameSetsOnBoot", () => {
     );
     expect(members.rows.map((m) => m.t_ms)).toEqual([0, 1000, 2500]);
     expect(members.rows[0]?.frame_id).toBe(liveFrames[1] as string);
-
-    // Curated copy keeps the reel's uuid and authored order.
-    const cut = sets.rows.find((s) => s.origin === "curated");
-    expect(cut?.id).toBe(reelUuid);
-    expect(cut?.frame_count).toBe(2);
-    const cutMembers = await pool.query<{ frame_id: string }>(
-      `SELECT frame_id FROM frame_set_frame
-       WHERE set_id = $1::uuid ORDER BY position ASC`,
-      [reelUuid]
-    );
-    expect(cutMembers.rows.map((m) => m.frame_id)).toEqual([
-      liveFrames[2] as string,
-      liveFrames[0] as string,
-    ]);
   });
 
   test("is idempotent — a second run adds nothing", async () => {
@@ -141,11 +122,12 @@ describe("migrateFrameSetsOnBoot", () => {
     const sets = await pool.query<{ n: number }>(
       "SELECT count(*)::int AS n FROM frame_set"
     );
-    expect(sets.rows[0]?.n).toBe(DECKS.length + 2);
+    expect(sets.rows[0]?.n).toBe(DECKS.length + 1);
     const members = await pool.query<{ n: number }>(
       "SELECT count(*)::int AS n FROM frame_set_frame"
     );
-    expect(members.rows[0]?.n).toBe(2 + 3 + 2);
+    // 2 builtin (noir seed) + 3 recording members.
+    expect(members.rows[0]?.n).toBe(2 + 3);
   });
 
   test("appends newly seeded frames past max(position) on rerun", async () => {

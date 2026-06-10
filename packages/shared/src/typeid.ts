@@ -19,11 +19,9 @@ export const idTypesMapNameToPrefix = {
   // Distinct from `session` (Better Auth's browser session). Used to group
   // image_library rows by live-play session for the timeline view.
   liveSession: "lse",
-  // Curated collection of frames ("reel") + its ordered membership rows.
-  // Superseded by frameSet (origin='curated'); kept while the legacy tables
-  // exist — the boot converger copies reels into frame_set.
-  reel: "rel",
-  reelFrame: "rlf",
+  // NOTE: the retired reel ("rel_") / reel-frame ("rlf_") prefixes live on in
+  // old links only — migration 0006 copied reels into frame_set with the
+  // same uuid, so legacy ids remap to set ids by a literal prefix swap.
   session: "ses",
   usageLedger: "usg",
   user: "usr",
@@ -82,8 +80,6 @@ export type UsageLedgerId = TypeIdString<"usageLedger">;
 export type AllowedEmailId = TypeIdString<"allowedEmail">;
 export type ImageLibraryId = TypeIdString<"imageLibrary">;
 export type LiveSessionId = TypeIdString<"liveSession">;
-export type ReelId = TypeIdString<"reel">;
-export type ReelFrameId = TypeIdString<"reelFrame">;
 export type FrameSetId = TypeIdString<"frameSet">;
 export type FrameSetFrameId = TypeIdString<"frameSetFrame">;
 
@@ -96,7 +92,5 @@ export const UsageLedgerIdSchema = typeIdValidator("usageLedger");
 export const AllowedEmailIdSchema = typeIdValidator("allowedEmail");
 export const ImageLibraryIdSchema = typeIdValidator("imageLibrary");
 export const LiveSessionIdSchema = typeIdValidator("liveSession");
-export const ReelIdSchema = typeIdValidator("reel");
-export const ReelFrameIdSchema = typeIdValidator("reelFrame");
 export const FrameSetIdSchema = typeIdValidator("frameSet");
 export const FrameSetFrameIdSchema = typeIdValidator("frameSetFrame");

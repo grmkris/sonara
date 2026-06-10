@@ -1,7 +1,6 @@
 "use client";
 
-import type { FrameSetId, LiveSessionId, ReelId } from "@sonara/shared/typeid";
-import { typeIdFromUuid, typeIdToUuid } from "@sonara/shared/typeid";
+import type { FrameSetId } from "@sonara/shared/typeid";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useRef } from "react";
 import { toast } from "sonner";
@@ -14,15 +13,22 @@ import { useVisualizerStore } from "@/stores/visualizer";
 //
 //   ?set=<setId>         → a frame set; recordings replay on their original
 //                          timing, curated/builtin sets on a fixed cadence
-//   ?reel=<reelId>       → legacy param, retired in C5 (reel ids live on as
-//                          set ids — same uuid), fixed cadence
-//   ?session=<sessionId> → legacy param, retired in C5 (live-session link),
-//                          original timing
+//   ?reel=<reelId>       → legacy param (pre-C5 /studio links), remapped
+//   ?session=<sessionId> → legacy param (pre-C5 /studio links), remapped
 //
 // Playback is purely client-side (no WS action, no generation): we fetch the
 // ordered frames and hand them to the set-playback slice; useSetPlaybackLoop
 // pushes them through the same crossfade pipeline. Lives in its own Suspense
 // boundary so useSearchParams doesn't gate the rest of the page.
+
+// Old /studio links keep resolving forever: typeid suffixes are
+// prefix-independent encodings of the uuid, and the 0006 migration (and the
+// boot converger before it) preserved uuid identity — curated set uuid = reel
+// uuid, recording set uuid = lse uuid. So rel_ABC / lse_ABC remap to set_ABC
+// with a literal prefix swap; no decode round-trip, no reel types.
+const remapToSetId = (value: string): FrameSetId =>
+  `set_${value.slice(value.indexOf("_") + 1)}` as FrameSetId;
+
 export const SetPlaybackConsumer = () => {
   const params = useSearchParams();
   const router = useRouter();
@@ -49,57 +55,32 @@ export const SetPlaybackConsumer = () => {
       return;
     }
     const { reel, session, setId } = snap;
-    if (!(reel || session || setId)) {
+    // One effective set id: ?set= wins, then the remapped legacy params.
+    const replaySetId =
+      (setId as FrameSetId | null) ??
+      (reel ? remapToSetId(reel) : null) ??
+      (session ? remapToSetId(session) : null);
+    if (!replaySetId) {
       return;
     }
 
     let cancelled = false;
     const run = async () => {
       try {
-        // Legacy ?reel= links keep working until C5 retires them: the
-        // migration kept each reel's uuid as its set id, so a rel_ id converts
-        // to the set_ id of the same row and both params resolve through
-        // sets.get.
-        const replaySetId: FrameSetId | null =
-          (setId as FrameSetId | null) ??
-          (reel
-            ? typeIdFromUuid("frameSet", typeIdToUuid(reel as ReelId).uuid)
-            : null);
-        if (replaySetId) {
-          const data = await rpcClient.sets.get({
-            setId: replaySetId,
-          });
-          if (cancelled) {
-            return;
-          }
-          if (data.frames.length === 0) {
-            toast("that set is empty");
-            return;
-          }
-          startSetPlayback({
-            cadence: data.origin === "recording" ? "original" : "fixed",
-            frames: data.frames,
-            id: data.id,
-            name: data.name,
-          });
-        } else if (session) {
-          const { frames } = await rpcClient.library.bySession({
-            sessionId: session as LiveSessionId,
-          });
-          if (cancelled) {
-            return;
-          }
-          if (frames.length === 0) {
-            toast("that session has no frames");
-            return;
-          }
-          startSetPlayback({
-            cadence: "original",
-            frames,
-            id: session,
-            name: "session replay",
-          });
+        const data = await rpcClient.sets.get({ setId: replaySetId });
+        if (cancelled) {
+          return;
         }
+        if (data.frames.length === 0) {
+          toast("that set is empty");
+          return;
+        }
+        startSetPlayback({
+          cadence: data.origin === "recording" ? "original" : "fixed",
+          frames: data.frames,
+          id: data.id,
+          name: data.name,
+        });
       } catch {
         if (!cancelled) {
           toast.error("couldn't load that for replay");

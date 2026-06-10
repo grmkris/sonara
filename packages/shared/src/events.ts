@@ -8,14 +8,13 @@ import {
   FrameSetIdSchema,
   ImageLibraryIdSchema,
   LiveSessionIdSchema,
-  ReelIdSchema,
 } from "./typeid";
 import { VISUAL_PRESET_NAMES } from "./visual-presets";
 
-// One persisted generated frame. Returned by the library router (list /
-// bySession RPCs) and carried by the `library.appended` WS event. The `url`
-// field is a fresh presigned read URL — never store these long-term on the
-// client; refetch via library.list to get current URLs.
+// One persisted generated frame. Returned by the library/sets routers and
+// carried by the `library.appended` WS event. The `url` field is a fresh
+// presigned read URL — never store these long-term on the client; refetch
+// via library.list to get current URLs.
 //
 // The `triggerReason`/`anchorUrl`/`inspectorContext` fields are populated
 // for frames generated after Phase 8a; historical rows have null/undefined
@@ -38,54 +37,6 @@ export const LibraryFrameSchema = z.object({
 });
 
 export type LibraryFrame = z.infer<typeof LibraryFrameSchema>;
-
-// Session-level summary returned by library.sessions. Lightweight — no
-// per-frame data, just the aggregate + a representative sample URL for
-// the sessions sidebar in /studio.
-export const SessionSummarySchema = z.object({
-  // Total session duration in ms (lastFrameAt - firstFrameAt). Cheap to
-  // compute server-side; clients avoid a Date math step.
-  durationMs: z.number().int().nonnegative(),
-  firstFrameAt: z.coerce.date(),
-  frameCount: z.number().int().nonnegative(),
-  lastFrameAt: z.coerce.date(),
-  // Presigned URL of the newest frame in the session — used as the
-  // sidebar thumbnail. Null only if the session has no rows (defensive).
-  sampleUrl: z.string().nullable(),
-  sessionId: LiveSessionIdSchema,
-});
-
-export type SessionSummary = z.infer<typeof SessionSummarySchema>;
-
-// Lightweight summary for the /studio reels sidebar — no per-frame data, just
-// the aggregate + a presigned cover thumbnail. Reels are user-curated groups
-// of frames (see packages/db/src/schema/reel.db.ts).
-export const ReelSummarySchema = z.object({
-  // Presigned URL of the cover frame (explicit cover, else newest member).
-  // Null when the reel is still empty.
-  coverUrl: z.string().nullable(),
-  createdAt: z.coerce.date(),
-  frameCount: z.number().int().nonnegative(),
-  id: ReelIdSchema,
-  name: z.string(),
-});
-
-export type ReelSummary = z.infer<typeof ReelSummarySchema>;
-
-// A full reel: summary header + its ordered frames (reusing LibraryFrame, with
-// freshly presigned urls). Frames are ordered by reel_frame.position.
-export const ReelSchema = z.object({
-  // Explicit cover frame id (null = no explicit cover; the cover thumbnail then
-  // falls back to the first frame). Lets the editor badge the cover tile.
-  coverFrameId: ImageLibraryIdSchema.nullable(),
-  coverUrl: z.string().nullable(),
-  createdAt: z.coerce.date(),
-  frames: z.array(LibraryFrameSchema),
-  id: ReelIdSchema,
-  name: z.string(),
-});
-
-export type Reel = z.infer<typeof ReelSchema>;
 
 // --- Sets (frame_set): the unified playable frame collection. Subsumes
 // built-in decks (origin=builtin), session recordings (origin=recording) and
