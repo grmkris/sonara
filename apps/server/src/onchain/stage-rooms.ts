@@ -23,7 +23,10 @@ export interface StageRoomBinding {
 const ROOM_ALPHABET = "ABCDEFGHJKMNPQRSTVWXYZ23456789";
 const ROOM_LEN = 5;
 
-const mintCode = (): string => {
+// Exported for the stage service: durable stage rows (stage-service.ts) mint
+// their permanent codes from the same alphabet so projector/phone readability
+// holds everywhere a code appears.
+export const mintCode = (): string => {
   const bytes = randomBytes(ROOM_LEN);
   return Array.from(
     bytes,
