@@ -6,6 +6,7 @@ export {
   pimlicoUrl,
   TESTNET_MAX_FEE_GWEI,
   TESTNET_PRIORITY_FEE_GWEI,
+  txExplorerUrl,
   USDC_DECIMALS,
 } from "./chain";
 export {

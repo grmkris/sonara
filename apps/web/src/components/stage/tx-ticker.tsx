@@ -1,6 +1,6 @@
 "use client";
 
-import { formatUsdc, monadTestnet } from "@sonara/onchain";
+import { formatUsdc, txExplorerUrl } from "@sonara/onchain";
 import type { StageActivityEvent } from "@sonara/shared";
 
 import { cn } from "@/lib/utils";
@@ -12,9 +12,6 @@ import { AddressGlyph, shortAddress } from "./address-glyph";
 // lines mount and run the .wire-print reveal; older lines fade with height.
 // Each line links to the tx on the chain explorer (new tab) — the wire
 // wrappers are pointer-events-none, so the anchor re-enables its own events.
-
-const txUrl = (hash: string): string =>
-  `${monadTestnet.blockExplorers.default.url}/tx/${hash}`;
 
 // "+0.50" → "+0.5", "1.00" → "1"
 const trimZeros = (units: string): string =>
@@ -44,7 +41,7 @@ const TickerLine = ({
   return (
     <li className="wire-print" style={{ opacity: fade }}>
       <a
-        href={txUrl(event.txHash)}
+        href={txExplorerUrl(event.txHash)}
         target="_blank"
         rel="noreferrer"
         title="view tx on monadscan"

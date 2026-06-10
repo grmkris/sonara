@@ -29,6 +29,11 @@ export const MONAD_MAINNET_USDC =
   "0x754704Bc059F8C67012fEd69BC8A327a5aafb603" as const;
 export const USDC_DECIMALS = 6;
 
+// One explorer for the whole app — derived from the chain config so every
+// surface (wire ticker, stage latency link, …) deep-links to the same place.
+export const txExplorerUrl = (hash: string): string =>
+  `${monadTestnet.blockExplorers.default.url}/tx/${hash}`;
+
 // Pimlico bundler + paymaster for Monad testnet. The public endpoint sponsors
 // testnet UserOps for free with no API key; pass a key to lift the public
 // rate limit (recommended before a live demo). One URL serves both the bundler

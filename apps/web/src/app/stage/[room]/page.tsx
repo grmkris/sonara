@@ -1,6 +1,6 @@
 "use client";
 
-import { formatUsdc, parseUsdc } from "@sonara/onchain";
+import { formatUsdc, parseUsdc, txExplorerUrl } from "@sonara/onchain";
 import type { StageKnob, StagePayment } from "@sonara/onchain";
 import type { StageActivityEvent } from "@sonara/shared";
 import { Mic, MicOff } from "lucide-react";
@@ -33,7 +33,6 @@ import { cn } from "@/lib/utils";
 const SLIDER_THROTTLE_MS = 200;
 const NUDGE_STEP = 0.12;
 const USDC_FAUCET_URL = "https://faucet.circle.com";
-const EXPLORER_TX_URL = "https://testnet.monadexplorer.com/tx/";
 
 // A "weirder / softer" tap pair for one knob.
 const KNOB_TAPS: { knob: StageKnob; down: string; up: string }[] = [
@@ -543,7 +542,7 @@ export default function StagePage() {
           {latency && (
             <a
               className="wire-print focus-ring mt-1 flex items-center gap-1.5 font-mono text-[9px] uppercase tracking-[0.18em] text-[color:var(--paper)]/80"
-              href={`${EXPLORER_TX_URL}${latency.txHash}`}
+              href={txExplorerUrl(latency.txHash)}
               key={latency.txHash}
               rel="noreferrer"
               target="_blank"
