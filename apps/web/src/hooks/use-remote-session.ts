@@ -1,10 +1,10 @@
 "use client";
 
-import type { LiveSessionId } from "@sonara/shared/typeid";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { AppRouterClient } from "server/rpc";
 
 import { dispatchControlAction } from "@/lib/control-actions";
+import type { ControlTarget } from "@/lib/control-actions";
 import { rpcClient } from "@/lib/orpc";
 import type { SessionSend } from "@/lib/session-actions";
 import { useVisualizerStore } from "@/stores/visualizer";
@@ -41,23 +41,36 @@ export interface RemoteSession {
 // hydrates the SAME zustand store from ~1s snapshot polls, so the reused
 // controls read current state exactly as they do on /play.
 export const useRemoteSession = (
-  liveSessionId: LiveSessionId | null
+  // Stage-addressed for the per-stage console; run-addressed only as the
+  // legacy fallback (pre-redirect /s/[id]/control). Stage-keyed snapshots
+  // make "new set" run swaps invisible — no rebind needed.
+  target: ControlTarget | null
 ): RemoteSession => {
   const [snapshot, setSnapshot] = useState<ControlSnapshot | null>(null);
   const [connected, setConnected] = useState(false);
 
   // Kept in a ref so the stable `send` callback always targets the current
   // session without re-creating on every rebind.
-  const idRef = useRef(liveSessionId);
-  idRef.current = liveSessionId;
+  const idRef = useRef(target);
+  idRef.current = target;
 
   // Timestamp of the operator's last scene edit; the poll skips rehydrating the
   // scene for SCENE_REHYDRATE_HOLD_MS after it so optimistic drags don't snap
   // back. Shared across the poll effect and the send callback via a ref.
   const lastSceneEditAtRef = useRef(0);
 
+  // Key the poll effect on the serialized target (object identity churns).
+  let targetKey: string | null = null;
+  if (target) {
+    targetKey =
+      "stageId" in target
+        ? `stg:${target.stageId}`
+        : `lse:${target.liveSessionId}`;
+  }
+
   useEffect(() => {
-    if (!liveSessionId) {
+    const boundTarget = idRef.current;
+    if (!(targetKey && boundTarget)) {
       setSnapshot(null);
       setConnected(false);
       return;
@@ -68,7 +81,7 @@ export const useRemoteSession = (
 
     const poll = async (): Promise<void> => {
       try {
-        const snap = await rpcClient.control.snapshot({ liveSessionId });
+        const snap = await rpcClient.control.snapshot(boundTarget);
         if (cancelled) {
           return;
         }
@@ -111,11 +124,12 @@ export const useRemoteSession = (
         clearTimeout(timer);
       }
     };
-  }, [liveSessionId]);
+    // oxlint-disable-next-line react-hooks/exhaustive-deps -- boundTarget derives from targetKey
+  }, [targetKey]);
 
   const send = useCallback<SessionSend>((action) => {
-    const id = idRef.current;
-    if (!id) {
+    const boundTarget = idRef.current;
+    if (!boundTarget) {
       return;
     }
     // Optimistic scene merge for slider/prompt patches so the operator's own
@@ -127,7 +141,7 @@ export const useRemoteSession = (
       lastSceneEditAtRef.current = Date.now();
     }
     // oxlint-disable-next-line prefer-await-to-then, prefer-await-to-callbacks -- REVIEW: send is a synchronous fire-and-forget SessionSend; awaiting here would change its contract
-    dispatchControlAction(rpcClient, id, action).catch((error) => {
+    dispatchControlAction(rpcClient, boundTarget, action).catch((error) => {
       console.warn("[control] dispatch failed", error);
     });
   }, []);

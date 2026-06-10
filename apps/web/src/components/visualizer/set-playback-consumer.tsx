@@ -1,7 +1,7 @@
 "use client";
 
 import type { FrameSetId } from "@sonara/shared/typeid";
-import { useRouter, useSearchParams } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useRef } from "react";
 import { toast } from "sonner";
 
@@ -32,6 +32,8 @@ const remapToSetId = (value: string): FrameSetId =>
 export const SetPlaybackConsumer = () => {
   const params = useSearchParams();
   const router = useRouter();
+  // Clear params on WHATEVER screen route mounted us (/play or /stage/<code>/screen).
+  const pathname = usePathname();
   const startSetPlayback = useVisualizerStore((s) => s.startSetPlayback);
 
   // Snapshot the params on first mount so we don't react to the clear we make
@@ -89,7 +91,7 @@ export const SetPlaybackConsumer = () => {
         // Clear so a refresh doesn't restart playback.
         if (!cancelled) {
           snapshotRef.current = null;
-          router.replace("/play");
+          router.replace(pathname);
         }
       }
     };
@@ -97,7 +99,7 @@ export const SetPlaybackConsumer = () => {
     return () => {
       cancelled = true;
     };
-  }, [router, startSetPlayback]);
+  }, [pathname, router, startSetPlayback]);
 
   return null;
 };

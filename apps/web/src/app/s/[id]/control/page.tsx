@@ -2,7 +2,7 @@
 
 import type { LiveSessionId } from "@sonara/shared/typeid";
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import type { AppRouterClient } from "server/rpc";
 
@@ -98,6 +98,15 @@ const Notice = ({
   </div>
 );
 
+// Old bookmark → permanent home: replace into the stage console.
+const ConsoleRedirect = ({ code }: { code: string }) => {
+  const router = useRouter();
+  useEffect(() => {
+    router.replace(`/stage/${code}/console`);
+  }, [router, code]);
+  return <Shell>{null}</Shell>;
+};
+
 // The page owns the remote binding (1s snapshot poll over the control
 // router); StageConsole is a pure presenter mounted `detached`.
 const LiveConsole = ({
@@ -109,7 +118,7 @@ const LiveConsole = ({
   liveSessionId: LiveSessionId;
   name: string;
 }) => {
-  const { send, snapshot, connected } = useRemoteSession(liveSessionId);
+  const { send, snapshot, connected } = useRemoteSession({ liveSessionId });
   return (
     <Shell pill={<ConnectedPill connected={connected} />}>
       <div className="-mt-2 flex items-center justify-between">
@@ -222,6 +231,13 @@ export default function SetConsolePage() {
     );
   }
 
+  // Stage-keyed shows have a PERMANENT console home — redirect there. The
+  // per-set URL dies with every set; the stage console URL is forever.
+  if (lens.live.stageCode) {
+    return <ConsoleRedirect code={lens.live.stageCode} />;
+  }
+
+  // Legacy fallback (run not stage-keyed yet — pre-stages client).
   return (
     <LiveConsole
       id={id}

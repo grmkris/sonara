@@ -1,44 +1,16 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
 
-import { rpcClient } from "@/lib/orpc";
+import { useLiveStages } from "@/hooks/use-live-stages";
 
 // One-line awareness strip at the top of the studio rail: while one of YOUR
-// sessions is live, link straight to its console (via /control, the resolver
-// that picks the newest show). Renders nothing when idle — studio stays calm.
-
-const POLL_MS = 5000;
+// stages is live, link straight to its console (via /control, the resolver).
+// Renders nothing when idle — studio stays calm.
 
 export const LiveNowCard = () => {
-  const [liveCount, setLiveCount] = useState(0);
-
-  useEffect(() => {
-    let cancelled = false;
-    let timer: ReturnType<typeof setTimeout> | null = null;
-    const poll = async (): Promise<void> => {
-      try {
-        const { sessions } = await rpcClient.control.liveSessions();
-        if (!cancelled) {
-          setLiveCount(sessions.length);
-        }
-      } catch {
-        // transient / auth hiccup — keep the last state, retry next tick.
-      } finally {
-        if (!cancelled) {
-          timer = setTimeout(poll, POLL_MS);
-        }
-      }
-    };
-    void poll();
-    return () => {
-      cancelled = true;
-      if (timer) {
-        clearTimeout(timer);
-      }
-    };
-  }, []);
+  const liveStages = useLiveStages();
+  const liveCount = liveStages.length;
 
   if (liveCount === 0) {
     return null;
@@ -54,8 +26,8 @@ export const LiveNowCard = () => {
         className="breath size-1.5 rounded-full bg-[color:var(--signal)]"
       />
       {liveCount === 1
-        ? "live now — open your console"
-        : `${liveCount} shows live — choose your console`}
+        ? `${liveStages[0]?.name ?? "your stage"} is live — open your console`
+        : `${liveCount} stages live — choose your console`}
     </Link>
   );
 };

@@ -1,6 +1,6 @@
 "use client";
 
-import { useRouter, useSearchParams } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useRef } from "react";
 
 import type { SessionSend } from "@/lib/session-actions";
@@ -25,6 +25,8 @@ interface StudioActionConsumerProps {
 export const StudioActionConsumer = ({ send }: StudioActionConsumerProps) => {
   const params = useSearchParams();
   const router = useRouter();
+  // Clear params on WHATEVER screen route mounted us (/play or /stage/<code>/screen).
+  const pathname = usePathname();
   const connected = useVisualizerStore((s) => s.connected);
   // Snapshot the params on first mount so we don't react to clears we
   // make ourselves below.
@@ -79,8 +81,8 @@ export const StudioActionConsumer = ({ send }: StudioActionConsumerProps) => {
     // Clear so refresh doesn't repeat. router.replace keeps the user on
     // /play, drops the query string.
     snapshotRef.current = null;
-    router.replace("/play");
-  }, [connected, send, router]);
+    router.replace(pathname);
+  }, [connected, send, router, pathname]);
 
   return null;
 };

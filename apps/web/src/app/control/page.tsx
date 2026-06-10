@@ -2,8 +2,6 @@
 
 import { ORPCError } from "@orpc/client";
 import { deckLabel } from "@sonara/shared";
-import type { LiveSessionId } from "@sonara/shared/typeid";
-import { typeIdFromUuid, typeIdToUuid } from "@sonara/shared/typeid";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
@@ -15,22 +13,21 @@ import { Button } from "@/components/ui/button";
 import { useSession } from "@/lib/auth-client";
 import { rpcClient } from "@/lib/orpc";
 
-// /control ("live" in the nav) — the console chooser. Every set has its own
-// console facet at /s/<setId>/control (the public face is /s/<setId>); this
-// page lists the caller's live shows and forwards only when unambiguous
-// (exactly one). The mixer itself never renders here or on the viewer page —
-// one page, one persona.
+// /control ("live" in the nav) — the console resolver. Every stage has its
+// own permanent console at /stage/<code>/console; this alias resolves YOUR
+// stages and forwards when unambiguous: 0 live → onboarding, 1 live → that
+// console, several live → a NAMED picker (each entry is a stage you created
+// and named — never an anonymous session id). The mixer itself never renders
+// here — one page, one persona.
 
-type LiveSessionSummary = Awaited<
-  ReturnType<AppRouterClient["control"]["liveSessions"]>
->["sessions"][number];
+type StageEntry = Awaited<
+  ReturnType<AppRouterClient["control"]["stages"]>
+>["stages"][number];
 
-const SESSIONS_POLL_MS = 3000;
+const STAGES_POLL_MS = 3000;
 
-// A live session's console lives at its set's control facet — the set id is
-// the same uuid as the liveSessionId, re-prefixed. No extra round trip.
-const consoleHref = (liveSessionId: LiveSessionId): string =>
-  `/s/${typeIdFromUuid("frameSet", typeIdToUuid(liveSessionId).uuid)}/control`;
+const consoleHref = (stage: StageEntry): string =>
+  `/stage/${stage.code}/console`;
 
 const startedAgo = (startedAt: number): string => {
   const mins = Math.max(0, Math.round((Date.now() - startedAt) / 60_000));
@@ -66,11 +63,11 @@ export default function ControlPage() {
   const { data: sessionData, isPending } = useSession();
   const isSignedIn = !!sessionData?.session;
 
-  const [sessions, setSessions] = useState<LiveSessionSummary[]>([]);
+  const [stages, setStages] = useState<StageEntry[] | null>(null);
   const [authExpired, setAuthExpired] = useState(false);
 
-  // Discover the caller's live sessions; keep polling until one shows up so
-  // the page resolves as soon as the projector connects.
+  // Discover the caller's stages; keep polling so the page resolves the
+  // moment a screen connects somewhere.
   useEffect(() => {
     if (!isSignedIn) {
       return;
@@ -80,9 +77,9 @@ export default function ControlPage() {
     let timer: ReturnType<typeof setTimeout> | null = null;
     const poll = async (): Promise<void> => {
       try {
-        const { sessions: next } = await rpcClient.control.liveSessions();
+        const { stages: next } = await rpcClient.control.stages();
         if (!cancelled) {
-          setSessions(next);
+          setStages(next);
         }
       } catch (error) {
         // An expired session must surface (not leave a stale list on screen);
@@ -94,7 +91,7 @@ export default function ControlPage() {
         }
       } finally {
         if (!(cancelled || stopped)) {
-          timer = setTimeout(poll, SESSIONS_POLL_MS);
+          timer = setTimeout(poll, STAGES_POLL_MS);
         }
       }
     };
@@ -107,19 +104,20 @@ export default function ControlPage() {
     };
   }, [isSignedIn]);
 
-  // Forward to the console ONLY when it's unambiguous (exactly one live
-  // session). Two or more — a stray /play tab, a second device — render the
-  // picker below instead of silently guessing the newest; polling keeps
-  // running, so when the list shrinks back to one this auto-resolves.
+  const liveStages = (stages ?? []).filter((s) => s.live);
+
+  // Forward ONLY when unambiguous (exactly one live stage). Several live —
+  // a second named stage mid-gig — render the picker; polling keeps running,
+  // so when the list shrinks back to one this auto-resolves.
   useEffect(() => {
-    if (sessions.length !== 1) {
+    if (liveStages.length !== 1) {
       return;
     }
-    const only = sessions[0]?.liveSessionId as LiveSessionId | undefined;
+    const [only] = liveStages;
     if (only) {
       router.replace(consoleHref(only));
     }
-  }, [sessions, router]);
+  }, [liveStages, router]);
 
   if (isPending) {
     return <Shell>loading…</Shell>;
@@ -165,7 +163,11 @@ export default function ControlPage() {
     );
   }
 
-  if (sessions.length === 0) {
+  if (stages === null) {
+    return <Shell>loading…</Shell>;
+  }
+
+  if (liveStages.length === 0) {
     return (
       <Shell>
         <div className="flex max-w-md flex-col gap-8">
@@ -214,33 +216,40 @@ export default function ControlPage() {
     );
   }
 
-  if (sessions.length > 1) {
+  if (liveStages.length > 1) {
     return (
       <Shell>
         <div className="flex w-full max-w-md flex-col gap-4">
           <p className="text-center font-serif text-[17px] normal-case tracking-normal text-[color:var(--paper)]/85">
-            {sessions.length} shows are live — which console?
+            {liveStages.length} stages are live — which console?
           </p>
           <ul className="flex flex-col gap-1.5">
-            {sessions.map((s) => (
-              <li key={s.liveSessionId}>
+            {liveStages.map((s) => (
+              <li key={s.stageId}>
                 <Link
-                  href={consoleHref(s.liveSessionId as LiveSessionId)}
+                  href={consoleHref(s)}
                   className="focus-ring flex items-baseline justify-between gap-3 rounded-sm border border-[color:var(--hairline)]/30 px-3 py-2.5 transition-colors hover:border-[color:var(--paper)]/40"
                 >
                   <span className="line-clamp-1 font-serif text-[13px] normal-case italic tracking-normal text-[color:var(--paper)]/85">
-                    {s.prompt ||
-                      (s.demoDeck ? `${deckLabel(s.demoDeck)} · deck` : "untitled show")}
+                    {s.name}
+                    <span className="not-italic text-[color:var(--stone)]">
+                      {" · "}
+                      {s.run?.prompt ||
+                        (s.run?.demoDeck
+                          ? `${deckLabel(s.run.demoDeck)} · deck`
+                          : "idle")}
+                    </span>
                   </span>
                   <span className="shrink-0 font-mono text-[9px] uppercase tracking-[0.18em] text-[color:var(--stone)]">
-                    started {startedAgo(s.startedAt)}
+                    {s.run ? `started ${startedAgo(s.run.startedAt)}` : "live"}
                   </span>
                 </Link>
               </li>
             ))}
           </ul>
           <p className="text-center font-sans text-[10px] normal-case tracking-[0.06em] text-[color:var(--stone)]">
-            stray tab? close its play screen and this list shrinks.
+            each row is a stage you named — close its screen and the list
+            shrinks.
           </p>
         </div>
       </Shell>
