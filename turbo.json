@@ -12,6 +12,11 @@
       "outputs": [],
       "cache": true
     },
+    "typecheck:fast": {
+      "dependsOn": ["^typecheck:fast"],
+      "outputs": [],
+      "cache": true
+    },
     "lint": {
       "outputs": [],
       "cache": true

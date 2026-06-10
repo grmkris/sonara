@@ -12,6 +12,7 @@
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
+    "typecheck:fast": "tsgo --noEmit",
     "lint": "oxlint",
     "fix": "oxlint --fix",
     "test": "bun test || echo 'no tests yet'"

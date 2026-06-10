@@ -15,6 +15,7 @@
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
+    "typecheck:fast": "tsgo --noEmit",
     "lint": "oxlint",
     "fix": "oxlint --fix"
   },

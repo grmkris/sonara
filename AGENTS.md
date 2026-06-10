@@ -137,11 +137,34 @@ bun run db:start       # local Postgres (docker) — start this first
 bun run dev            # gateway + web + server in parallel via turbo
 bun run dev:web        # web only
 bun run dev:server     # server only
-bun run typecheck      # all packages
+bun run typecheck      # all packages (tsc — authoritative)
 bun run lint           # oxlint
 bun run test           # turbo test
-bun run ci:local       # lint → typecheck → test → build (serial)
+bun run ci:step        # lint + typecheck:fast (tsgo) — the per-step check, ~25s
+bun run ci:local       # lint → typecheck → test → build — the push gate, ~3min
 ```
+
+### Verification loop (agents: follow this — don't run ci:local per step)
+
+Three tiers, cheapest first. The expensive pipeline runs exactly twice a
+session, not once per edit:
+
+1. **Per edit** — `bunx oxlint <changed files>` (sub-second). Catches the
+   strict ultracite nits (sort-keys, prefer-destructuring, a11y…) the moment
+   they're written instead of via a 3-minute pipeline round-trip.
+2. **Per step / work package** — `bun run ci:step` (~25s for a one-package
+   change, cached otherwise): whole-repo lint + **tsgo** typecheck (the
+   official TS-in-Go preview checker; ~5× faster than tsc, near-parity).
+   Add `bun test <dir>` in the touched package when logic changed (the
+   server PGlite suite is ~14s).
+3. **Per push gate** — `bun run ci:local` (authoritative tsc + tests + real
+   builds, concurrency 4). Always green before pushing `dev` — a push
+   deploys.
+
+tsgo is the speed layer, tsc stays the authority at gates — if the preview
+checker ever diverges, the gate catches it before anything ships. Note
+`bun run check` (ultracite `--type-aware`) is NOT a CI signal: its extra
+type-aware ruleset was never adopted (~1000 open findings repo-wide).
 
 Open **`http://localhost:4470`** (the Caddy gateway) — that's the only origin the browser should use. The gateway proxies to web (`:4472`) and server (`:4471`) internally. WS is same-origin: `ws://localhost:4470/ws`. The gateway dev task runs `caddy:2-alpine` via `docker run --network host` (so it needs Docker; it's in `bun run dev`). Hitting `:4472` directly works for the UI but auth/RPC/WS won't (those live on the server behind the gateway).
 
