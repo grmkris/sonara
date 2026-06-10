@@ -1,7 +1,15 @@
 # Stages & roles — live-identity refactor plan (rev 2)
 
-> **Status: revised direction, 2026-06-10 architecture round.** Rev 1's transport
-> and Redis decisions are **unchanged** (restated under _Locked decisions_).
+> **Status: Phases 0 + 1 SHIPPED to dev (2026-06-11).** The stage table
+> (migration 0007), server-owned runs with the grace window + takeover, the
+> face routes (/stage/<code>/{screen,console} with /play + /control as
+> aliases), one StageConsole, "new set" segmentation, studio→stage activation,
+> permanent crowd codes, and the minimal stage manager are all live. Remaining:
+> the post-verification legacy cleanup (lse-keyed router arms, conn: keying),
+> then Phase 2 (Redis StageStore) onward.
+>
+> Rev 1's transport and Redis decisions are **unchanged** (restated under
+> _Locked decisions_).
 > What changed: the durable identity is now the **stage** (named, multiple per
 > account, permanent short code), not "one room per account"; and the page model
 > changes from "three independent pages" to "**faces of a stage**" so /play and
