@@ -12,7 +12,6 @@ import { toast } from "sonner";
 import { Mark } from "@/components/brand/mark";
 import { AddressGlyph, shortAddress } from "@/components/stage/address-glyph";
 import { BlockPulse } from "@/components/stage/block-pulse";
-import { Button } from "@/components/ui/button";
 import { rpcClient } from "@/lib/orpc";
 import { useVoiceRecognition } from "@/hooks/use-voice-recognition";
 import { createLatencyTracker } from "@/lib/stage/latency";
@@ -348,7 +347,7 @@ const PromptComposer = ({
       <div className="relative">
         <textarea
           aria-label="scene prompt"
-          className="min-h-[64px] w-full resize-none rounded-sm border border-[color:var(--hairline)]/30 bg-transparent px-3 py-2 pr-10 font-serif text-[16px] text-[color:var(--paper)] outline-none placeholder:text-[color:var(--stone)]/60 focus:border-[color:var(--paper)]/50"
+          className="min-h-[80px] w-full resize-none rounded-sm border border-[color:var(--paper)]/30 bg-[color:var(--paper)]/5 px-3 py-2.5 pr-10 font-serif text-[16px] text-[color:var(--paper)] outline-none placeholder:text-[color:var(--stone)]/70 focus:border-[color:var(--signal)]/70 focus:bg-[color:var(--paper)]/10"
           disabled={!linked}
           id="prompt"
           maxLength={200}
@@ -383,15 +382,16 @@ const PromptComposer = ({
           placeholder="tip usdc"
           value={tip}
         />
-        <Button
-          className="flex-1 font-sans text-[11px] uppercase tracking-[0.2em]"
+        <button
+          className="focus-ring flex flex-1 items-center justify-center rounded-sm bg-[color:var(--signal)] px-4 py-3 text-[color:var(--ink)] shadow-[0_0_28px_-10px_var(--signal)] transition-all active:scale-[0.98] disabled:opacity-35 disabled:shadow-none"
           disabled={!linked || !prompt.trim() || !canAfford}
           onClick={send}
-          size="sm"
           type="button"
         >
-          {tip ? "jump the line" : "queue it"}
-        </Button>
+          <span className="font-serif text-[17px] italic leading-none">
+            {tip ? "jump the line ↑" : "put it on screen →"}
+          </span>
+        </button>
       </div>
       {needsFunds && address && (
         <FundPanel address={address} onCredited={onCredited} room={room} />
