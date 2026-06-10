@@ -13,6 +13,7 @@ import type {
   FrameSetId,
   ImageLibraryId,
   LiveSessionId,
+  StageId,
   UserId,
 } from "@sonara/shared/typeid";
 import { and, asc, desc, eq, inArray, lt, max, or, sql } from "drizzle-orm";
@@ -39,6 +40,23 @@ import { protectedProcedure, publicProcedure } from "./procedures";
 // permalink replay: owners see everything; everyone else needs
 // visibility != 'private'. Missing and private-to-others both surface as
 // NOT_FOUND so a private set's existence doesn't leak.
+
+// The durable stage's permanent code for a live run (stage-keyed runs only)
+// — lets /s/<id>/control redirect to the per-stage console.
+const durableStageCode = async (
+  db: Database,
+  stageId: string | null
+): Promise<string | null> => {
+  if (!stageId) {
+    return null;
+  }
+  const rows = await db
+    .select({ code: SCHEMA.stage.code })
+    .from(SCHEMA.stage)
+    .where(eq(SCHEMA.stage.id, stageId as StageId))
+    .limit(1);
+  return rows[0]?.code ?? null;
+};
 
 const LIST_DEFAULT_LIMIT = 50;
 const LIST_MAX_LIMIT = 100;
@@ -491,6 +509,7 @@ export const setsRouter = {
           callerId !== null && session.userId === typeIdToUuid(callerId).uuid;
         const room = stageRooms.roomFor(liveSessionId as string);
         const binding = room ? stageRooms.resolve(room) : undefined;
+        const stageCode = await durableStageCode(context.db, session.stageId);
         return {
           exists: true as const,
           isOwner,
@@ -500,6 +519,7 @@ export const setsRouter = {
             jobStatus: snap.jobStatus,
             liveSessionId: snap.liveSessionId,
             nowPlaying: snap.nowPlaying,
+            stageCode,
           },
           set,
           stage: room

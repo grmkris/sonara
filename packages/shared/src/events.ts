@@ -195,6 +195,19 @@ export const ServerEvent = z.discriminatedUnion("type", [
     connectionId: z.string(),
     type: z.literal("screen.takenOver"),
   }),
+  // Remote source switch (control.setSource — e.g. /studio "activate on
+  // <stage>"). The server is a relay: the SCREEN starts the playback exactly
+  // like a local pick, then reports back via source.report — currentSource
+  // stays producer-truth, never optimistic.
+  z.object({
+    source: z.object({
+      deck: z.string().optional(),
+      kind: z.enum(["set", "deck", "idle"]),
+      label: z.string().nullable().optional(),
+      setId: z.string().optional(),
+    }),
+    type: z.literal("source.set"),
+  }),
 ]);
 
 export type ServerEvent = z.infer<typeof ServerEvent>;

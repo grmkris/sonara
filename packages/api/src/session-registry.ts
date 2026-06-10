@@ -73,6 +73,13 @@ export interface ControllableSession {
   // "New set": finalize the current recording segment and start the next run
   // in place (same Session, same publisher). Returns the new run id.
   startNewRun(): LiveSessionId;
+  // Relay a remote source switch (`source.set` event) to the screen.
+  notifySource(source: {
+    deck?: string;
+    kind: "set" | "deck" | "idle";
+    label?: string | null;
+    setId?: string;
+  }): void;
 }
 
 // Lookup surface over the live in-memory sessions. apps/server's

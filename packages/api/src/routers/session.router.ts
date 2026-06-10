@@ -42,6 +42,9 @@ export interface SessionLike {
   setResolution(resolution: RenderResolution): void;
   setCurrentFrame(url: string): void;
   setCurrentSource(source: SessionSource): void;
+  // "New set": finalize the current recording segment, start the next run in
+  // place. The new id reaches the client via the `run.started` event.
+  startNewRun(): string;
   reset(): void;
   subscribe(signal?: AbortSignal): AsyncGenerator<ServerEvent>;
   getSnapshot(): SonaraSceneState;
@@ -165,6 +168,12 @@ export const sessionRouter = {
 
   hello: sessionOs.input(HelloInput).handler(({ context }) => {
     context.session.init();
+  }),
+
+  // "New set" from the attached console — same semantics as control.newSet,
+  // over the screen's own socket. No reconnect: the run swaps in place.
+  newSet: sessionOs.handler(({ context }) => {
+    context.session.startNewRun();
   }),
 
   recognize: sessionOs

@@ -328,6 +328,17 @@ export class Session implements ControllableSession {
     this.send({ connectionId, type: "screen.takenOver" });
   }
 
+  // Remote source switch relay (control.setSource). The screen applies it
+  // exactly like a local pick and confirms via source.report.
+  notifySource(source: {
+    deck?: string;
+    kind: "set" | "deck" | "idle";
+    label?: string | null;
+    setId?: string;
+  }): void {
+    this.send({ source, type: "source.set" });
+  }
+
   // "New set": close out the current recording segment and start the next
   // one in place. Same Session object (the long-lived events iterator stays
   // subscribed to this publisher), same scene — only the run identity and
