@@ -96,15 +96,20 @@ export const PromptInput = ({ send }: PromptInputProps) => {
       if (next.length === 0) {
         return;
       }
-      if (next === scene.prompt) {
+      // The dedupe guards only apply while already live — "same prompt" used
+      // to mean "already showing it", but with switchable sources an
+      // identical prompt must still leave a playing deck/set and go live
+      // (the server remembers scene.prompt across reconnects).
+      const leavingPlayback = source.kind === "deck" || source.kind === "set";
+      if (!leavingPlayback && next === scene.prompt) {
         return;
       }
-      if (lastSentRef.current === next) {
+      if (!leavingPlayback && lastSentRef.current === next) {
         return;
       }
       lastSentRef.current = next;
 
-      if (source.kind === "deck" || source.kind === "set") {
+      if (leavingPlayback) {
         // Leaving playback → go live. Seed the first generated frame off the
         // frame currently on screen so the visuals evolve out of it ("take
         // it from there"); flipping the source stops the playback loop (its
