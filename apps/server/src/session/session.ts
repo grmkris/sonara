@@ -5,9 +5,9 @@ import type {
   SessionSource,
 } from "@sonara/api/server";
 import {
-  DECK_KEYS,
   DEFAULT_RESOLUTION,
   DEFAULT_TEXT_MODEL,
+  LISTED_DECK_KEYS,
   TEXT_MODELS,
   clampPrompt,
   deckStyle,
@@ -289,11 +289,14 @@ export class Session implements ControllableSession {
     this.lastGeneratedScene = { ...defaultScene };
     // Anonymous sessions default to demo mode; the connect snapshot relays
     // demoMode/demoDeck to the client, whose demo loop (use-demo-frame-loop)
-    // drives the frames locally. A random deck is suggested; the picker swaps it.
+    // drives the frames locally. A random deck is suggested; the picker swaps
+    // it. Listed decks only — unlisted (show-specific) decks never land on
+    // strangers.
     if (opts.userId === null) {
       this.demoMode = true;
       this.demoDeck =
-        DECK_KEYS[Math.floor(Math.random() * DECK_KEYS.length)] ?? null;
+        LISTED_DECK_KEYS[Math.floor(Math.random() * LISTED_DECK_KEYS.length)] ??
+        null;
     }
     this.startPeriodic();
   }

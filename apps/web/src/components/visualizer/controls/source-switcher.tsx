@@ -1,6 +1,11 @@
 "use client";
 
-import { DECKS, deckLabel } from "@sonara/shared";
+import {
+  DECKS,
+  canSeeUnlistedDecks,
+  deckLabel,
+  isDeckUnlisted,
+} from "@sonara/shared";
 import type { FrameSetSummary } from "@sonara/shared";
 import { ChevronDown } from "lucide-react";
 import { useState } from "react";
@@ -42,6 +47,12 @@ interface SourceSwitcherProps {
 const GROUP_HEADER =
   "px-3 pt-2 pb-1 font-mono text-[9px] uppercase tracking-[0.26em] text-[color:var(--stone)]";
 
+// Unlisted (show-specific) decks render only for allowlisted operators.
+const visibleDecksFor = (sessionData: { user?: { email?: string } } | null) => {
+  const showUnlisted = canSeeUnlistedDecks(sessionData?.user?.email);
+  return DECKS.filter((d) => showUnlisted || !isDeckUnlisted(d.key));
+};
+
 const SetRows = ({
   active,
   onPick,
@@ -81,6 +92,7 @@ export const SourceSwitcher = ({
 }: SourceSwitcherProps) => {
   const { data: sessionData } = useSession();
   const isSignedIn = !!sessionData?.session;
+  const visibleDecks = visibleDecksFor(sessionData);
   const demoMode = useVisualizerStore((s) => s.demoMode);
   const demoDeck = useVisualizerStore((s) => s.demoDeck);
   const prompt = useVisualizerStore((s) => s.scene.prompt);
@@ -209,7 +221,7 @@ export const SourceSwitcher = ({
         >
           <div className={GROUP_HEADER}>decks</div>
           <div className="flex flex-wrap gap-1.5 px-3 pb-2">
-            {DECKS.map((d) => (
+            {visibleDecks.map((d) => (
               <button
                 key={d.key}
                 type="button"

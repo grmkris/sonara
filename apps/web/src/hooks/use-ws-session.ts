@@ -1,5 +1,6 @@
 "use client";
 
+import { DECK_LOOK } from "@sonara/shared";
 import type { DeckKey, ServerEvent } from "@sonara/shared";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
@@ -199,6 +200,13 @@ export const useWsSession = (target: { code: string | null }): WsSession => {
           } else if (source.kind === "deck" && source.deck) {
             s.setDemoMode(true);
             s.setDemoDeck(source.deck as DeckKey);
+            // Deck-as-a-unit: a remote pick applies the deck's baked render
+            // preset here too, exactly like a local pick (usePickDeck).
+            // Intensity arrives separately via scene.state.
+            const look = DECK_LOOK[source.deck as DeckKey];
+            if (look && isKnownPreset(look.preset)) {
+              s.setPreset(look.preset);
+            }
           } else if (source.kind === "idle" && s.demoMode) {
             s.setDemoMode(false);
             s.setDemoDeck(null);

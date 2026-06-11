@@ -193,6 +193,14 @@ export const controlRouter = {
     .handler(async ({ context, input }) => {
       const session = await resolveTarget(context, input);
       session.setDemoMode(input.on, input.deck);
+      // Relay the deck pick to the screen as a source switch — without this a
+      // remote console's deck pick only mutates server state and the screen
+      // keeps playing the old deck until its next reconnect. HTTP control
+      // path only (the screen's own WS picks don't come through here, so no
+      // echo). Demo-off stays with the existing stop flow.
+      if (input.on && input.deck) {
+        session.notifySource({ deck: input.deck, kind: "deck" });
+      }
     }),
 
   setImageAnchor: protectedProcedure

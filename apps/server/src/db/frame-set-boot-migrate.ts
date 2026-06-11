@@ -1,4 +1,4 @@
-import { DECKS } from "@sonara/shared";
+import { DECKS, isDeckUnlisted } from "@sonara/shared";
 import { typeIdToUuid } from "@sonara/shared/typeid";
 import type { LiveSessionId } from "@sonara/shared/typeid";
 
@@ -32,15 +32,24 @@ export const migrateFrameSetsOnBoot = async (
   let builtins = 0;
   let recordings = 0;
 
-  // 1) Built-in decks → builtin sets (one per DeckKey, public, system-owned).
+  // 1) Built-in decks → builtin sets (one per DeckKey, system-owned).
+  // Unlisted decks (show-specific collections) get 'unlisted' visibility so
+  // they stay out of public listings; the visibility UPDATE re-converges
+  // existing rows if a deck's listing flag ever changes.
   for (const deck of DECKS) {
+    const visibility = isDeckUnlisted(deck.key) ? "unlisted" : "public";
     const res = await pool.query(
       `INSERT INTO frame_set (id, deck_key, name, origin, status, user_id, visibility)
-       VALUES (gen_random_uuid(), $1, $2, 'builtin', 'final', NULL, 'public')
+       VALUES (gen_random_uuid(), $1, $2, 'builtin', 'final', NULL, $3)
        ON CONFLICT (deck_key) WHERE origin = 'builtin' DO NOTHING`,
-      [deck.key, deck.label]
+      [deck.key, deck.label, visibility]
     );
     builtins += res.rowCount ?? 0;
+    await pool.query(
+      `UPDATE frame_set SET visibility = $2
+       WHERE origin = 'builtin' AND deck_key = $1 AND visibility <> $2`,
+      [deck.key, visibility]
+    );
     await pool.query(
       `INSERT INTO frame_set_frame (id, set_id, frame_id, position, t_ms)
        SELECT gen_random_uuid(), fs.id, il.id,
