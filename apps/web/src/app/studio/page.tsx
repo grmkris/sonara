@@ -15,7 +15,7 @@ import { FrameInspector } from "@/components/studio/frame-inspector";
 import { FrameInspectorContent } from "@/components/studio/frame-inspector-content";
 import { LiveNowCard } from "@/components/studio/live-now-card";
 import { SelectionBar } from "@/components/studio/selection-bar";
-import { DecksPanel } from "@/components/studio/decks-panel";
+import { BuiltinSetDetail } from "@/components/studio/builtin-set-detail";
 import { SetEditor } from "@/components/studio/set-editor";
 import { SetsList } from "@/components/studio/sets-list";
 import { RecordingTimeline } from "@/components/studio/recording-timeline";
@@ -38,7 +38,8 @@ import { cn } from "@/lib/utils";
 
 const parseTab = (raw: string | null): StudioTab => {
   if (raw === "sets" || raw === "decks") {
-    return raw;
+    // "decks" predates the fold-in — built-ins live on the sets tab now.
+    return "sets";
   }
   return "recordings";
 };
@@ -149,6 +150,7 @@ const StudioInner = () => {
 
   // --- Sets (curated) ---
   const [curatedSets, setCuratedSets] = useState<FrameSetSummary[]>([]);
+  const [builtinSets, setBuiltinSets] = useState<FrameSetSummary[]>([]);
   const [setsLoading, setSetsLoading] = useState(false);
   const [setsBootstrapped, setSetsBootstrapped] = useState(false);
   const [setDetail, setSetDetail] = useState<FrameSet | null>(null);
@@ -247,6 +249,29 @@ const StudioInner = () => {
     }
   }, [tab, setsBootstrapped, selectedSetId, curatedSets, router]);
 
+  // Built-in sets ("decks" — same entity) for the sets tab's built-ins group.
+  // One fetch; the list only changes on deploys (and allowlist gating is
+  // server-side in sets.list).
+  useEffect(() => {
+    if (!isSignedIn) {
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      try {
+        const { sets: s } = await rpcClient.sets.list({ origin: "builtin" });
+        if (!cancelled) {
+          setBuiltinSets(s);
+        }
+      } catch {
+        // non-fatal — the group just stays empty
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [isSignedIn]);
+
   // Load the recording detail when the recording selection changes.
   useEffect(() => {
     if (!isSignedIn || !selectedRecordingId) {
@@ -324,8 +349,9 @@ const StudioInner = () => {
 
   // --- Multi-select curation ---
   const displayOrder = useMemo(() => {
+    const openSet = setDetail?.origin === "builtin" ? null : setDetail;
     const pool =
-      tab === "sets" ? (setDetail?.frames ?? []) : (recordingDetail?.frames ?? []);
+      tab === "sets" ? (openSet?.frames ?? []) : (recordingDetail?.frames ?? []);
     return pool.map((f) => f.id as string);
   }, [tab, recordingDetail, setDetail]);
 
@@ -650,12 +676,6 @@ const StudioInner = () => {
     );
   };
 
-  const renderNonSetsCenter = () => {
-    if (tab === "decks") {
-      return <DecksPanel />;
-    }
-    return renderRecordingsCenter();
-  };
 
   return (
     <main className="relative flex min-h-svh flex-col overflow-hidden bg-[color:var(--ink)] text-[color:var(--paper)]">
@@ -706,6 +726,7 @@ const StudioInner = () => {
           {tab === "sets" && (
             <SetsList
               sets={curatedSets}
+              builtins={builtinSets}
               loading={setsLoading}
               bootstrapped={setsBootstrapped}
               selectedSetId={selectedSetId}
@@ -740,7 +761,9 @@ const StudioInner = () => {
             </div>
           )}
 
-          {tab === "sets" ? (
+          {tab === "sets" && setDetail?.origin === "builtin" ? (
+            <BuiltinSetDetail frameSet={setDetail} />
+          ) : tab === "sets" ? (
             <SetEditor
               frameSet={setDetail}
               loading={setDetailLoading}
@@ -770,7 +793,7 @@ const StudioInner = () => {
               onRemoveFrames={mutations.removeFrames}
             />
           ) : (
-            renderNonSetsCenter()
+            renderRecordingsCenter()
           )}
         </section>
 

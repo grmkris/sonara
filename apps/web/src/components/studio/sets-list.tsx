@@ -9,6 +9,10 @@ import { NewSetDropRow, SetDropRow } from "@/components/studio/set-drop-row";
 
 interface SetsListProps {
   sets: FrameSetSummary[];
+  // Built-in sets ("decks" — same entity, origin=builtin): listed in their
+  // own group below the user's sets. Plain rows — immutable, so never drop
+  // targets.
+  builtins: FrameSetSummary[];
   loading: boolean;
   bootstrapped: boolean;
   selectedSetId: string | null;
@@ -18,10 +22,54 @@ interface SetsListProps {
   dragCount?: number;
 }
 
+const BuiltinRow = ({
+  set,
+  selected,
+  onSelect,
+}: {
+  set: FrameSetSummary;
+  selected: boolean;
+  onSelect: (setId: string) => void;
+}) => (
+  <button
+    type="button"
+    onClick={() => onSelect(set.id)}
+    aria-current={selected ? "true" : undefined}
+    className={
+      selected
+        ? "focus-ring flex w-full items-center gap-3 border-b border-[color:var(--hairline)]/20 bg-[color:var(--paper)]/10 px-4 py-2 text-left"
+        : "focus-ring flex w-full items-center gap-3 border-b border-[color:var(--hairline)]/20 px-4 py-2 text-left transition-colors hover:bg-[color:var(--paper)]/5"
+    }
+  >
+    {set.coverUrl ? (
+      // eslint-disable-next-line @next/next/no-img-element
+      <img
+        src={set.coverUrl}
+        alt=""
+        loading="lazy"
+        className="size-10 shrink-0 rounded-sm border border-[color:var(--hairline)]/40 object-cover"
+      />
+    ) : (
+      <div className="size-10 shrink-0 rounded-sm border border-[color:var(--hairline)]/40 bg-[color:var(--ink)]/40" />
+    )}
+    <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+      <span className="truncate font-sans text-[11px] uppercase tracking-[0.16em] text-[color:var(--paper)]/80">
+        {set.name}
+      </span>
+      <span className="font-mono text-[9px] uppercase tracking-[0.18em] text-[color:var(--stone)]">
+        {set.frameCount} frames
+        {set.look ? ` · ${set.look.preset.replaceAll("_", " ")}` : ""}
+        {set.visibility === "unlisted" ? " · unlisted" : ""}
+      </span>
+    </div>
+  </button>
+);
+
 // Left-rail list of curated sets. Each card shows the cover thumb, name, and
 // frame count. A "new set" affordance reveals an inline input. Click selects.
 export const SetsList = ({
   sets,
+  builtins,
   loading,
   bootstrapped,
   selectedSetId,
@@ -119,6 +167,27 @@ export const SetsList = ({
       )}
 
       {body}
+
+      {builtins.length > 0 && (
+        <>
+          <div className="px-4 pt-6 pb-2">
+            <h3 className="font-sans text-[9px] uppercase tracking-[0.26em] text-[color:var(--stone)]">
+              built-ins
+            </h3>
+          </div>
+          <ul className="flex flex-col">
+            {builtins.map((b) => (
+              <li key={b.id}>
+                <BuiltinRow
+                  set={b}
+                  selected={b.id === selectedSetId}
+                  onSelect={onSelect}
+                />
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
     </nav>
   );
 };
