@@ -15,9 +15,9 @@ export interface PersistFrameInput {
   // Pre-minted by the caller so the matching frame.final event can carry
   // the id WITHOUT waiting for the persist round-trip to complete.
   id: ImageLibraryId;
-  // Raw user uuid (matches the Session.userId shape + credits.service /
-  // library-provider conventions on the server). The library router
-  // converts to typeid at the API boundary.
+  // Raw user uuid (matches the Session.userId shape + credits.service
+  // conventions on the server). The library router converts to typeid at
+  // the API boundary.
   userId: string;
   sessionId: LiveSessionId;
   deck: string;
