@@ -2,12 +2,17 @@
 
 import type { FrameSet, FrameSetVisibility } from "@sonara/shared";
 import type { ImageLibraryId } from "@sonara/shared/typeid";
+import { combine } from "@atlaskit/pragmatic-drag-and-drop/combine";
+import { dropTargetForElements } from "@atlaskit/pragmatic-drag-and-drop/element/adapter";
+import { autoScrollForElements } from "@atlaskit/pragmatic-drag-and-drop-auto-scroll/element";
 import { Pencil, Play, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 
 import { useMarqueeSelection } from "@/hooks/use-marquee-selection";
 import { useTileRegistry } from "@/hooks/use-tile-registry";
+import { isFramePayload } from "@/lib/curation-dnd";
+import type { FrameDragPayload } from "@/lib/curation-dnd";
 import { cn } from "@/lib/utils";
 
 import type { TileClickMods } from "./set-frame-tile";
@@ -46,6 +51,9 @@ interface SetEditorProps {
   // Sub-threshold click on whitespace clears the selection.
   onWhitespaceClick: () => void;
   marqueeEnabled?: boolean;
+  // Drag payload factory (page decides single tile vs whole selection).
+  // Present only when the set is editable — also gates the drop targets.
+  getDragPayload?: (frameId: string) => FrameDragPayload;
 }
 
 const Hint = ({ children }: { children: string }) => (
@@ -80,6 +88,7 @@ export const SetEditor = ({
   onMarquee,
   onWhitespaceClick,
   marqueeEnabled = true,
+  getDragPayload,
 }: SetEditorProps) => {
   const [renaming, setRenaming] = useState(false);
   const [draftName, setDraftName] = useState("");
@@ -93,6 +102,36 @@ export const SetEditor = ({
     onChange: onMarquee,
     onWhitespaceClick,
   });
+
+  // DnD targets owned by the editor: the grid itself (append / empty-set
+  // drop) and edge auto-scroll on the scroll container while a frame drag is
+  // in flight (native auto-scroll is unreliable outside Chrome).
+  const gridRef = useRef<HTMLDivElement | null>(null);
+  const setId = frameSet?.id ?? null;
+  const droppable = !!getDragPayload;
+  useEffect(() => {
+    const container = containerRef.current;
+    const grid = gridRef.current;
+    if (!(container && setId && droppable)) {
+      return;
+    }
+    const cleanups = [
+      autoScrollForElements({
+        canScroll: ({ source }) => isFramePayload(source.data),
+        element: container,
+      }),
+    ];
+    if (grid) {
+      cleanups.push(
+        dropTargetForElements({
+          canDrop: ({ source }) => isFramePayload(source.data),
+          element: grid,
+          getData: () => ({ kind: "set-grid", setId }),
+        })
+      );
+    }
+    return combine(...cleanups);
+  }, [setId, droppable]);
 
   // Reset the rename draft whenever the selected set changes.
   useEffect(() => {
@@ -225,6 +264,7 @@ export const SetEditor = ({
         <SetEmptyDraft />
       ) : (
         <div
+          ref={gridRef}
           className={cn(
             "grid gap-2",
             "grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6"
@@ -243,6 +283,14 @@ export const SetEditor = ({
               checked={isSelected(frame.id)}
               selecting={isSelecting}
               registerRef={registerTile(frame.id)}
+              dnd={
+                getDragPayload && frameSet
+                  ? {
+                      getPayload: () => getDragPayload(frame.id),
+                      setId: frameSet.id,
+                    }
+                  : undefined
+              }
               onMovePrev={
                 onMoveFrame ? (id) => onMoveFrame(id, "prev") : undefined
               }

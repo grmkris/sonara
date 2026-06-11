@@ -1,11 +1,29 @@
 "use client";
 
+import { combine } from "@atlaskit/pragmatic-drag-and-drop/combine";
+import {
+  draggable,
+  dropTargetForElements,
+} from "@atlaskit/pragmatic-drag-and-drop/element/adapter";
+import { pointerOutsideOfPreview } from "@atlaskit/pragmatic-drag-and-drop/element/pointer-outside-of-preview";
+import { setCustomNativeDragPreview } from "@atlaskit/pragmatic-drag-and-drop/element/set-custom-native-drag-preview";
+import {
+  attachClosestEdge,
+  extractClosestEdge,
+} from "@atlaskit/pragmatic-drag-and-drop-hitbox/closest-edge";
+import type { Edge } from "@atlaskit/pragmatic-drag-and-drop-hitbox/types";
 import type { LibraryFrame } from "@sonara/shared";
 import { ChevronLeft, ChevronRight, ImageIcon, X } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { MouseEvent } from "react";
+import { createRoot } from "react-dom/client";
 
+import { DropEdgeIndicator } from "@/components/studio/drop-indicator";
+import { FrameDragPreview } from "@/components/studio/drag-preview";
 import { TileCheck } from "@/components/studio/tile-check";
 import { useLongPress } from "@/hooks/use-long-press";
+import { isFramePayload } from "@/lib/curation-dnd";
+import type { FrameDragPayload } from "@/lib/curation-dnd";
 import { cn } from "@/lib/utils";
 
 export interface TileClickMods {
@@ -29,6 +47,13 @@ interface SetFrameTileProps {
   selecting: boolean;
   // Tile-registry hookup (marquee hit-testing, keyboard focus).
   registerRef?: (el: HTMLElement | null) => void;
+  // Drag-and-drop (desktop, set editor only). `getPayload` decides single vs
+  // whole-selection at drag start; the tile is also a drop target with a
+  // closest-edge insertion indicator.
+  dnd?: {
+    setId: string;
+    getPayload: () => FrameDragPayload;
+  };
   // Edit affordances — only rendered when provided (read-only otherwise).
   onMovePrev?: (frameId: string) => void;
   onMoveNext?: (frameId: string) => void;
@@ -53,6 +78,7 @@ export const SetFrameTile = ({
   checked,
   selecting,
   registerRef,
+  dnd,
   onMovePrev,
   onMoveNext,
   onRemove,
@@ -62,6 +88,82 @@ export const SetFrameTile = ({
 }: SetFrameTileProps) => {
   const editable = !!(onMovePrev || onMoveNext || onRemove || onSetCover);
   const longPress = useLongPress(() => onCheck(frame.id));
+  const wrapperRef = useRef<HTMLDivElement | null>(null);
+  const [dropEdge, setDropEdge] = useState<Edge | null>(null);
+  const [dragging, setDragging] = useState(false);
+
+  const setRefs = useCallback(
+    (el: HTMLDivElement | null) => {
+      wrapperRef.current = el;
+      registerRef?.(el);
+    },
+    [registerRef]
+  );
+
+  const dndSetId = dnd?.setId;
+  const getPayloadRef = useRef(dnd?.getPayload);
+  getPayloadRef.current = dnd?.getPayload;
+
+  useEffect(() => {
+    const el = wrapperRef.current;
+    if (!(el && dndSetId)) {
+      return;
+    }
+    return combine(
+      draggable({
+        element: el,
+        getInitialData: () =>
+          (getPayloadRef.current?.() ?? {}) as unknown as Record<
+            string,
+            unknown
+          >,
+        onDragStart: () => setDragging(true),
+        onDrop: () => setDragging(false),
+        onGenerateDragPreview: ({ nativeSetDragImage, source }) => {
+          const payload = source.data;
+          if (!isFramePayload(payload)) {
+            return;
+          }
+          setCustomNativeDragPreview({
+            getOffset: pointerOutsideOfPreview({ x: "12px", y: "12px" }),
+            nativeSetDragImage,
+            render({ container }) {
+              const root = createRoot(container);
+              root.render(
+                <FrameDragPreview
+                  count={payload.frameIds.length}
+                  urls={payload.previewUrls}
+                />
+              );
+              return () => root.unmount();
+            },
+          });
+        },
+      }),
+      dropTargetForElements({
+        canDrop: ({ source }) => isFramePayload(source.data),
+        element: el,
+        getData: ({ element, input }) =>
+          attachClosestEdge(
+            { frameId: frame.id, index, kind: "set-tile", setId: dndSetId },
+            { allowedEdges: ["left", "right"], element, input }
+          ),
+        onDrag: ({ self, source }) => {
+          // No caret while hovering a tile that's part of the dragged block.
+          if (
+            isFramePayload(source.data) &&
+            source.data.frameIds.includes(frame.id)
+          ) {
+            setDropEdge(null);
+            return;
+          }
+          setDropEdge(extractClosestEdge(self.data));
+        },
+        onDragLeave: () => setDropEdge(null),
+        onDrop: () => setDropEdge(null),
+      })
+    );
+  }, [dndSetId, frame.id, index]);
 
   const handleClick = (e: MouseEvent<HTMLButtonElement>) => {
     if (longPress.consumeFired()) {
@@ -78,7 +180,14 @@ export const SetFrameTile = ({
     stateClass = "border-[color:var(--paper)] ring-2 ring-[color:var(--paper)]/40";
   }
   return (
-    <div className="group relative" data-frame-tile={frame.id} ref={registerRef}>
+    <div
+      className={cn("group relative", dragging && "opacity-40")}
+      data-frame-tile={frame.id}
+      ref={setRefs}
+    >
+      {dropEdge && (
+        <DropEdgeIndicator edge={dropEdge === "left" ? "left" : "right"} />
+      )}
       <button
         type="button"
         onClick={handleClick}

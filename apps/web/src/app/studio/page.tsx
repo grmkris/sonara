@@ -25,9 +25,12 @@ import type { StudioTab } from "@/components/studio/studio-sidebar-tabs";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { useFrameSelection } from "@/hooks/use-frame-selection";
 import { useIsMobile } from "@/hooks/use-is-mobile";
+import { useCurationDnd } from "@/hooks/use-curation-dnd";
 import { useSetMutations } from "@/hooks/use-set-mutations";
 import { useSession } from "@/lib/auth-client";
 import { rpcClient } from "@/lib/orpc";
+import { makeFramePayload } from "@/lib/curation-dnd";
+import type { FrameDragPayload } from "@/lib/curation-dnd";
 import { recordingsHref, setsHref } from "@/lib/studio-hrefs";
 import { cn } from "@/lib/utils";
 
@@ -522,6 +525,38 @@ const StudioInner = () => {
     [mutations]
   );
 
+  // --- Drag and drop (desktop): one monitor routes every frame drop. ---
+  const setOrderedIds = useMemo(
+    () => (setDetail?.frames ?? []).map((f) => f.id as string),
+    [setDetail]
+  );
+  const { dragActive } = useCurationDnd({
+    currentOrderedIds: setOrderedIds,
+    currentSetId: selectedSetId,
+    mutations,
+  });
+
+  // Dragging a selected tile carries the WHOLE selection (Finder rule),
+  // ordered by display order; an unselected tile drags alone.
+  const getSetDragPayload = useCallback(
+    (frameId: string): FrameDragPayload => {
+      const frames = setDetail?.frames ?? [];
+      const carried = selection.isSelected(frameId)
+        ? frames.filter((f) => selection.isSelected(f.id)).map((f) => f.id as string)
+        : [frameId];
+      const carriedSet = new Set(carried);
+      return makeFramePayload({
+        frameIds: carried,
+        previewUrls: frames
+          .filter((f) => carriedSet.has(f.id))
+          .slice(0, 3)
+          .map((f) => f.url),
+        source: { setId: setDetail?.id ?? "", type: "set" },
+      });
+    },
+    [setDetail, selection]
+  );
+
   // Auth gate.
   if (isPending) {
     return <StudioFallback />;
@@ -575,6 +610,7 @@ const StudioInner = () => {
         onTogglePinned={selection.togglePinned}
         onMarquee={onMarquee}
         onWhitespaceClick={onWhitespaceClick}
+        marqueeEnabled={!dragActive}
       />
     );
   };
@@ -680,6 +716,8 @@ const StudioInner = () => {
               onTogglePinned={selection.togglePinned}
               onMarquee={onMarquee}
               onWhitespaceClick={onWhitespaceClick}
+              marqueeEnabled={!dragActive}
+              getDragPayload={getSetDragPayload}
             />
           )}
         </section>

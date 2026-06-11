@@ -13,6 +13,9 @@
     "test": "bun test || echo 'no tests yet'"
   },
   "dependencies": {
+    "@atlaskit/pragmatic-drag-and-drop": "^1.8.1",
+    "@atlaskit/pragmatic-drag-and-drop-auto-scroll": "^2.1.5",
+    "@atlaskit/pragmatic-drag-and-drop-hitbox": "^1.2.0",
     "@base-ui/react": "^1.4.1",
     "@dodopayments/better-auth": "^1.6.3",
     "@ffmpeg/ffmpeg": "^0.12.15",
