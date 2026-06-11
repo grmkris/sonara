@@ -166,6 +166,50 @@ describe("SessionManager (stage-keyed)", () => {
     m.endRun(stageId);
   });
 
+  test("same-tab reconnect over a half-dead socket is a RESUME, never a takeover", async () => {
+    const m = new SessionManager(logger, { graceMs: GRACE_MS });
+    // Same connectionId on both sockets — the per-tab id is reused for every
+    // reconnect attempt, so this models wake-from-sleep / proxy cut where the
+    // server still holds the stale socket.
+    const stale = makeWs("same-tab");
+    const { session } = m.attach({
+      key: stageId,
+      stageId,
+      userId: userUuid,
+      ws: stale,
+    });
+
+    const events: ServerEvent[] = [];
+    const ac = new AbortController();
+    const consumer = (async () => {
+      for await (const ev of session.subscribe(ac.signal)) {
+        events.push(ev);
+      }
+    })();
+
+    const fresh = makeWs("same-tab");
+    const again = m.attach({ key: stageId, stageId, userId: userUuid, ws: fresh });
+    expect(again.resumed).toBe(true);
+    expect(again.session).toBe(session);
+    // The stale socket is closed NORMALLY (not 4409 — the client must not
+    // treat its own reconnect as a kick)…
+    expect(stale.closed).toEqual([
+      { code: 1000 },
+    ]);
+    // …and NO screen.takenOver event reaches the shared publisher.
+    await sleep(30);
+    ac.abort();
+    await consumer.catch(() => {
+      // aborting the iterator is the expected exit
+    });
+    expect(events.some((e) => e.type === "screen.takenOver")).toBe(false);
+
+    // The stale socket's late close callback must not detach the fresh one.
+    m.detach(stageId, stale);
+    expect(m.screenAttached(stageId)).toBe(true);
+    m.endRun(stageId);
+  });
+
   test("legacy conn: key finalizes immediately on detach (no grace)", async () => {
     const m = new SessionManager(logger, { graceMs: 60_000 });
     const ws = makeWs("legacy-1");

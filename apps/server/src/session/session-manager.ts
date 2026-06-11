@@ -64,17 +64,32 @@ export class SessionManager implements SessionRegistry {
     const entry = this.entries.get(opts.key);
     if (entry) {
       if (entry.ws) {
-        // Takeover: a second screen claims the stage. Tell both screens
-        // (clients match connectionId against their own), swap the binding
-        // FIRST so the old socket's close callback no-ops, then kick it.
         const old = entry.ws;
-        entry.session.notifyTakenOver(old.data.sessionId);
+        // Same connection id = the SAME tab reconnecting over a half-dead
+        // socket (laptop wake, proxy cut, network switch) before the server
+        // noticed the old one died. That's a resume, not a takeover — swap
+        // silently, or the tab "kicks itself" and freezes behind the
+        // taken-over overlay. The id is minted once per tab and reused for
+        // every reconnect attempt, so equality means same logical screen.
+        const samePeer = old.data.sessionId === opts.ws.data.sessionId;
         entry.ws = opts.ws;
-        old.close(4409, "screen taken over");
-        this.logger.info(
-          { key: opts.key, kicked: old.data.sessionId },
-          "screen takeover"
-        );
+        if (samePeer) {
+          old.close(1000, "stale connection replaced");
+          this.logger.info(
+            { connectionId: old.data.sessionId, key: opts.key },
+            "stale screen socket replaced (same tab reconnect)"
+          );
+        } else {
+          // Genuine takeover: a second device claims the stage. Tell both
+          // screens (clients match connectionId against their own); the
+          // binding swapped FIRST so the old socket's close callback no-ops.
+          entry.session.notifyTakenOver(old.data.sessionId);
+          old.close(4409, "screen taken over");
+          this.logger.info(
+            { key: opts.key, kicked: old.data.sessionId },
+            "screen takeover"
+          );
+        }
       } else {
         // Resume from grace.
         if (entry.graceTimer) {
