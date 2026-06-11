@@ -6,17 +6,20 @@ import type { UserId } from "@sonara/shared/typeid";
 export interface TestServerCtx<TDb, TRegistry> {
   db: TDb;
   registry: TRegistry;
-  session: { user: { id: UserId } } | null;
+  session: { user: { email?: string; id: UserId } } | null;
   userId: UserId | null;
 }
 
 export const makeServerCtx = <TDb, TRegistry = Record<string, never>>(args: {
   db: TDb;
+  email?: string;
   registry?: TRegistry;
   userId?: UserId | null;
 }): TestServerCtx<TDb, TRegistry> => ({
   db: args.db,
   registry: (args.registry ?? {}) as TRegistry,
-  session: args.userId ? { user: { id: args.userId } } : null,
+  session: args.userId
+    ? { user: { email: args.email, id: args.userId } }
+    : null,
   userId: args.userId ?? null,
 });

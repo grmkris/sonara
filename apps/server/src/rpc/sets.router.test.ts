@@ -42,11 +42,11 @@ const sessionId = typeIdGenerator("liveSession") as LiveSessionId;
 const A: ImageLibraryId[] = [];
 let seedFrameId: ImageLibraryId;
 
-const mkCtx = (userId: UserId | null): ServerHttpContext =>
-  makeServerCtx({ db, userId }) as ServerHttpContext;
+const mkCtx = (userId: UserId | null, email?: string): ServerHttpContext =>
+  makeServerCtx({ db, email, userId }) as ServerHttpContext;
 
-const makeClient = (userId: UserId | null) =>
-  createRouterClient(setsRouter, { context: mkCtx(userId) });
+const makeClient = (userId: UserId | null, email?: string) =>
+  createRouterClient(setsRouter, { context: mkCtx(userId, email) });
 
 type SetsClient = ReturnType<typeof makeClient>;
 let a: SetsClient;
@@ -613,5 +613,90 @@ describe("addFrames atPosition (splice) + removeFrames", () => {
       setId,
     });
     expect(await orderOf(setId)).toEqual([A[0], A[1], A[2], A[3]] as string[]);
+  });
+});
+
+describe("setLook", () => {
+  const LOOK = {
+    cadence: { calm: 8000, loud: 3000 },
+    intensity: 0.7,
+    preset: "storm" as const,
+  };
+
+  test("owner authors a look and it round-trips through get/list", async () => {
+    const setId = await newCut("looked");
+    await a.setLook({ look: LOOK, setId });
+
+    const got = await a.get({ setId });
+    expect(got.look).toEqual(LOOK);
+
+    const { sets } = await a.list({ origin: "curated" });
+    expect(sets.find((s) => s.id === setId)?.look).toEqual(LOOK);
+  });
+
+  test("null clears the look", async () => {
+    const setId = await newCut("cleared");
+    await a.setLook({ look: LOOK, setId });
+    await a.setLook({ look: null, setId });
+    const got = await a.get({ setId });
+    expect(got.look).toBeNull();
+  });
+
+  test("non-owner is rejected", async () => {
+    const setId = await newCut("not yours");
+    expect(b.setLook({ look: LOOK, setId })).rejects.toThrow(ORPCError);
+  });
+
+  test("builtin sets are immutable", async () => {
+    const builtinId = await insertSet({
+      deckKey: "wild",
+      origin: "builtin",
+      userId: null,
+      visibility: "public",
+    });
+    expect(a.setLook({ look: LOOK, setId: builtinId })).rejects.toThrow(
+      ORPCError
+    );
+  });
+
+  test("recordings accept a look (metadata-class edit)", async () => {
+    const recId = await insertSet({
+      liveSessionId: typeIdGenerator("liveSession"),
+      origin: "recording",
+      userId: userA,
+    });
+    await a.setLook({ look: LOOK, setId: recId });
+    const got = await a.get({ setId: recId });
+    expect(got.look).toEqual(LOOK);
+  });
+});
+
+describe("unlisted builtin gating in list", () => {
+  beforeEach(async () => {
+    await insertSet({
+      deckKey: "wild",
+      name: "Wild Things",
+      origin: "builtin",
+      userId: null,
+      visibility: "public",
+    });
+    await insertSet({
+      deckKey: "alt01",
+      name: "Altnext 01",
+      origin: "builtin",
+      userId: null,
+      visibility: "unlisted",
+    });
+  });
+
+  test("regular users don't see unlisted builtins", async () => {
+    const { sets } = await b.list({ origin: "builtin" });
+    expect(sets.map((s) => s.deckKey)).toEqual(["wild"]);
+  });
+
+  test("allowlisted operators see unlisted builtins", async () => {
+    const operator = makeClient(userA, "kristjan.grm1@gmail.com");
+    const { sets } = await operator.list({ origin: "builtin" });
+    expect(sets.map((s) => s.deckKey).toSorted()).toEqual(["alt01", "wild"]);
   });
 });
