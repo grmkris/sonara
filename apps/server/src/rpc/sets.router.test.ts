@@ -93,6 +93,7 @@ const insertSet = (opts: {
   deckKey?: string;
   liveSessionId?: LiveSessionId;
   frames?: { id: ImageLibraryId; tMs?: number }[];
+  name?: string;
 }): Promise<FrameSetId> => insertSetRow(db, opts);
 
 describe("create / list / get", () => {

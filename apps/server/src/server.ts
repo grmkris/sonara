@@ -132,7 +132,9 @@ app.all("/rpc/*", async (c) => {
   const context = buildContext({
     db,
     registry: manager,
-    session: session ? { user: { id: session.user.id as UserId } } : null,
+    session: session
+      ? { user: { email: session.user.email, id: session.user.id as UserId } }
+      : null,
   });
   const { matched, response } = await rpcHandler.handle(c.req.raw, {
     context,
