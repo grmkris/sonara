@@ -3,28 +3,6 @@
 // callers.
 
 /**
- * Relative time from a past Date — "just now", "Nm ago", "Nh ago", "Nd ago".
- * Used for thumbnail tooltips and session card labels.
- */
-export const formatAgo = (date: Date): string => {
-  const now = Date.now();
-  const ms = now - date.getTime();
-  if (ms < 60_000) {
-    return "just now";
-  }
-  const m = Math.floor(ms / 60_000);
-  if (m < 60) {
-    return `${m}m ago`;
-  }
-  const h = Math.floor(m / 60);
-  if (h < 24) {
-    return `${h}h ago`;
-  }
-  const d = Math.floor(h / 24);
-  return `${d}d ago`;
-};
-
-/**
  * Milliseconds → MM:SS (with HHh prefix for sessions >60 min). Used for
  * the studio timeline tickmarks + per-frame tMs labels.
  */

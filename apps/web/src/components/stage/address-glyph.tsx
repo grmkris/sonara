@@ -13,7 +13,7 @@ const hash = (s: string): number => {
   return h;
 };
 
-export const glyphFor = (who: string): { hue: number; mark: number } => {
+const glyphFor = (who: string): { hue: number; mark: number } => {
   const h = hash(who.toLowerCase());
   return {
     hue: h % 360,

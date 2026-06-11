@@ -38,30 +38,6 @@ const SheetTrigger = ({
   );
 };
 
-const SheetClose = ({
-  asChild,
-  children,
-  ...props
-}: SheetPrimitive.Close.Props & {
-  asChild?: boolean;
-  children?: React.ReactNode;
-}) => {
-  if (asChild && React.isValidElement(children)) {
-    return (
-      <SheetPrimitive.Close
-        data-slot="sheet-close"
-        render={children as React.ReactElement}
-        {...props}
-      />
-    );
-  }
-  return (
-    <SheetPrimitive.Close data-slot="sheet-close" {...props}>
-      {children}
-    </SheetPrimitive.Close>
-  );
-};
-
 const SheetPortal = ({ ...props }: SheetPrimitive.Portal.Props) => (
   <SheetPrimitive.Portal {...props} />
 );
@@ -119,22 +95,6 @@ const SheetContent = ({
   </SheetPortal>
 );
 
-const SheetHeader = ({ className, ...props }: React.ComponentProps<"div">) => (
-  <div
-    data-slot="sheet-header"
-    className={cn("flex flex-col gap-1.5 p-4", className)}
-    {...props}
-  />
-);
-
-const SheetFooter = ({ className, ...props }: React.ComponentProps<"div">) => (
-  <div
-    data-slot="sheet-footer"
-    className={cn("mt-auto flex flex-col gap-2 p-4", className)}
-    {...props}
-  />
-);
-
 const SheetTitle = ({ className, ...props }: SheetPrimitive.Title.Props) => (
   <SheetPrimitive.Title
     data-slot="sheet-title"
@@ -143,24 +103,4 @@ const SheetTitle = ({ className, ...props }: SheetPrimitive.Title.Props) => (
   />
 );
 
-const SheetDescription = ({
-  className,
-  ...props
-}: SheetPrimitive.Description.Props) => (
-  <SheetPrimitive.Description
-    data-slot="sheet-description"
-    className={cn("text-sm text-muted-foreground", className)}
-    {...props}
-  />
-);
-
-export {
-  Sheet,
-  SheetTrigger,
-  SheetClose,
-  SheetContent,
-  SheetHeader,
-  SheetFooter,
-  SheetTitle,
-  SheetDescription,
-};
+export { Sheet, SheetTrigger, SheetContent, SheetTitle };

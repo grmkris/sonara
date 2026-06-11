@@ -7,14 +7,10 @@ import { toast } from "sonner";
 
 import { startSetReplayById } from "@/lib/apply-source";
 import { createSessionConnection } from "@/lib/orpc-ws";
-import { PRESET_NAMES } from "@/lib/render/presets";
-import type { PresetName } from "@/lib/render/presets";
+import { isKnownPreset } from "@/lib/render/presets";
 import { dispatchSessionAction } from "@/lib/session-actions";
 import type { SessionAction, SessionSend } from "@/lib/session-actions";
 import { useVisualizerStore } from "@/stores/visualizer";
-
-const isKnownPreset = (name: string): name is PresetName =>
-  (PRESET_NAMES as readonly string[]).includes(name);
 
 // Server close code for "another screen took over this stage" — the one close
 // the client must NOT auto-reconnect from (it would kick the new screen right

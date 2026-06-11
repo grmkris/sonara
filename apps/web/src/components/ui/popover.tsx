@@ -65,41 +65,4 @@ const PopoverContent = ({
   </PopoverPrimitive.Portal>
 );
 
-const PopoverHeader = ({
-  className,
-  ...props
-}: React.ComponentProps<"div">) => (
-  <div
-    data-slot="popover-header"
-    className={cn("flex flex-col gap-1 text-sm", className)}
-    {...props}
-  />
-);
-
-const PopoverTitle = ({ className, ...props }: React.ComponentProps<"h2">) => (
-  <div
-    data-slot="popover-title"
-    className={cn("font-medium", className)}
-    {...props}
-  />
-);
-
-const PopoverDescription = ({
-  className,
-  ...props
-}: React.ComponentProps<"p">) => (
-  <p
-    data-slot="popover-description"
-    className={cn("text-muted-foreground", className)}
-    {...props}
-  />
-);
-
-export {
-  Popover,
-  PopoverTrigger,
-  PopoverContent,
-  PopoverHeader,
-  PopoverTitle,
-  PopoverDescription,
-};
+export { Popover, PopoverTrigger, PopoverContent };

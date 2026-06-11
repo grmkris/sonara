@@ -65,5 +65,3 @@ export const Button = ({
     </ButtonPrimitive>
   );
 };
-
-export { buttonVariants };

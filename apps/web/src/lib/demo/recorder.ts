@@ -121,7 +121,7 @@ export interface CaptureExport {
   frames: CaptureFrame[];
 }
 
-export const exportCapture = (snapshot: CaptureSnapshot): CaptureExport => ({
+const exportCapture = (snapshot: CaptureSnapshot): CaptureExport => ({
   durationSec: snapshot.elapsedSec,
   frames: snapshot.frames,
   slug: snapshot.slug,
