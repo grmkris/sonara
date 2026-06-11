@@ -311,7 +311,7 @@ export const setsRouter = {
               })
               .where(eq(SCHEMA.frameSet.id, input.setId));
           }
-          return inserted.length;
+          return inserted.map((r) => r.frameId);
         }
 
         // Splice path. Read the ordered members once — both for the display-
@@ -328,7 +328,7 @@ export const setsRouter = {
         const memberIds = new Set(members.map((m) => m.frameId));
         const newIds = frameIds.filter((id) => !memberIds.has(id));
         if (newIds.length === 0) {
-          return 0;
+          return [] as ImageLibraryId[];
         }
         const idx = Math.min(input.atPosition, members.length);
         const threshold =
@@ -380,9 +380,11 @@ export const setsRouter = {
             })
             .where(eq(SCHEMA.frameSet.id, input.setId));
         }
-        return inserted.length;
+        return inserted.map((r) => r.frameId);
       });
-      return { added, ok: true as const };
+      // `addedIds` = the frames that actually landed (dedupe-survivors) — the
+      // exact inverse payload for the client's undo (removeFrames).
+      return { added: added.length, addedIds: added, ok: true as const };
     }),
 
   /**

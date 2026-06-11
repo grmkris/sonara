@@ -1,12 +1,11 @@
 "use client";
 
-import type { FrameSet, FrameSetSummary, FrameSetVisibility } from "@sonara/shared";
-import type { FrameSetId, ImageLibraryId } from "@sonara/shared/typeid";
+import type { FrameSet, FrameSetSummary } from "@sonara/shared";
+import type { FrameSetId } from "@sonara/shared/typeid";
 import { ChevronLeft } from "lucide-react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
-import { toast } from "sonner";
 
 import { AppNavLinks } from "@/components/app-nav";
 import { AnonCta } from "@/components/studio/anon-cta";
@@ -26,8 +25,10 @@ import type { StudioTab } from "@/components/studio/studio-sidebar-tabs";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { useFrameSelection } from "@/hooks/use-frame-selection";
 import { useIsMobile } from "@/hooks/use-is-mobile";
+import { useSetMutations } from "@/hooks/use-set-mutations";
 import { useSession } from "@/lib/auth-client";
 import { rpcClient } from "@/lib/orpc";
+import { recordingsHref, setsHref } from "@/lib/studio-hrefs";
 import { cn } from "@/lib/utils";
 
 // /studio — the user's set library. Two tabs: "recordings" (auto-captured
@@ -45,28 +46,7 @@ const StudioFallback = () => (
   </main>
 );
 
-const setsHref = (setId?: string, frameId?: string): string => {
-  const qs = new URLSearchParams({ tab: "sets" });
-  if (setId) {
-    qs.set("set", setId);
-  }
-  if (frameId) {
-    qs.set("frame", frameId);
-  }
-  return `/studio?${qs.toString()}`;
-};
 
-const recordingsHref = (recordingId?: string, frameId?: string): string => {
-  const qs = new URLSearchParams();
-  if (recordingId) {
-    qs.set("recording", recordingId);
-  }
-  if (frameId) {
-    qs.set("frame", frameId);
-  }
-  const s = qs.toString();
-  return s.length > 0 ? `/studio?${s}` : "/studio";
-};
 
 // Right-side header tally for the recordings tab. Extracted so its
 // conditionals don't inflate StudioInner's complexity.
@@ -96,11 +76,21 @@ const HeaderCount = ({
 const StudioSelectionBar = ({
   selectedFrameIds,
   onClear,
+  onAddTo,
+  onCreateFrom,
   onAdded,
   onCreatedFromSelection,
 }: {
   selectedFrameIds: string[];
   onClear: () => void;
+  onAddTo: (
+    target: { id: string; name: string },
+    frameIds: string[]
+  ) => Promise<number | null>;
+  onCreateFrom: (
+    frameIds: string[],
+    name: string
+  ) => Promise<FrameSetSummary | null>;
   onAdded: (target: { id: string; name: string }) => void;
   onCreatedFromSelection: (set: FrameSetSummary) => void;
 }) => {
@@ -111,6 +101,8 @@ const StudioSelectionBar = ({
     <SelectionBar
       selectedFrameIds={selectedFrameIds}
       onClear={onClear}
+      onAddTo={onAddTo}
+      onCreateFrom={onCreateFrom}
       onAdded={onAdded}
       onCreatedFromSelection={onCreatedFromSelection}
     />
@@ -486,214 +478,30 @@ const StudioInner = () => {
     selection,
   ]);
 
-  // --- Set mutations (optimistic; sidebar refreshed via refreshSets) ---
-  const onCreateSet = useCallback(
-    (name: string) => {
-      void (async () => {
-        try {
-          const { set: created } = await rpcClient.sets.create({ name });
-          refreshSets();
-          router.push(setsHref(created.id));
-          toast(`created “${created.name}”`, { duration: 1600 });
-        } catch {
-          toast.error("couldn't create set");
-        }
-      })();
-    },
-    [refreshSets, router]
-  );
-
-  // "Make a cut": derive an editable curated set from the open recording.
-  const onMakeCut = useCallback(() => {
-    if (!recordingDetail) {
-      return;
-    }
-    const name = `cut of ${recordingDetail.name}`;
-    const fromSetId = recordingDetail.id;
-    void (async () => {
-      try {
-        const { set: created } = await rpcClient.sets.create({
-          fromSetId,
-          name,
-        });
-        refreshSets();
-        router.push(setsHref(created.id));
-        toast(`created “${created.name}”`, { duration: 1600 });
-      } catch {
-        toast.error("couldn't make a cut");
-      }
-    })();
-  }, [recordingDetail, refreshSets, router]);
-
-  const onRenameSet = useCallback(
-    (name: string) => {
-      if (!(setDetail && selectedSetId)) {
-        return;
-      }
-      const prev = setDetail.name;
-      setSetDetail((d) => (d ? { ...d, name } : d));
-      void (async () => {
-        try {
-          await rpcClient.sets.rename({
-            name,
-            setId: selectedSetId as FrameSetId,
-          });
-          refreshSets();
-        } catch {
-          setSetDetail((d) => (d ? { ...d, name: prev } : d));
-          toast.error("rename failed");
-        }
-      })();
-    },
-    [setDetail, selectedSetId, refreshSets]
-  );
-
-  const onDeleteSet = useCallback(() => {
-    if (!selectedSetId) {
-      return;
-    }
-    void (async () => {
-      try {
-        await rpcClient.sets.remove({ setId: selectedSetId as FrameSetId });
-        refreshSets();
-        router.replace("/studio?tab=sets");
-        toast("set deleted", { duration: 1600 });
-      } catch {
-        toast.error("couldn't delete set");
-      }
-    })();
-  }, [selectedSetId, refreshSets, router]);
-
-  const onMoveFrame = useCallback(
-    (frameId: string, dir: "prev" | "next") => {
-      if (!(setDetail && selectedSetId)) {
-        return;
-      }
-      const ids = setDetail.frames.map((f) => f.id);
-      const i = ids.indexOf(frameId as ImageLibraryId);
-      if (i === -1) {
-        return;
-      }
-      const j = dir === "prev" ? i - 1 : i + 1;
-      if (j < 0 || j >= ids.length) {
-        return;
-      }
-      const reordered = [...setDetail.frames];
-      const [moved] = reordered.splice(i, 1);
-      if (moved) {
-        reordered.splice(j, 0, moved);
-      }
-      const prevFrames = setDetail.frames;
-      setSetDetail((d) => (d ? { ...d, frames: reordered } : d));
-      void (async () => {
-        try {
-          await rpcClient.sets.reorder({
-            orderedFrameIds: reordered.map((f) => f.id),
-            setId: selectedSetId as FrameSetId,
-          });
-          refreshSets();
-        } catch {
-          setSetDetail((d) => (d ? { ...d, frames: prevFrames } : d));
-          toast.error("reorder failed");
-        }
-      })();
-    },
-    [setDetail, selectedSetId, refreshSets]
-  );
-
+  // --- Set mutations: one hook owns optimistic updates, the serialization
+  // queue, and the undo toasts (see use-set-mutations.ts). ---
+  const mutations = useSetMutations({
+    recordingDetail,
+    refreshSets,
+    retrySetDetail,
+    router,
+    selectedFrameId,
+    selectedSetId,
+    setDetail,
+    setRecordingDetail,
+    setSetDetail,
+  });
+  const onCreateSet = mutations.createSet;
+  const onMakeCut = mutations.makeCut;
+  const onRenameSet = mutations.renameSet;
+  const onDeleteSet = mutations.deleteSet;
+  const onMoveFrame = mutations.moveFrame;
+  const onSetCover = mutations.setCover;
+  const onSetVisibility = mutations.setVisibility;
+  const onRecordingVisibility = mutations.recordingVisibility;
   const onRemoveFrame = useCallback(
-    (frameId: string) => {
-      if (!(setDetail && selectedSetId)) {
-        return;
-      }
-      const prevFrames = setDetail.frames;
-      setSetDetail((d) =>
-        d ? { ...d, frames: d.frames.filter((f) => f.id !== frameId) } : d
-      );
-      // If the open inspector frame was removed, close it.
-      if (selectedFrameId === frameId) {
-        router.replace(setsHref(selectedSetId));
-      }
-      void (async () => {
-        try {
-          await rpcClient.sets.removeFrame({
-            frameId: frameId as ImageLibraryId,
-            setId: selectedSetId as FrameSetId,
-          });
-          refreshSets();
-        } catch {
-          setSetDetail((d) => (d ? { ...d, frames: prevFrames } : d));
-          toast.error("couldn't remove frame");
-        }
-      })();
-    },
-    [setDetail, selectedSetId, selectedFrameId, refreshSets, router]
-  );
-
-  const onSetCover = useCallback(
-    (frameId: string) => {
-      if (!(setDetail && selectedSetId)) {
-        return;
-      }
-      const prev = setDetail.coverFrameId;
-      setSetDetail((d) =>
-        d ? { ...d, coverFrameId: frameId as ImageLibraryId } : d
-      );
-      void (async () => {
-        try {
-          await rpcClient.sets.setCover({
-            frameId: frameId as ImageLibraryId,
-            setId: selectedSetId as FrameSetId,
-          });
-          refreshSets();
-          toast("cover set", { duration: 1400 });
-        } catch {
-          setSetDetail((d) => (d ? { ...d, coverFrameId: prev } : d));
-          toast.error("couldn't set cover");
-        }
-      })();
-    },
-    [setDetail, selectedSetId, refreshSets]
-  );
-
-  const onSetVisibility = useCallback(
-    (visibility: FrameSetVisibility) => {
-      if (!setDetail) {
-        return;
-      }
-      const prev = setDetail.visibility;
-      const setId = setDetail.id;
-      setSetDetail((d) => (d ? { ...d, visibility } : d));
-      void (async () => {
-        try {
-          await rpcClient.sets.setVisibility({ setId, visibility });
-        } catch {
-          setSetDetail((d) => (d ? { ...d, visibility: prev } : d));
-          toast.error("couldn't change visibility");
-        }
-      })();
-    },
-    [setDetail]
-  );
-
-  const onRecordingVisibility = useCallback(
-    (visibility: FrameSetVisibility) => {
-      if (!recordingDetail) {
-        return;
-      }
-      const prev = recordingDetail.visibility;
-      const setId = recordingDetail.id;
-      setRecordingDetail((d) => (d ? { ...d, visibility } : d));
-      void (async () => {
-        try {
-          await rpcClient.sets.setVisibility({ setId, visibility });
-        } catch {
-          setRecordingDetail((d) => (d ? { ...d, visibility: prev } : d));
-          toast.error("couldn't change visibility");
-        }
-      })();
-    },
-    [recordingDetail]
+    (frameId: string) => mutations.removeFrames([frameId]),
+    [mutations]
   );
 
   // Auth gate.
@@ -866,6 +674,8 @@ const StudioInner = () => {
       <StudioSelectionBar
         selectedFrameIds={selectedFrameIds}
         onClear={clearSelection}
+        onAddTo={mutations.addToSet}
+        onCreateFrom={mutations.createSetFrom}
         onAdded={onSelectionAdded}
         onCreatedFromSelection={onSelectionCreated}
       />

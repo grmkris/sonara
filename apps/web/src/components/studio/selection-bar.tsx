@@ -1,7 +1,6 @@
 "use client";
 
 import type { FrameSetSummary } from "@sonara/shared";
-import type { FrameSetId, ImageLibraryId } from "@sonara/shared/typeid";
 import { ChevronUp, Plus } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
@@ -12,7 +11,6 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { useCuratedSetsPicker } from "@/hooks/use-curated-sets-picker";
-import { rpcClient } from "@/lib/orpc";
 
 // Floating action bar for studio's multi-select mode: shown bottom-center
 // while frames are selected. The primary button one-clicks the selection into
@@ -176,17 +174,30 @@ const SetPickerContent = ({
 interface SelectionBarProps {
   selectedFrameIds: string[];
   onClear: () => void;
+  // The page owns the RPCs (use-set-mutations) so adds get the undo toast;
+  // resolves with the added count (null = failed).
+  onAddTo: (
+    target: TargetSet,
+    frameIds: string[]
+  ) => Promise<number | null>;
+  // "New set from selection" — resolves with the created summary (the page
+  // navigates + toasts-with-undo); null = failed.
+  onCreateFrom: (
+    frameIds: string[],
+    name: string
+  ) => Promise<FrameSetSummary | null>;
   // Fired after a successful add — the page clears the selection (keeping
-  // select mode) and refreshes the open set if it was the target.
+  // the pin) and refreshes the open set if it was the target.
   onAdded: (target: TargetSet) => void;
-  // Fired after "new set from selection" — the page refreshes the sidebar and
-  // navigates to the new set.
+  // Fired after "new set from selection" — the page navigates to the new set.
   onCreatedFromSelection: (set: FrameSetSummary) => void;
 }
 
 export const SelectionBar = ({
   selectedFrameIds,
   onClear,
+  onAddTo,
+  onCreateFrom,
   onAdded,
   onCreatedFromSelection,
 }: SelectionBarProps) => {
@@ -207,20 +218,13 @@ export const SelectionBar = ({
 
   const addTo = async (target: TargetSet) => {
     setPickerOpen(false);
-    try {
-      const { added } = await rpcClient.sets.addFrames({
-        frameIds: selectedFrameIds as ImageLibraryId[],
-        setId: target.id as FrameSetId,
-      });
-      toast(`${added} frame${added === 1 ? "" : "s"} → “${target.name}”`, {
-        duration: 1800,
-      });
-      writeLastTarget(target);
-      setLastTarget(target);
-      onAdded(target);
-    } catch {
-      toast.error("couldn't add to set");
+    const added = await onAddTo(target, selectedFrameIds);
+    if (added === null) {
+      return;
     }
+    writeLastTarget(target);
+    setLastTarget(target);
+    onAdded(target);
   };
 
   const onCreateInPicker = async (name: string) => {
@@ -235,15 +239,9 @@ export const SelectionBar = ({
 
   const onNewSetFromSelection = async (name: string) => {
     setNamingFromSelection(false);
-    try {
-      const { set } = await rpcClient.sets.create({
-        frameIds: selectedFrameIds as ImageLibraryId[],
-        name,
-      });
-      toast(`created “${set.name}”`, { duration: 1600 });
+    const set = await onCreateFrom(selectedFrameIds, name);
+    if (set) {
       onCreatedFromSelection(set);
-    } catch {
-      toast.error("couldn't create set");
     }
   };
 
