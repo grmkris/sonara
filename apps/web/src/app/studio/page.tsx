@@ -677,6 +677,45 @@ const StudioInner = () => {
   };
 
 
+  // Center pane, sets tab: built-ins render read-only; everything else gets
+  // the full editor. Extracted (like renderRecordingsCenter) so the branches
+  // don't inflate StudioInner's complexity.
+  const renderSetsCenter = () => {
+    if (setDetail?.origin === "builtin") {
+      return <BuiltinSetDetail frameSet={setDetail} />;
+    }
+    return (
+      <SetEditor
+        frameSet={setDetail}
+        loading={setDetailLoading}
+        error={setDetailError}
+        onRetry={retrySetDetail}
+        selectedFrameId={selectedFrameId}
+        coverFrameId={setDetail?.coverFrameId ?? null}
+        onRename={onRenameSet}
+        onDelete={onDeleteSet}
+        onMoveFrame={onMoveFrame}
+        onRemoveFrame={onRemoveFrame}
+        onSetCover={onSetCover}
+        onVisibilityChange={onSetVisibility}
+        onLookChange={mutations.setLook}
+        onFrameClick={onFrameClick}
+        onFrameOpen={onFrameOpen}
+        onFrameCheck={onFrameCheck}
+        isSelected={selection.isSelected}
+        isSelecting={isSelecting}
+        pinned={selection.pinned}
+        onTogglePinned={selection.togglePinned}
+        onMarquee={onMarquee}
+        onWhitespaceClick={onWhitespaceClick}
+        marqueeEnabled={!dragActive}
+        getDragPayload={getSetDragPayload}
+        selectionApi={selection}
+        onRemoveFrames={mutations.removeFrames}
+      />
+    );
+  };
+
   return (
     <main className="relative flex min-h-svh flex-col overflow-hidden bg-[color:var(--ink)] text-[color:var(--paper)]">
       {/* Header */}
@@ -761,40 +800,7 @@ const StudioInner = () => {
             </div>
           )}
 
-          {tab === "sets" && setDetail?.origin === "builtin" ? (
-            <BuiltinSetDetail frameSet={setDetail} />
-          ) : tab === "sets" ? (
-            <SetEditor
-              frameSet={setDetail}
-              loading={setDetailLoading}
-              error={setDetailError}
-              onRetry={retrySetDetail}
-              selectedFrameId={selectedFrameId}
-              coverFrameId={setDetail?.coverFrameId ?? null}
-              onRename={onRenameSet}
-              onDelete={onDeleteSet}
-              onMoveFrame={onMoveFrame}
-              onRemoveFrame={onRemoveFrame}
-              onSetCover={onSetCover}
-              onVisibilityChange={onSetVisibility}
-              onLookChange={mutations.setLook}
-              onFrameClick={onFrameClick}
-              onFrameOpen={onFrameOpen}
-              onFrameCheck={onFrameCheck}
-              isSelected={selection.isSelected}
-              isSelecting={isSelecting}
-              pinned={selection.pinned}
-              onTogglePinned={selection.togglePinned}
-              onMarquee={onMarquee}
-              onWhitespaceClick={onWhitespaceClick}
-              marqueeEnabled={!dragActive}
-              getDragPayload={getSetDragPayload}
-              selectionApi={selection}
-              onRemoveFrames={mutations.removeFrames}
-            />
-          ) : (
-            renderRecordingsCenter()
-          )}
+          {tab === "recordings" ? renderRecordingsCenter() : renderSetsCenter()}
         </section>
 
         {/* Desktop inspector pane */}
