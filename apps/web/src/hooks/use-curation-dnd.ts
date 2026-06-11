@@ -27,6 +27,7 @@ export const useCurationDnd = (opts: {
   mutations: SetMutations;
 }) => {
   const [dragActive, setDragActive] = useState(false);
+  const [dragCount, setDragCount] = useState(0);
   const stateRef = useRef(opts);
   stateRef.current = opts;
 
@@ -34,9 +35,15 @@ export const useCurationDnd = (opts: {
     () =>
       monitorForElements({
         canMonitor: ({ source }) => isFramePayload(source.data),
-        onDragStart: () => setDragActive(true),
+        onDragStart: ({ source }) => {
+          setDragActive(true);
+          setDragCount(
+            isFramePayload(source.data) ? source.data.frameIds.length : 0
+          );
+        },
         onDrop: ({ location, source }) => {
           setDragActive(false);
+          setDragCount(0);
           const payload = source.data;
           if (!isFramePayload(payload)) {
             return;
@@ -103,5 +110,5 @@ export const useCurationDnd = (opts: {
     []
   );
 
-  return { dragActive };
+  return { dragActive, dragCount };
 };

@@ -19,6 +19,7 @@ import { SetEditor } from "@/components/studio/set-editor";
 import { SetsList } from "@/components/studio/sets-list";
 import { RecordingTimeline } from "@/components/studio/recording-timeline";
 import { RecordingsList } from "@/components/studio/recordings-list";
+import { SetsDropShelf } from "@/components/studio/sets-drop-shelf";
 import { StagesSection } from "@/components/studio/stages-section";
 import { StudioSidebarTabs } from "@/components/studio/studio-sidebar-tabs";
 import type { StudioTab } from "@/components/studio/studio-sidebar-tabs";
@@ -530,11 +531,34 @@ const StudioInner = () => {
     () => (setDetail?.frames ?? []).map((f) => f.id as string),
     [setDetail]
   );
-  const { dragActive } = useCurationDnd({
+  const { dragActive, dragCount } = useCurationDnd({
     currentOrderedIds: setOrderedIds,
     currentSetId: selectedSetId,
     mutations,
   });
+
+  // Same Finder rule for recordings: a selected frame drags the whole
+  // selection (display order), an unselected one drags alone.
+  const getRecordingDragPayload = useCallback(
+    (frameId: string): FrameDragPayload => {
+      const frames = recordingDetail?.frames ?? [];
+      const carried = selection.isSelected(frameId)
+        ? frames
+            .filter((f) => selection.isSelected(f.id))
+            .map((f) => f.id as string)
+        : [frameId];
+      const carriedSet = new Set(carried);
+      return makeFramePayload({
+        frameIds: carried,
+        previewUrls: frames
+          .filter((f) => carriedSet.has(f.id))
+          .slice(0, 3)
+          .map((f) => f.url),
+        source: { setId: recordingDetail?.id ?? "", type: "recording" },
+      });
+    },
+    [recordingDetail, selection]
+  );
 
   // Dragging a selected tile carries the WHOLE selection (Finder rule),
   // ordered by display order; an unselected tile drags alone.
@@ -611,6 +635,7 @@ const StudioInner = () => {
         onMarquee={onMarquee}
         onWhitespaceClick={onWhitespaceClick}
         marqueeEnabled={!dragActive}
+        getDragPayload={getRecordingDragPayload}
       />
     );
   };
@@ -647,15 +672,21 @@ const StudioInner = () => {
         >
           <LiveNowCard />
           <StudioSidebarTabs tab={tab} onTab={onTab} />
-          {tab === "recordings" ? (
-            <RecordingsList
-              recordings={recordings}
-              loading={recordingsLoading}
-              bootstrapped={recordingsBootstrapped}
-              selectedRecordingId={selectedRecordingId}
-              onSelect={onSelectRecording}
-            />
-          ) : (
+          {tab === "recordings" &&
+            (dragActive ? (
+              // Mid-drag the recordings list is useless as a destination —
+              // swap in curated-set drop targets for the drag's duration.
+              <SetsDropShelf sets={curatedSets} dragCount={dragCount} />
+            ) : (
+              <RecordingsList
+                recordings={recordings}
+                loading={recordingsLoading}
+                bootstrapped={recordingsBootstrapped}
+                selectedRecordingId={selectedRecordingId}
+                onSelect={onSelectRecording}
+              />
+            ))}
+          {tab === "sets" && (
             <SetsList
               sets={curatedSets}
               loading={setsLoading}
@@ -663,6 +694,7 @@ const StudioInner = () => {
               selectedSetId={selectedSetId}
               onSelect={onSelectSet}
               onCreate={onCreateSet}
+              dragCount={dragCount}
             />
           )}
           {/* Stages are account objects like sets — managed here, not on a

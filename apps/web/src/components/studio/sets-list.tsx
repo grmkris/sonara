@@ -5,7 +5,7 @@ import { Plus } from "lucide-react";
 import type { ReactNode } from "react";
 import { useState } from "react";
 
-import { cn } from "@/lib/utils";
+import { NewSetDropRow, SetDropRow } from "@/components/studio/set-drop-row";
 
 interface SetsListProps {
   sets: FrameSetSummary[];
@@ -14,6 +14,8 @@ interface SetsListProps {
   selectedSetId: string | null;
   onSelect: (setId: string) => void;
   onCreate: (name: string) => void;
+  // Size of the in-flight frame drag (0 = none) — rows light up as targets.
+  dragCount?: number;
 }
 
 // Left-rail list of curated sets. Each card shows the cover thumb, name, and
@@ -25,6 +27,7 @@ export const SetsList = ({
   selectedSetId,
   onSelect,
   onCreate,
+  dragCount = 0,
 }: SetsListProps) => {
   const [creating, setCreating] = useState(false);
   const [draftName, setDraftName] = useState("");
@@ -55,51 +58,21 @@ export const SetsList = ({
   } else {
     body = (
       <ul className="flex flex-col">
-        {sets.map((r) => {
-          const selected = r.id === selectedSetId;
-          return (
-            <li key={r.id}>
-              <button
-                type="button"
-                onClick={() => onSelect(r.id)}
-                aria-current={selected ? "true" : undefined}
-                className={cn(
-                  "focus-ring flex w-full items-center gap-3 border-b border-[color:var(--hairline)]/20 px-4 py-2 text-left transition-colors",
-                  selected
-                    ? "bg-[color:var(--paper)]/10"
-                    : "hover:bg-[color:var(--paper)]/5"
-                )}
-              >
-                {r.coverUrl ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    src={r.coverUrl}
-                    alt=""
-                    loading="lazy"
-                    className="size-10 shrink-0 rounded-sm border border-[color:var(--hairline)]/40 object-cover"
-                  />
-                ) : (
-                  <div className="size-10 shrink-0 rounded-sm border border-[color:var(--hairline)]/40 bg-[color:var(--ink)]/40" />
-                )}
-                <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-                  <span
-                    className={cn(
-                      "truncate font-sans text-[11px] uppercase tracking-[0.16em]",
-                      selected
-                        ? "text-[color:var(--paper)]"
-                        : "text-[color:var(--paper)]/80"
-                    )}
-                  >
-                    {r.name}
-                  </span>
-                  <span className="font-mono text-[9px] uppercase tracking-[0.18em] text-[color:var(--stone)]">
-                    {r.frameCount} frame{r.frameCount === 1 ? "" : "s"}
-                  </span>
-                </div>
-              </button>
-            </li>
-          );
-        })}
+        {dragCount > 0 && (
+          <li>
+            <NewSetDropRow dragCount={dragCount} />
+          </li>
+        )}
+        {sets.map((r) => (
+          <li key={r.id}>
+            <SetDropRow
+              set={r}
+              selected={r.id === selectedSetId}
+              onSelect={onSelect}
+              dragCount={dragCount}
+            />
+          </li>
+        ))}
       </ul>
     );
   }

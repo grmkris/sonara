@@ -9,6 +9,8 @@ import { useMarqueeSelection } from "@/hooks/use-marquee-selection";
 import { useTileRegistry } from "@/hooks/use-tile-registry";
 import { formatDuration, formatMmSs } from "@/lib/format-time";
 
+import type { FrameDragPayload } from "@/lib/curation-dnd";
+
 import { FrameCard } from "./frame-card";
 import { SelectModeToggle } from "./select-mode-toggle";
 import type { TileClickMods } from "./set-frame-tile";
@@ -31,6 +33,8 @@ interface RecordingTimelineProps {
   onMarquee: (ids: string[], additive: boolean) => void;
   onWhitespaceClick: () => void;
   marqueeEnabled?: boolean;
+  // Drag frames OUT of the recording (toward sidebar sets / the open set).
+  getDragPayload?: (frameId: string) => FrameDragPayload;
 }
 
 const FRAME_SIZE_DESKTOP = 56;
@@ -130,6 +134,7 @@ export const RecordingTimeline = ({
   onMarquee,
   onWhitespaceClick,
   marqueeEnabled = true,
+  getDragPayload,
 }: RecordingTimelineProps) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const { measure, registerTile } = useTileRegistry();
@@ -243,6 +248,11 @@ export const RecordingTimeline = ({
               checked={isSelected(entry.frame.id)}
               selecting={isSelecting}
               registerRef={registerTile(entry.frame.id)}
+              getDragPayload={
+                getDragPayload
+                  ? () => getDragPayload(entry.frame.id)
+                  : undefined
+              }
               leftPct={entry.leftPct}
               stackIdx={entry.stackIdx}
               size={FRAME_SIZE_DESKTOP}

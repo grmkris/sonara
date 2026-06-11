@@ -1,12 +1,19 @@
 "use client";
 
+import { draggable } from "@atlaskit/pragmatic-drag-and-drop/element/adapter";
+import { pointerOutsideOfPreview } from "@atlaskit/pragmatic-drag-and-drop/element/pointer-outside-of-preview";
+import { setCustomNativeDragPreview } from "@atlaskit/pragmatic-drag-and-drop/element/set-custom-native-drag-preview";
 import type { LibraryFrame } from "@sonara/shared";
-import { useCallback } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { MouseEvent } from "react";
+import { createRoot } from "react-dom/client";
 
+import { FrameDragPreview } from "@/components/studio/drag-preview";
 import { TileCheck } from "@/components/studio/tile-check";
 import type { TileClickMods } from "@/components/studio/set-frame-tile";
 import { useLongPress } from "@/hooks/use-long-press";
+import { isFramePayload } from "@/lib/curation-dnd";
+import type { FrameDragPayload } from "@/lib/curation-dnd";
 import { formatMmSs } from "@/lib/format-time";
 import { cn } from "@/lib/utils";
 
@@ -26,6 +33,8 @@ interface FrameCardProps {
   stackIdx: number;
   size: number;
   registerRef?: (el: HTMLElement | null) => void;
+  // Drag source only — recordings are frozen, nothing drops INTO a timeline.
+  getDragPayload?: () => FrameDragPayload;
 }
 
 // A single 48×48 (configurable) thumbnail positioned absolutely on the
@@ -44,8 +53,55 @@ export const FrameCard = ({
   stackIdx,
   size,
   registerRef,
+  getDragPayload,
 }: FrameCardProps) => {
   const longPress = useLongPress(() => onCheck(frame.id));
+  const wrapperRef = useRef<HTMLDivElement | null>(null);
+  const [dragging, setDragging] = useState(false);
+  const setRefs = useCallback(
+    (el: HTMLDivElement | null) => {
+      wrapperRef.current = el;
+      registerRef?.(el);
+    },
+    [registerRef]
+  );
+  const getPayloadRef = useRef(getDragPayload);
+  getPayloadRef.current = getDragPayload;
+  const draggableEnabled = !!getDragPayload;
+
+  useEffect(() => {
+    const el = wrapperRef.current;
+    if (!(el && draggableEnabled)) {
+      return;
+    }
+    return draggable({
+      element: el,
+      getInitialData: () =>
+        (getPayloadRef.current?.() ?? {}) as unknown as Record<string, unknown>,
+      onDragStart: () => setDragging(true),
+      onDrop: () => setDragging(false),
+      onGenerateDragPreview: ({ nativeSetDragImage, source }) => {
+        const payload = source.data;
+        if (!isFramePayload(payload)) {
+          return;
+        }
+        setCustomNativeDragPreview({
+          getOffset: pointerOutsideOfPreview({ x: "12px", y: "12px" }),
+          nativeSetDragImage,
+          render({ container }) {
+            const root = createRoot(container);
+            root.render(
+              <FrameDragPreview
+                count={payload.frameIds.length}
+                urls={payload.previewUrls}
+              />
+            );
+            return () => root.unmount();
+          },
+        });
+      },
+    });
+  }, [draggableEnabled]);
 
   const handleClick = useCallback(
     (e: MouseEvent<HTMLButtonElement>) => {
@@ -72,8 +128,8 @@ export const FrameCard = ({
   return (
     <div
       data-frame-tile={frame.id}
-      ref={registerRef}
-      className="group absolute top-0"
+      ref={setRefs}
+      className={cn("group absolute top-0", dragging && "opacity-40")}
       style={{
         height: size,
         left: `${leftPct}%`,
