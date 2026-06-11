@@ -295,7 +295,6 @@ export const StageScreen = ({ code }: { code: string | null }) => {
         <div className="pointer-events-auto flex flex-col gap-3">
           <Logotype />
           <AppNavLinks current="play" />
-          <StageChip current={ownStage} />
         </div>
         <div className="pointer-events-auto flex items-center gap-3 pt-2 sm:gap-5">
           {/* Operator remote: drive this session from a phone so the projector
@@ -353,15 +352,27 @@ export const StageScreen = ({ code }: { code: string | null }) => {
           uiVisible ? "ui-fade-in" : "ui-fade-out"
         )}
       >
-        {/* Scene rail — left-anchored, top third. */}
+        {/* Scene rail — left-anchored, top third. The scene card carries the
+            stage identity as its eyebrow ("on this stage, this scene") so the
+            chip no longer crowds the header stack; bordered like the console
+            card across the canvas (scrims alone stopped being the rule when
+            the right rail grew its frame). */}
         <section className="pointer-events-auto mt-24 flex flex-1 gap-6 px-4 md:mt-28 md:gap-10 md:px-10">
           <div className="relative w-full md:w-[360px] md:shrink-0">
-            <div aria-hidden className="paper-scrim absolute -inset-6 -z-10" />
-            {isSignedIn ? (
-              <PromptInput send={send} />
-            ) : (
-              <AnonPromptPlaceholder />
-            )}
+            <div aria-hidden className="paper-scrim absolute -inset-4 -z-10" />
+            <div className="flex flex-col rounded-sm border border-[color:var(--hairline)]/25 p-3">
+              <div className="mb-3 flex items-center justify-between gap-2 border-b border-[color:var(--hairline)]/25 pb-2">
+                <span className="font-sans text-[9px] uppercase tracking-[0.28em] text-[color:var(--stone)]">
+                  scene
+                </span>
+                <StageChip current={ownStage} />
+              </div>
+              {isSignedIn ? (
+                <PromptInput send={send} variant="card" />
+              ) : (
+                <AnonPromptPlaceholder />
+              )}
+            </div>
           </div>
 
           <div className="hidden flex-1 md:block" />
