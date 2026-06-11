@@ -4,8 +4,10 @@ import type { FrameSet, FrameSetVisibility } from "@sonara/shared";
 import type { ImageLibraryId } from "@sonara/shared/typeid";
 import { Pencil, Play, Trash2 } from "lucide-react";
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
+import { useMarqueeSelection } from "@/hooks/use-marquee-selection";
+import { useTileRegistry } from "@/hooks/use-tile-registry";
 import { cn } from "@/lib/utils";
 
 import type { TileClickMods } from "./set-frame-tile";
@@ -39,6 +41,11 @@ interface SetEditorProps {
   isSelecting: boolean;
   pinned: boolean;
   onTogglePinned: () => void;
+  // Marquee sweep over the grid (desktop): live hit ids while dragging.
+  onMarquee: (ids: string[], additive: boolean) => void;
+  // Sub-threshold click on whitespace clears the selection.
+  onWhitespaceClick: () => void;
+  marqueeEnabled?: boolean;
 }
 
 const Hint = ({ children }: { children: string }) => (
@@ -70,9 +77,22 @@ export const SetEditor = ({
   isSelecting,
   pinned,
   onTogglePinned,
+  onMarquee,
+  onWhitespaceClick,
+  marqueeEnabled = true,
 }: SetEditorProps) => {
   const [renaming, setRenaming] = useState(false);
   const [draftName, setDraftName] = useState("");
+  const containerRef = useRef<HTMLDivElement>(null);
+  const { measure, registerTile } = useTileRegistry();
+  const { marqueeProps, marqueeRect } = useMarqueeSelection({
+    containerRef,
+    enabled: marqueeEnabled,
+    measureItems: () =>
+      containerRef.current ? measure(containerRef.current) : [],
+    onChange: onMarquee,
+    onWhitespaceClick,
+  });
 
   // Reset the rename draft whenever the selected set changes.
   useEffect(() => {
@@ -99,7 +119,23 @@ export const SetEditor = ({
   };
 
   return (
-    <div className="flex h-full flex-col gap-6 overflow-y-auto px-6 py-8 md:px-10">
+    <div
+      ref={containerRef}
+      {...marqueeProps}
+      className="relative flex h-full flex-col gap-6 overflow-y-auto px-6 py-8 md:px-10"
+    >
+      {marqueeRect && (
+        <div
+          aria-hidden
+          className="pointer-events-none absolute z-20 border border-[color:var(--paper)]/50 bg-[color:var(--paper)]/8"
+          style={{
+            height: marqueeRect.h,
+            left: marqueeRect.x,
+            top: marqueeRect.y,
+            width: marqueeRect.w,
+          }}
+        />
+      )}
       <header className="flex flex-wrap items-start justify-between gap-4">
         <div className="flex min-w-0 flex-col gap-1">
           <span className="font-mono text-[10px] uppercase tracking-[0.26em] text-[color:var(--stone)]">
@@ -206,6 +242,7 @@ export const SetEditor = ({
               onCheck={onFrameCheck}
               checked={isSelected(frame.id)}
               selecting={isSelecting}
+              registerRef={registerTile(frame.id)}
               onMovePrev={
                 onMoveFrame ? (id) => onMoveFrame(id, "prev") : undefined
               }

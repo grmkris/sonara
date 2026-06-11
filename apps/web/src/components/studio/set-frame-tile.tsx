@@ -27,6 +27,8 @@ interface SetFrameTileProps {
   checked: boolean;
   // True while a selection is in progress (or pinned) — keeps checks visible.
   selecting: boolean;
+  // Tile-registry hookup (marquee hit-testing, keyboard focus).
+  registerRef?: (el: HTMLElement | null) => void;
   // Edit affordances — only rendered when provided (read-only otherwise).
   onMovePrev?: (frameId: string) => void;
   onMoveNext?: (frameId: string) => void;
@@ -50,6 +52,7 @@ export const SetFrameTile = ({
   onCheck,
   checked,
   selecting,
+  registerRef,
   onMovePrev,
   onMoveNext,
   onRemove,
@@ -75,7 +78,7 @@ export const SetFrameTile = ({
     stateClass = "border-[color:var(--paper)] ring-2 ring-[color:var(--paper)]/40";
   }
   return (
-    <div className="group relative" data-frame-tile={frame.id}>
+    <div className="group relative" data-frame-tile={frame.id} ref={registerRef}>
       <button
         type="button"
         onClick={handleClick}

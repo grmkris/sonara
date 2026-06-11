@@ -3,8 +3,10 @@
 import type { FrameSet, FrameSetVisibility, LibraryFrame } from "@sonara/shared";
 import { Play, Scissors } from "lucide-react";
 import Link from "next/link";
-import { useMemo } from "react";
+import { useMemo, useRef } from "react";
 
+import { useMarqueeSelection } from "@/hooks/use-marquee-selection";
+import { useTileRegistry } from "@/hooks/use-tile-registry";
 import { formatDuration, formatMmSs } from "@/lib/format-time";
 
 import { FrameCard } from "./frame-card";
@@ -26,6 +28,9 @@ interface RecordingTimelineProps {
   isSelecting: boolean;
   pinned: boolean;
   onTogglePinned: () => void;
+  onMarquee: (ids: string[], additive: boolean) => void;
+  onWhitespaceClick: () => void;
+  marqueeEnabled?: boolean;
 }
 
 const FRAME_SIZE_DESKTOP = 56;
@@ -122,7 +127,20 @@ export const RecordingTimeline = ({
   isSelecting,
   pinned,
   onTogglePinned,
+  onMarquee,
+  onWhitespaceClick,
+  marqueeEnabled = true,
 }: RecordingTimelineProps) => {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const { measure, registerTile } = useTileRegistry();
+  const { marqueeProps, marqueeRect } = useMarqueeSelection({
+    containerRef,
+    enabled: marqueeEnabled,
+    measureItems: () =>
+      containerRef.current ? measure(containerRef.current) : [],
+    onChange: onMarquee,
+    onWhitespaceClick,
+  });
   const frames = recording?.frames ?? [];
   const layout = useMemo(
     () => computeLayout(recording?.frames ?? []),
@@ -152,7 +170,23 @@ export const RecordingTimeline = ({
   const trackHeight = FRAME_SIZE_DESKTOP * (maxStack + 1) + maxStack * 4;
 
   return (
-    <div className="flex h-full flex-col gap-6 overflow-y-auto px-6 py-8 md:px-10">
+    <div
+      ref={containerRef}
+      {...marqueeProps}
+      className="relative flex h-full flex-col gap-6 overflow-y-auto px-6 py-8 md:px-10"
+    >
+      {marqueeRect && (
+        <div
+          aria-hidden
+          className="pointer-events-none absolute z-20 border border-[color:var(--paper)]/50 bg-[color:var(--paper)]/8"
+          style={{
+            height: marqueeRect.h,
+            left: marqueeRect.x,
+            top: marqueeRect.y,
+            width: marqueeRect.w,
+          }}
+        />
+      )}
       <header className="flex flex-wrap items-start justify-between gap-4">
         <div className="flex min-w-0 flex-col gap-1">
           <span className="font-mono text-[10px] uppercase tracking-[0.26em] text-[color:var(--stone)]">
@@ -208,6 +242,7 @@ export const RecordingTimeline = ({
               onCheck={onFrameCheck}
               checked={isSelected(entry.frame.id)}
               selecting={isSelecting}
+              registerRef={registerTile(entry.frame.id)}
               leftPct={entry.leftPct}
               stackIdx={entry.stackIdx}
               size={FRAME_SIZE_DESKTOP}

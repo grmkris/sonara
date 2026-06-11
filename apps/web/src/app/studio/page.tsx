@@ -419,6 +419,24 @@ const StudioInner = () => {
     [selection]
   );
 
+  // Marquee sweep: replace (or union, with shift) the selection with the
+  // swept tiles; a plain click on whitespace clears it.
+  const onMarquee = useCallback(
+    (ids: string[], additive: boolean) => {
+      if (additive) {
+        selection.add(ids);
+      } else {
+        selection.replace(ids);
+      }
+    },
+    [selection]
+  );
+  const onWhitespaceClick = useCallback(() => {
+    if (selectedFrameIds.length > 0) {
+      clearSelection();
+    }
+  }, [selectedFrameIds.length, clearSelection]);
+
   const onCloseInspector = useCallback(() => {
     if (tab === "sets") {
       router.replace(selectedSetId ? setsHref(selectedSetId) : "/studio?tab=sets");
@@ -555,6 +573,8 @@ const StudioInner = () => {
         isSelecting={isSelecting}
         pinned={selection.pinned}
         onTogglePinned={selection.togglePinned}
+        onMarquee={onMarquee}
+        onWhitespaceClick={onWhitespaceClick}
       />
     );
   };
@@ -658,6 +678,8 @@ const StudioInner = () => {
               isSelecting={isSelecting}
               pinned={selection.pinned}
               onTogglePinned={selection.togglePinned}
+              onMarquee={onMarquee}
+              onWhitespaceClick={onWhitespaceClick}
             />
           )}
         </section>

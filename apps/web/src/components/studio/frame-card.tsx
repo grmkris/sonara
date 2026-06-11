@@ -25,6 +25,7 @@ interface FrameCardProps {
   // 1+ = stacked rows below).
   stackIdx: number;
   size: number;
+  registerRef?: (el: HTMLElement | null) => void;
 }
 
 // A single 48×48 (configurable) thumbnail positioned absolutely on the
@@ -42,6 +43,7 @@ export const FrameCard = ({
   leftPct,
   stackIdx,
   size,
+  registerRef,
 }: FrameCardProps) => {
   const longPress = useLongPress(() => onCheck(frame.id));
 
@@ -70,6 +72,7 @@ export const FrameCard = ({
   return (
     <div
       data-frame-tile={frame.id}
+      ref={registerRef}
       className="group absolute top-0"
       style={{
         height: size,
