@@ -21,7 +21,6 @@ import { SetsList } from "@/components/studio/sets-list";
 import { RecordingTimeline } from "@/components/studio/recording-timeline";
 import { RecordingsList } from "@/components/studio/recordings-list";
 import { SetsDropShelf } from "@/components/studio/sets-drop-shelf";
-import { StagesSection } from "@/components/studio/stages-section";
 import { StudioSidebarTabs } from "@/components/studio/studio-sidebar-tabs";
 import type { StudioTab } from "@/components/studio/studio-sidebar-tabs";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
@@ -774,9 +773,6 @@ const StudioInner = () => {
               dragCount={dragCount}
             />
           )}
-          {/* Stages are account objects like sets — managed here, not on a
-              separate resolver page. */}
-          <StagesSection />
         </aside>
 
         {/* Center pane */}
