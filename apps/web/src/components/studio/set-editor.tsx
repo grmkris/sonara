@@ -9,6 +9,7 @@ import { Pencil, Play, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 
+import { useGridCursor } from "@/hooks/use-grid-cursor";
 import { useMarqueeSelection } from "@/hooks/use-marquee-selection";
 import { useTileRegistry } from "@/hooks/use-tile-registry";
 import { isFramePayload } from "@/lib/curation-dnd";
@@ -54,7 +55,64 @@ interface SetEditorProps {
   // Drag payload factory (page decides single tile vs whole selection).
   // Present only when the set is editable — also gates the drop targets.
   getDragPayload?: (frameId: string) => FrameDragPayload;
+  // Keyboard cursor wiring (page-owned selection + mutations).
+  selectionApi: {
+    toggle: (id: string) => void;
+    rangeTo: (id: string) => void;
+    selectedFrameIds: string[];
+  };
+  onRemoveFrames?: (ids: string[]) => void;
 }
+
+// Header action cluster — extracted to keep SetEditor under the complexity
+// budget.
+const SetHeaderActions = ({
+  frameSet,
+  pinned,
+  onTogglePinned,
+  onVisibilityChange,
+  onDelete,
+}: {
+  frameSet: FrameSet;
+  pinned: boolean;
+  onTogglePinned: () => void;
+  onVisibilityChange?: (visibility: FrameSetVisibility) => void;
+  onDelete?: () => void;
+}) => (
+  <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
+    {onVisibilityChange && (
+      <SetShareControls
+        setId={frameSet.id}
+        visibility={frameSet.visibility}
+        onVisibilityChange={onVisibilityChange}
+      />
+    )}
+    {frameSet.frames.length > 0 && (
+      <SelectModeToggle active={pinned} onToggle={onTogglePinned} />
+    )}
+    {frameSet.frames.length > 0 && <ActivateOnStage setId={frameSet.id} />}
+    {frameSet.frames.length > 0 && (
+      <Link
+        href={`/play?set=${encodeURIComponent(frameSet.id)}`}
+        className="focus-ring font-sans inline-flex items-center gap-1.5 border border-[color:var(--hairline)]/40 px-3 py-1.5 text-[10px] uppercase tracking-[0.22em] text-[color:var(--paper)]/85 transition-colors hover:border-[color:var(--paper)]/70 hover:text-[color:var(--paper)]"
+      >
+        <Play className="size-3" strokeWidth={1.5} />
+        preview
+      </Link>
+    )}
+    {onDelete && (
+      <button
+        type="button"
+        onClick={onDelete}
+        aria-label="delete set"
+        className="focus-ring inline-flex items-center gap-1.5 border border-[color:var(--hairline)]/40 px-3 py-1.5 font-sans text-[10px] uppercase tracking-[0.22em] text-[color:var(--stone)] transition-colors hover:border-[color:var(--signal)] hover:text-[color:var(--signal)]"
+      >
+        <Trash2 className="size-3" strokeWidth={1.5} />
+        delete
+      </button>
+    )}
+  </div>
+);
 
 const Hint = ({ children }: { children: string }) => (
   <div className="px-10 py-16 font-sans text-[10px] uppercase tracking-[0.22em] text-[color:var(--stone)]">
@@ -89,6 +147,8 @@ export const SetEditor = ({
   onWhitespaceClick,
   marqueeEnabled = true,
   getDragPayload,
+  selectionApi,
+  onRemoveFrames,
 }: SetEditorProps) => {
   const [renaming, setRenaming] = useState(false);
   const [draftName, setDraftName] = useState("");
@@ -101,6 +161,24 @@ export const SetEditor = ({
       containerRef.current ? measure(containerRef.current) : [],
     onChange: onMarquee,
     onWhitespaceClick,
+  });
+
+  const cursor = useGridCursor({
+    displayOrder: (frameSet?.frames ?? []).map((f) => f.id as string),
+    focusTile: (id) => {
+      const el = containerRef.current?.querySelector(
+        `[data-frame-tile="${id}"] button`
+      );
+      (el as HTMLElement | null)?.focus();
+    },
+    measure: () =>
+      containerRef.current ? measure(containerRef.current) : [],
+    onMove: onMoveFrame
+      ? (id, dir) => onMoveFrame(id, dir)
+      : undefined,
+    onOpen: onFrameOpen,
+    onRemove: onRemoveFrames,
+    selection: selectionApi,
   });
 
   // DnD targets owned by the editor: the grid itself (append / empty-set
@@ -161,6 +239,7 @@ export const SetEditor = ({
     <div
       ref={containerRef}
       {...marqueeProps}
+      onKeyDown={cursor.onKeyDown}
       className="relative flex h-full flex-col gap-6 overflow-y-auto px-6 py-8 md:px-10"
     >
       {marqueeRect && (
@@ -223,41 +302,13 @@ export const SetEditor = ({
           </span>
         </div>
 
-        <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
-          {onVisibilityChange && (
-            <SetShareControls
-              setId={frameSet.id}
-              visibility={frameSet.visibility}
-              onVisibilityChange={onVisibilityChange}
-            />
-          )}
-          {frameSet.frames.length > 0 && (
-            <SelectModeToggle active={pinned} onToggle={onTogglePinned} />
-          )}
-          {frameSet.frames.length > 0 && (
-            <ActivateOnStage setId={frameSet.id} />
-          )}
-          {frameSet.frames.length > 0 && (
-            <Link
-              href={`/play?set=${encodeURIComponent(frameSet.id)}`}
-              className="focus-ring font-sans inline-flex items-center gap-1.5 border border-[color:var(--hairline)]/40 px-3 py-1.5 text-[10px] uppercase tracking-[0.22em] text-[color:var(--paper)]/85 transition-colors hover:border-[color:var(--paper)]/70 hover:text-[color:var(--paper)]"
-            >
-              <Play className="size-3" strokeWidth={1.5} />
-              preview
-            </Link>
-          )}
-          {onDelete && (
-            <button
-              type="button"
-              onClick={onDelete}
-              aria-label="delete set"
-              className="focus-ring inline-flex items-center gap-1.5 border border-[color:var(--hairline)]/40 px-3 py-1.5 font-sans text-[10px] uppercase tracking-[0.22em] text-[color:var(--stone)] transition-colors hover:border-[color:var(--signal)] hover:text-[color:var(--signal)]"
-            >
-              <Trash2 className="size-3" strokeWidth={1.5} />
-              delete
-            </button>
-          )}
-        </div>
+        <SetHeaderActions
+          frameSet={frameSet}
+          pinned={pinned}
+          onTogglePinned={onTogglePinned}
+          onVisibilityChange={onVisibilityChange}
+          onDelete={onDelete}
+        />
       </header>
 
       {frameSet.frames.length === 0 ? (
@@ -283,6 +334,8 @@ export const SetEditor = ({
               checked={isSelected(frame.id)}
               selecting={isSelecting}
               registerRef={registerTile(frame.id)}
+              tabIndex={cursor.tileTabIndex(frame.id)}
+              onFocusTile={cursor.onTileFocus}
               dnd={
                 getDragPayload && frameSet
                   ? {

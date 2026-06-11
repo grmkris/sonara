@@ -5,6 +5,7 @@ import { Play, Scissors } from "lucide-react";
 import Link from "next/link";
 import { useMemo, useRef } from "react";
 
+import { useGridCursor } from "@/hooks/use-grid-cursor";
 import { useMarqueeSelection } from "@/hooks/use-marquee-selection";
 import { useTileRegistry } from "@/hooks/use-tile-registry";
 import { formatDuration, formatMmSs } from "@/lib/format-time";
@@ -35,6 +36,11 @@ interface RecordingTimelineProps {
   marqueeEnabled?: boolean;
   // Drag frames OUT of the recording (toward sidebar sets / the open set).
   getDragPayload?: (frameId: string) => FrameDragPayload;
+  selectionApi: {
+    toggle: (id: string) => void;
+    rangeTo: (id: string) => void;
+    selectedFrameIds: string[];
+  };
 }
 
 const FRAME_SIZE_DESKTOP = 56;
@@ -135,6 +141,7 @@ export const RecordingTimeline = ({
   onWhitespaceClick,
   marqueeEnabled = true,
   getDragPayload,
+  selectionApi,
 }: RecordingTimelineProps) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const { measure, registerTile } = useTileRegistry();
@@ -145,6 +152,19 @@ export const RecordingTimeline = ({
       containerRef.current ? measure(containerRef.current) : [],
     onChange: onMarquee,
     onWhitespaceClick,
+  });
+  const cursor = useGridCursor({
+    displayOrder: (recording?.frames ?? []).map((f) => f.id as string),
+    focusTile: (id) => {
+      const el = containerRef.current?.querySelector(
+        `[data-frame-tile="${id}"] button`
+      );
+      (el as HTMLElement | null)?.focus();
+    },
+    measure: () =>
+      containerRef.current ? measure(containerRef.current) : [],
+    onOpen: onFrameOpen,
+    selection: selectionApi,
   });
   const frames = recording?.frames ?? [];
   const layout = useMemo(
@@ -178,6 +198,7 @@ export const RecordingTimeline = ({
     <div
       ref={containerRef}
       {...marqueeProps}
+      onKeyDown={cursor.onKeyDown}
       className="relative flex h-full flex-col gap-6 overflow-y-auto px-6 py-8 md:px-10"
     >
       {marqueeRect && (
@@ -248,6 +269,8 @@ export const RecordingTimeline = ({
               checked={isSelected(entry.frame.id)}
               selecting={isSelecting}
               registerRef={registerTile(entry.frame.id)}
+              tabIndex={cursor.tileTabIndex(entry.frame.id)}
+              onFocusTile={cursor.onTileFocus}
               getDragPayload={
                 getDragPayload
                   ? () => getDragPayload(entry.frame.id)

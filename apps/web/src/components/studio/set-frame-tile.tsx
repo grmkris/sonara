@@ -54,6 +54,9 @@ interface SetFrameTileProps {
     setId: string;
     getPayload: () => FrameDragPayload;
   };
+  // Roving tabindex (keyboard cursor) — exactly one tile is tab-reachable.
+  tabIndex?: 0 | -1;
+  onFocusTile?: (frameId: string) => void;
   // Edit affordances — only rendered when provided (read-only otherwise).
   onMovePrev?: (frameId: string) => void;
   onMoveNext?: (frameId: string) => void;
@@ -62,6 +65,78 @@ interface SetFrameTileProps {
   canMovePrev?: boolean;
   canMoveNext?: boolean;
 }
+
+// Hover-reveal edit strip (reorder arrows / cover / remove) — extracted so
+// the tile body stays under the complexity budget.
+const TileEditControls = ({
+  frameId,
+  isCover,
+  onMovePrev,
+  onMoveNext,
+  onRemove,
+  onSetCover,
+  canMovePrev,
+  canMoveNext,
+}: {
+  frameId: string;
+  isCover: boolean;
+  onMovePrev?: (frameId: string) => void;
+  onMoveNext?: (frameId: string) => void;
+  onRemove?: (frameId: string) => void;
+  onSetCover?: (frameId: string) => void;
+  canMovePrev?: boolean;
+  canMoveNext?: boolean;
+}) => (
+  <div className="pointer-events-none absolute inset-x-0 bottom-0 flex items-center justify-between gap-0.5 bg-gradient-to-t from-[color:var(--ink)]/95 to-transparent p-1 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
+    <div className="flex items-center gap-0.5">
+      {onMovePrev && (
+        <button
+          type="button"
+          onClick={() => onMovePrev(frameId)}
+          disabled={!canMovePrev}
+          aria-label="move earlier"
+          className="focus-ring pointer-events-auto rounded-sm p-0.5 text-[color:var(--paper)]/85 hover:text-[color:var(--paper)] disabled:opacity-30"
+        >
+          <ChevronLeft className="size-3.5" strokeWidth={1.5} />
+        </button>
+      )}
+      {onMoveNext && (
+        <button
+          type="button"
+          onClick={() => onMoveNext(frameId)}
+          disabled={!canMoveNext}
+          aria-label="move later"
+          className="focus-ring pointer-events-auto rounded-sm p-0.5 text-[color:var(--paper)]/85 hover:text-[color:var(--paper)] disabled:opacity-30"
+        >
+          <ChevronRight className="size-3.5" strokeWidth={1.5} />
+        </button>
+      )}
+    </div>
+    <div className="flex items-center gap-0.5">
+      {onSetCover && !isCover && (
+        <button
+          type="button"
+          onClick={() => onSetCover(frameId)}
+          aria-label="set as cover"
+          title="set as cover"
+          className="focus-ring pointer-events-auto rounded-sm p-0.5 text-[color:var(--paper)]/85 hover:text-[color:var(--paper)]"
+        >
+          <ImageIcon className="size-3.5" strokeWidth={1.5} />
+        </button>
+      )}
+      {onRemove && (
+        <button
+          type="button"
+          onClick={() => onRemove(frameId)}
+          aria-label="remove from set"
+          className="focus-ring pointer-events-auto rounded-sm p-0.5 text-[color:var(--paper)]/85 hover:text-[color:var(--signal)]"
+        >
+          <X className="size-3.5" strokeWidth={1.5} />
+        </button>
+      )}
+    </div>
+  </div>
+);
 
 // One frame within the set editor grid. Plain click inspects (or toggles
 // while selecting); the hover check-circle, cmd-click and touch long-press
@@ -79,6 +154,8 @@ export const SetFrameTile = ({
   selecting,
   registerRef,
   dnd,
+  tabIndex,
+  onFocusTile,
   onMovePrev,
   onMoveNext,
   onRemove,
@@ -190,6 +267,8 @@ export const SetFrameTile = ({
       )}
       <button
         type="button"
+        tabIndex={tabIndex}
+        onFocus={onFocusTile ? () => onFocusTile(frame.id) : undefined}
         onClick={handleClick}
         onDoubleClick={() => onOpen(frame.id)}
         // Shift-click must not smear browser text selection across the grid.
@@ -233,55 +312,16 @@ export const SetFrameTile = ({
       />
 
       {editable && (
-        <div className="pointer-events-none absolute inset-x-0 bottom-0 flex items-center justify-between gap-0.5 bg-gradient-to-t from-[color:var(--ink)]/95 to-transparent p-1 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
-          <div className="flex items-center gap-0.5">
-            {onMovePrev && (
-              <button
-                type="button"
-                onClick={() => onMovePrev(frame.id)}
-                disabled={!canMovePrev}
-                aria-label="move earlier"
-                className="focus-ring pointer-events-auto rounded-sm p-0.5 text-[color:var(--paper)]/85 hover:text-[color:var(--paper)] disabled:opacity-30"
-              >
-                <ChevronLeft className="size-3.5" strokeWidth={1.5} />
-              </button>
-            )}
-            {onMoveNext && (
-              <button
-                type="button"
-                onClick={() => onMoveNext(frame.id)}
-                disabled={!canMoveNext}
-                aria-label="move later"
-                className="focus-ring pointer-events-auto rounded-sm p-0.5 text-[color:var(--paper)]/85 hover:text-[color:var(--paper)] disabled:opacity-30"
-              >
-                <ChevronRight className="size-3.5" strokeWidth={1.5} />
-              </button>
-            )}
-          </div>
-          <div className="flex items-center gap-0.5">
-            {onSetCover && !isCover && (
-              <button
-                type="button"
-                onClick={() => onSetCover(frame.id)}
-                aria-label="set as cover"
-                title="set as cover"
-                className="focus-ring pointer-events-auto rounded-sm p-0.5 text-[color:var(--paper)]/85 hover:text-[color:var(--paper)]"
-              >
-                <ImageIcon className="size-3.5" strokeWidth={1.5} />
-              </button>
-            )}
-            {onRemove && (
-              <button
-                type="button"
-                onClick={() => onRemove(frame.id)}
-                aria-label="remove from set"
-                className="focus-ring pointer-events-auto rounded-sm p-0.5 text-[color:var(--paper)]/85 hover:text-[color:var(--signal)]"
-              >
-                <X className="size-3.5" strokeWidth={1.5} />
-              </button>
-            )}
-          </div>
-        </div>
+        <TileEditControls
+          frameId={frame.id}
+          isCover={isCover}
+          onMovePrev={onMovePrev}
+          onMoveNext={onMoveNext}
+          onRemove={onRemove}
+          onSetCover={onSetCover}
+          canMovePrev={canMovePrev}
+          canMoveNext={canMoveNext}
+        />
       )}
     </div>
   );

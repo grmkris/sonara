@@ -636,6 +636,7 @@ const StudioInner = () => {
         onWhitespaceClick={onWhitespaceClick}
         marqueeEnabled={!dragActive}
         getDragPayload={getRecordingDragPayload}
+        selectionApi={selection}
       />
     );
   };
@@ -750,6 +751,8 @@ const StudioInner = () => {
               onWhitespaceClick={onWhitespaceClick}
               marqueeEnabled={!dragActive}
               getDragPayload={getSetDragPayload}
+              selectionApi={selection}
+              onRemoveFrames={mutations.removeFrames}
             />
           )}
         </section>

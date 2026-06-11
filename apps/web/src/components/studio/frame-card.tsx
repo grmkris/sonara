@@ -35,6 +35,8 @@ interface FrameCardProps {
   registerRef?: (el: HTMLElement | null) => void;
   // Drag source only — recordings are frozen, nothing drops INTO a timeline.
   getDragPayload?: () => FrameDragPayload;
+  tabIndex?: 0 | -1;
+  onFocusTile?: (frameId: string) => void;
 }
 
 // A single 48×48 (configurable) thumbnail positioned absolutely on the
@@ -54,6 +56,8 @@ export const FrameCard = ({
   size,
   registerRef,
   getDragPayload,
+  tabIndex,
+  onFocusTile,
 }: FrameCardProps) => {
   const longPress = useLongPress(() => onCheck(frame.id));
   const wrapperRef = useRef<HTMLDivElement | null>(null);
@@ -139,6 +143,8 @@ export const FrameCard = ({
     >
       <button
         type="button"
+        tabIndex={tabIndex}
+        onFocus={onFocusTile ? () => onFocusTile(frame.id) : undefined}
         onClick={handleClick}
         onDoubleClick={() => onOpen(frame.id)}
         onMouseDown={(e) => {
