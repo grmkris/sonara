@@ -100,6 +100,31 @@ describe("migrateFrameSetsOnBoot", () => {
     expect(noir?.visibility).toBe("public");
     expect(noir?.frame_count).toBe(2);
 
+    // Builtins with a DECK_LOOK entry carry the baked look; those without
+    // keep null look columns (= app defaults, never frozen). All carry the
+    // style drift string.
+    const looks = await pool.query<{
+      deck_key: string;
+      look_cadence_calm_ms: number | null;
+      look_cadence_loud_ms: number | null;
+      look_intensity: number | null;
+      look_preset: string | null;
+      style_drift: string | null;
+    }>(`SELECT deck_key, look_preset, look_intensity, look_cadence_calm_ms,
+               look_cadence_loud_ms, style_drift
+        FROM frame_set WHERE origin = 'builtin'
+          AND deck_key IN ('noir', 'wild')`);
+    const noirLook = looks.rows.find((r) => r.deck_key === "noir");
+    expect(noirLook?.look_preset).toBe("noir");
+    expect(noirLook?.look_intensity).toBeCloseTo(0.15);
+    expect(noirLook?.look_cadence_calm_ms).toBe(12_000);
+    expect(noirLook?.look_cadence_loud_ms).toBe(7000);
+    expect(noirLook?.style_drift).toContain("noir");
+    const wildLook = looks.rows.find((r) => r.deck_key === "wild");
+    expect(wildLook?.look_preset).toBeNull();
+    expect(wildLook?.look_intensity).toBeNull();
+    expect(wildLook?.style_drift).toContain("wildlife");
+
     // Recording set id is derived from the lse_ uuid (deterministic).
     const recording = sets.rows.find((s) => s.origin === "recording");
     expect(recording?.id).toBe(typeIdToUuid(sessionId).uuid);
@@ -128,6 +153,24 @@ describe("migrateFrameSetsOnBoot", () => {
     );
     // 2 builtin (noir seed) + 3 recording members.
     expect(members.rows[0]?.n).toBe(2 + 3);
+  });
+
+  test("re-converges a drifted builtin look on rerun", async () => {
+    await pool.query(
+      `UPDATE frame_set SET look_preset = 'rave', look_intensity = 0.9
+       WHERE origin = 'builtin' AND deck_key = 'noir'`
+    );
+    await migrateFrameSetsOnBoot(noopLogger, pool);
+
+    const noir = await pool.query<{
+      look_intensity: number | null;
+      look_preset: string | null;
+    }>(
+      `SELECT look_preset, look_intensity FROM frame_set
+       WHERE origin = 'builtin' AND deck_key = 'noir'`
+    );
+    expect(noir.rows[0]?.look_preset).toBe("noir");
+    expect(noir.rows[0]?.look_intensity).toBeCloseTo(0.15);
   });
 
   test("appends newly seeded frames past max(position) on rerun", async () => {

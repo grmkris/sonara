@@ -70,9 +70,14 @@ const SET_COLUMNS = {
   frameCount: SCHEMA.frameSet.frameCount,
   id: SCHEMA.frameSet.id,
   liveSessionId: SCHEMA.frameSet.liveSessionId,
+  lookCadenceCalmMs: SCHEMA.frameSet.lookCadenceCalmMs,
+  lookCadenceLoudMs: SCHEMA.frameSet.lookCadenceLoudMs,
+  lookIntensity: SCHEMA.frameSet.lookIntensity,
+  lookPreset: SCHEMA.frameSet.lookPreset,
   name: SCHEMA.frameSet.name,
   origin: SCHEMA.frameSet.origin,
   status: SCHEMA.frameSet.status,
+  styleDrift: SCHEMA.frameSet.styleDrift,
   userId: SCHEMA.frameSet.userId,
   visibility: SCHEMA.frameSet.visibility,
 } as const;
@@ -187,6 +192,20 @@ const requireOwnedFrames = async (
 const canRead = (set: SetRow, userId: UserId | null): boolean =>
   set.visibility !== "private" || (userId !== null && set.userId === userId);
 
+// A look exists only when all four authored values are present (they're
+// written atomically by setLook / the boot converger).
+const toLook = (row: SetRow): FrameSetSummary["look"] =>
+  row.lookPreset !== null &&
+  row.lookIntensity !== null &&
+  row.lookCadenceCalmMs !== null &&
+  row.lookCadenceLoudMs !== null
+    ? {
+        cadence: { calm: row.lookCadenceCalmMs, loud: row.lookCadenceLoudMs },
+        intensity: row.lookIntensity,
+        preset: row.lookPreset,
+      }
+    : null;
+
 const toSummary = (row: SetRow, coverUrl: string | null): FrameSetSummary => ({
   coverUrl,
   createdAt: row.createdAt,
@@ -194,9 +213,11 @@ const toSummary = (row: SetRow, coverUrl: string | null): FrameSetSummary => ({
   frameCount: row.frameCount,
   id: row.id,
   liveSessionId: row.liveSessionId,
+  look: toLook(row),
   name: row.name,
   origin: row.origin,
   status: row.status,
+  styleDrift: row.styleDrift,
   visibility: row.visibility,
 });
 

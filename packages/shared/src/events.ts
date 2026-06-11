@@ -56,6 +56,22 @@ export const FrameSetVisibilitySchema = z.enum([
 ]);
 export type FrameSetVisibility = z.infer<typeof FrameSetVisibilitySchema>;
 
+// A set's optional baked look — render preset + reactivity intensity +
+// cadence bounds, applied as a unit when the set is picked (generalizes the
+// deck-only DECK_LOOK). `preset` is a plain string on the read side so a
+// renamed preset degrades (client guards with isKnownPreset) instead of
+// breaking every set read; writes validate against VISUAL_PRESET_NAMES in
+// sets.setLook.
+export const SetLookSchema = z.object({
+  cadence: z.object({
+    calm: z.number().int().positive(),
+    loud: z.number().int().positive(),
+  }),
+  intensity: z.number().min(0).max(1),
+  preset: z.string(),
+});
+export type SetLook = z.infer<typeof SetLookSchema>;
+
 // Lightweight summary for set lists (studio sidebar, the Now-Showing
 // dropdown). No per-frame data — just the aggregate + a presigned cover.
 export const FrameSetSummarySchema = z.object({
@@ -70,10 +86,14 @@ export const FrameSetSummarySchema = z.object({
   id: FrameSetIdSchema,
   // Recordings only: the live session that produced (or is producing) it.
   liveSessionId: LiveSessionIdSchema.nullable(),
+  // Authored look, or null. Applied on pick like a deck's DECK_LOOK.
+  look: SetLookSchema.nullable(),
   name: z.string(),
   origin: FrameSetOriginSchema,
   // recording = a live performance is still appending frames.
   status: z.enum(["recording", "final"]),
+  // Prompt-drift modifier for live generation after leaving this set.
+  styleDrift: z.string().nullable(),
   visibility: FrameSetVisibilitySchema,
 });
 export type FrameSetSummary = z.infer<typeof FrameSetSummarySchema>;

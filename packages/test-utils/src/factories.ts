@@ -96,9 +96,15 @@ export const insertSet = async (
     deckKey?: string;
     frames?: { id: ImageLibraryId; tMs?: number }[];
     liveSessionId?: LiveSessionId;
+    look?: {
+      cadence: { calm: number; loud: number };
+      intensity: number;
+      preset: string;
+    };
     name?: string;
     origin: "builtin" | "curated" | "recording";
     status?: "final" | "recording";
+    styleDrift?: string;
     userId?: UserId | null;
     visibility?: "private" | "public" | "unlisted";
   }
@@ -109,9 +115,14 @@ export const insertSet = async (
       deckKey: opts.deckKey,
       frameCount: opts.frames?.length ?? 0,
       liveSessionId: opts.liveSessionId,
+      lookCadenceCalmMs: opts.look?.cadence.calm ?? null,
+      lookCadenceLoudMs: opts.look?.cadence.loud ?? null,
+      lookIntensity: opts.look?.intensity ?? null,
+      lookPreset: opts.look?.preset ?? null,
       name: opts.name ?? `${opts.origin} set`,
       origin: opts.origin,
       status: opts.status ?? "final",
+      styleDrift: opts.styleDrift ?? null,
       userId: opts.userId ?? null,
       visibility: opts.visibility ?? "private",
     })
