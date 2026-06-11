@@ -1,17 +1,32 @@
 "use client";
 
 import type { LibraryFrame } from "@sonara/shared";
-import { Check, ChevronLeft, ChevronRight, ImageIcon, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, ImageIcon, X } from "lucide-react";
 import type { MouseEvent } from "react";
 
+import { TileCheck } from "@/components/studio/tile-check";
+import { useLongPress } from "@/hooks/use-long-press";
 import { cn } from "@/lib/utils";
+
+export interface TileClickMods {
+  shiftKey: boolean;
+  metaOrCtrl: boolean;
+}
 
 interface SetFrameTileProps {
   frame: LibraryFrame;
   index: number;
   selected: boolean;
   isCover: boolean;
-  onSelect: (frameId: string) => void;
+  // The click matrix lives at the page level — the tile only reports the
+  // gesture: onClick (with modifiers), onOpen (double-click — always
+  // inspects), onCheck (check-circle / long-press — always toggles).
+  onClick: (frameId: string, mods: TileClickMods) => void;
+  onOpen: (frameId: string) => void;
+  onCheck: (frameId: string) => void;
+  checked: boolean;
+  // True while a selection is in progress (or pinned) — keeps checks visible.
+  selecting: boolean;
   // Edit affordances — only rendered when provided (read-only otherwise).
   onMovePrev?: (frameId: string) => void;
   onMoveNext?: (frameId: string) => void;
@@ -19,58 +34,64 @@ interface SetFrameTileProps {
   onSetCover?: (frameId: string) => void;
   canMovePrev?: boolean;
   canMoveNext?: boolean;
-  // Multi-select mode — when on, a click toggles membership instead of
-  // opening the inspector.
-  selectMode?: boolean;
-  checked?: boolean;
-  onToggle?: (frameId: string, shiftKey: boolean) => void;
 }
 
-// One frame within the set editor grid. Click selects (opens the inspector).
-// When edit handlers are passed, hover reveals reorder / remove / set-cover
-// controls.
+// One frame within the set editor grid. Plain click inspects (or toggles
+// while selecting); the hover check-circle, cmd-click and touch long-press
+// enter selection; double-click always inspects. When edit handlers are
+// passed, hover reveals reorder / remove / set-cover controls.
 export const SetFrameTile = ({
   frame,
   index,
   selected,
   isCover,
-  onSelect,
+  onClick,
+  onOpen,
+  onCheck,
+  checked,
+  selecting,
   onMovePrev,
   onMoveNext,
   onRemove,
   onSetCover,
   canMovePrev,
   canMoveNext,
-  selectMode = false,
-  checked = false,
-  onToggle,
 }: SetFrameTileProps) => {
   const editable = !!(onMovePrev || onMoveNext || onRemove || onSetCover);
-  const isChecked = selectMode && checked;
-  const onClick = (e: MouseEvent<HTMLButtonElement>) => {
-    if (selectMode && onToggle) {
-      onToggle(frame.id, e.shiftKey);
+  const longPress = useLongPress(() => onCheck(frame.id));
+
+  const handleClick = (e: MouseEvent<HTMLButtonElement>) => {
+    if (longPress.consumeFired()) {
       return;
     }
-    onSelect(frame.id);
+    onClick(frame.id, { metaOrCtrl: e.metaKey || e.ctrlKey, shiftKey: e.shiftKey });
   };
+
   let stateClass =
     "border-[color:var(--hairline)]/40 hover:border-[color:var(--paper)]/70";
-  if (isChecked) {
+  if (checked) {
     stateClass = "border-[color:var(--signal)] ring-2 ring-[color:var(--signal)]";
   } else if (selected) {
     stateClass = "border-[color:var(--paper)] ring-2 ring-[color:var(--paper)]/40";
   }
   return (
-    <div className="group relative">
+    <div className="group relative" data-frame-tile={frame.id}>
       <button
         type="button"
-        onClick={onClick}
-        aria-pressed={selectMode ? isChecked : selected}
+        onClick={handleClick}
+        onDoubleClick={() => onOpen(frame.id)}
+        // Shift-click must not smear browser text selection across the grid.
+        onMouseDown={(e) => {
+          if (e.shiftKey) {
+            e.preventDefault();
+          }
+        }}
+        {...longPress.handlers}
+        aria-pressed={checked || selected}
         aria-label={`frame ${index + 1}: ${frame.prompt.slice(0, 80)}`}
         title={frame.prompt.slice(0, 120)}
         className={cn(
-          "focus-ring relative block aspect-square w-full overflow-hidden rounded-sm border bg-[color:var(--ink)]/40 transition-all duration-150",
+          "focus-ring relative block aspect-square w-full overflow-hidden rounded-sm border bg-[color:var(--ink)]/40 transition-all duration-150 [-webkit-touch-callout:none]",
           stateClass
         )}
       >
@@ -80,9 +101,10 @@ export const SetFrameTile = ({
           alt=""
           loading="lazy"
           decoding="async"
+          draggable={false}
           className="h-full w-full object-cover"
         />
-        <span className="absolute left-1 top-1 rounded-sm bg-[color:var(--ink)]/80 px-1 font-mono text-[8px] tracking-[0.12em] text-[color:var(--paper)]/85">
+        <span className="absolute left-7 top-1 rounded-sm bg-[color:var(--ink)]/80 px-1 font-mono text-[8px] tracking-[0.12em] text-[color:var(--paper)]/85">
           {index + 1}
         </span>
         {isCover && (
@@ -90,12 +112,13 @@ export const SetFrameTile = ({
             cover
           </span>
         )}
-        {isChecked && (
-          <span className="pointer-events-none absolute bottom-1 right-1 flex size-4 items-center justify-center rounded-sm bg-[color:var(--signal)] text-[color:var(--paper)]">
-            <Check className="size-3" strokeWidth={2.5} />
-          </span>
-        )}
       </button>
+
+      <TileCheck
+        checked={checked}
+        forceVisible={selecting}
+        onCheck={() => onCheck(frame.id)}
+      />
 
       {editable && (
         <div className="pointer-events-none absolute inset-x-0 bottom-0 flex items-center justify-between gap-0.5 bg-gradient-to-t from-[color:var(--ink)]/95 to-transparent p-1 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">

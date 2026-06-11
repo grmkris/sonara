@@ -9,20 +9,23 @@ import { formatDuration, formatMmSs } from "@/lib/format-time";
 
 import { FrameCard } from "./frame-card";
 import { SelectModeToggle } from "./select-mode-toggle";
+import type { TileClickMods } from "./set-frame-tile";
 import { SetShareControls } from "./set-share-controls";
 
 interface RecordingTimelineProps {
   recording: FrameSet | null;
   loading: boolean;
   selectedFrameId: string | null;
-  onSelectFrame: (frameId: string) => void;
   onMakeCut: () => void;
   onVisibilityChange: (visibility: FrameSetVisibility) => void;
-  // Multi-select curation mode (page-owned state).
-  selectMode: boolean;
-  selectedFrameIds: string[];
-  onToggleFrame: (frameId: string, shiftKey: boolean) => void;
-  onToggleSelectMode: () => void;
+  // Selection v2 (page-owned): the page resolves the click matrix.
+  onFrameClick: (frameId: string, mods: TileClickMods) => void;
+  onFrameOpen: (frameId: string) => void;
+  onFrameCheck: (frameId: string) => void;
+  isSelected: (frameId: string) => boolean;
+  isSelecting: boolean;
+  pinned: boolean;
+  onTogglePinned: () => void;
 }
 
 const FRAME_SIZE_DESKTOP = 56;
@@ -110,13 +113,15 @@ export const RecordingTimeline = ({
   recording,
   loading,
   selectedFrameId,
-  onSelectFrame,
   onMakeCut,
   onVisibilityChange,
-  selectMode,
-  selectedFrameIds,
-  onToggleFrame,
-  onToggleSelectMode,
+  onFrameClick,
+  onFrameOpen,
+  onFrameCheck,
+  isSelected,
+  isSelecting,
+  pinned,
+  onTogglePinned,
 }: RecordingTimelineProps) => {
   const frames = recording?.frames ?? [];
   const layout = useMemo(
@@ -168,7 +173,7 @@ export const RecordingTimeline = ({
             visibility={recording.visibility}
             onVisibilityChange={onVisibilityChange}
           />
-          <SelectModeToggle active={selectMode} onToggle={onToggleSelectMode} />
+          <SelectModeToggle active={pinned} onToggle={onTogglePinned} />
           <button
             type="button"
             onClick={onMakeCut}
@@ -198,13 +203,14 @@ export const RecordingTimeline = ({
               key={entry.frame.id}
               frame={entry.frame}
               selected={entry.frame.id === selectedFrameId}
-              onSelect={onSelectFrame}
+              onClick={onFrameClick}
+              onOpen={onFrameOpen}
+              onCheck={onFrameCheck}
+              checked={isSelected(entry.frame.id)}
+              selecting={isSelecting}
               leftPct={entry.leftPct}
               stackIdx={entry.stackIdx}
               size={FRAME_SIZE_DESKTOP}
-              selectMode={selectMode}
-              checked={selectedFrameIds.includes(entry.frame.id)}
-              onToggle={onToggleFrame}
             />
           ))}
         </div>

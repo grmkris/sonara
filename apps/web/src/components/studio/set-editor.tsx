@@ -8,6 +8,7 @@ import { useEffect, useState } from "react";
 
 import { cn } from "@/lib/utils";
 
+import type { TileClickMods } from "./set-frame-tile";
 import { ActivateOnStage } from "./activate-on-stage";
 import { ErrorState } from "./error-state";
 import { SelectModeToggle } from "./select-mode-toggle";
@@ -21,7 +22,6 @@ interface SetEditorProps {
   error: boolean;
   onRetry: () => void;
   selectedFrameId: string | null;
-  onSelectFrame: (frameId: string) => void;
   // Edit affordances — only active when provided (read-only otherwise).
   coverFrameId?: ImageLibraryId | null;
   onRename?: (name: string) => void;
@@ -30,15 +30,16 @@ interface SetEditorProps {
   onRemoveFrame?: (frameId: string) => void;
   onSetCover?: (frameId: string) => void;
   onVisibilityChange?: (visibility: FrameSetVisibility) => void;
-  // Multi-select curation mode (page-owned state) — optional so read-only
-  // embeds stay untouched.
-  selectMode?: boolean;
-  selectedFrameIds?: string[];
-  onToggleFrame?: (frameId: string, shiftKey: boolean) => void;
-  onToggleSelectMode?: () => void;
+  // Selection v2 (page-owned): the page resolves the click matrix; the editor
+  // just threads gestures + visual state.
+  onFrameClick: (frameId: string, mods: TileClickMods) => void;
+  onFrameOpen: (frameId: string) => void;
+  onFrameCheck: (frameId: string) => void;
+  isSelected: (frameId: string) => boolean;
+  isSelecting: boolean;
+  pinned: boolean;
+  onTogglePinned: () => void;
 }
-
-const EMPTY_SELECTION: string[] = [];
 
 const Hint = ({ children }: { children: string }) => (
   <div className="px-10 py-16 font-sans text-[10px] uppercase tracking-[0.22em] text-[color:var(--stone)]">
@@ -55,7 +56,6 @@ export const SetEditor = ({
   error,
   onRetry,
   selectedFrameId,
-  onSelectFrame,
   coverFrameId,
   onRename,
   onDelete,
@@ -63,10 +63,13 @@ export const SetEditor = ({
   onRemoveFrame,
   onSetCover,
   onVisibilityChange,
-  selectMode = false,
-  selectedFrameIds = EMPTY_SELECTION,
-  onToggleFrame,
-  onToggleSelectMode,
+  onFrameClick,
+  onFrameOpen,
+  onFrameCheck,
+  isSelected,
+  isSelecting,
+  pinned,
+  onTogglePinned,
 }: SetEditorProps) => {
   const [renaming, setRenaming] = useState(false);
   const [draftName, setDraftName] = useState("");
@@ -153,11 +156,8 @@ export const SetEditor = ({
               onVisibilityChange={onVisibilityChange}
             />
           )}
-          {onToggleSelectMode && frameSet.frames.length > 0 && (
-            <SelectModeToggle
-              active={selectMode}
-              onToggle={onToggleSelectMode}
-            />
+          {frameSet.frames.length > 0 && (
+            <SelectModeToggle active={pinned} onToggle={onTogglePinned} />
           )}
           {frameSet.frames.length > 0 && (
             <ActivateOnStage setId={frameSet.id} />
@@ -201,7 +201,11 @@ export const SetEditor = ({
               index={i}
               selected={frame.id === selectedFrameId}
               isCover={coverFrameId ? frame.id === coverFrameId : false}
-              onSelect={onSelectFrame}
+              onClick={onFrameClick}
+              onOpen={onFrameOpen}
+              onCheck={onFrameCheck}
+              checked={isSelected(frame.id)}
+              selecting={isSelecting}
               onMovePrev={
                 onMoveFrame ? (id) => onMoveFrame(id, "prev") : undefined
               }
@@ -212,9 +216,6 @@ export const SetEditor = ({
               onSetCover={onSetCover}
               canMovePrev={i > 0}
               canMoveNext={i < frameSet.frames.length - 1}
-              selectMode={selectMode}
-              checked={selectedFrameIds.includes(frame.id)}
-              onToggle={onToggleFrame}
             />
           ))}
         </div>

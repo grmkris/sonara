@@ -94,19 +94,17 @@ const HeaderCount = ({
 // Visibility gate for the floating selection bar — extracted so its
 // conditionals don't inflate StudioInner's complexity.
 const StudioSelectionBar = ({
-  selectMode,
   selectedFrameIds,
   onClear,
   onAdded,
   onCreatedFromSelection,
 }: {
-  selectMode: boolean;
   selectedFrameIds: string[];
   onClear: () => void;
   onAdded: (target: { id: string; name: string }) => void;
   onCreatedFromSelection: (set: FrameSetSummary) => void;
 }) => {
-  if (!selectMode || selectedFrameIds.length === 0) {
+  if (selectedFrameIds.length === 0) {
     return null;
   }
   return (
@@ -326,19 +324,18 @@ const StudioInner = () => {
     return pool.map((f) => f.id as string);
   }, [tab, recordingDetail, setDetail]);
 
-  // Hopping recordings/sets drops the selection (selectionResetKey) but keeps
-  // select mode — the multi-recording flow; switching tabs exits the mode.
+  // Hopping recordings/sets drops the selection but keeps the PIN — the
+  // multi-recording sweep flow. Selection itself is implicit: it exists
+  // whenever frames are selected (check / cmd-click / long-press / pill).
+  const selection = useFrameSelection({
+    displayOrder,
+    resetKey: `${tab}|${selectedRecordingId}|${selectedSetId}`,
+  });
   const {
     clear: clearSelection,
-    selectMode,
+    isSelecting,
     selectedFrameIds,
-    toggleFrame: onToggleFrame,
-    toggleMode: onToggleSelectMode,
-  } = useFrameSelection({
-    displayOrder,
-    modeResetKey: tab,
-    selectionResetKey: `${tab}|${selectedRecordingId}|${selectedSetId}`,
-  });
+  } = selection;
 
   // A batch landed in `target`: keep select mode (next recording, same set),
   // drop the selection, and refresh whatever shows the target's frame count.
@@ -384,7 +381,9 @@ const StudioInner = () => {
     [router]
   );
 
-  const onSelectFrame = useCallback(
+  // Open the inspector for a frame (double-click / plain click outside a
+  // selection context / Enter later).
+  const onFrameOpen = useCallback(
     (frameId: string) => {
       if (tab === "sets") {
         if (!selectedSetId) {
@@ -401,6 +400,33 @@ const StudioInner = () => {
     [router, tab, selectedSetId, selectedRecordingId]
   );
 
+  // THE click matrix — one resolution point for both surfaces:
+  // plain = inspect (or toggle while selecting); cmd/ctrl = toggle always;
+  // shift = range (no anchor → plain); check/long-press = toggle always.
+  const onFrameClick = useCallback(
+    (frameId: string, mods: { shiftKey: boolean; metaOrCtrl: boolean }) => {
+      if (mods.metaOrCtrl) {
+        selection.toggle(frameId);
+        return;
+      }
+      if (mods.shiftKey && isSelecting) {
+        selection.rangeTo(frameId);
+        return;
+      }
+      if (isSelecting) {
+        selection.toggle(frameId);
+        return;
+      }
+      onFrameOpen(frameId);
+    },
+    [selection, isSelecting, onFrameOpen]
+  );
+
+  const onFrameCheck = useCallback(
+    (frameId: string) => selection.toggle(frameId),
+    [selection]
+  );
+
   const onCloseInspector = useCallback(() => {
     if (tab === "sets") {
       router.replace(selectedSetId ? setsHref(selectedSetId) : "/studio?tab=sets");
@@ -412,6 +438,53 @@ const StudioInner = () => {
   const onBackToList = useCallback(() => {
     router.replace(tab === "sets" ? "/studio?tab=sets" : "/studio");
   }, [router, tab]);
+
+  // Esc clears the selection (else closes the inspector); cmd/ctrl+A selects
+  // the visible pool — but only once a selection exists or the pin is on, so
+  // the browser keeps its native select-all elsewhere. (Folds into the full
+  // keyboard cursor in C7.)
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (
+        target &&
+        (target.tagName === "INPUT" ||
+          target.tagName === "TEXTAREA" ||
+          target.isContentEditable)
+      ) {
+        return;
+      }
+      if (e.key === "Escape") {
+        if (selectedFrameIds.length > 0) {
+          e.preventDefault();
+          clearSelection();
+        } else if (selectedFrameId) {
+          e.preventDefault();
+          onCloseInspector();
+        }
+        return;
+      }
+      if (
+        (e.metaKey || e.ctrlKey) &&
+        e.key.toLowerCase() === "a" &&
+        isSelecting &&
+        displayOrder.length > 0
+      ) {
+        e.preventDefault();
+        selection.selectAll();
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [
+    selectedFrameIds.length,
+    selectedFrameId,
+    clearSelection,
+    onCloseInspector,
+    isSelecting,
+    displayOrder.length,
+    selection,
+  ]);
 
   // --- Set mutations (optimistic; sidebar refreshed via refreshSets) ---
   const onCreateSet = useCallback(
@@ -665,13 +738,15 @@ const StudioInner = () => {
         recording={recordingDetail}
         loading={recordingLoading}
         selectedFrameId={selectedFrameId}
-        onSelectFrame={onSelectFrame}
         onMakeCut={onMakeCut}
         onVisibilityChange={onRecordingVisibility}
-        selectMode={selectMode}
-        selectedFrameIds={selectedFrameIds}
-        onToggleFrame={onToggleFrame}
-        onToggleSelectMode={onToggleSelectMode}
+        onFrameClick={onFrameClick}
+        onFrameOpen={onFrameOpen}
+        onFrameCheck={onFrameCheck}
+        isSelected={selection.isSelected}
+        isSelecting={isSelecting}
+        pinned={selection.pinned}
+        onTogglePinned={selection.togglePinned}
       />
     );
   };
@@ -761,7 +836,6 @@ const StudioInner = () => {
               error={setDetailError}
               onRetry={retrySetDetail}
               selectedFrameId={selectedFrameId}
-              onSelectFrame={onSelectFrame}
               coverFrameId={setDetail?.coverFrameId ?? null}
               onRename={onRenameSet}
               onDelete={onDeleteSet}
@@ -769,10 +843,13 @@ const StudioInner = () => {
               onRemoveFrame={onRemoveFrame}
               onSetCover={onSetCover}
               onVisibilityChange={onSetVisibility}
-              selectMode={selectMode}
-              selectedFrameIds={selectedFrameIds}
-              onToggleFrame={onToggleFrame}
-              onToggleSelectMode={onToggleSelectMode}
+              onFrameClick={onFrameClick}
+              onFrameOpen={onFrameOpen}
+              onFrameCheck={onFrameCheck}
+              isSelected={selection.isSelected}
+              isSelecting={isSelecting}
+              pinned={selection.pinned}
+              onTogglePinned={selection.togglePinned}
             />
           )}
         </section>
@@ -787,7 +864,6 @@ const StudioInner = () => {
 
       {/* Floating multi-select action bar */}
       <StudioSelectionBar
-        selectMode={selectMode}
         selectedFrameIds={selectedFrameIds}
         onClear={clearSelection}
         onAdded={onSelectionAdded}
