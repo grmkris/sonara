@@ -1,19 +1,15 @@
 // Top-up pack catalogue + per-frame cost model. One source of truth for both
-// client (<TopUpButton> shows the prices; the anchor zone shows the per-frame
-// cost) and server (creates the Dodo checkout session; the credit gate debits
-// the right amount).
+// client and server (creates the Dodo checkout session; the credit gate
+// debits the right amount).
 //
-// Cost model is NO LONGER uniform: a standard text-to-image keyframe costs
-// FRAME_COST_CREDITS.text, but an image-anchor keyframe (heavier fal model)
-// costs FRAME_COST_CREDITS.anchor. So a 320-credit pack yields ~320 text
-// frames OR ~40 anchor frames. The credit gate (apps/server credit-gate.ts)
-// imports these so the server and the UI never disagree.
+// The cost model is uniform again: every keyframe — fresh t2i or chained
+// image-to-image (klein/9b/edit conditions on the previous frame) — costs
+// FRAME_COST_CREDITS.text. The 8-credit anchor tier died with flux-pro
+// ultra; chained frames cost ~3.7× t2i at fal but still land far under one
+// credit of revenue.
 export const FRAME_COST_CREDITS = {
-  anchor: 8,
   text: 1,
 } as const;
-
-export type FrameMode = keyof typeof FRAME_COST_CREDITS;
 
 export type DodoProductEnv =
   | "DODO_PRODUCT_STARTER"

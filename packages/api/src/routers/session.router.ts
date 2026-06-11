@@ -35,7 +35,7 @@ export interface SessionLike {
   setSource(source: SessionSourceState): void;
   goLive(prompt: string, seedFrameUrl: string | null): void;
   setImageAnchor(
-    input: { url: string; strength: number } | { clear: true }
+    input: { url: string } | { clear: true }
   ): void;
   setModel(model: TextModelKey): void;
   setResolution(resolution: RenderResolution): void;
@@ -87,7 +87,8 @@ const GoLiveInput = z.object({
 
 const SetImageAnchorInput = z.union([
   z.object({
-    strength: z.number().min(0).max(1),
+    // DEPRECATED (ultra-era) — tolerated so stale tabs don't 400; ignored.
+    strength: z.number().min(0).max(1).optional(),
     url: z.string().url(),
   }),
   z.object({ clear: z.literal(true) }),
@@ -239,7 +240,7 @@ export const sessionRouter = {
 
   // Image-anchor switch. The browser uploaded an image via the web service's
   // /api/upload/image route and got back a fal-hosted URL; this mutation
-  // pins that URL + strength preset onto the live Session, which fires an
+  // pins that URL onto the live Session as a one-shot chain seed; fires an
   // immediate triggerAnchor. Pass { clear: true } to remove the anchor.
   // Setting an anchor implicitly clears demo mode (anchor wins).
   setImageAnchor: sessionOs

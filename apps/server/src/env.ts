@@ -44,13 +44,10 @@ const envSchema = z.object({
   DODO_PRODUCT_PRO: z.string().default(""),
   DODO_PRODUCT_MAX: z.string().default(""),
 
-  // Optional — text-mode fal model. Every text-mode keyframe goes through
-  // this one text-to-image endpoint. No /edit pipeline.
+  // Optional — fal model for the offline deck generator (gen:deck). The live
+  // pipeline's models live in packages/shared TEXT_MODELS (incl. the /edit
+  // chaining endpoint).
   FAL_TEXT_MODEL: z.string().default("fal-ai/flux-2/klein/9b"),
-  // Image-anchor fal model — accepts image_url + image_prompt_strength.
-  // Separate code path from FAL_TEXT_MODEL (see anchor-provider.ts).
-  // Heavier model, billed at ANCHOR_FRAME_COST_CREDITS per frame.
-  FAL_ANCHOR_MODEL: z.string().default("fal-ai/flux-pro/v1.1-ultra"),
   // LLM endpoint used by scene-llm-expander (drift candidate generation) and
   // song-muse (track → prompt synthesis). Not used by voice — voice is
   // direct dictation with no LLM round-trip.

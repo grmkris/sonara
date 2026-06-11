@@ -66,7 +66,12 @@ const SetDemoModeInput = ByTarget.and(
 );
 const SetImageAnchorInput = z.union([
   ByTarget.and(
-    z.object({ strength: z.number().min(0).max(1), url: z.string().url() })
+    // `strength` is DEPRECATED (ultra-era) — tolerated so stale consoles
+    // don't 400; the session ignores it. Delete after soak.
+    z.object({
+      strength: z.number().min(0).max(1).optional(),
+      url: z.string().url(),
+    })
   ),
   ByTarget.and(z.object({ clear: z.literal(true) })),
 ]);
@@ -212,7 +217,7 @@ export const controlRouter = {
       session.setImageAnchor(
         "clear" in input
           ? { clear: true }
-          : { strength: input.strength, url: input.url }
+          : { url: input.url }
       );
     }),
 

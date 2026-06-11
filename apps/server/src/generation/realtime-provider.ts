@@ -17,7 +17,7 @@ import {
 //
 // Same text-to-image invariant as the queue path: no `image_url`, no identity
 // lock — a prompt change pivots the very next frame (the image-anchor path in
-// `anchor-provider.ts` is the only one that conditions on a reference image).
+// the queue path also handles chained /edit frames conditioning on the previous one).
 //
 // Lifecycle: ONE pool per Session. Connections open lazily on first send and
 // are reused across frames (keyed by fal model id, so an A/B model switch just

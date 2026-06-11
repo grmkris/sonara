@@ -56,11 +56,7 @@ export const dispatchControlAction = (
       return c.goLive({ ...target, prompt: action.prompt });
     }
     case "image.anchor.set": {
-      return c.setImageAnchor({
-        ...target,
-        strength: action.strength,
-        url: action.url,
-      });
+      return c.setImageAnchor({ ...target, url: action.url });
     }
     case "image.anchor.clear": {
       return c.setImageAnchor({ ...target, clear: true });

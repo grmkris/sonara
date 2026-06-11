@@ -77,7 +77,7 @@ export interface ControllableSession {
   goLive(prompt: string, seedFrameUrl: string | null): void;
   setSource(source: SessionSourceState): void;
   setImageAnchor(
-    input: { url: string; strength: number } | { clear: true }
+    input: { url: string } | { clear: true }
   ): void;
   setCurrentFrame(url: string): void;
   setCurrentSource(source: SessionSource): void;

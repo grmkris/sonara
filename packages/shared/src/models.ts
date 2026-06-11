@@ -29,6 +29,11 @@ export interface TextModelConfig {
   label: string;
   blurb: string;
   transport: "realtime" | "queue";
+  // Image-to-image variant of this model, when one exists. Presence of this
+  // field IS the "frames can chain" capability: the live pipeline conditions
+  // each keyframe on the previous one via this endpoint (queue transport
+  // only). Absent → plain t2i every frame.
+  editFalId?: string;
   // num_inference_steps. Realtime distills want 4-6; klein's documented min is 4.
   steps: number;
   // CFG scale. Omitted for models that don't take one (lightning-sdxl, klein).
@@ -39,7 +44,8 @@ export interface TextModelConfig {
 // is driven by TEXT_MODEL_KEYS above.
 export const TEXT_MODELS: Record<TextModelKey, TextModelConfig> = {
   "klein-9b": {
-    blurb: "queue · quality baseline",
+    blurb: "queue · quality default",
+    editFalId: "fal-ai/flux-2/klein/9b/edit",
     falId: "fal-ai/flux-2/klein/9b",
     label: "Klein 9B",
     steps: 4,

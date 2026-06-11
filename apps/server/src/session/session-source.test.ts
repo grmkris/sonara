@@ -5,7 +5,7 @@ import { LISTED_DECK_KEYS, UNLISTED_DECK_KEYS } from "@sonara/shared";
 import { typeIdGenerator, typeIdToUuid } from "@sonara/shared/typeid";
 import type { LiveSessionId, UserId } from "@sonara/shared/typeid";
 
-import { Session } from "./session";
+import { freshCadenceFromStability, Session } from "./session";
 
 // Unit tests for the source state machine (the demoMode/demoDeck successor):
 // anon pinning, the anon playback guard, and producer-report adoption. The
@@ -105,5 +105,21 @@ describe("Session source state", () => {
     const idle = s.getControlSnapshot();
     expect(idle.demoMode).toBe(false);
     expect(idle.demoDeck).toBeNull();
+  });
+});
+
+describe("freshCadenceFromStability", () => {
+  test("stability 0 → every frame fresh (never chains)", () => {
+    expect(freshCadenceFromStability(0)).toBe(0);
+  });
+
+  test("stability 1 → 24 chained frames per fresh one", () => {
+    expect(freshCadenceFromStability(1)).toBe(24);
+  });
+
+  test("interpolates and clamps", () => {
+    expect(freshCadenceFromStability(0.5)).toBe(12);
+    expect(freshCadenceFromStability(-1)).toBe(0);
+    expect(freshCadenceFromStability(2)).toBe(24);
   });
 });

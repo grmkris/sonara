@@ -2,12 +2,17 @@ import { z } from "zod";
 
 import { NowPlaying } from "./now-playing";
 
-// Image-anchor sub-object — a user-uploaded image that conditions the next
-// generation. Strength comes from a 3-preset client picker (style-only 0.3,
-// style+subject 0.55, lock-subject 0.8). URL is a fal.storage CDN address;
+// Image-anchor sub-object — now a one-shot CHAIN SEED: the next generated
+// keyframe conditions on this image (klein/9b/edit), then the chain takes
+// over and the anchor clears. URL is a fal.storage CDN address (or any
+// fal-fetchable absolute URL — the deck→live handoff passes the deck frame);
 // session-bound and dropped on disconnect (no DB row).
+//
+// `strength` is DEPRECATED (the ultra-era conditioning knob): tolerated on
+// the wire for one release so stale tabs' setImageAnchor calls don't 400;
+// the server ignores it. Delete both sides after soak.
 export const ImageAnchor = z.object({
-  strength: z.number().min(0).max(1),
+  strength: z.number().min(0).max(1).optional(),
   url: z.string(),
 });
 export type ImageAnchor = z.infer<typeof ImageAnchor>;

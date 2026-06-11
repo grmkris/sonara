@@ -43,7 +43,7 @@ export type SessionAction =
     }
   | { type: "demo.set"; on: boolean; deck: DeckKey | null }
   | { type: "session.goLive"; prompt: string; seedFrameUrl: string | null }
-  | { type: "image.anchor.set"; url: string; strength: number }
+  | { type: "image.anchor.set"; url: string }
   | { type: "image.anchor.clear" }
   | { type: "model.set"; model: TextModelKey }
   | { type: "resolution.set"; resolution: RenderResolution }
@@ -102,10 +102,7 @@ export const dispatchSessionAction = (
       });
     }
     case "image.anchor.set": {
-      return client.setImageAnchor({
-        strength: action.strength,
-        url: action.url,
-      });
+      return client.setImageAnchor({ url: action.url });
     }
     case "image.anchor.clear": {
       return client.setImageAnchor({ clear: true });
