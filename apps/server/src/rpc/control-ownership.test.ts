@@ -73,6 +73,7 @@ const registerSession = (
     liveSessionId,
     nowPlaying: null,
     scene: defaultScene,
+    source: { kind: "idle" },
     startedAt: Date.now(),
   };
   sessions.set(liveSessionId, {
@@ -89,8 +90,8 @@ const registerSession = (
     reset: () => {},
     setCurrentFrame: () => {},
     setCurrentSource: () => {},
-    setDemoMode: () => {},
     setImageAnchor: () => {},
+    setSource: () => {},
     stageId,
     startNewRun: () => typeIdGenerator("liveSession") as LiveSessionId,
     userId: typeIdToUuid(ownerId).uuid,

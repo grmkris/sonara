@@ -112,6 +112,7 @@ export const controlRouter = {
         const snap = s.getControlSnapshot();
         return {
           currentFrameUrl: snap.currentFrameUrl,
+          // Deprecated shims alongside source — web migrates in U4.
           demoDeck: snap.demoDeck,
           demoMode: snap.demoMode,
           jobStatus: snap.jobStatus,
@@ -119,6 +120,7 @@ export const controlRouter = {
           liveSessionId: snap.liveSessionId,
           nowPlaying: snap.nowPlaying,
           prompt: snap.scene.prompt,
+          source: snap.source,
           startedAt: snap.startedAt,
         };
       })
@@ -188,18 +190,18 @@ export const controlRouter = {
       session.applyPatch(input.patch, "client");
     }),
 
+  // DEPRECATED shim over setSource — old console bundles still call this
+  // after a deploy. Delete together with the WS setDemoMode shim.
   setDemoMode: protectedProcedure
     .input(SetDemoModeInput)
     .handler(async ({ context, input }) => {
       const session = await resolveTarget(context, input);
-      session.setDemoMode(input.on, input.deck);
-      // Relay the deck pick to the screen as a source switch — without this a
-      // remote console's deck pick only mutates server state and the screen
-      // keeps playing the old deck until its next reconnect. HTTP control
-      // path only (the screen's own WS picks don't come through here, so no
-      // echo). Demo-off stays with the existing stop flow.
       if (input.on && input.deck) {
+        session.setSource({ deck: input.deck, kind: "deck" });
         session.notifySource({ deck: input.deck, kind: "deck" });
+      } else if (!input.on) {
+        session.setSource({ kind: "idle" });
+        session.notifySource({ kind: "idle" });
       }
     }),
 
@@ -242,17 +244,28 @@ export const controlRouter = {
         ) {
           throw new ORPCError("NOT_FOUND", { message: "Unknown set." });
         }
+        // Optimistic server state first (so trigger() stops generating at
+        // once), then the relay; the screen's source.report confirms or
+        // corrects within one switch.
+        const label = input.source.label ?? set.name;
+        session.setSource({
+          kind: "set",
+          label,
+          setId: input.source.setId,
+        });
         session.notifySource({
           kind: "set",
-          label: input.source.label ?? set.name,
+          label,
           setId: input.source.setId,
         });
         return { ok: true };
       }
       if (input.source.kind === "deck") {
+        session.setSource({ deck: input.source.deck, kind: "deck" });
         session.notifySource({ deck: input.source.deck, kind: "deck" });
         return { ok: true };
       }
+      session.setSource({ kind: "idle" });
       session.notifySource({ kind: "idle" });
       return { ok: true };
     }),
@@ -282,12 +295,14 @@ export const controlRouter = {
           run: snap
             ? {
                 currentFrameUrl: snap.currentFrameUrl,
+                // Deprecated shims alongside source — web migrates in U4.
                 demoDeck: snap.demoDeck,
                 demoMode: snap.demoMode,
                 jobStatus: snap.jobStatus,
                 liveSessionId: snap.liveSessionId,
                 nowPlaying: snap.nowPlaying,
                 prompt: snap.scene.prompt,
+                source: snap.source,
                 startedAt: snap.startedAt,
               }
             : null,

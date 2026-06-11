@@ -12,14 +12,13 @@ import {
   TextModelKeySchema,
 } from "@sonara/shared";
 import type {
-  DeckKey,
   ImageAnchor as ImageAnchorType,
   RenderResolution,
   TextModelKey,
 } from "@sonara/shared";
 import { z } from "zod";
 
-import type { SessionSource } from "../session-registry";
+import type { SessionSource, SessionSourceState } from "../session-registry";
 
 // Structural interface for a live session. apps/server's Session class
 // implements this; the router never imports from apps/server so the package
@@ -33,7 +32,7 @@ export interface SessionLike {
     mimeType: string,
     trigger: "auto" | "manual"
   ): Promise<NowPlaying | null>;
-  setDemoMode(on: boolean, deck: DeckKey | null): void;
+  setSource(source: SessionSourceState): void;
   goLive(prompt: string, seedFrameUrl: string | null): void;
   setImageAnchor(
     input: { url: string; strength: number } | { clear: true }
@@ -48,8 +47,7 @@ export interface SessionLike {
   reset(): void;
   subscribe(signal?: AbortSignal): AsyncGenerator<ServerEvent>;
   getSnapshot(): SonaraSceneState;
-  isDemoMode(): boolean;
-  getDemoDeck(): DeckKey | null;
+  getSource(): SessionSourceState;
   getImageAnchor(): ImageAnchorType | null;
 }
 
@@ -117,27 +115,45 @@ const ReportFrameInput = z.object({
 
 // Companion of frame.report: WHAT is showing (live / deck / set / idle), not
 // just which frame. label is the human name (deck label / set name); setId
-// rides along for set playback so viewers can link to the permalink.
+// rides along for set playback so viewers can link to the permalink; deck
+// carries the key so the server can adopt deck reports into its
+// authoritative source state.
 const ReportSourceInput = z.object({
   source: z.object({
+    deck: DeckKeySchema.optional(),
     kind: z.enum(["live", "deck", "set", "idle"]),
     label: z.string().max(200).nullable(),
     setId: z.string().max(64).optional(),
   }),
 });
 
+// The server's authoritative source state, carried in the connect snapshot.
+const SourceStateOutput = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("live") }),
+  z.object({ kind: z.literal("idle") }),
+  z.object({ deck: DeckKeySchema, kind: z.literal("deck") }),
+  z.object({
+    kind: z.literal("set"),
+    label: z.string().nullable(),
+    setId: z.string(),
+  }),
+]);
+
 const StateOutput = z.object({
+  // DEPRECATED shims derived from `source` — kept one release so a stale tab
+  // (old web bundle) that still reads demoMode/demoDeck doesn't go black
+  // after a deploy. Delete with the setDemoMode shim below.
   demoDeck: DeckKeySchema.nullable(),
-  // Server-authoritative demo state. Anon sessions are pinned to demoMode=true
-  // at Session construction with a random deck; signed-in sessions reflect
-  // whatever the user last toggled. The client hydrates the zustand demo
-  // slice from this on every (re)connect — that's what starts the client-native
-  // demo loop (use-demo-frame-loop) for the right deck.
   demoMode: z.boolean(),
   // Server-authoritative image anchor. Set via setImageAnchor; survives a
   // tab refresh because the live Session keeps it in memory until disconnect.
   imageAnchor: ImageAnchor.nullable(),
   scene: SonaraSceneState,
+  // Server-authoritative playback source. Anon sessions are pinned to a
+  // random deck source at Session construction; signed-in sessions reflect
+  // the last command/report. The client hydrates its source slice from this
+  // on every (re)connect — that's what starts the client playback loop.
+  source: SourceStateOutput,
 });
 
 export const sessionRouter = {
@@ -210,11 +226,15 @@ export const sessionRouter = {
     context.session.applyPatch(input.patch, "client");
   }),
 
-  // DEMO mode switch. When on with a deck selected, the session pulls
-  // pre-generated images from image_library instead of calling fal. Toggling
-  // off resumes the standard fal path on the next trigger.
+  // DEPRECATED shim over setSource — kept one release for stale tabs that
+  // still send demo.set after a deploy. New clients report via reportSource;
+  // remote commands flow through control.setSource.
   setDemoMode: sessionOs.input(DemoModeInput).handler(({ context, input }) => {
-    context.session.setDemoMode(input.on, input.deck);
+    if (input.on && input.deck) {
+      context.session.setSource({ deck: input.deck, kind: "deck" });
+    } else if (!input.on) {
+      context.session.setSource({ kind: "idle" });
+    }
   }),
 
   // Image-anchor switch. The browser uploaded an image via the web service's
@@ -246,12 +266,16 @@ export const sessionRouter = {
   // on every reconnect) to cover the race where session.init()'s initial
   // publishes land before the events() subscribe has attached. Also useful for
   // post-drift resync later.
-  state: sessionOs.output(StateOutput).handler(({ context }) => ({
-    demoDeck: context.session.getDemoDeck(),
-    demoMode: context.session.isDemoMode(),
-    imageAnchor: context.session.getImageAnchor(),
-    scene: context.session.getSnapshot(),
-  })),
+  state: sessionOs.output(StateOutput).handler(({ context }) => {
+    const source = context.session.getSource();
+    return {
+      demoDeck: source.kind === "deck" ? source.deck : null,
+      demoMode: source.kind === "deck",
+      imageAnchor: context.session.getImageAnchor(),
+      scene: context.session.getSnapshot(),
+      source,
+    };
+  }),
 
   // Direct field-keyed PTT patch. The client routes each push-to-talk
   // transcript to a specific scene field (subject/environment/mood/palette),

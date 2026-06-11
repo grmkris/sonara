@@ -62,6 +62,7 @@ const makeFakeSession = (opts: {
     liveSessionId: opts.liveSessionId,
     nowPlaying: null,
     scene: { ...defaultScene, prompt: "neon koi" },
+    source: { kind: "live" },
     startedAt: Date.now(),
   };
   return {
@@ -74,8 +75,8 @@ const makeFakeSession = (opts: {
     reset: () => {},
     setCurrentFrame: () => {},
     setCurrentSource: () => {},
-    setDemoMode: () => {},
     setImageAnchor: () => {},
+    setSource: () => {},
     stageId: null,
     startNewRun: () => opts.liveSessionId,
     userId: opts.userId,

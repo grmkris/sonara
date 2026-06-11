@@ -18,4 +18,5 @@ export {
   type JobStatus,
   type SessionRegistry,
   type SessionSource,
+  type SessionSourceState,
 } from "./session-registry";

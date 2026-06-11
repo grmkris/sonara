@@ -3,6 +3,7 @@ import type {
   ControllableSession,
   ControlSnapshot,
   SessionSource,
+  SessionSourceState,
 } from "@sonara/api/server";
 import {
   DEFAULT_RESOLUTION,
@@ -245,10 +246,12 @@ export class Session implements ControllableSession {
   // watching for up to the whole grace window.
   private attached = true;
 
-  // DEMO mode state. Frame-driving is client-side now (use-demo-frame-loop);
-  // the server only tracks these to relay in the connect snapshot + anon pinning.
-  private demoMode = false;
-  private demoDeck: DeckKey | null = null;
+  // The authoritative playback source (demoMode/demoDeck successor): what
+  // this session should be showing. Frame-driving for deck/set sources is
+  // client-side; the server tracks this for the connect snapshot, anon
+  // pinning, and the trigger() generation gate. Mutated by control commands
+  // (optimistic) and adopted from producer source.report confirmations.
+  private source: SessionSourceState = { kind: "idle" };
 
   // Consecutive image-anchor generation failures. Resets on any anchor
   // success; once it hits ANCHOR_FAILURE_LIMIT we auto-clear the anchor so a
@@ -287,16 +290,16 @@ export class Session implements ControllableSession {
     this.realtimePool = new RealtimeImagePool(this.logger);
     this.scene = { ...defaultScene };
     this.lastGeneratedScene = { ...defaultScene };
-    // Anonymous sessions default to demo mode; the connect snapshot relays
-    // demoMode/demoDeck to the client, whose demo loop (use-demo-frame-loop)
-    // drives the frames locally. A random deck is suggested; the picker swaps
-    // it. Listed decks only — unlisted (show-specific) decks never land on
-    // strangers.
+    // Anonymous sessions are pinned to deck playback; the connect snapshot
+    // relays the source to the client, whose playback loop drives the frames
+    // locally. A random deck is suggested; the picker swaps it. Listed decks
+    // only — unlisted (show-specific) decks never land on strangers.
     if (opts.userId === null) {
-      this.demoMode = true;
-      this.demoDeck =
-        LISTED_DECK_KEYS[Math.floor(Math.random() * LISTED_DECK_KEYS.length)] ??
-        null;
+      const deck =
+        LISTED_DECK_KEYS[Math.floor(Math.random() * LISTED_DECK_KEYS.length)];
+      if (deck) {
+        this.source = { deck, kind: "deck" };
+      }
     }
     this.startPeriodic();
   }
@@ -388,15 +391,11 @@ export class Session implements ControllableSession {
     return this.scene;
   }
 
-  // Demo state accessors exposed for the bootstrap snapshot. Anon sessions
-  // are constructor-pinned with demoMode=true + a random deck, and the
-  // client has no other way to learn that — so the snapshot carries it.
-  isDemoMode(): boolean {
-    return this.demoMode;
-  }
-
-  getDemoDeck(): DeckKey | null {
-    return this.demoDeck;
+  // Source accessor exposed for the bootstrap snapshot. Anon sessions are
+  // constructor-pinned to a random deck source, and the client has no other
+  // way to learn that — so the snapshot carries it.
+  getSource(): SessionSourceState {
+    return this.source;
   }
 
   getImageAnchor(): ImageAnchor | null {
@@ -411,14 +410,16 @@ export class Session implements ControllableSession {
     return {
       currentFrameUrl: this.currentFrameUrl ?? this.lastFrameUrl,
       currentSource: this.currentSource,
-      demoDeck: this.demoDeck,
-      demoMode: this.demoMode,
+      // Deprecated derived shims — see ControlSnapshot.
+      demoDeck: this.source.kind === "deck" ? this.source.deck : null,
+      demoMode: this.source.kind === "deck",
       imageAnchor: this.scene.imageAnchor ?? null,
       jobStatus: this.lastJobStatus,
       lastFrameUrl: this.lastFrameUrl,
       liveSessionId: this.liveSessionId,
       nowPlaying: this.scene.nowPlaying ?? null,
       scene: this.scene,
+      source: this.source,
       startedAt: this.sessionStartAt,
     };
   }
@@ -434,6 +435,25 @@ export class Session implements ControllableSession {
   // switch, same producer-only contract as setCurrentFrame.
   setCurrentSource(source: SessionSource): void {
     this.currentSource = source;
+    // Adopt producer truth into the authoritative source so a screen-local
+    // pick (deck chip on /play) and a control command converge on the same
+    // state. Guards: anon stays pinned to playback kinds; deck reports from
+    // stale clients may lack the key — leave intent alone then; set reports
+    // need a setId.
+    if (
+      (source.kind === "live" || source.kind === "idle") &&
+      this.userId !== null
+    ) {
+      this.source = { kind: source.kind };
+    } else if (source.kind === "deck" && source.deck) {
+      this.source = { deck: source.deck, kind: "deck" };
+    } else if (source.kind === "set" && source.setId) {
+      this.source = {
+        kind: "set",
+        label: source.label ?? null,
+        setId: source.setId,
+      };
+    }
   }
 
   // Set or clear the live session's image anchor. Setting clears demoMode
@@ -459,17 +479,14 @@ export class Session implements ControllableSession {
     if (cur && cur.url === input.url && cur.strength === input.strength) {
       return;
     }
-    // Anchor wins over demo. setDemoMode doesn't touch anchor; if both are
+    // Anchor wins over playback. setSource doesn't touch anchor; if both are
     // attempted to be set simultaneously, the most recent mutation lands.
     // Uploading an anchor from a deck is also "going live" — remember the deck
     // so its style keeps nudging generation (deckStyle drift).
-    if (this.demoMode) {
-      if (this.demoDeck) {
-        this.lastDeck = this.demoDeck;
-      }
-      this.demoMode = false;
-      this.demoDeck = null;
+    if (this.source.kind === "deck") {
+      this.lastDeck = this.source.deck;
     }
+    this.source = { kind: "live" };
     // Fresh anchor → reset the failure streak from any prior anchor.
     this.anchorFailureCount = 0;
     this.scene = {
@@ -533,11 +550,10 @@ export class Session implements ControllableSession {
       });
       return;
     }
-    if (this.demoDeck) {
-      this.lastDeck = this.demoDeck;
+    if (this.source.kind === "deck") {
+      this.lastDeck = this.source.deck;
     }
-    this.demoMode = false;
-    this.demoDeck = null;
+    this.source = { kind: "live" };
     this.scene = { ...this.scene, prompt: clampPrompt(prompt) };
     if (seedFrameUrl) {
       this.handoffAnchor = true;
@@ -748,23 +764,25 @@ export class Session implements ControllableSession {
     return track;
   }
 
-  setDemoMode(on: boolean, deck: DeckKey | null): void {
-    // Anonymous sessions can switch decks but cannot leave demo mode. Letting
-    // them flip demoMode off would push trigger() into the fal path, where
-    // the userId-null guard would refuse to generate — the visualiser would
-    // just stop. Pin them on; the UI hides the Switch for anon anyway.
-    if (this.userId === null && !on) {
-      this.logger.info({}, "anon setDemoMode(false) ignored — pinned on");
+  setSource(source: SessionSourceState): void {
+    // Anonymous sessions can switch decks/sets but cannot leave client-driven
+    // playback. Letting them go live would push trigger() into the fal path,
+    // where the userId-null guard would refuse to generate — the visualiser
+    // would just stop; idle would blank it. Pin them to playback kinds.
+    if (
+      this.userId === null &&
+      (source.kind === "live" || source.kind === "idle")
+    ) {
+      this.logger.info(
+        { kind: source.kind },
+        "anon setSource ignored — pinned to playback"
+      );
       return;
     }
-    this.demoMode = on;
-    this.demoDeck = on ? deck : null;
-    this.logger.info(
-      { demoDeck: this.demoDeck, demoMode: on },
-      "demo mode set"
-    );
-    // Demo frames are driven client-side (use-demo-frame-loop); the client
-    // starts/stops its own loop on this toggle, so nothing to trigger here.
+    this.source = source;
+    this.logger.info({ source }, "source set");
+    // Deck/set frames are driven client-side; the client starts/stops its
+    // own playback loop on the relayed source.set, so nothing to trigger.
   }
 
   reset(): void {
@@ -834,9 +852,9 @@ export class Session implements ControllableSession {
       if (now - this.lastKeyframeAt < periodicMs) {
         return;
       }
-      // Demo is client-driven (use-demo-frame-loop); the server only
-      // auto-triggers LIVE generation, and never while in demo mode.
-      if (this.demoMode) {
+      // Deck/set playback is client-driven; the server only auto-triggers
+      // LIVE generation, never while a playback source is showing.
+      if (this.source.kind === "deck" || this.source.kind === "set") {
         return;
       }
       // No screen attached (reconnect grace window) → nobody is watching;
@@ -891,11 +909,12 @@ export class Session implements ControllableSession {
     // part of `job.status` / `generation.requested`.
     const reason = source;
 
-    // Demo is fully client-driven (apps/web/src/hooks/use-demo-frame-loop.ts):
-    // the browser cycles a static per-deck manifest, so demo works on slow/no
-    // internet and the server never generates in demo mode. This path runs
-    // only for live generation.
-    if (this.demoMode) {
+    // Deck/set playback is fully client-driven (the browser cycles static
+    // per-deck manifests or fetched set frames, so playback works on slow/no
+    // internet and the server never generates during it). This path runs
+    // only for live generation. Idle + the empty-prompt guard below keep
+    // idle sessions from generating, while a typed prompt still flows.
+    if (this.source.kind === "deck" || this.source.kind === "set") {
       return;
     }
 
@@ -909,10 +928,10 @@ export class Session implements ControllableSession {
       return;
     }
 
-    // Defence in depth. The constructor pins anon sessions to demoMode=true
-    // with a deck, so the short-circuit above always catches them. If that
-    // invariant ever breaks (someone clears demoMode programmatically), we
-    // refuse to enter the paid path rather than billing a phantom user.
+    // Defence in depth. The constructor pins anon sessions to a deck source,
+    // so the short-circuit above always catches them. If that invariant ever
+    // breaks (someone flips the source programmatically), we refuse to enter
+    // the paid path rather than billing a phantom user.
     if (this.userId === null) {
       this.logger.warn({ reason }, "anon trigger reached fal path — bailing");
       return;
