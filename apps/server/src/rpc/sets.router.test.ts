@@ -495,7 +495,7 @@ describe("addFrames atPosition (splice) + removeFrames", () => {
       setId,
     });
     expect(added).toBe(1);
-    expect(await orderOf(setId)).toEqual([A[0], A[3], A[1], A[2]]);
+    expect(await orderOf(setId)).toEqual([A[0], A[3], A[1], A[2]] as string[]);
     const set = await a.get({ setId });
     expect(set.frameCount).toBe(4);
   });
@@ -508,13 +508,13 @@ describe("addFrames atPosition (splice) + removeFrames", () => {
       frameIds: [A[1]] as ImageLibraryId[],
       setId,
     });
-    expect(await orderOf(setId)).toEqual([A[1], A[0]]);
+    expect(await orderOf(setId)).toEqual([A[1], A[0]] as string[]);
     await a.addFrames({
       atPosition: 99,
       frameIds: [A[2]] as ImageLibraryId[],
       setId,
     });
-    expect(await orderOf(setId)).toEqual([A[1], A[0], A[2]]);
+    expect(await orderOf(setId)).toEqual([A[1], A[0], A[2]] as string[]);
   });
 
   test("gap safety: splice at an index whose raw positions have gaps", async () => {
@@ -526,9 +526,9 @@ describe("addFrames atPosition (splice) + removeFrames", () => {
     });
     // removeFrame leaves a raw-position gap at index 1.
     await a.removeFrame({ frameId: A[1] as ImageLibraryId, setId });
-    expect(await orderOf(setId)).toEqual([A[0], A[2], A[3]]);
+    expect(await orderOf(setId)).toEqual([A[0], A[2], A[3]] as string[]);
     await a.addFrames({ atPosition: 1, frameIds: [extra], setId });
-    expect(await orderOf(setId)).toEqual([A[0], extra, A[2], A[3]]);
+    expect(await orderOf(setId)).toEqual([A[0], extra, A[2], A[3]] as string[]);
   });
 
   test("splice dedupes against members without moving them", async () => {
@@ -540,7 +540,7 @@ describe("addFrames atPosition (splice) + removeFrames", () => {
       setId,
     });
     expect(added).toBe(1);
-    expect(await orderOf(setId)).toEqual([extra, A[0], A[1], A[2]]);
+    expect(await orderOf(setId)).toEqual([extra, A[0], A[1], A[2]] as string[]);
   });
 
   test("multi-frame block keeps its order at the splice point", async () => {
@@ -549,7 +549,7 @@ describe("addFrames atPosition (splice) + removeFrames", () => {
     const e2 = await insertFrame(db, { userId: userA });
     await a.addFrames({ frameIds: [A[0], A[1]] as ImageLibraryId[], setId });
     await a.addFrames({ atPosition: 1, frameIds: [e1, e2], setId });
-    expect(await orderOf(setId)).toEqual([A[0], e1, e2, A[1]]);
+    expect(await orderOf(setId)).toEqual([A[0], e1, e2, A[1]] as string[]);
   });
 
   test("splice respects the freeze policy and frame ownership", async () => {
@@ -581,7 +581,7 @@ describe("addFrames atPosition (splice) + removeFrames", () => {
       setId,
     });
     expect(removed).toBe(2);
-    expect(await orderOf(setId)).toEqual([A[1]]);
+    expect(await orderOf(setId)).toEqual([A[1]] as string[]);
     const set = await a.get({ setId });
     expect(set.frameCount).toBe(1);
     // Frozen recordings reject batch removal too.
@@ -606,12 +606,12 @@ describe("addFrames atPosition (splice) + removeFrames", () => {
       frameIds: [A[1], A[2]] as ImageLibraryId[],
       setId,
     });
-    expect(await orderOf(setId)).toEqual([A[0], A[3]]);
+    expect(await orderOf(setId)).toEqual([A[0], A[3]] as string[]);
     await a.addFrames({
       atPosition: 1,
       frameIds: [A[1], A[2]] as ImageLibraryId[],
       setId,
     });
-    expect(await orderOf(setId)).toEqual([A[0], A[1], A[2], A[3]]);
+    expect(await orderOf(setId)).toEqual([A[0], A[1], A[2], A[3]] as string[]);
   });
 });
