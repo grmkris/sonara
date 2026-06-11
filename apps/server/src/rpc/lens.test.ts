@@ -19,7 +19,7 @@ import { makeServerCtx } from "@sonara/test-utils/orpc";
 import { getTestDb } from "@sonara/test-utils/test-db";
 import type { TestDb } from "@sonara/test-utils/test-db";
 
-import { stageRooms } from "../onchain/stage-rooms";
+import { stageRooms } from "../stage/stage-rooms";
 import type { ServerHttpContext } from "./procedures";
 import { setsRouter } from "./sets.router";
 

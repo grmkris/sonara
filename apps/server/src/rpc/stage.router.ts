@@ -3,11 +3,11 @@ import { MAX_STAGE_PROMPT_CHARS, StageKnobName } from "@sonara/shared";
 import { LiveSessionIdSchema, StageIdSchema } from "@sonara/shared/typeid";
 import { z } from "zod";
 
-import { stageActions } from "../onchain/stage-actions";
-import { publishActivity } from "../onchain/stage-feed";
-import { stageRooms } from "../onchain/stage-rooms";
-import { stageState } from "../onchain/stage-state";
-import { stageThrottle } from "../onchain/stage-throttle";
+import { stageActions } from "../stage/stage-actions";
+import { publishActivity } from "../stage/stage-feed";
+import { stageRooms } from "../stage/stage-rooms";
+import { stageState } from "../stage/stage-state";
+import { stageThrottle } from "../stage/stage-throttle";
 import { getOwnedStage } from "../stage/stage-service";
 import { resolveOwnedSession } from "./owned-session";
 import { resolveOwnedStageRun } from "./owned-stage";

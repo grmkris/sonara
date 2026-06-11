@@ -52,7 +52,7 @@ import {
   ensureRecordingSet,
   finalizeRecordingSet,
 } from "../library/recording-set";
-import { stageRooms } from "../onchain/stage-rooms";
+import { stageRooms } from "../stage/stage-rooms";
 import { recognizeClip } from "../recognition/recognition.service";
 import { semanticDiff } from "./semantic-diff";
 

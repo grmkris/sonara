@@ -4,7 +4,7 @@ import type { Database } from "@sonara/db";
 import type { StageId, UserId } from "@sonara/shared/typeid";
 import { and, eq } from "drizzle-orm";
 
-import { mintCode } from "../onchain/stage-rooms";
+import { mintCode } from "./stage-rooms";
 
 // Durable stage rows — the named places an account performs at
 // (docs/rooms-and-roles-plan.md rev 2). This service owns identity only;

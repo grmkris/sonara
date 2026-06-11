@@ -21,13 +21,13 @@ import { seedLibraryOnBoot } from "./db/library-boot-seed";
 import { env } from "./env";
 import { uploadImage } from "./http/upload";
 import { logger } from "./lib/logger";
-import { bindStageActions, startStageActions } from "./onchain/stage-actions";
+import { bindStageActions, startStageActions } from "./stage/stage-actions";
 import {
   bindStagePublisher,
   stageFeedHooks,
   tryUpgradeStageFeed,
-} from "./onchain/stage-feed";
-import type { StageFeedWsData } from "./onchain/stage-feed";
+} from "./stage/stage-feed";
+import type { StageFeedWsData } from "./stage/stage-feed";
 import { appRouter } from "./rpc/app.router";
 import { SessionManager } from "./session/session-manager";
 
@@ -153,7 +153,7 @@ const server = Bun.serve<WsData, never>({
     const url = new URL(req.url);
     // Public per-room stage feed — no ticket; the room code is the capability
     // (same trust model as stage.snapshot). All logic lives in
-    // onchain/stage-feed.ts.
+    // stage/stage-feed.ts.
     if (url.pathname === "/ws/stage") {
       return tryUpgradeStageFeed(req, srv);
     }

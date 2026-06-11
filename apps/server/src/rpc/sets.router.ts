@@ -35,8 +35,8 @@ import {
 } from "drizzle-orm";
 import { z } from "zod";
 
-import { stageRooms } from "../onchain/stage-rooms";
-import { stageState } from "../onchain/stage-state";
+import { stageRooms } from "../stage/stage-rooms";
+import { stageState } from "../stage/stage-state";
 import { FRAME_COLUMNS, frameReadUrl, rowToFrame } from "./frame-mapping";
 import { protectedProcedure, publicProcedure } from "./procedures";
 
