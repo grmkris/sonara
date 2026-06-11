@@ -15,8 +15,8 @@ const harness = (dwellMs = 1000, maxLen = 20) => {
     onDrop: (e) => dropped.push(e.text),
     onPlay: (e) => played.push(e.text),
   });
-  const enq = (text: string, who = text, tip = 0n) =>
-    q.enqueue({ enqueuedAt: t, text, tip, who });
+  const enq = (text: string, who = text) =>
+    q.enqueue({ enqueuedAt: t, text, who });
   const advance = (ms: number) => {
     t += ms;
   };
@@ -40,15 +40,18 @@ describe("PromptQueue", () => {
     expect(h.played).toEqual(["a", "b", "c"]);
   });
 
-  test("a tip jumps ahead of free prompts already queued", () => {
+  test("plain FIFO — submissions play in arrival order", () => {
     const h = harness(1000);
-    h.enq("free1");
-    h.enq("free2"); // queued behind nothing-playing rules: free1 plays, free2 queued
-    h.enq("paid", "whale", 1000n); // should jump to front of the queue
-    expect(h.played).toEqual(["free1"]);
+    h.enq("first");
+    h.enq("second");
+    h.enq("third", "other");
+    expect(h.played).toEqual(["first"]);
     h.advance(1000);
     h.tick();
-    expect(h.played).toEqual(["free1", "paid"]);
+    expect(h.played).toEqual(["first", "second"]);
+    h.advance(1000);
+    h.tick();
+    expect(h.played).toEqual(["first", "second", "third"]);
   });
 
   test("dedup rejects identical text; per-sender re-submit replaces", () => {
@@ -72,7 +75,7 @@ describe("PromptQueue", () => {
     expect(h.played).toEqual(["a", "b"]);
   });
 
-  test("overflow drops lowest-priority tail, not silently", () => {
+  test("overflow drops the tail, not silently", () => {
     const h = harness(1000, 3);
     h.enq("playing");
     for (const t of ["q1", "q2", "q3", "q4", "q5"]) {

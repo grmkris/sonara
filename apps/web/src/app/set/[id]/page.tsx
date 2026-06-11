@@ -10,7 +10,6 @@ import { toast } from "sonner";
 
 import { AppNavLinks } from "@/components/app-nav";
 import { Mark } from "@/components/brand/mark";
-import { BlockPulse } from "@/components/stage/block-pulse";
 import { Seismograph } from "@/components/stage/seismograph";
 import { StageJoinQr } from "@/components/stage/stage-join-qr";
 import { TxTicker } from "@/components/stage/tx-ticker";
@@ -18,7 +17,6 @@ import { SonaraCanvas } from "@/components/visualizer/canvas/sonara-canvas";
 import { FullscreenToggle } from "@/components/visualizer/controls/fullscreen-toggle";
 import { HideToggle } from "@/components/visualizer/controls/hide-toggle";
 import { MusicSource } from "@/components/visualizer/controls/music-source";
-import { publicEnv } from "@/env";
 import { useAudioFeatures } from "@/hooks/use-audio-features";
 import type { AudioSource } from "@/hooks/use-audio-features";
 import { usePlaybackLoop } from "@/hooks/use-playback-loop";
@@ -292,25 +290,21 @@ const useViewerAudio = (): {
   return { audioSource, setAudioSource };
 };
 
-// The Monad wire, viewer edition: live on-chain activity over the public
-// per-room WS feed (/ws/stage — the room code is the capability, no auth),
-// composed from the projector overlay's own exported pieces. Mounts only
-// while the host's stage is open; pairs with the StageJoinQr bottom-right so
-// anyone looking at this screen can scan in and drive what they're seeing.
+// The crowd wire, viewer edition: live activity over the public per-room WS
+// feed (/ws/stage — the room code is the capability, no auth), composed from
+// the projector overlay's own exported pieces. Mounts only while the host's
+// stage is open; pairs with the StageJoinQr bottom-right so anyone looking
+// at this screen can scan in and drive what they're seeing.
 const ViewerWire = ({ room }: { room: string }) => {
   const feed = useStageFeed(room);
   return (
     <div aria-hidden className="pointer-events-none absolute inset-0 z-20">
-      <BlockPulse
-        blockNumber={feed.blockNumber}
-        className="absolute left-4 top-[150px] md:left-10 md:top-[160px]"
-      />
       <div className="absolute bottom-24 left-4 flex w-[340px] max-w-[80vw] flex-col gap-2 md:bottom-28 md:left-10">
         <div aria-hidden className="paper-scrim absolute -inset-4 -z-10" />
         <TxTicker events={feed.activity} max={6} />
         <Seismograph height={22} ring={feed.ring} />
         <p className="font-mono text-[9px] uppercase tracking-[0.26em] text-[color:var(--stone)] tabular-nums">
-          wire · {feed.txCount} tx · room {room}
+          wire · {feed.txCount} taps · room {room}
         </p>
       </div>
     </div>
@@ -344,7 +338,7 @@ const lensViewModel = (lens: FoundLens, replaySet: ReplaySet | null) => {
     name: lens.set?.name ?? "live session",
     nowPlaying: live?.nowPlaying ?? null,
     stageRoom:
-      stage?.open && publicEnv.NEXT_PUBLIC_SONARA_STAGE_CONTRACT
+      stage?.open
         ? stage.room
         : null,
   };

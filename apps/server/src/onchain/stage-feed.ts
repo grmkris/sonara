@@ -5,25 +5,23 @@ import type {
 } from "@sonara/shared";
 import type { ServerWebSocket } from "bun";
 
-import { env } from "../env";
 import { logger } from "../lib/logger";
-import { deriveAgentAddress, StageActivityLog } from "./stage-activity";
+import { StageActivityLog } from "./stage-activity";
 import type { StageActivityInput } from "./stage-activity";
 import { stageRooms } from "./stage-rooms";
 import { stageState } from "./stage-state";
 
 // The public per-room stage feed: a raw read-only WebSocket at /ws/stage that
-// pushes StageFeedMessage frames (activity ticker, block heartbeat, queue,
-// counters) to the projector overlay, audience phones, and the host panel.
+// pushes StageFeedMessage frames (activity ticker, queue, counters) to the
+// projector overlay, audience phones, and the host panel.
 //
 // Deliberately a SEPARATE socket from /ws (the oRPC session wire): the
 // rooms-and-roles plan's transport rule is "never raw frames on the oRPC
 // socket", and the room code — not an auth ticket — is the capability here,
-// exactly like stage.snapshot. Bun's native pub/sub is the fan-out:
-// each socket subscribes to its room topic + the global block topic; the
-// listener publishes via server.publish. Everything lives in this module so
-// server.ts only gains delegation lines (that file is being rewritten by the
-// rooms refactor).
+// exactly like stage.snapshot. Bun's native pub/sub is the fan-out: each
+// socket subscribes to its room topic; stage-actions/the stage router publish
+// via server.publish. Everything lives in this module so server.ts only gains
+// delegation lines.
 
 export interface StageFeedWsData {
   kind: "stage";
@@ -39,15 +37,12 @@ interface StagePublisher {
   publish(topic: string, data: string): number;
 }
 
-const TOPIC_BLOCKS = "stage:blocks";
 const topicFor = (room: string): string => `stage:${room}`;
 
-export const stageActivity = new StageActivityLog({
-  agentAddress: deriveAgentAddress(env.MCP_AGENT_KEY),
-});
+export const stageActivity = new StageActivityLog({});
 
 // server.publish needs the Bun.Server instance, which doesn't exist yet when
-// the stage listener is constructed — so publishes no-op until server.ts binds
+// the stage modules are constructed — so publishes no-op until server.ts binds
 // it after Bun.serve returns. Activity is still RECORDED before binding; the
 // backlog rides the next hello frame, so nothing is lost.
 let publisher: StagePublisher | null = null;
@@ -59,7 +54,7 @@ const send = (room: string, msg: StageFeedMessage): void => {
   publisher?.publish(topicFor(room), JSON.stringify(msg));
 };
 
-// Record + fan out one decoded on-chain action, plus the updated counters.
+// Record + fan out one crowd action, plus the updated counter.
 // Call AFTER stageState.bump so the count frame reflects this event.
 export const publishActivity = (
   room: string,
@@ -69,7 +64,6 @@ export const publishActivity = (
   send(room, { event, type: "activity" });
   const live = stageState.get(room);
   send(room, {
-    revenueUnits: live.revenueUnits,
     txCount: live.txCount,
     type: "count",
   });
@@ -78,17 +72,6 @@ export const publishActivity = (
 
 export const publishQueue = (room: string, queue: StageQueueSnapshot): void => {
   send(room, { queue, type: "queue" });
-};
-
-// Monad block heartbeat (~400ms). Tracked so hello frames can carry the last
-// block immediately instead of waiting for the next tick.
-let lastBlock: number | null = null;
-export const publishBlock = (blockNumber: bigint): void => {
-  lastBlock = Number(blockNumber);
-  publisher?.publish(
-    TOPIC_BLOCKS,
-    JSON.stringify({ number: lastBlock, type: "block" } satisfies StageFeedMessage)
-  );
 };
 
 // Live feed sockets per room, so closing a stage can close its watchers.
@@ -137,15 +120,12 @@ export const stageFeedHooks = {
     }
     set.add(ws);
     ws.subscribe(topicFor(room));
-    ws.subscribe(TOPIC_BLOCKS);
     const live = stageState.get(room);
     ws.send(
       JSON.stringify({
         allowPrompts: binding.allowPrompts,
-        block: lastBlock,
         queue: { nowPlaying: live.nowPlaying, upNext: live.upNext },
         recent: stageActivity.recent(room),
-        revenueUnits: live.revenueUnits,
         room,
         txCount: live.txCount,
         type: "hello",

@@ -22,7 +22,6 @@
     "@orpc/client": "^1.14.5",
     "@sonara/api": "workspace:*",
     "@sonara/logger": "workspace:*",
-    "@sonara/onchain": "workspace:*",
     "@sonara/shared": "workspace:*",
     "@tanstack/react-query": "^5.101.0",
     "better-auth": "^1.6.15",

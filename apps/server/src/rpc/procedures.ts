@@ -3,7 +3,9 @@ import type { ApiContext } from "@sonara/api/server";
 import type { Database } from "@sonara/db";
 import type { UserId } from "@sonara/shared/typeid";
 
-export type ServerHttpContext = ApiContext<Database>;
+// `ip` is the gateway-provided caller address (X-Forwarded-For) — null in
+// local dev without a proxy. Used by the public crowd-stage throttles.
+export type ServerHttpContext = ApiContext<Database> & { ip: string | null };
 
 // Procedure primitives for the HTTP (oRPC over fetch) surface, bound to the
 // concrete server DB type. The realtime WebSocket surface uses its own

@@ -33,7 +33,6 @@
     "@sonara/api": "workspace:*",
     "@sonara/db": "workspace:*",
     "@sonara/logger": "workspace:*",
-    "@sonara/onchain": "workspace:*",
     "@sonara/shared": "workspace:*",
     "better-auth": "^1.6.15",
     "dodopayments": "^2.36.0",

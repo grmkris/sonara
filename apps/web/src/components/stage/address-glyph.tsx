@@ -1,18 +1,25 @@
-// Deterministic mini-mark for an on-chain address, so repeat participants
-// become recognizable characters in the wire feed without avatars. Hue + one
-// of six proofreader-style strokes derived from the hex — desaturated so it
+// Deterministic mini-mark for a crowd handle, so repeat participants become
+// recognizable characters in the wire feed without avatars. Hue + one of six
+// proofreader-style strokes derived from a string hash — desaturated so it
 // sits inside the ink/paper palette and never competes with --signal.
 
-export const glyphFor = (address: string): { hue: number; mark: number } => {
-  const hex = address.toLowerCase().replace(/^0x/u, "").padEnd(10, "0");
-  return {
-    hue: Number.parseInt(hex.slice(0, 6), 16) % 360,
-    mark: Number.parseInt(hex.slice(6, 8), 16) % 6,
-  };
+// Simple multiplicative string hash — handles are short opaque strings, not
+// hex. No bitwise ops (lint) — Math.imul + abs keeps it deterministic.
+const hash = (s: string): number => {
+  let h = 7;
+  for (const ch of s) {
+    h = Math.abs(Math.imul(h, 31) + (ch.codePointAt(0) ?? 0));
+  }
+  return h;
 };
 
-export const shortAddress = (address: string): string =>
-  `${address.slice(0, 6)}…${address.slice(-4)}`;
+export const glyphFor = (who: string): { hue: number; mark: number } => {
+  const h = hash(who.toLowerCase());
+  return {
+    hue: h % 360,
+    mark: Math.floor(h / 360) % 6,
+  };
+};
 
 const MARKS = [
   // dot
@@ -29,16 +36,16 @@ const MARKS = [
   <path d="M2.5 4.4h7M2.5 7.6h7" key="dashes" />,
 ];
 
-export const AddressGlyph = ({
-  address,
+export const HandleGlyph = ({
+  who,
   className,
   size = 12,
 }: {
-  address: string;
+  who: string;
   className?: string;
   size?: number;
 }) => {
-  const { hue, mark } = glyphFor(address);
+  const { hue, mark } = glyphFor(who);
   return (
     <svg
       aria-hidden

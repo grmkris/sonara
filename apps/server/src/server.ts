@@ -15,17 +15,13 @@ import type { LiveSessionId, UserId } from "@sonara/shared/typeid";
 import type { ServerWebSocket } from "bun";
 import { Hono } from "hono";
 
-import { isAddress } from "viem";
-
 import { getAuth } from "./auth/auth";
 import { migrateFrameSetsOnBoot } from "./db/frame-set-boot-migrate";
 import { seedLibraryOnBoot } from "./db/library-boot-seed";
 import { env } from "./env";
 import { uploadImage } from "./http/upload";
 import { logger } from "./lib/logger";
-import { createStageListener } from "./onchain/stage-listener";
-import { createStageMcp } from "./onchain/mcp-server";
-import { stageFaucet } from "./onchain/stage-faucet";
+import { bindStageActions, startStageActions } from "./onchain/stage-actions";
 import {
   bindStagePublisher,
   stageFeedHooks,
@@ -69,33 +65,16 @@ const rpcHandler = new RPCHandler(appRouter);
 // a user's own live session from a second device (the operator remote).
 const manager = new SessionManager(logger);
 
-// Monad "stage": when a contract address is configured, subscribe to its
-// on-chain events and fold them into the live Sessions (the crowd / AI agents
-// drive the visuals). Dormant when SONARA_STAGE_CONTRACT is empty.
-const stageListener =
-  env.SONARA_STAGE_CONTRACT && isAddress(env.SONARA_STAGE_CONTRACT)
-    ? createStageListener({
-        contract: env.SONARA_STAGE_CONTRACT,
-        dwellMs: env.PROMPT_DWELL_MS,
-        logger,
-        registry: manager,
-        wssUrl: env.MONAD_RPC_WSS,
-      })
-    : null;
-
-// Stage airdrop faucet (stage.airdrop): tops audience wallets up with
-// USDC so they can prompt without leaving the show. Dormant without a key.
-if (
-  env.SONARA_STAGE_CONTRACT &&
-  isAddress(env.SONARA_STAGE_CONTRACT) &&
-  /^0x[0-9a-fA-F]{64}$/u.test(env.STAGE_FAUCET_KEY)
-) {
-  stageFaucet.configure({
-    contract: env.SONARA_STAGE_CONTRACT,
-    faucetKey: env.STAGE_FAUCET_KEY as `0x${string}`,
-    logger,
-  });
-}
+// Crowd stage: fold audience intent (stage.tap / setKnob / submitPrompt RPCs)
+// into the live Sessions — coalesced knob patches + the prompt dwell queue.
+// Successor of the Monad event listener; always on (the RPCs are the
+// transport now).
+const stageActions = startStageActions({
+  dwellMs: env.PROMPT_DWELL_MS,
+  logger,
+  registry: manager,
+});
+bindStageActions(stageActions);
 
 app.get("/health", (c) => c.json({ ok: true }));
 app.get("/", (c) => c.text("sonara server — connect to /ws via WebSocket"));
@@ -108,34 +87,24 @@ app.on(["GET", "POST"], "/api/auth/*", (c) => auth.handler(c.req.raw));
 // Image-anchor upload (multipart → fal storage).
 app.post("/api/upload/image", (c) => uploadImage(c.req.raw));
 
-// MCP server (/api/mcp) — an AI agent drives a stage room via on-chain txs,
-// signed by the agent EOA (MCP_AGENT_KEY). Mounted only when both the contract
-// and the agent key are configured. The room code is the capability.
-const stageMcp =
-  env.SONARA_STAGE_CONTRACT &&
-  isAddress(env.SONARA_STAGE_CONTRACT) &&
-  /^0x[0-9a-fA-F]{64}$/u.test(env.MCP_AGENT_KEY)
-    ? createStageMcp({
-        agentKey: env.MCP_AGENT_KEY as `0x${string}`,
-        contract: env.SONARA_STAGE_CONTRACT,
-        logger,
-      })
-    : null;
-if (stageMcp) {
-  app.all("/api/mcp", (c) => stageMcp(c));
-}
-
 // oRPC HTTP router (credits, mintWsTicket). Build the context per request
 // from the Better Auth session, then delegate to the oRPC fetch handler.
+// The caller IP (gateway-set X-Forwarded-For) rides along for the public
+// crowd-stage throttles; null without a proxy (local dev).
 app.all("/rpc/*", async (c) => {
   const session = await auth.api.getSession({ headers: c.req.raw.headers });
-  const context = buildContext({
-    db,
-    registry: manager,
-    session: session
-      ? { user: { email: session.user.email, id: session.user.id as UserId } }
-      : null,
-  });
+  const ip =
+    c.req.header("x-forwarded-for")?.split(",")[0]?.trim() ?? null;
+  const context = {
+    ...buildContext({
+      db,
+      registry: manager,
+      session: session
+        ? { user: { email: session.user.email, id: session.user.id as UserId } }
+        : null,
+    }),
+    ip,
+  };
   const { matched, response } = await rpcHandler.handle(c.req.raw, {
     context,
     prefix: "/rpc",
@@ -313,13 +282,13 @@ logger.info(
 
 process.on("SIGTERM", () => {
   logger.info("SIGTERM received, shutting down");
-  stageListener?.close();
+  stageActions.close();
   server.stop();
   process.exit(0);
 });
 process.on("SIGINT", () => {
   logger.info("SIGINT received, shutting down");
-  stageListener?.close();
+  stageActions.close();
   server.stop();
   process.exit(0);
 });
