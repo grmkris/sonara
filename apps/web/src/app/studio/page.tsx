@@ -15,6 +15,7 @@ import { FrameInspector } from "@/components/studio/frame-inspector";
 import { FrameInspectorContent } from "@/components/studio/frame-inspector-content";
 import { LiveNowCard } from "@/components/studio/live-now-card";
 import { SelectionBar } from "@/components/studio/selection-bar";
+import { DecksPanel } from "@/components/studio/decks-panel";
 import { SetEditor } from "@/components/studio/set-editor";
 import { SetsList } from "@/components/studio/sets-list";
 import { RecordingTimeline } from "@/components/studio/recording-timeline";
@@ -34,6 +35,14 @@ import { makeFramePayload } from "@/lib/curation-dnd";
 import type { FrameDragPayload } from "@/lib/curation-dnd";
 import { recordingsHref, setsHref } from "@/lib/studio-hrefs";
 import { cn } from "@/lib/utils";
+
+const parseTab = (raw: string | null): StudioTab => {
+  if (raw === "sets" || raw === "decks") {
+    return raw;
+  }
+  return "recordings";
+};
+
 
 // /studio — the user's set library. Two tabs: "recordings" (auto-captured
 // live performances; frame list frozen, replayable on original timing) and
@@ -120,7 +129,7 @@ const StudioInner = () => {
   const router = useRouter();
   const isMobile = useIsMobile();
 
-  const tab: StudioTab = sp.get("tab") === "sets" ? "sets" : "recordings";
+  const tab = parseTab(sp.get("tab"));
   const selectedRecordingId = sp.get("recording");
   const selectedSetId = sp.get("set");
   const selectedFrameId = sp.get("frame");
@@ -358,7 +367,7 @@ const StudioInner = () => {
   // --- Navigation handlers ---
   const onTab = useCallback(
     (next: StudioTab) => {
-      router.push(next === "sets" ? "/studio?tab=sets" : "/studio");
+      router.push(next === "recordings" ? "/studio" : `/studio?tab=${next}`);
     },
     [router]
   );
@@ -641,6 +650,13 @@ const StudioInner = () => {
     );
   };
 
+  const renderNonSetsCenter = () => {
+    if (tab === "decks") {
+      return <DecksPanel />;
+    }
+    return renderRecordingsCenter();
+  };
+
   return (
     <main className="relative flex min-h-svh flex-col overflow-hidden bg-[color:var(--ink)] text-[color:var(--paper)]">
       {/* Header */}
@@ -724,9 +740,7 @@ const StudioInner = () => {
             </div>
           )}
 
-          {tab === "recordings" ? (
-            renderRecordingsCenter()
-          ) : (
+          {tab === "sets" ? (
             <SetEditor
               frameSet={setDetail}
               loading={setDetailLoading}
@@ -740,6 +754,7 @@ const StudioInner = () => {
               onRemoveFrame={onRemoveFrame}
               onSetCover={onSetCover}
               onVisibilityChange={onSetVisibility}
+              onLookChange={mutations.setLook}
               onFrameClick={onFrameClick}
               onFrameOpen={onFrameOpen}
               onFrameCheck={onFrameCheck}
@@ -754,6 +769,8 @@ const StudioInner = () => {
               selectionApi={selection}
               onRemoveFrames={mutations.removeFrames}
             />
+          ) : (
+            renderNonSetsCenter()
           )}
         </section>
 

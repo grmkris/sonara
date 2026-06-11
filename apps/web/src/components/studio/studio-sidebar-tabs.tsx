@@ -2,9 +2,9 @@
 
 import { cn } from "@/lib/utils";
 
-export type StudioTab = "recordings" | "sets";
+export type StudioTab = "recordings" | "sets" | "decks";
 
-const TABS: StudioTab[] = ["recordings", "sets"];
+const TABS: StudioTab[] = ["recordings", "sets", "decks"];
 
 // Two-tab header for the /studio sidebar: "recordings" (auto-captured live
 // performances) and curated "sets" (named groups). URL-driven via ?tab so

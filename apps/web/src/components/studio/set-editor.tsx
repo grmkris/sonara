@@ -1,6 +1,6 @@
 "use client";
 
-import type { FrameSet, FrameSetVisibility } from "@sonara/shared";
+import type { FrameSet, FrameSetVisibility, SetLook } from "@sonara/shared";
 import type { ImageLibraryId } from "@sonara/shared/typeid";
 import { combine } from "@atlaskit/pragmatic-drag-and-drop/combine";
 import { dropTargetForElements } from "@atlaskit/pragmatic-drag-and-drop/element/adapter";
@@ -22,6 +22,7 @@ import { ErrorState } from "./error-state";
 import { SelectModeToggle } from "./select-mode-toggle";
 import { SetEmptyDraft } from "./set-empty-draft";
 import { SetFrameTile } from "./set-frame-tile";
+import { SetLookEditor } from "./set-look-editor";
 import { SetShareControls } from "./set-share-controls";
 
 interface SetEditorProps {
@@ -38,6 +39,7 @@ interface SetEditorProps {
   onRemoveFrame?: (frameId: string) => void;
   onSetCover?: (frameId: string) => void;
   onVisibilityChange?: (visibility: FrameSetVisibility) => void;
+  onLookChange?: (look: SetLook | null) => void;
   // Selection v2 (page-owned): the page resolves the click matrix; the editor
   // just threads gestures + visual state.
   onFrameClick: (frameId: string, mods: TileClickMods) => void;
@@ -71,15 +73,20 @@ const SetHeaderActions = ({
   pinned,
   onTogglePinned,
   onVisibilityChange,
+  onLookChange,
   onDelete,
 }: {
   frameSet: FrameSet;
   pinned: boolean;
   onTogglePinned: () => void;
   onVisibilityChange?: (visibility: FrameSetVisibility) => void;
+  onLookChange?: (look: SetLook | null) => void;
   onDelete?: () => void;
 }) => (
   <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
+    {onLookChange && (
+      <SetLookEditor look={frameSet.look} onChange={onLookChange} />
+    )}
     {onVisibilityChange && (
       <SetShareControls
         setId={frameSet.id}
@@ -136,6 +143,7 @@ export const SetEditor = ({
   onRemoveFrame,
   onSetCover,
   onVisibilityChange,
+  onLookChange,
   onFrameClick,
   onFrameOpen,
   onFrameCheck,
@@ -307,6 +315,7 @@ export const SetEditor = ({
           pinned={pinned}
           onTogglePinned={onTogglePinned}
           onVisibilityChange={onVisibilityChange}
+          onLookChange={onLookChange}
           onDelete={onDelete}
         />
       </header>

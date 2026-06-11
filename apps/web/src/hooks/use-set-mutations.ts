@@ -1,6 +1,6 @@
 "use client";
 
-import type { FrameSet, FrameSetSummary } from "@sonara/shared";
+import type { FrameSet, FrameSetSummary, SetLook } from "@sonara/shared";
 import type { FrameSetId, ImageLibraryId } from "@sonara/shared/typeid";
 import type { useRouter } from "next/navigation";
 import { useCallback, useMemo, useRef } from "react";
@@ -39,6 +39,9 @@ export interface SetMutations {
   renameSet: (name: string) => void;
   deleteSet: () => void;
   setCover: (frameId: string) => void;
+  // Author or clear the open set's baked look (preset/intensity/cadence).
+  // Optimistic with rollback, same shape as setVisibility.
+  setLook: (look: SetLook | null) => void;
   setVisibility: (visibility: FrameSet["visibility"]) => void;
   recordingVisibility: (visibility: FrameSet["visibility"]) => void;
   // Full-order rewrite (drag reorder / move buttons). Optimistic + rollback;
@@ -237,6 +240,30 @@ export const useSetMutations = (deps: SetMutationDeps): SetMutations => {
       } catch {
         setSetDetail((s) => (s ? { ...s, coverFrameId: prev } : s));
         toast.error("couldn't set cover");
+      }
+    })();
+  }, []);
+
+  const setLook = useCallback((look: SetLook | null) => {
+    const { setDetail, setSetDetail } = d.current;
+    if (!setDetail) {
+      return;
+    }
+    const prev = setDetail.look;
+    const setId = setDetail.id;
+    setSetDetail((s) => (s ? { ...s, look } : s));
+    void (async () => {
+      try {
+        await rpcClient.sets.setLook({
+          look: look as Parameters<
+            typeof rpcClient.sets.setLook
+          >[0]["look"],
+          setId,
+        });
+        toast(look ? "look saved" : "look cleared");
+      } catch {
+        setSetDetail((s) => (s ? { ...s, look: prev } : s));
+        toast.error("couldn't save the look");
       }
     })();
   }, []);
@@ -494,6 +521,7 @@ export const useSetMutations = (deps: SetMutationDeps): SetMutations => {
       renameSet,
       reorderTo,
       setCover,
+      setLook,
       setVisibility,
     }),
     [
@@ -509,6 +537,7 @@ export const useSetMutations = (deps: SetMutationDeps): SetMutations => {
       renameSet,
       reorderTo,
       setCover,
+      setLook,
       setVisibility,
     ]
   );
