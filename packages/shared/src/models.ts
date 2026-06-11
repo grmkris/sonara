@@ -36,7 +36,7 @@ export interface TextModelConfig {
 }
 
 // NOTE: keys are alphabetical to satisfy sort-keys; the studio DROPDOWN order
-// is driven by TEXT_MODEL_KEYS above (lightning-sdxl first = the default).
+// is driven by TEXT_MODEL_KEYS above.
 export const TEXT_MODELS: Record<TextModelKey, TextModelConfig> = {
   "klein-9b": {
     blurb: "queue · quality baseline",
@@ -56,9 +56,10 @@ export const TEXT_MODELS: Record<TextModelKey, TextModelConfig> = {
 
 export const TextModelKeySchema = z.enum(TEXT_MODEL_KEYS);
 
-// Default for new live sessions. lightning-sdxl is the realtime speed win and
-// the day-to-day pick; klein stays available as the A/B baseline.
-export const DEFAULT_TEXT_MODEL: TextModelKey = "lightning-sdxl";
+// Default for new live sessions. klein/9b is the quality pick and the
+// day-to-day default; lightning-sdxl stays available behind the ?lab=1
+// model A/B for latency experiments.
+export const DEFAULT_TEXT_MODEL: TextModelKey = "klein-9b";
 
 // Render resolutions the studio can A/B. Both realtime models accept custom
 // {width,height}; we keep it to a small square set. 512² roughly halves the

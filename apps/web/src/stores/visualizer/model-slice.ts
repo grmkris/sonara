@@ -48,14 +48,23 @@ export const createModelSlice: StateCreator<
   },
 });
 
-// Post-mount hydration from localStorage (mirrors readDemoPrefs / preset
-// prefs). Server always renders with the defaults; the client applies the
-// stored preference after mount so SSR + first client render stay consistent.
+// Post-mount hydration from localStorage (mirrors the preset prefs). Server
+// always renders with the defaults; the client applies the stored preference
+// after mount so SSR + first client render stay consistent.
+//
+// The model/resolution A/B is dev instrumentation now (ModelPicker renders
+// only with ?lab=1), so stored picks apply ONLY in lab mode — otherwise a
+// pref persisted before the lab gate (or by a past experiment) would silently
+// override the product default forever, with no visible picker to undo it.
 export const readModelPrefs = (): {
   model: TextModelKey;
   resolution: RenderResolution;
 } => {
   if (typeof window === "undefined") {
+    return { model: DEFAULT_TEXT_MODEL, resolution: DEFAULT_RESOLUTION };
+  }
+  const lab = new URLSearchParams(window.location.search).has("lab");
+  if (!lab) {
     return { model: DEFAULT_TEXT_MODEL, resolution: DEFAULT_RESOLUTION };
   }
   const m = window.localStorage.getItem(MODEL_KEY);
