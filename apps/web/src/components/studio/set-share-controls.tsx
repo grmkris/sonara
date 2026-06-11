@@ -9,7 +9,7 @@ const VISIBILITIES: FrameSetVisibility[] = ["private", "unlisted", "public"];
 
 // Per-set share affordance, shared by the recording timeline and the set
 // editor headers: a visibility select (private / unlisted / public) plus a
-// copy-link button for the /s/<setId> permalink. The /s page ships in a later
+// copy-link button for the /set/<setId> permalink. The /s page ships in a later
 // WP — the link shape is final.
 export const SetShareControls = ({
   setId,
@@ -24,7 +24,7 @@ export const SetShareControls = ({
     void (async () => {
       try {
         await navigator.clipboard.writeText(
-          `${window.location.origin}/s/${setId}`
+          `${window.location.origin}/set/${setId}`
         );
         toast("link copied", { duration: 1600 });
       } catch {
@@ -63,7 +63,7 @@ export const SetShareControls = ({
       </button>
       {/* See it as your audience would — the /s permalink in a new tab. */}
       <Link
-        href={`/s/${setId}`}
+        href={`/set/${setId}`}
         target="_blank"
         rel="noopener"
         className="focus-ring inline-flex items-center border border-[color:var(--hairline)]/40 px-3 py-1.5 font-sans text-[10px] uppercase tracking-[0.22em] text-[color:var(--stone)] transition-colors hover:border-[color:var(--paper)]/70 hover:text-[color:var(--paper)]"

@@ -18,7 +18,7 @@ import {
 import { useVisualizerStore } from "@/stores/visualizer";
 
 // Share affordance on /play (signed-in only): the permalink to THIS
-// performance's recording set — /s/<set_id>. The set id is derivable client
+// performance's recording set — /set/<set_id>. The set id is derivable client
 // side because a recording set reuses its live session's uuid (see
 // sets-architecture.md). Run identity is server-owned: it arrives via the
 // `run.started` event into the store, so the link tracks "new set" swaps
@@ -59,7 +59,7 @@ export const ShareLink = ({ stageCode = null }: { stageCode?: string | null }) =
     // else this set's permalink (legacy runs).
     const nextUrl = stageCode
       ? `${window.location.origin}/stage/${stageCode}`
-      : `${window.location.origin}/s/${setId}`;
+      : `${window.location.origin}/set/${setId}`;
     setUrl(nextUrl);
     void (async () => {
       setQr(await QRCode.toDataURL(nextUrl, { margin: 1, width: 240 }));
@@ -69,7 +69,7 @@ export const ShareLink = ({ stageCode = null }: { stageCode?: string | null }) =
   const replayUrl =
     typeof window === "undefined" || !setId
       ? ""
-      : `${window.location.origin}/s/${setId}`;
+      : `${window.location.origin}/set/${setId}`;
 
   if (!setId) {
     return null;

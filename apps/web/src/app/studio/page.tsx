@@ -20,6 +20,7 @@ import { SetEditor } from "@/components/studio/set-editor";
 import { SetsList } from "@/components/studio/sets-list";
 import { RecordingTimeline } from "@/components/studio/recording-timeline";
 import { RecordingsList } from "@/components/studio/recordings-list";
+import { StagesSection } from "@/components/studio/stages-section";
 import { StudioSidebarTabs } from "@/components/studio/studio-sidebar-tabs";
 import type { StudioTab } from "@/components/studio/studio-sidebar-tabs";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
@@ -725,6 +726,9 @@ const StudioInner = () => {
               onCreate={onCreateSet}
             />
           )}
+          {/* Stages are account objects like sets — managed here, not on a
+              separate resolver page. */}
+          <StagesSection />
         </aside>
 
         {/* Center pane */}

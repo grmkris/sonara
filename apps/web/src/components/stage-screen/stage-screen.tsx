@@ -21,6 +21,7 @@ import { AudioRibbon } from "@/components/visualizer/audio/audio-ribbon";
 import { GhostOverlay } from "@/components/visualizer/canvas/ghost-overlay";
 import { ScanSweep } from "@/components/visualizer/canvas/scan-sweep";
 import { SonaraCanvas } from "@/components/visualizer/canvas/sonara-canvas";
+import { StageChip } from "@/components/stage-screen/stage-chip";
 import { StageConsole } from "@/components/stage-console/stage-console";
 import { DemoRecorder } from "@/components/visualizer/controls/demo-recorder";
 import { FullscreenToggle } from "@/components/visualizer/controls/fullscreen-toggle";
@@ -92,15 +93,15 @@ const LookChip = () => {
   );
 };
 
-// Discreet link to the console (/control resolves to the owner view on /s).
-// Opens in a new tab so the projector keeps playing; in practice you open it
-// on a second device, but the link makes it discoverable from here too.
-const RemoteLink = () => (
+// Discreet link to THIS stage's console (permanent URL). Opens in a new tab
+// so the projector keeps playing; in practice you open it on a second device,
+// but the link makes it discoverable from here too.
+const RemoteLink = ({ code }: { code: string }) => (
   <Link
-    href="/control"
+    href={`/stage/${code}/console`}
     target="_blank"
     rel="noopener"
-    aria-label="open your console"
+    aria-label="open this stage's console"
     title="drive the show from your phone"
     className="focus-ring flex items-center text-[color:var(--stone)] transition-colors hover:text-[color:var(--paper)]"
   >
@@ -320,6 +321,7 @@ export const StageScreen = ({ code }: { code: string | null }) => {
         <div className="pointer-events-auto flex flex-col gap-3">
           <Logotype />
           <AppNavLinks current="play" />
+          <StageChip current={ownStage} />
           <LookChip />
         </div>
         <div className="pointer-events-auto flex items-center gap-3 pt-2 sm:gap-5">
@@ -328,7 +330,7 @@ export const StageScreen = ({ code }: { code: string | null }) => {
               stays a clean canvas (hide the HUD with the toggle beside this).
               Signed-in only — control needs an owned live session. */}
           {isSignedIn && <ShareLink stageCode={ownStage?.code ?? null} />}
-          {isSignedIn && <RemoteLink />}
+          {isSignedIn && ownStage && <RemoteLink code={ownStage.code} />}
           <UserControls />
           <FullscreenToggle />
           <HideToggle />

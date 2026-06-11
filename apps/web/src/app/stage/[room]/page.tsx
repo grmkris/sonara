@@ -12,6 +12,7 @@ import { toast } from "sonner";
 import { Mark } from "@/components/brand/mark";
 import { AddressGlyph, shortAddress } from "@/components/stage/address-glyph";
 import { BlockPulse } from "@/components/stage/block-pulse";
+import { OwnerConsoleBanner } from "@/components/stage/owner-console-banner";
 import { rpcClient } from "@/lib/orpc";
 import { useVoiceRecognition } from "@/hooks/use-voice-recognition";
 import { createLatencyTracker } from "@/lib/stage/latency";
@@ -482,6 +483,8 @@ export default function StagePage() {
 
   return (
     <Shell>
+      {/* Owner scanning their own QR → jump to the console (crowd never sees this). */}
+      <OwnerConsoleBanner code={room} />
       <header className="flex items-center justify-between">
         <span className="flex items-center gap-2">
           <Mark className="h-6 w-6 shrink-0" />
