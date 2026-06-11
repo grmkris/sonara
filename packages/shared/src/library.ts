@@ -18,17 +18,28 @@ export const LibraryManifestSchema = z.object({
   frames: z.array(z.string()),
 });
 
+// Reactive cadence: interpolate a hold time between calm/loud bounds by the
+// music's intensity (0..1, clamped). The shared primitive behind deck
+// playback and any set with an authored look.
+export const cadenceBetweenMs = (
+  intensity: number,
+  bounds: { calm: number; loud: number }
+): number => {
+  const i = Math.max(0, Math.min(1, intensity));
+  return Math.round(bounds.calm + (bounds.loud - bounds.calm) * i);
+};
+
 // Demo frame cadence: how long a library frame is held before the next one.
-// Shared by the server session (its periodic trigger) and the client demo loop
-// so both pace identically from one definition. A frame is held longer when the
-// music is calm and cut faster when it's loud (intensity 0..1). The range comes
-// from the deck's look profile (DECK_LOOK) when given — e.g. Noir holds 12s→7s
-// for a chill, slow slideshow — otherwise the app default 6s→2s.
+// Shared by the server session (its periodic trigger) and the client playback
+// loop so both pace identically from one definition. A frame is held longer
+// when the music is calm and cut faster when it's loud. The range comes from
+// the deck's look profile (DECK_LOOK) when given — e.g. Noir holds 12s→7s for
+// a chill, slow slideshow — otherwise the app default 6s→2s.
 export const libraryCadenceMs = (
   intensity: number,
   deck?: DeckKey | null
-): number => {
-  const i = Math.max(0, Math.min(1, intensity));
-  const { calm, loud } = (deck && DECK_LOOK[deck]?.cadence) || DEFAULT_CADENCE;
-  return Math.round(calm + (loud - calm) * i);
-};
+): number =>
+  cadenceBetweenMs(
+    intensity,
+    (deck && DECK_LOOK[deck]?.cadence) || DEFAULT_CADENCE
+  );

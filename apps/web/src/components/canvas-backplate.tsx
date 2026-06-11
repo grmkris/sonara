@@ -3,13 +3,13 @@
 import { useEffect } from "react";
 
 import { SonaraCanvas } from "@/components/visualizer/canvas/sonara-canvas";
-import { useDemoFrameLoop } from "@/hooks/use-demo-frame-loop";
+import { usePlaybackLoop } from "@/hooks/use-playback-loop";
 import { useVisualizerStore } from "@/stores/visualizer";
 
 // Shared marketing backplate for the landing + about pages. The same
 // SonaraCanvas the visualiser uses, mounted as a fixed full-viewport plate so
-// it stays visible while copy scrolls over it. Demo is client-native:
-// useDemoFrameLoop() cycles a deck's static frames into the canvas (with the
+// it stays visible while copy scrolls over it. Playback is client-native:
+// usePlaybackLoop() cycles a deck's static frames into the canvas (with the
 // displacement-shader transitions) — no server/WS frames and no audio.
 //
 // A single `.page-veil` sits between the canvas (z-0, behind the grain at z-1)
@@ -20,18 +20,15 @@ export const CanvasBackplate = () => {
   // (static deck manifests), and a WS would attach this tab as the visitor's
   // default-stage SCREEN — a signed-in user browsing the homepage would take
   // over their own projector mid-gig.
-  useDemoFrameLoop();
+  usePlaybackLoop();
 
-  // Self-start demo regardless of auth/connectivity — without this the
+  // Self-start playback regardless of auth/connectivity — without this the
   // backplate would be black. Only fills gaps (won't override a deck a
   // previous page already chose).
   useEffect(() => {
     const st = useVisualizerStore.getState();
-    if (!st.demoMode) {
-      st.setDemoMode(true);
-    }
-    if (!st.demoDeck) {
-      st.setDemoDeck("liquid");
+    if (st.source.kind === "idle" || st.source.kind === "live") {
+      st.setSource({ deck: "liquid", kind: "deck" });
     }
   }, []);
 

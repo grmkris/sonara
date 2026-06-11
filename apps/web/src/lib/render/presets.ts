@@ -443,6 +443,11 @@ export const PRESETS: Record<PresetName, PresetConfig> = {
 
 export const PRESET_NAMES: readonly PresetName[] = VISUAL_PRESET_NAMES;
 
+// Read-side guard for preset names arriving over the wire (set looks are
+// plain strings so a renamed preset degrades instead of breaking reads).
+export const isKnownPreset = (name: string): name is PresetName =>
+  (PRESET_NAMES as readonly string[]).includes(name);
+
 // Short 1-line descriptors used in UI tooltips. Re-exported from shared so
 // the server-side LLM prompt and the UI share one source of truth.
 export const PRESET_DESCRIPTIONS = VISUAL_PRESET_DESCRIPTIONS;

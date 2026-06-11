@@ -43,8 +43,7 @@ export const ImageAnchorZone = ({ send }: ImageAnchorZoneProps) => {
   const acceptClickwrap = useVisualizerStore((s) => s.acceptClickwrap);
   const setUploadState = useVisualizerStore((s) => s.setUploadState);
   const clearAnchor = useVisualizerStore((s) => s.clearAnchor);
-  const setDemoMode = useVisualizerStore((s) => s.setDemoMode);
-  const setDemoDeck = useVisualizerStore((s) => s.setDemoDeck);
+  const setSource = useVisualizerStore((s) => s.setSource);
 
   const [showClickwrap, setShowClickwrap] = useState(false);
   const pendingFileRef = useRef<File | null>(null);
@@ -103,11 +102,10 @@ export const ImageAnchorZone = ({ send }: ImageAnchorZoneProps) => {
         }
         setAnchorImageUrl(data.url);
         setUploadState("idle");
-        // Pinning an anchor goes live — stop the client demo loop so it
-        // doesn't fight the server's anchor frames (the server flips its own
-        // demo off inside setImageAnchor).
-        setDemoMode(false);
-        setDemoDeck(null);
+        // Pinning an anchor goes live — flip the source so the playback loop
+        // stands down and doesn't fight the server's anchor frames (the
+        // server flips its own source inside setImageAnchor).
+        setSource({ kind: "live" });
         send({
           strength: STRENGTH_PRESET_VALUES[strengthPreset],
           type: "image.anchor.set",
@@ -126,8 +124,7 @@ export const ImageAnchorZone = ({ send }: ImageAnchorZoneProps) => {
       setAnchorImageUrl,
       setAnchorLocalPreview,
       setUploadState,
-      setDemoMode,
-      setDemoDeck,
+      setSource,
     ]
   );
 

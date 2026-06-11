@@ -33,6 +33,9 @@ export type SessionAction =
   | {
       type: "source.report";
       source: {
+        // The deck key rides along so the server can adopt deck reports into
+        // its authoritative source state.
+        deck?: DeckKey;
         kind: "live" | "deck" | "set" | "idle";
         label: string | null;
         setId?: string;

@@ -9,7 +9,8 @@ import type { VisualizerState } from "@/stores/visualizer";
 
 // Companion of use-frame-reporter: reports WHAT is showing (live / deck / set
 // replay / idle) up to the server (source.report) so /control and any viewer
-// can name the source, not just render its frames.
+// can name the source, not just render its frames. The deck key rides along
+// so the server can adopt the report into its authoritative source state.
 //
 // Mount this ONLY on the producer (/play), right next to useFrameReporter.
 // The source only changes on transport switches (picking a deck/set, going
@@ -21,28 +22,33 @@ type ReportedSource = Extract<
   { type: "source.report" }
 >["source"];
 
-// Precedence mirrors the frame producers' mutual exclusion: an active set
-// replay wins (it forces demoMode off), then deck playback, then live (a
-// generation prompt exists), else idle.
 const deriveSource = (s: VisualizerState): ReportedSource => {
-  if (s.setPlaybackActive) {
-    return {
-      kind: "set",
-      label: s.setPlaybackName,
-      ...(s.setPlaybackId ? { setId: s.setPlaybackId } : {}),
-    };
+  const { source } = s;
+  switch (source.kind) {
+    case "set": {
+      return { kind: "set", label: source.name, setId: source.setId };
+    }
+    case "deck": {
+      return {
+        deck: source.deck,
+        kind: "deck",
+        label: deckLabel(source.deck),
+      };
+    }
+    case "live": {
+      return { kind: "live", label: null };
+    }
+    default: {
+      return { kind: "idle", label: null };
+    }
   }
-  if (s.demoMode && s.demoDeck) {
-    return { kind: "deck", label: deckLabel(s.demoDeck) };
-  }
-  if (s.scene.prompt.trim().length > 0) {
-    return { kind: "live", label: null };
-  }
-  return { kind: "idle", label: null };
 };
 
 const sameSource = (a: ReportedSource, b: ReportedSource): boolean =>
-  a.kind === b.kind && a.label === b.label && a.setId === b.setId;
+  a.kind === b.kind &&
+  a.label === b.label &&
+  a.setId === b.setId &&
+  a.deck === b.deck;
 
 export const useSourceReporter = (send: SessionSend): void => {
   useEffect(() => {

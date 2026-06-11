@@ -97,8 +97,35 @@ export const useRemoteSession = (
           s.setScene(snap.scene);
         }
         s.setStatus(snap.jobStatus);
-        s.setDemoMode(snap.demoMode);
-        s.setDemoDeck(snap.demoDeck);
+        // Reconcile the source only when it actually changed — setSource
+        // builds a fresh object, and a 1s poll would otherwise re-render
+        // every `source` selector each tick.
+        const cur = s.source;
+        const next = snap.source;
+        const sameSource =
+          cur.kind === next.kind &&
+          (next.kind !== "deck" ||
+            (cur.kind === "deck" && cur.deck === next.deck)) &&
+          (next.kind !== "set" ||
+            (cur.kind === "set" && cur.setId === next.setId));
+        if (!sameSource) {
+          if (next.kind === "set") {
+            // Display-only mapping for the console (it never mounts the
+            // playback loop): origin/look aren't in the snapshot.
+            s.setSource({
+              deckKey: null,
+              kind: "set",
+              look: null,
+              name: next.label,
+              origin: "curated",
+              setId: next.setId,
+            });
+          } else if (next.kind === "deck") {
+            s.setSource({ deck: next.deck, kind: "deck" });
+          } else {
+            s.setSource({ kind: next.kind });
+          }
+        }
         if (snap.imageAnchor) {
           s.setAnchorImageUrl(snap.imageAnchor.url);
         } else {

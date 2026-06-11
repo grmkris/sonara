@@ -31,9 +31,8 @@ export const PromptInput = ({ send }: PromptInputProps) => {
   const setIsListening = useVisualizerStore((s) => s.setIsListening);
   const liveTranscript = useVisualizerStore((s) => s.liveTranscript);
   const setLiveTranscript = useVisualizerStore((s) => s.setLiveTranscript);
-  const demoMode = useVisualizerStore((s) => s.demoMode);
-  const setDemoMode = useVisualizerStore((s) => s.setDemoMode);
-  const setDemoDeck = useVisualizerStore((s) => s.setDemoDeck);
+  const source = useVisualizerStore((s) => s.source);
+  const setSource = useVisualizerStore((s) => s.setSource);
 
   const [draft, setDraft] = useState<string | null>(null);
   const lastDraftFromVoiceRef = useRef(false);
@@ -104,27 +103,27 @@ export const PromptInput = ({ send }: PromptInputProps) => {
       }
       lastSentRef.current = next;
 
-      if (demoMode) {
-        // Leaving the deck → go live. Seed the first generated frame off the
-        // deck frame currently on screen so the visuals evolve out of it
-        // ("take it from there"), and stop the client demo loop by flipping
-        // demoMode off locally (the loop effect keys on demoMode).
+      if (source.kind === "deck" || source.kind === "set") {
+        // Leaving playback → go live. Seed the first generated frame off the
+        // frame currently on screen so the visuals evolve out of it ("take
+        // it from there"); flipping the source stops the playback loop (its
+        // effect keys on the source).
         const frame = useVisualizerStore.getState().currentFrame;
         const seedFrameUrl = frame
           ? new URL(frame, window.location.origin).href
           : null;
-        setDemoMode(false);
-        setDemoDeck(null);
+        setSource({ kind: "live" });
         send({ prompt: next, seedFrameUrl, type: "session.goLive" });
       } else {
         const messageType: "voice.patch" | "scene.patch" =
           lastDraftFromVoiceRef.current ? "voice.patch" : "scene.patch";
+        setSource({ kind: "live" });
         send({ patch: { prompt: next }, type: messageType });
       }
       lastDraftFromVoiceRef.current = false;
       flashCommit();
     },
-    [scene.prompt, send, demoMode, setDemoMode, setDemoDeck]
+    [scene.prompt, send, source.kind, setSource]
   );
 
   const onChange = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {

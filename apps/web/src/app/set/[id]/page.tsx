@@ -21,8 +21,9 @@ import { MusicSource } from "@/components/visualizer/controls/music-source";
 import { publicEnv } from "@/env";
 import { useAudioFeatures } from "@/hooks/use-audio-features";
 import type { AudioSource } from "@/hooks/use-audio-features";
-import { useSetPlaybackLoop } from "@/hooks/use-set-playback-loop";
+import { usePlaybackLoop } from "@/hooks/use-playback-loop";
 import { rpcClient } from "@/lib/orpc";
+import { isKnownPreset } from "@/lib/render/presets";
 import { useStageFeed } from "@/lib/stage/use-stage-feed";
 import { cn } from "@/lib/utils";
 import { useVisualizerStore } from "@/stores/visualizer";
@@ -223,24 +224,40 @@ const useLiveFrameFeed = (
   }, [tense, frameUrl]);
 };
 
-// Replay rides the existing set-playback machinery: load the frames into the
-// store and let useSetPlaybackLoop (mounted by the page) drive pushFrame at
-// the right cadence — original timing for recordings, fixed loop otherwise.
+// Replay rides the unified playback machinery: hand the set to the source
+// slice and let usePlaybackLoop (mounted by the page) drive pushFrame at the
+// right cadence — original timing for recordings, the authored look's
+// reactive cadence otherwise. The set's look also applies here (preset +
+// intensity, viewer-locally) so the authored vibe travels to permalinks.
 // Viewer-local only: the loop writes to the store, never to the server.
 const useReplayPlayback = (replaySet: ReplaySet | null): void => {
   useEffect(() => {
-    if (!replaySet || replaySet.frames.length === 0) {
+    if (!replaySet || (replaySet.frames.length === 0 && !replaySet.deckKey)) {
       return;
     }
     const s = useVisualizerStore.getState();
-    s.startSetPlayback({
-      cadence: replaySet.origin === "recording" ? "original" : "fixed",
-      frames: replaySet.frames,
-      id: replaySet.id,
-      name: replaySet.name,
-    });
+    const { look } = replaySet;
+    if (look) {
+      if (isKnownPreset(look.preset)) {
+        s.setPreset(look.preset);
+      }
+      useVisualizerStore.setState((st) => ({
+        scene: { ...st.scene, intensity: look.intensity },
+      }));
+    }
+    s.setSource(
+      {
+        deckKey: replaySet.deckKey,
+        kind: "set",
+        look: replaySet.look,
+        name: replaySet.name,
+        origin: replaySet.origin,
+        setId: replaySet.id,
+      },
+      replaySet.frames
+    );
     return () => {
-      useVisualizerStore.getState().stopSetPlayback();
+      useVisualizerStore.getState().stopToIdle();
     };
   }, [replaySet]);
 };
@@ -439,7 +456,7 @@ export default function SetPermalinkPage() {
 
   // The viewer's render pipeline: set-playback loop (inert until replay
   // loads frames), live frame feed, and local audio analysis.
-  useSetPlaybackLoop();
+  usePlaybackLoop();
   useLiveFrameFeed(
     tense,
     lens?.exists && lens.tense === "live"

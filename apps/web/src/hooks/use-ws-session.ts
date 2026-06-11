@@ -192,14 +192,11 @@ export const useWsSession = (target: { code: string | null }): WsSession => {
           // <stage>"). Apply exactly like a local pick; source.report then
           // confirms producer-truth back to the server.
           const { source } = event;
-          if (s.setPlaybackActive) {
-            s.stopSetPlayback();
-          }
           if (source.kind === "set" && source.setId) {
-            void startSetReplayById(source.setId);
+            // startSetReplayById sets the unified source + applies the set's
+            // authored look. sendRef dodges the handler/send decl order.
+            void startSetReplayById(source.setId, (a) => sendRef.current?.(a));
           } else if (source.kind === "deck" && source.deck) {
-            s.setDemoMode(true);
-            s.setDemoDeck(source.deck as DeckKey);
             // Deck-as-a-unit: a remote pick applies the deck's baked render
             // preset here too, exactly like a local pick (usePickDeck).
             // Intensity arrives separately via scene.state.
@@ -207,9 +204,9 @@ export const useWsSession = (target: { code: string | null }): WsSession => {
             if (look && isKnownPreset(look.preset)) {
               s.setPreset(look.preset);
             }
-          } else if (source.kind === "idle" && s.demoMode) {
-            s.setDemoMode(false);
-            s.setDemoDeck(null);
+            s.setSource({ deck: source.deck as DeckKey, kind: "deck" });
+          } else if (source.kind === "idle") {
+            s.stopToIdle();
           }
           break;
         }
@@ -307,14 +304,21 @@ export const useWsSession = (target: { code: string | null }): WsSession => {
               if (!cancelled) {
                 const s = store.getState();
                 s.setScene(snap.scene);
-                // Hydrate demo state from the server snapshot. For anon
-                // sessions the server picked demoMode=true + a random deck
-                // at construction; for signed-in this matches whatever
-                // setDemoMode last persisted. Flipping demoMode on here is
-                // what triggers the auto-play effect in music-source.tsx
-                // (so anon visitors actually hear the demo track).
-                s.setDemoMode(snap.demoMode);
-                s.setDemoDeck(snap.demoDeck);
+                // Hydrate the playback source from the server snapshot. For
+                // anon sessions the server pinned a random deck at
+                // construction; for signed-in this is the last
+                // command/report. A set source hydrates through
+                // startSetReplayById (it needs frames + the authored look).
+                const src = snap.source;
+                if (src.kind === "set") {
+                  void startSetReplayById(src.setId, (a) =>
+                    sendRef.current?.(a)
+                  );
+                } else if (src.kind === "deck") {
+                  s.setSource({ deck: src.deck as DeckKey, kind: "deck" });
+                } else {
+                  s.setSource({ kind: src.kind });
+                }
                 // Hydrate image-anchor too — if the user pinned an anchor
                 // and the WS dropped (tab refresh, transient disconnect),
                 // the live Session kept it in memory and we want the
