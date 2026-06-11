@@ -160,6 +160,9 @@ export class Session implements ControllableSession {
   private scene: SonaraSceneState;
   private lastGeneratedScene: SonaraSceneState;
   private activeJob?: AbortController;
+  // Wall-clock start of the in-flight job; 0 when none is running. Drives
+  // the periodic no-cannibalize guard in trigger().
+  private activeJobStartedAt = 0;
   private activeVersion = 0;
   private pauseTimer?: ReturnType<typeof setTimeout>;
   private periodicTimer?: ReturnType<typeof setInterval>;
@@ -187,6 +190,11 @@ export class Session implements ControllableSession {
       this.lastFrameUrl = event.imageUrl;
     } else if (event.type === "job.status") {
       this.lastJobStatus = event.status;
+    } else if (event.type === "generation.completed") {
+      // Every generation path (text realtime/queue, anchor success/failure)
+      // emits this at the end — the single chokepoint that marks "no job in
+      // flight" for the periodic no-cannibalize guard in trigger().
+      this.activeJobStartedAt = 0;
     }
     this.publisher.publish("event", event);
   }
@@ -259,6 +267,10 @@ export class Session implements ControllableSession {
   // every periodic tick.
   private anchorFailureCount = 0;
   private static readonly ANCHOR_FAILURE_LIMIT = 3;
+  // How long an in-flight generation may run before a periodic tick is
+  // allowed to abort-and-replace it (guards against hung fal jobs without
+  // letting the cadence starve slow models).
+  private static readonly JOB_SUPERSEDE_MS = 60_000;
 
   // One-shot handoff anchor. Set by goLive() when the user leaves a deck: the
   // first live frame anchors off the deck frame on screen for visual
@@ -903,6 +915,22 @@ export class Session implements ControllableSession {
     })();
   }
 
+  // A periodic tick must NOT cannibalize a still-running generation. Slow
+  // models (the anchor's flux-pro ultra on a congested fal queue) can take
+  // longer than the periodic cadence — if every tick aborted the in-flight
+  // job and restarted the queue wait, nothing would ever complete: frames
+  // starve forever while credits churn through debit/refund. Let the running
+  // job land; supersede it only when it's clearly hung (JOB_SUPERSEDE_MS).
+  // User edits (semantic/pause/voice) still abort-and-replace immediately.
+  private jobStillRunning(): boolean {
+    return (
+      this.activeJob !== undefined &&
+      !this.activeJob.signal.aborted &&
+      this.activeJobStartedAt > 0 &&
+      Date.now() - this.activeJobStartedAt < Session.JOB_SUPERSEDE_MS
+    );
+  }
+
   private async trigger(source: TriggerSource): Promise<void> {
     const kind = kindFromSource(source);
     // Keep `reason` for log + event compatibility — it goes on the wire as
@@ -915,6 +943,10 @@ export class Session implements ControllableSession {
     // only for live generation. Idle + the empty-prompt guard below keep
     // idle sessions from generating, while a typed prompt still flows.
     if (this.source.kind === "deck" || this.source.kind === "set") {
+      return;
+    }
+
+    if (reason === "periodic" && this.jobStillRunning()) {
       return;
     }
 
@@ -991,6 +1023,7 @@ export class Session implements ControllableSession {
     this.activeJob?.abort();
     const controller = new AbortController();
     this.activeJob = controller;
+    this.activeJobStartedAt = Date.now();
 
     this.activeVersion += 1;
     const version = this.activeVersion;
@@ -1305,6 +1338,7 @@ export class Session implements ControllableSession {
     this.activeJob?.abort();
     const controller = new AbortController();
     this.activeJob = controller;
+    this.activeJobStartedAt = Date.now();
 
     this.activeVersion += 1;
     const version = this.activeVersion;
