@@ -33,6 +33,7 @@ export const PromptInput = ({ send }: PromptInputProps) => {
   const setLiveTranscript = useVisualizerStore((s) => s.setLiveTranscript);
   const source = useVisualizerStore((s) => s.source);
   const setSource = useVisualizerStore((s) => s.setSource);
+  const anchorImageUrl = useVisualizerStore((s) => s.anchorImageUrl);
 
   const [draft, setDraft] = useState<string | null>(null);
   const lastDraftFromVoiceRef = useRef(false);
@@ -145,12 +146,58 @@ export const PromptInput = ({ send }: PromptInputProps) => {
   const value = draft ?? scene.prompt ?? "";
   const isRunning = status === "running";
 
+  // Collapsed by default — the composer is authoring chrome, and the canvas
+  // is the product. One line summarizes the scene (+ anchor); a click expands
+  // to the full textarea + anchor zone. Stays expanded while dictating.
+  const [expanded, setExpanded] = useState(false);
+  useEffect(() => {
+    if (expanded) {
+      textareaRef.current?.focus();
+    }
+  }, [expanded]);
+
+  if (!(expanded || isListening)) {
+    return (
+      <button
+        type="button"
+        onClick={() => setExpanded(true)}
+        aria-label="describe the scene"
+        className="focus-ring flex w-full items-center gap-2 border border-[color:var(--hairline)]/30 px-3 py-2 text-left transition-colors hover:border-[color:var(--paper)]/50"
+      >
+        <span aria-hidden className="text-[color:var(--stone)]">
+          ✎
+        </span>
+        <span
+          className={cn(
+            "min-w-0 flex-1 truncate font-serif text-[13px]",
+            value.trim()
+              ? "text-[color:var(--paper)]/85"
+              : "text-[color:var(--stone)]/60 italic"
+          )}
+        >
+          {value.trim() || "describe the scene…"}
+        </span>
+        {anchorImageUrl && (
+          <span
+            aria-label="anchor image set"
+            className="size-1.5 shrink-0 rounded-full bg-[color:var(--signal)]"
+          />
+        )}
+      </button>
+    );
+  }
+
   return (
     <div className="flex flex-col gap-2">
       <div className="flex items-center justify-between">
-        <span className="font-sans text-[9px] uppercase tracking-[0.28em] text-[color:var(--stone)]">
-          scene
-        </span>
+        <button
+          type="button"
+          onClick={() => setExpanded(false)}
+          aria-label="collapse the scene composer"
+          className="focus-ring font-sans text-[9px] uppercase tracking-[0.28em] text-[color:var(--stone)] transition-colors hover:text-[color:var(--paper)]"
+        >
+          scene · ▴
+        </button>
         {supported && (
           <button
             type="button"
@@ -171,7 +218,13 @@ export const PromptInput = ({ send }: PromptInputProps) => {
         ref={textareaRef}
         value={value}
         onChange={onChange}
-        onKeyDown={onKeyDown}
+        onKeyDown={(e) => {
+          if (e.key === "Escape") {
+            setExpanded(false);
+            return;
+          }
+          onKeyDown(e);
+        }}
         rows={3}
         maxLength={MAX_PROMPT_CHARS}
         aria-label="scene prompt"

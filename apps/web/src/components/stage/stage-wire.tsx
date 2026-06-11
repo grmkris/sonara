@@ -14,8 +14,10 @@ import { TxTicker } from "./tx-ticker";
 // only while this session's crowd stage is open (stageRoom in the store, fed
 // by stage.status): a teleprinter activity ticker + seismograph bottom-left,
 // and a "sent by K7QX" credit when a queued prompt takes the screen.
-// Entirely pointer-transparent and deliberately IGNORES the hide-UI chrome
-// toggle — the wire is part of the show.
+// Entirely pointer-transparent. The wire is PROJECTOR furniture: it shows
+// when the operator chrome is hidden and steps aside while the chrome is up
+// (the operator has the stage sheet; the big join QR would z-fight the
+// rail). The feed socket stays mounted either way so nothing is missed.
 
 const CREDIT_HOLD_MS = 6000;
 
@@ -43,6 +45,7 @@ const NowPlayingCredit = ({ credit }: { credit: PromptCredit }) => (
 const StageWireInner = ({ room }: { room: string }) => {
   const feed = useStageFeed(room);
   const showQr = useVisualizerStore((s) => s.stageShowQr);
+  const uiVisible = useVisualizerStore((s) => s.uiVisible);
 
   // Hold a credit card for a few seconds whenever a new prompt takes the
   // screen; identity is who+text so re-plays of the same prompt don't flash.
@@ -60,12 +63,12 @@ const StageWireInner = ({ room }: { room: string }) => {
     // oxlint-disable-next-line exhaustive-deps
   }, [playingKey]);
 
+  if (uiVisible) {
+    return null;
+  }
+
   return (
     <>
-      {/* The whole wire is show-layer, not operator chrome: hiding the UI
-         (h) keeps the QR, ticker and credits up — crowd actions ARE the
-         show. Only the host's QR toggle and the stage closing remove
-         anything. */}
       {showQr && <StageJoinQr room={room} />}
       <div aria-hidden className="pointer-events-none absolute inset-0 z-20">
         {/* The wire: ticker + room pulse, bottom-left above the audio strip. */}

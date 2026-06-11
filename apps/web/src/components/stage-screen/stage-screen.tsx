@@ -1,6 +1,5 @@
 "use client";
 
-import { deckLabel } from "@sonara/shared";
 import { SlidersHorizontal, Smartphone } from "lucide-react";
 import Link from "next/link";
 import { Suspense, useCallback, useEffect, useRef, useState } from "react";
@@ -73,29 +72,6 @@ const AnonPromptPlaceholder = () => (
     </Button>
   </div>
 );
-
-// Quiet caption under the wordmark naming what's playing. Shows while on a
-// deck or a set; once you commit a prompt and go live it disappears (the
-// "live · generating" chip carries the live state). Replaces the old
-// SceneHud telemetry; the audio-reactive 1px rule under "sonara"
-// (`.wordmark::after` via `--amp`) carries live-presence more elegantly.
-const LookChip = () => {
-  const source = useVisualizerStore((s) => s.source);
-  let label: string | null = null;
-  if (source.kind === "deck") {
-    label = deckLabel(source.deck);
-  } else if (source.kind === "set") {
-    label = source.name;
-  }
-  if (!label) {
-    return null;
-  }
-  return (
-    <span className="font-mono pointer-events-none text-[10px] uppercase tracking-[0.22em] text-[color:var(--paper)]/85">
-      {label}
-    </span>
-  );
-};
 
 // Discreet link to THIS stage's console (permanent URL). Opens in a new tab
 // so the projector keeps playing; in practice you open it on a second device,
@@ -320,10 +296,8 @@ export const StageScreen = ({ code }: { code: string | null }) => {
           <Logotype />
           <AppNavLinks current="play" />
           <StageChip current={ownStage} />
-          <LookChip />
         </div>
         <div className="pointer-events-auto flex items-center gap-3 pt-2 sm:gap-5">
-          <NowPlaying />
           {/* Operator remote: drive this session from a phone so the projector
               stays a clean canvas (hide the HUD with the toggle beside this).
               Signed-in only — control needs an owned live session. */}
@@ -416,21 +390,18 @@ export const StageScreen = ({ code }: { code: string | null }) => {
 
           <AudioRibbon height={40} />
 
-          {/* Bring-your-own-audio nudge. The deck cycles dimmed until the
-             visitor connects a source (mic / track / tab); once they do, the
-             canvas wakes up to full brightness + beat reactivity. */}
-          {!audioConnected && (
-            <p className="mt-2 font-sans text-[10px] uppercase tracking-[0.24em] text-[color:var(--signal)]">
-              ▷ bring sound — open the mic, drop a track, or share a tab
-            </p>
-          )}
-
+          {/* One audio row: the source pill, the bring-sound nudge folded
+             inline (only while silent), and the identified track. */}
           <div className="mt-3 flex items-center justify-between gap-3 sm:gap-6">
-            <div className="flex items-center gap-3 sm:gap-6">
+            <div className="flex min-w-0 items-center gap-3 sm:gap-6">
               <MusicSource source={audioSource} setSource={setAudioSource} />
+              {!audioConnected && (
+                <p className="hidden font-sans text-[10px] uppercase tracking-[0.24em] text-[color:var(--signal)] sm:block">
+                  ▷ bring sound — mic, track, or tab
+                </p>
+              )}
             </div>
-            {/* new-session / reset moved into the console footer (StageConsole)
-                so the attached and detached consoles carry the same actions. */}
+            <NowPlaying />
           </div>
         </section>
       </div>

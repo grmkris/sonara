@@ -22,10 +22,20 @@ import type { ControlTarget } from "@/lib/control-actions";
 
 export const StageHostPanel = ({
   target,
+  initialRoom = null,
 }: {
   target: ControlTarget | null;
+  // Server-truth room (store.stageRoom via the stage.status push) — re-syncs
+  // the panel when it remounts inside a sheet. The panel's own open/close
+  // actions still update local state optimistically.
+  initialRoom?: string | null;
 }) => {
-  const [room, setRoom] = useState<string | null>(null);
+  const [room, setRoom] = useState<string | null>(initialRoom);
+  // Track server truth while mounted (open/close from another device, or the
+  // stage.status echo of our own action).
+  useEffect(() => {
+    setRoom(initialRoom);
+  }, [initialRoom]);
   const [busy, setBusy] = useState(false);
   const [qr, setQr] = useState<string | null>(null);
   const [stageUrl, setStageUrl] = useState("");

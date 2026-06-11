@@ -4,11 +4,14 @@ import { deckLabel } from "@sonara/shared";
 import type { DeckKey, SonaraSceneState } from "@sonara/shared";
 import type { ControlSnapshot } from "@sonara/api/server";
 
+import { useEffect, useState } from "react";
+
+import { LookPopover } from "@/components/stage-console/look-popover";
+import { StageSheet } from "@/components/stage-console/stage-sheet";
 import { StageHostPanel } from "@/components/stage/stage-host-panel";
 import { Button } from "@/components/ui/button";
 import { IntensityDial } from "@/components/visualizer/controls/intensity-dial";
 import { ModelPicker } from "@/components/visualizer/controls/model-picker";
-import { PresetPicker } from "@/components/visualizer/controls/preset-picker";
 import { PromptInput } from "@/components/visualizer/controls/prompt-input";
 import { SliderRow } from "@/components/visualizer/controls/slider-row";
 import { SourceSwitcher } from "@/components/visualizer/controls/source-switcher";
@@ -212,6 +215,62 @@ const FeelControls = ({ send }: { send: SessionSend }) => {
   );
 };
 
+const AttachedConsole = ({
+  send,
+  hostTarget,
+  onNewSet,
+  onReset,
+}: {
+  send: SessionSend;
+  hostTarget: ControlTarget | null;
+  onNewSet?: () => void;
+  onReset?: () => void;
+}) => {
+  // ?lab=1 reveals the model/resolution A/B. Read post-mount from
+  // window.location so the page keeps prerendering (no useSearchParams
+  // Suspense bailout for a dev flag).
+  const [lab, setLab] = useState(false);
+  useEffect(() => {
+    setLab(new URLSearchParams(window.location.search).has("lab"));
+  }, []);
+
+  return (
+    <div className="relative flex flex-col gap-5 rounded-sm border border-[color:var(--hairline)]/25 p-4">
+      {/* Source — the Now-Showing transport: what's on the canvas (live /
+          deck / set replay / idle), with the picker + stop. */}
+      <SourceSwitcher send={send} mode="local" />
+
+      <Divider />
+
+      {/* Energy — the master audio→visual coupling. */}
+      <IntensityDial send={send} />
+
+      {/* Feel — the four scene knobs. */}
+      <FeelControls send={send} />
+
+      <Divider />
+
+      {/* Setup-time surfaces, one tap away. */}
+      <div className="flex flex-wrap items-center gap-2">
+        <LookPopover />
+        <StageSheet target={hostTarget} />
+      </div>
+
+      {/* Lab — A/B the fal model + render resolution. Dev instrumentation,
+          hidden behind ?lab=1 (client-authoritative localStorage prefs are
+          untouched by the gate). */}
+      {lab && (
+        <>
+          <Divider />
+          <ModelPicker send={send} />
+        </>
+      )}
+
+      <Footer onNewSet={onNewSet} onReset={onReset} />
+    </div>
+  );
+};
+
 export const StageConsole = ({
   send,
   variant,
@@ -251,39 +310,10 @@ export const StageConsole = ({
     );
   }
 
-  return (
-    <div className="relative flex flex-col gap-5 rounded-sm border border-[color:var(--hairline)]/25 p-4">
-      {/* Source — the Now-Showing transport: what's on the canvas (live /
-          deck / set replay / idle), with the picker + stop. */}
-      <SourceSwitcher send={send} mode="local" />
-
-      <Divider />
-
-      {/* Energy — the master audio→visual coupling. */}
-      <IntensityDial send={send} />
-
-      <Divider />
-
-      {/* Engine — A/B the fal model + render resolution. Client-authoritative,
-          so screen-only (see capability split above). */}
-      <ModelPicker send={send} />
-
-      <Divider />
-
-      {/* Treatment — render preset (client-local shader) + image feel. */}
-      <div className="panel-reveal flex flex-col gap-5">
-        <PresetPicker />
-        <FeelControls send={send} />
-      </div>
-
-      {hostTarget !== null && (
-        <>
-          <Divider />
-          <StageHostPanel target={hostTarget} />
-        </>
-      )}
-
-      <Footer onNewSet={onNewSet} onReset={onReset} />
-    </div>
-  );
+  // The attached console is the INSTRUMENT: transport + intensity + feel,
+  // and nothing else resident. Setup-time surfaces live one tap away —
+  // presets in the look popover, the crowd stage in a sheet — and the
+  // engine/resolution A/B (dev instrumentation) only appears with ?lab=1.
+  return <AttachedConsole {...{ hostTarget, onNewSet, onReset, send }} />;
 };
+
