@@ -471,3 +471,147 @@ describe("ownership", () => {
     expect(frames.length).toBe(1);
   });
 });
+
+describe("addFrames atPosition (splice) + removeFrames", () => {
+  const orderOf = async (setId: FrameSetId): Promise<string[]> => {
+    const set = await a.get({ setId });
+    return set.frames.map((f) => f.id);
+  };
+
+  const seeded = async (): Promise<FrameSetId> => {
+    const setId = await newCut("splice target");
+    await a.addFrames({
+      frameIds: [A[0], A[1], A[2]] as ImageLibraryId[],
+      setId,
+    });
+    return setId;
+  };
+
+  test("middle insert lands the block at the display index", async () => {
+    const setId = await seeded();
+    const { added } = await a.addFrames({
+      atPosition: 1,
+      frameIds: [A[3] as ImageLibraryId],
+      setId,
+    });
+    expect(added).toBe(1);
+    expect(await orderOf(setId)).toEqual([A[0], A[3], A[1], A[2]]);
+    const set = await a.get({ setId });
+    expect(set.frameCount).toBe(4);
+  });
+
+  test("atPosition 0 prepends; out-of-range clamps to append", async () => {
+    const setId = await newCut("clamp");
+    await a.addFrames({ frameIds: [A[0]] as ImageLibraryId[], setId });
+    await a.addFrames({
+      atPosition: 0,
+      frameIds: [A[1]] as ImageLibraryId[],
+      setId,
+    });
+    expect(await orderOf(setId)).toEqual([A[1], A[0]]);
+    await a.addFrames({
+      atPosition: 99,
+      frameIds: [A[2]] as ImageLibraryId[],
+      setId,
+    });
+    expect(await orderOf(setId)).toEqual([A[1], A[0], A[2]]);
+  });
+
+  test("gap safety: splice at an index whose raw positions have gaps", async () => {
+    const setId = await newCut("gappy");
+    const extra = await insertFrame(db, { userId: userA });
+    await a.addFrames({
+      frameIds: [A[0], A[1], A[2], A[3]] as ImageLibraryId[],
+      setId,
+    });
+    // removeFrame leaves a raw-position gap at index 1.
+    await a.removeFrame({ frameId: A[1] as ImageLibraryId, setId });
+    expect(await orderOf(setId)).toEqual([A[0], A[2], A[3]]);
+    await a.addFrames({ atPosition: 1, frameIds: [extra], setId });
+    expect(await orderOf(setId)).toEqual([A[0], extra, A[2], A[3]]);
+  });
+
+  test("splice dedupes against members without moving them", async () => {
+    const setId = await seeded();
+    const extra = await insertFrame(db, { userId: userA });
+    const { added } = await a.addFrames({
+      atPosition: 0,
+      frameIds: [A[2] as ImageLibraryId, extra],
+      setId,
+    });
+    expect(added).toBe(1);
+    expect(await orderOf(setId)).toEqual([extra, A[0], A[1], A[2]]);
+  });
+
+  test("multi-frame block keeps its order at the splice point", async () => {
+    const setId = await newCut("block");
+    const e1 = await insertFrame(db, { userId: userA });
+    const e2 = await insertFrame(db, { userId: userA });
+    await a.addFrames({ frameIds: [A[0], A[1]] as ImageLibraryId[], setId });
+    await a.addFrames({ atPosition: 1, frameIds: [e1, e2], setId });
+    expect(await orderOf(setId)).toEqual([A[0], e1, e2, A[1]]);
+  });
+
+  test("splice respects the freeze policy and frame ownership", async () => {
+    const recId = await insertSet({
+      frames: [{ id: A[0] as ImageLibraryId, tMs: 0 }],
+      liveSessionId: typeIdGenerator("liveSession"),
+      origin: "recording",
+      userId: userA,
+    });
+    expect(
+      a.addFrames({
+        atPosition: 0,
+        frameIds: [A[1] as ImageLibraryId],
+        setId: recId,
+      })
+    ).rejects.toThrow("frozen");
+    const setId = await newCut("foreign");
+    const foreign = await insertFrame(db, { userId: userB });
+    expect(
+      a.addFrames({ atPosition: 0, frameIds: [foreign], setId })
+    ).rejects.toThrow("not found");
+  });
+
+  test("removeFrames drops members in one call; non-members skipped", async () => {
+    const setId = await seeded();
+    const stranger = await insertFrame(db, { userId: userA });
+    const { removed } = await a.removeFrames({
+      frameIds: [A[0] as ImageLibraryId, A[2] as ImageLibraryId, stranger],
+      setId,
+    });
+    expect(removed).toBe(2);
+    expect(await orderOf(setId)).toEqual([A[1]]);
+    const set = await a.get({ setId });
+    expect(set.frameCount).toBe(1);
+    // Frozen recordings reject batch removal too.
+    const recId = await insertSet({
+      frames: [{ id: A[0] as ImageLibraryId, tMs: 0 }],
+      liveSessionId: typeIdGenerator("liveSession"),
+      origin: "recording",
+      userId: userA,
+    });
+    expect(
+      a.removeFrames({ frameIds: [A[0] as ImageLibraryId], setId: recId })
+    ).rejects.toThrow("frozen");
+  });
+
+  test("undo round-trip: removeFrames then addFrames(atPosition) restores order", async () => {
+    const setId = await newCut("undo");
+    await a.addFrames({
+      frameIds: [A[0], A[1], A[2], A[3]] as ImageLibraryId[],
+      setId,
+    });
+    await a.removeFrames({
+      frameIds: [A[1], A[2]] as ImageLibraryId[],
+      setId,
+    });
+    expect(await orderOf(setId)).toEqual([A[0], A[3]]);
+    await a.addFrames({
+      atPosition: 1,
+      frameIds: [A[1], A[2]] as ImageLibraryId[],
+      setId,
+    });
+    expect(await orderOf(setId)).toEqual([A[0], A[1], A[2], A[3]]);
+  });
+});

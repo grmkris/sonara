@@ -16,7 +16,7 @@ import type {
   StageId,
   UserId,
 } from "@sonara/shared/typeid";
-import { and, asc, desc, eq, inArray, lt, max, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gte, inArray, lt, max, or, sql } from "drizzle-orm";
 import { z } from "zod";
 
 import { stageRooms } from "../onchain/stage-rooms";
@@ -200,6 +200,11 @@ const toSummary = (row: SetRow, coverUrl: string | null): FrameSetSummary => ({
   visibility: row.visibility,
 });
 
+// Two-pass position rewrites jump rows into this disjoint band first so the
+// non-deferrable unique (set_id, position) index never sees a transient
+// collision. Far above any real position (sets cap at BATCH_FRAMES_MAX).
+const REORDER_OFFSET = 1_000_000;
+
 const bumpFrameCount = async (
   db: Database,
   setId: FrameSetId,
@@ -248,15 +253,24 @@ export const setsRouter = {
     }),
 
   /**
-   * Batch addFrame: append many frames to a curated set in INPUT order,
-   * positions allocated after the current max. Idempotent per frame — frames
-   * already in the set are skipped (unique (set_id, frame_id)) and `added`
-   * reflects only the real inserts. All-or-nothing on validation: one foreign
-   * frame anywhere in the list rejects the whole batch.
+   * Batch addFrame: add many frames to a curated set in INPUT order.
+   * Idempotent per frame — frames already in the set are skipped
+   * (unique (set_id, frame_id)) and `added` reflects only the real inserts.
+   * All-or-nothing on validation: one foreign frame anywhere in the list
+   * rejects the whole batch.
+   *
+   * `atPosition` (optional) is a DISPLAY index into the ordered member list —
+   * NOT a raw `position` value (removeFrame leaves gaps, so raw positions and
+   * display indices diverge). Omitted → append after the current max
+   * (untouched fast path). Given → splice: the tail shifts up by the insert
+   * count via the same two-pass offset trick reorder uses (the unique
+   * (set_id, position) index is non-deferrable), then the block lands in the
+   * opened gap. Clamped to the member count.
    */
   addFrames: protectedProcedure
     .input(
       z.object({
+        atPosition: z.number().int().min(0).optional(),
         frameIds: z.array(ImageLibraryIdSchema).min(1).max(BATCH_FRAMES_MAX),
         setId: FrameSetIdSchema,
       })
@@ -268,21 +282,92 @@ export const setsRouter = {
       const frameIds = await requireOwnedFrames(db, userId, input.frameIds);
 
       const added = await db.transaction(async (tx) => {
-        const [agg] = await tx
-          .select({ maxPos: max(SCHEMA.frameSetFrame.position) })
-          .from(SCHEMA.frameSetFrame)
-          .where(eq(SCHEMA.frameSetFrame.setId, input.setId));
-        const basePosition = (agg?.maxPos ?? -1) + 1;
+        if (input.atPosition === undefined) {
+          // Append fast path (the original behavior, byte for byte).
+          const [agg] = await tx
+            .select({ maxPos: max(SCHEMA.frameSetFrame.position) })
+            .from(SCHEMA.frameSetFrame)
+            .where(eq(SCHEMA.frameSetFrame.setId, input.setId));
+          const basePosition = (agg?.maxPos ?? -1) + 1;
 
+          const inserted = await tx
+            .insert(SCHEMA.frameSetFrame)
+            .values(
+              frameIds.map((frameId, i) => ({
+                frameId,
+                position: basePosition + i,
+                setId: input.setId,
+              }))
+            )
+            .onConflictDoNothing({
+              target: [SCHEMA.frameSetFrame.setId, SCHEMA.frameSetFrame.frameId],
+            })
+            .returning();
+          if (inserted.length > 0) {
+            await tx
+              .update(SCHEMA.frameSet)
+              .set({
+                frameCount: sql`greatest(frame_count + ${inserted.length}, 0)`,
+              })
+              .where(eq(SCHEMA.frameSet.id, input.setId));
+          }
+          return inserted.length;
+        }
+
+        // Splice path. Read the ordered members once — both for the display-
+        // index → raw-position mapping and to drop already-member frames
+        // (their positions must NOT move; splicing them is reorder's job).
+        const members = await tx
+          .select({
+            frameId: SCHEMA.frameSetFrame.frameId,
+            position: SCHEMA.frameSetFrame.position,
+          })
+          .from(SCHEMA.frameSetFrame)
+          .where(eq(SCHEMA.frameSetFrame.setId, input.setId))
+          .orderBy(asc(SCHEMA.frameSetFrame.position));
+        const memberIds = new Set(members.map((m) => m.frameId));
+        const newIds = frameIds.filter((id) => !memberIds.has(id));
+        if (newIds.length === 0) {
+          return 0;
+        }
+        const idx = Math.min(input.atPosition, members.length);
+        const threshold =
+          members[idx]?.position ?? (members.at(-1)?.position ?? -1) + 1;
+
+        // Two-pass tail shift: jump the tail into a disjoint band first
+        // (REORDER_OFFSET is far above any live position), then land it
+        // +count above where it was — no transient unique collisions.
+        await tx
+          .update(SCHEMA.frameSetFrame)
+          .set({
+            position: sql`position + ${REORDER_OFFSET + newIds.length}`,
+          })
+          .where(
+            and(
+              eq(SCHEMA.frameSetFrame.setId, input.setId),
+              gte(SCHEMA.frameSetFrame.position, threshold)
+            )
+          );
+        await tx
+          .update(SCHEMA.frameSetFrame)
+          .set({ position: sql`position - ${REORDER_OFFSET}` })
+          .where(
+            and(
+              eq(SCHEMA.frameSetFrame.setId, input.setId),
+              gte(SCHEMA.frameSetFrame.position, REORDER_OFFSET)
+            )
+          );
         const inserted = await tx
           .insert(SCHEMA.frameSetFrame)
           .values(
-            frameIds.map((frameId, i) => ({
+            newIds.map((frameId, i) => ({
               frameId,
-              position: basePosition + i,
+              position: threshold + i,
               setId: input.setId,
             }))
           )
+          // Membership verified absent above, inside this tx — kept anyway
+          // for parity with the append path.
           .onConflictDoNothing({
             target: [SCHEMA.frameSetFrame.setId, SCHEMA.frameSetFrame.frameId],
           })
@@ -290,7 +375,9 @@ export const setsRouter = {
         if (inserted.length > 0) {
           await tx
             .update(SCHEMA.frameSet)
-            .set({ frameCount: sql`greatest(frame_count + ${inserted.length}, 0)` })
+            .set({
+              frameCount: sql`greatest(frame_count + ${inserted.length}, 0)`,
+            })
             .where(eq(SCHEMA.frameSet.id, input.setId));
         }
         return inserted.length;
@@ -680,6 +767,37 @@ export const setsRouter = {
       return { ok: true as const };
     }),
 
+  /**
+   * Batch removeFrame: drop many frames from a curated set in one delete
+   * (positions keep gaps; harmless). Non-members are silently skipped —
+   * idempotent, and the inverse of addFrames for the client's undo toast.
+   */
+  removeFrames: protectedProcedure
+    .input(
+      z.object({
+        frameIds: z.array(ImageLibraryIdSchema).min(1).max(BATCH_FRAMES_MAX),
+        setId: FrameSetIdSchema,
+      })
+    )
+    .handler(async ({ context, input }) => {
+      const { db, userId } = context;
+      const set = await requireOwnedSet(db, userId, input.setId);
+      requireEditableFrameList(set);
+      const deleted = await db
+        .delete(SCHEMA.frameSetFrame)
+        .where(
+          and(
+            eq(SCHEMA.frameSetFrame.setId, input.setId),
+            inArray(SCHEMA.frameSetFrame.frameId, input.frameIds)
+          )
+        )
+        .returning();
+      if (deleted.length > 0) {
+        await bumpFrameCount(db, input.setId, -deleted.length);
+      }
+      return { ok: true as const, removed: deleted.length };
+    }),
+
   /** Rename. Metadata edits stay open on recordings (only the frame list is frozen). */
   rename: protectedProcedure
     .input(
@@ -731,12 +849,11 @@ export const setsRouter = {
         });
       }
 
-      const OFFSET = 1_000_000;
       await db.transaction(async (tx) => {
         for (const [i, frameId] of input.orderedFrameIds.entries()) {
           await tx
             .update(SCHEMA.frameSetFrame)
-            .set({ position: i + OFFSET })
+            .set({ position: i + REORDER_OFFSET })
             .where(
               and(
                 eq(SCHEMA.frameSetFrame.setId, input.setId),
