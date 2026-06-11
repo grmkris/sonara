@@ -5,7 +5,7 @@ Conventions for working in this repo. Read this before making non-trivial change
 ## Quick orient
 
 - `apps/gateway` — Caddy reverse proxy (`caddy:2-alpine`). The single public entry. Path-routes `/api/auth/*`, `/rpc/*`, `/api/upload/*`, `/ws` to the server and everything else to web, over `*.railway.internal`. So the browser sees one origin → cookies first-party, no CORS.
-- `apps/web` — Next.js 16, thin frontend. Renders the landing page at `/` and the visualizer at `/play`. No DB, no secrets, no business logic — just UI + a little SSR. Consumes the server via the oRPC client (`/rpc`), the Better Auth React client (`/api/auth`), and the WebSocket (`/ws`), all same-origin through the gateway.
+- `apps/web` — Next.js 16, thin frontend. Renders the landing page at `/`, the visualizer at `/play`, the set library at `/studio`, and the set permalink at `/s/[id]`. No DB, no secrets, no business logic — just UI + a little SSR. Consumes the server via the oRPC client (`/rpc`), the Better Auth React client (`/api/auth`), and the WebSocket (`/ws`), all same-origin through the gateway.
 - `apps/server` — Bun + Hono + native WebSocket. **Single source of truth.** Owns Better Auth (`/api/auth/*`, incl. the Dodo webhook), the oRPC HTTP router (`/rpc` — credits, `mintWsTicket`), image upload (`/api/upload/image`), the live `Session`, fal generation, STT, song recognition, credit gating. Runs Drizzle migrations on boot.
 - `packages/api` — generic oRPC primitives, the shared `sessionRouter`, the WS bridge.
 - `packages/db` — Drizzle schema (`auth.db.ts`, `credits.db.ts`), migrations folder, `createDb` + `runMigrations` helpers. Imported by the **server** only (web no longer touches the DB).
@@ -47,6 +47,8 @@ Two Railway environments in the **same** project, each a full stack (gateway/web
 | `dev` | `cab8872e-9c58-411e-bbb6-056d6e963730` | `dev` | https://dev.sonara.fm | **on** |
 
 **Workflow:** the machine-wide **dev-flow** (canonical rules in `~/.claude/CLAUDE.md`). Commit directly to `dev` → push auto-deploys the `dev` env (test on dev.sonara.fm, not locally) → **promote to prod only when asked, via a PR `dev` → `main`** the user reviews + merges (merging auto-deploys prod). The deploy branch is set per-environment via `railway environment edit -e <env> --service-config <serviceId> source.branch <branch>`.
+
+> **Merge with a merge commit — never squash.** `dev` and `main` are long-lived branches, so a squash merge re-writes every promoted commit into one new SHA on `main`; `dev`'s originals stay non-ancestors, so each later `dev → main` PR shows those already-shipped commits as "phantom" un-merged work (this bit PR #1 — Noir et al. were already on `main` via the squash, yet reappeared in PR #2's commit list). A real merge commit makes `dev`'s commits ancestors of `main`, so future PRs show only genuinely-new work. The repo's merge settings enforce this: **merge commit allowed, squash + rebase disabled** (`gh api repos/grmkris/sonara`). Trust the PR's **Files-changed** diff, not the commit list, when histories have already diverged from a past squash.
 
 **Isolation:** the `dev` env was forked with `railway environment new dev --duplicate production`, which copied all variables/secrets but provisioned a **fresh empty Postgres** and a **separate S3 bucket** (`sonara-frames-hlwwxfsgres`) — the `${{Postgres.DATABASE_URL}}` / `${{sonara-frames.*}}` references re-point automatically. Migrations + the boot library-seed run on first server boot, so the fresh DB self-populates.
 
@@ -135,13 +137,55 @@ bun run db:start       # local Postgres (docker) — start this first
 bun run dev            # gateway + web + server in parallel via turbo
 bun run dev:web        # web only
 bun run dev:server     # server only
-bun run typecheck      # all packages
+bun run typecheck      # all packages (tsc — authoritative)
 bun run lint           # oxlint
 bun run test           # turbo test
-bun run ci:local       # lint → typecheck → test → build (serial)
+bun run ci:step        # lint + typecheck:fast (tsgo) — the per-step check, ~25s
+bun run ci:local       # lint → typecheck → test → build — the push gate, ~3min
 ```
 
+### Verification loop (agents: follow this — don't run ci:local per step)
+
+Three tiers, cheapest first. The expensive pipeline runs exactly twice a
+session, not once per edit:
+
+1. **Per edit** — `bunx oxlint <changed files>` (sub-second). Catches the
+   strict ultracite nits (sort-keys, prefer-destructuring, a11y…) the moment
+   they're written instead of via a 3-minute pipeline round-trip.
+2. **Per step / work package** — `bun run ci:step` (~25s for a one-package
+   change, cached otherwise): whole-repo lint + **tsgo** typecheck (the
+   official TS-in-Go preview checker; ~5× faster than tsc, near-parity).
+   Add `bun test <dir>` in the touched package when logic changed (the
+   server PGlite suite is ~14s).
+3. **Per push gate** — `bun run ci:local` (authoritative tsc + tests + real
+   builds, concurrency 4). Always green before pushing `dev` — a push
+   deploys.
+
+tsgo is the speed layer, tsc stays the authority at gates — if the preview
+checker ever diverges, the gate catches it before anything ships. Note
+`bun run check` (ultracite `--type-aware`) is NOT a CI signal: its extra
+type-aware ruleset was never adopted (~1000 open findings repo-wide).
+
 Open **`http://localhost:4470`** (the Caddy gateway) — that's the only origin the browser should use. The gateway proxies to web (`:4472`) and server (`:4471`) internally. WS is same-origin: `ws://localhost:4470/ws`. The gateway dev task runs `caddy:2-alpine` via `docker run --network host` (so it needs Docker; it's in `bun run dev`). Hitting `:4472` directly works for the UI but auth/RPC/WS won't (those live on the server behind the gateway).
+
+## Lint & format
+
+oxlint + oxfmt, configured via the **ultracite** preset — the strict, AI-oriented ruleset (~530 rules / 12 plugins incl. `jsx-a11y`), **not** oxlint's light defaults (correctness-only). The sibling repos on this stack (stylelab) share it.
+
+- `oxlint.config.ts` → `extends [ultracite/oxlint/core, react, next]`; `oxfmt.config.ts` → re-exports `ultracite/oxfmt`. `oxlint-tsgolint` (devDep) backs the `--type-aware` flag — without it `bun run check`/`fix` error out.
+- `bun run lint` → `oxlint` (this is what `ci:local`/CI runs). `bun run check` / `fix` / `fix:unsafe` → `ultracite … --type-aware --type-check` (lint + oxfmt in one). **Never run `--unsafe` unattended** — it strips `async` off no-`await` fns (breaks their `Promise` return type) and mangles exhaustive discriminated-union switches.
+- We use ultracite's **lint layer only**. Do **not** run `ultracite init` — it regenerates these configs and injects a generic rules dump into this file + `CLAUDE.md`. The linter is the source of truth; its generic standards aren't vendored here.
+
+**Deliberate carve-outs — don't "fix" these.** ~54 `// oxlint-disable … -- REVIEW: …` comments mark rules that don't fit this codebase (`grep -rn "oxlint-disable.*REVIEW:" apps packages`; full index + dispositions in `docs/lint-disables-review.md`). Leave these alone:
+
+- **fire-and-forget promises** (`prefer-await-to-then`/`-callbacks`) — session `stream*`, credit refund, WS bootstrap, 60 Hz audio tick; awaiting blocks the live hot path.
+- **intentional barrels** (`no-barrel-file`) — package `index.ts` entrypoints.
+- **bitwise** (`no-bitwise`) — constant-time crypto compare (`ws-ticket.ts`) + seed masks.
+- **`sort-keys`** — env / Drizzle schema / preset orderings are curated, not alphabetical.
+- **`complexity`** — DSP / canvas / dispatch loops kept whole (see Don't touch).
+- native `confirm`/`prompt` (`no-alert`), `.onX=` handler assignment (`prefer-add-event-listener`), byte-level `charCodeAt` (`prefer-code-point`), ServiceWorker `postMessage` (no `targetOrigin` param).
+
+Only **3** are genuinely rewritable (flagged 🟢 in the doc): `catch-error-name`, `default-case`, `no-use-before-define`.
 
 ## Database
 
@@ -221,6 +265,16 @@ Pre-generated, deck-organised images that bypass fal during client demos. Zero p
 - **Assets**: WebPs live under `apps/web/public/library/<deck>/<typeid>.webp` and ship with the Next build. Database `url` column stores the relative path — same on dev and prod.
 - **Seeding fresh prompts** (calls fal): `cd apps/server && bun run seed:library` (optionally `--deck <key> --limit <n> --model <id> --dry-run`). Re-runs are idempotent via `sha256(deck::prompt)` in `prompt_hash`.
 - **Seeding from the committed export** (no fal, replay-safe): `bun run export:library` after a fal seed dumps `apps/server/scripts/library-seed.json` (commit it). `bun run seed:library -- --from-export` replays it. Production fill-up: `railway run --service server -- bun run scripts/seed-library.ts -- --from-export`.
+
+## Sets (`frame_set`)
+
+One entity for everything playable (see `docs/sets-architecture.md`). What used to be three concepts — built-in *decks*, archived *sessions*, curated *reels* — is a **Set**, distinguished only by `origin: 'builtin' | 'recording' | 'curated'`. UI word is "set"; code/schema say `frameSet` / `frame_set`, typeid prefix `set_` (never a bare `set` — collides with JS `Set` / SQL `SET`; ungreppable).
+
+- **Schema**: `packages/db/src/schema/frame-set.db.ts`. Sets *reference* `image_library` rows via `frame_set_frame` (Photos→Albums — never copied). `t_ms` on junction rows drives cadence: present → original timing, null → fixed loop.
+- **Router**: `apps/server/src/rpc/sets.router.ts` — successor of the reel router. Mutation policy: builtin immutable; **recording frame lists are frozen** (it's the take — metadata stays editable; "make a cut" seeds a curated set instead); curated fully owner-editable. `sets.get` is **public** (visibility-gated; private-to-others = `NOT_FOUND` so existence doesn't leak).
+- **Recordings are auto-captured**: going live as a signed-in producer creates a `origin: recording` set and appends frames with real `t_ms` as the show happens; `status` flips `recording → final` at the end. No "save" step. (Anon/demo sessions generate nothing new — nothing to record.)
+- **Permalink**: `/s/<set_id>` — live view while the show runs (via the `lens` procedure in `control.router.ts`), replay forever after; the link never dies. `/s/<id>/control` is the owner's console facet over the `control.*` HTTP router.
+- Built-in decks exist twice on purpose: the deck registry (`packages/shared/src/decks.ts`) still drives the client-native demo loop, **and** each deck is seeded as a `origin: builtin` set row (`frame_set_deck_key_idx`) so it shows in the unified picker. The boot seed converges both.
 
 ## Don't touch
 

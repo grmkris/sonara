@@ -1,9 +1,7 @@
+import { defaultAudio } from "@sonara/shared";
+import type { AudioFeatures, NowPlaying } from "@sonara/shared";
 import type { StateCreator } from "zustand";
-import {
-  type AudioFeatures,
-  type NowPlaying,
-  defaultAudio,
-} from "@sonara/shared";
+
 import type { VisualizerState } from "./types";
 
 export interface PlaybackSlice {
@@ -29,12 +27,11 @@ export const createPlaybackSlice: StateCreator<
   PlaybackSlice
 > = (set) => ({
   audio: { ...defaultAudio },
-  nowPlaying: null,
   identifyTick: 0,
+  nowPlaying: null,
   recognizing: false,
-
+  requestIdentify: () => set((s) => ({ identifyTick: s.identifyTick + 1 })),
   setAudio: (f) => set({ audio: f }),
   setNowPlaying: (track) => set({ nowPlaying: track }),
-  requestIdentify: () => set((s) => ({ identifyTick: s.identifyTick + 1 })),
   setRecognizing: (r) => set({ recognizing: r }),
 });

@@ -14,43 +14,44 @@ interface DriftEntry {
   // Weight per act. 0 = never, 1 = always eligible. Sampling multiplies these
   // by the current-act affinity (intro / build / dissolve) derived from
   // sessionProgress.
-  weights: [number, number, number]; // [intro, build, dissolve]
+  // [intro, build, dissolve]
+  weights: [number, number, number];
 }
 
 const DRIFT_POOL: readonly DriftEntry[] = [
   // light — morning/bright intro, fades to dusk
-  { phrase: "dappled light",   weights: [1.0, 0.6, 0.1] },
-  { phrase: "silver morning",  weights: [1.0, 0.3, 0.0] },
-  { phrase: "dawn haze",       weights: [1.0, 0.2, 0.0] },
-  { phrase: "low sun",         weights: [0.2, 0.8, 0.9] },
-  { phrase: "smoked gold",     weights: [0.1, 0.8, 1.0] },
-  { phrase: "moonstone glow",  weights: [0.0, 0.4, 1.0] },
+  { phrase: "dappled light", weights: [1, 0.6, 0.1] },
+  { phrase: "silver morning", weights: [1, 0.3, 0] },
+  { phrase: "dawn haze", weights: [1, 0.2, 0] },
+  { phrase: "low sun", weights: [0.2, 0.8, 0.9] },
+  { phrase: "smoked gold", weights: [0.1, 0.8, 1] },
+  { phrase: "moonstone glow", weights: [0, 0.4, 1] },
   // texture — steady through
-  { phrase: "ink wash",        weights: [0.8, 1.0, 0.8] },
-  { phrase: "wet pigment",     weights: [0.9, 1.0, 0.6] },
-  { phrase: "paper grain",     weights: [1.0, 0.8, 0.6] },
-  { phrase: "etched lines",    weights: [0.3, 1.0, 0.5] },
-  { phrase: "dry brush",       weights: [0.2, 0.9, 1.0] },
-  { phrase: "soft diffusion",  weights: [1.0, 0.7, 0.4] },
+  { phrase: "ink wash", weights: [0.8, 1, 0.8] },
+  { phrase: "wet pigment", weights: [0.9, 1, 0.6] },
+  { phrase: "paper grain", weights: [1, 0.8, 0.6] },
+  { phrase: "etched lines", weights: [0.3, 1, 0.5] },
+  { phrase: "dry brush", weights: [0.2, 0.9, 1] },
+  { phrase: "soft diffusion", weights: [1, 0.7, 0.4] },
   // motion — slow intro, more energetic build, dissolving end
-  { phrase: "slow drift",      weights: [1.0, 0.6, 0.4] },
-  { phrase: "held breath",     weights: [1.0, 0.5, 0.3] },
-  { phrase: "cascading",       weights: [0.3, 1.0, 0.6] },
-  { phrase: "turning air",     weights: [0.5, 1.0, 0.7] },
-  { phrase: "gathering weight",weights: [0.2, 1.0, 0.9] },
-  { phrase: "dissolving",      weights: [0.0, 0.4, 1.0] },
+  { phrase: "slow drift", weights: [1, 0.6, 0.4] },
+  { phrase: "held breath", weights: [1, 0.5, 0.3] },
+  { phrase: "cascading", weights: [0.3, 1, 0.6] },
+  { phrase: "turning air", weights: [0.5, 1, 0.7] },
+  { phrase: "gathering weight", weights: [0.2, 1, 0.9] },
+  { phrase: "dissolving", weights: [0, 0.4, 1] },
   // atmosphere
-  { phrase: "dust motes",      weights: [1.0, 0.8, 0.6] },
-  { phrase: "soft fog",        weights: [0.8, 0.7, 1.0] },
-  { phrase: "deep shadow",     weights: [0.2, 0.8, 1.0] },
-  { phrase: "humid air",       weights: [0.4, 1.0, 0.7] },
-  { phrase: "cold clarity",    weights: [1.0, 0.5, 0.3] },
-  { phrase: "quiet tension",   weights: [0.5, 1.0, 0.7] },
+  { phrase: "dust motes", weights: [1, 0.8, 0.6] },
+  { phrase: "soft fog", weights: [0.8, 0.7, 1] },
+  { phrase: "deep shadow", weights: [0.2, 0.8, 1] },
+  { phrase: "humid air", weights: [0.4, 1, 0.7] },
+  { phrase: "cold clarity", weights: [1, 0.5, 0.3] },
+  { phrase: "quiet tension", weights: [0.5, 1, 0.7] },
 ];
 
 // Map sessionProgress (0..1) → per-act affinity (summing to ~1). Triangular
 // weights centred on each act's natural time: intro=0.15, build=0.5, dissolve=0.85.
-function actWeights(progress: number): [number, number, number] {
+const actWeights = (progress: number): [number, number, number] => {
   const p = Math.max(0, Math.min(1, progress));
   const tri = (center: number, width: number) =>
     Math.max(0, 1 - Math.abs(p - center) / width);
@@ -59,12 +60,14 @@ function actWeights(progress: number): [number, number, number] {
   const dissolve = tri(0.85, 0.5);
   const sum = intro + build + dissolve || 1;
   return [intro / sum, build / sum, dissolve / sum];
-}
+};
 
 // Returns a single random modifier biased by sessionProgress. When progress is
 // null/undefined we fall back to uniform sampling (preserves old behaviour).
-export function sampleDrift(sessionProgress?: number): string | null {
-  if (DRIFT_POOL.length === 0) return null;
+export const sampleDrift = (sessionProgress?: number): string | null => {
+  if (DRIFT_POOL.length === 0) {
+    return null;
+  }
   if (sessionProgress === undefined) {
     const idx = Math.floor(Math.random() * DRIFT_POOL.length);
     return DRIFT_POOL[idx]?.phrase ?? null;
@@ -75,14 +78,18 @@ export function sampleDrift(sessionProgress?: number): string | null {
     w: e.weights[0] * wi + e.weights[1] * wb + e.weights[2] * wd,
   }));
   const total = weighted.reduce((s, e) => s + e.w, 0);
-  if (total <= 0) return DRIFT_POOL[0]?.phrase ?? null;
+  if (total <= 0) {
+    return DRIFT_POOL[0]?.phrase ?? null;
+  }
   let r = Math.random() * total;
   for (const e of weighted) {
     r -= e.w;
-    if (r <= 0) return e.phrase;
+    if (r <= 0) {
+      return e.phrase;
+    }
   }
-  return weighted[weighted.length - 1]?.phrase ?? null;
-}
+  return weighted.at(-1)?.phrase ?? null;
+};
 
 // Stateful drift sequence held by each Session. Pre-samples a fixed-length
 // trajectory of modifiers and advances one slot per keyframe; the slot order
@@ -112,12 +119,16 @@ export class DriftTrajectory {
   // we already hold (cheap pool-equality check) so the cursor doesn't reset
   // on every periodic trigger when nothing has actually changed.
   reseed(opts: { candidates?: string[]; sessionProgress?: number }): boolean {
-    if (typeof opts.sessionProgress === "number") this.progress = opts.sessionProgress;
+    if (typeof opts.sessionProgress === "number") {
+      this.progress = opts.sessionProgress;
+    }
     const next = opts.candidates ?? [];
     const sameCandidates =
       next.length === this.candidatePool.length &&
       next.every((c, i) => c === this.candidatePool[i]);
-    if (sameCandidates && this.slots.length > 0) return false;
+    if (sameCandidates && this.slots.length > 0) {
+      return false;
+    }
     this.candidatePool = [...next];
     this.slots = this.sampleSlots();
     this.cursor = 0;
@@ -130,7 +141,9 @@ export class DriftTrajectory {
       // fallback). Should be rare; only happens if reseed() was somehow
       // called with no candidates and the static pool is empty.
       this.slots = this.sampleSlots();
-      if (this.slots.length === 0) return null;
+      if (this.slots.length === 0) {
+        return null;
+      }
     }
     const idx = this.cursor % this.slots.length;
     const phrase = this.slots[idx] ?? null;
@@ -142,7 +155,8 @@ export class DriftTrajectory {
     if (Math.random() < RECOMBINE_PROB) {
       const replacement = this.sampleOne();
       if (replacement) {
-        const offset = 2 + Math.floor(Math.random() * 4); // 2..5 ahead
+        // 2..5 ahead
+        const offset = 2 + Math.floor(Math.random() * 4);
         const replaceIdx = (this.cursor + offset) % this.slots.length;
         this.slots[replaceIdx] = replacement;
       }
@@ -153,14 +167,20 @@ export class DriftTrajectory {
 
   // Diagnostic — used by trigger() logs / tests.
   inspect(): { slots: string[]; cursor: number; pool: string[] } {
-    return { slots: [...this.slots], cursor: this.cursor, pool: [...this.candidatePool] };
+    return {
+      cursor: this.cursor,
+      pool: [...this.candidatePool],
+      slots: [...this.slots],
+    };
   }
 
   private sampleSlots(): string[] {
     const out: string[] = [];
-    for (let i = 0; i < TRAJECTORY_LENGTH; i++) {
+    for (let i = 0; i < TRAJECTORY_LENGTH; i += 1) {
       const phrase = this.sampleOne();
-      if (phrase) out.push(phrase);
+      if (phrase) {
+        out.push(phrase);
+      }
     }
     return out;
   }

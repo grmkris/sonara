@@ -1,4 +1,5 @@
 import type { StateCreator } from "zustand";
+
 import type { VisualizerState } from "./types";
 
 export const UI_VISIBLE_KEY = "sonara.uiVisible";
@@ -16,13 +17,16 @@ export interface UiSlice {
 }
 
 export const createUiSlice: StateCreator<VisualizerState, [], [], UiSlice> = (
-  set,
+  set
 ) => ({
-  uiVisible: true,
+  sessionStartedAt: typeof performance === "undefined" ? 0 : performance.now(),
+  setUiVisible: (v) => {
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem(UI_VISIBLE_KEY, v ? "1" : "0");
+    }
+    set({ uiVisible: v });
+  },
   sweepPulse: 0,
-  sessionStartedAt:
-    typeof performance !== "undefined" ? performance.now() : 0,
-
   toggleUi: () =>
     set((s) => {
       const next = !s.uiVisible;
@@ -31,10 +35,5 @@ export const createUiSlice: StateCreator<VisualizerState, [], [], UiSlice> = (
       }
       return { uiVisible: next };
     }),
-  setUiVisible: (v) => {
-    if (typeof window !== "undefined") {
-      window.localStorage.setItem(UI_VISIBLE_KEY, v ? "1" : "0");
-    }
-    set({ uiVisible: v });
-  },
+  uiVisible: true,
 });

@@ -1,8 +1,8 @@
 "use client";
 
 import { useSession } from "@/lib/auth-client";
-import { useVisualizerStore } from "@/stores/visualizer";
 import { cn } from "@/lib/utils";
+import { useVisualizerStore } from "@/stores/visualizer";
 
 // Small chip showing the identified track (with a "refresh" action) OR — when
 // nothing is known yet — a minimal "identify" button. Without the always-
@@ -14,15 +14,50 @@ import { cn } from "@/lib/utils";
 // "listening…" instead of just bouncing back to the resting state — users
 // couldn't tell whether the click had registered otherwise.
 //
+const RefreshIcon = () => (
+  <svg
+    width="12"
+    height="12"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+  >
+    <path d="M21 12a9 9 0 1 1-3-6.7" />
+    <path d="M21 3v6h-6" />
+  </svg>
+);
+
+const SpinnerIcon = () => (
+  <svg
+    width="12"
+    height="12"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    className="animate-spin"
+    aria-hidden
+  >
+    <path d="M21 12a9 9 0 1 1-6.219-8.56" />
+  </svg>
+);
+
 // Hidden for anonymous visitors. The underlying `recognize` WS proc returns
 // null for `userId === null`, so the chip would never light up anyway.
-export function NowPlaying() {
+export const NowPlaying = () => {
   const { data: sessionData } = useSession();
   const track = useVisualizerStore((s) => s.nowPlaying);
   const requestIdentify = useVisualizerStore((s) => s.requestIdentify);
   const recognizing = useVisualizerStore((s) => s.recognizing);
 
-  if (!sessionData?.session) return null;
+  if (!sessionData?.session) {
+    return null;
+  }
 
   if (!track) {
     return (
@@ -33,16 +68,12 @@ export function NowPlaying() {
         className={cn(
           "focus-ring pointer-events-auto flex items-center gap-2 rounded-sm border border-[color:var(--hairline)]/40 bg-black/20 px-2 py-1 backdrop-blur-sm",
           "font-mono text-[10px] uppercase tracking-[0.2em] text-[color:var(--stone)] transition",
-          "hover:text-[color:var(--paper)] disabled:opacity-60",
+          "hover:text-[color:var(--paper)] disabled:opacity-60"
         )}
         title={recognizing ? "recognising…" : "identify music playing now"}
         aria-label={recognizing ? "recognising" : "identify music playing now"}
       >
-        {recognizing ? (
-          <SpinnerIcon />
-        ) : (
-          <RefreshIcon />
-        )}
+        {recognizing ? <SpinnerIcon /> : <RefreshIcon />}
         <span className="hidden sm:inline">
           {recognizing ? "listening…" : "identify"}
         </span>
@@ -66,7 +97,7 @@ export function NowPlaying() {
         <span
           className={cn(
             "truncate font-serif text-[11px] italic",
-            "text-[color:var(--paper)]/90",
+            "text-[color:var(--paper)]/90"
           )}
           title={`${track.title} — ${track.artist}`}
         >
@@ -88,41 +119,4 @@ export function NowPlaying() {
       </button>
     </div>
   );
-}
-
-function RefreshIcon() {
-  return (
-    <svg
-      width="12"
-      height="12"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <path d="M21 12a9 9 0 1 1-3-6.7" />
-      <path d="M21 3v6h-6" />
-    </svg>
-  );
-}
-
-function SpinnerIcon() {
-  return (
-    <svg
-      width="12"
-      height="12"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      className="animate-spin"
-      aria-hidden
-    >
-      <path d="M21 12a9 9 0 1 1-6.219-8.56" />
-    </svg>
-  );
-}
+};

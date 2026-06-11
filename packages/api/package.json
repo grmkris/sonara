@@ -12,15 +12,16 @@
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
+    "typecheck:fast": "tsgo --noEmit",
     "lint": "oxlint",
     "fix": "oxlint --fix",
     "test": "bun test || echo 'no tests yet'"
   },
   "dependencies": {
+    "@orpc/client": "^1.14.5",
+    "@orpc/server": "^1.14.5",
     "@sonara/shared": "workspace:*",
-    "@orpc/client": "^1.14.0",
-    "@orpc/server": "^1.14.0",
-    "zod": "^4.3.6"
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "typescript": "^6.0.3"

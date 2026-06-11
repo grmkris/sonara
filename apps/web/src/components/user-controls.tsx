@@ -1,13 +1,14 @@
 "use client";
 
+import { LogInIcon, LogOutIcon } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
-import { LogInIcon, LogOutIcon } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { signOut, useSession } from "@/lib/auth-client";
-import { UsagePanel } from "@/components/usage-panel";
 
-export function UserControls() {
+import { Button } from "@/components/ui/button";
+import { UsagePanel } from "@/components/usage-panel";
+import { signOut, useSession } from "@/lib/auth-client";
+
+export const UserControls = () => {
   const { data: sessionData } = useSession();
   const isSignedIn = !!sessionData?.session;
   const [panelOpen, setPanelOpen] = useState(false);
@@ -15,10 +16,16 @@ export function UserControls() {
 
   // Close popover on outside click.
   useEffect(() => {
-    if (!panelOpen) return;
+    if (!panelOpen) {
+      return;
+    }
     const onDown = (e: MouseEvent) => {
-      if (!popoverRef.current) return;
-      if (!popoverRef.current.contains(e.target as Node)) setPanelOpen(false);
+      if (!popoverRef.current) {
+        return;
+      }
+      if (!popoverRef.current.contains(e.target as Node)) {
+        setPanelOpen(false);
+      }
     };
     window.addEventListener("mousedown", onDown);
     return () => window.removeEventListener("mousedown", onDown);
@@ -65,13 +72,10 @@ export function UserControls() {
         <LogOutIcon size={12} />
       </Button>
       {panelOpen ? (
-        <div
-          ref={popoverRef}
-          className="absolute right-0 top-full z-40 mt-3"
-        >
+        <div ref={popoverRef} className="absolute right-0 top-full z-40 mt-3">
           <UsagePanel onClose={() => setPanelOpen(false)} />
         </div>
       ) : null}
     </div>
   );
-}
+};

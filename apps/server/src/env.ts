@@ -4,6 +4,7 @@ import { z } from "zod";
 // Startup-time env validation. Required keys fail the parse immediately so
 // the server refuses to boot into a half-configured state. Optional model
 // overrides stay optional because they have sane defaults.
+// oxlint-disable-next-line sort-keys -- REVIEW: keys are grouped logically (required vs optional) with per-key documentation; alphabetic reorder would scramble the doc-comment associations
 const envSchema = z.object({
   // Which environment this is (local | dev | prod). Required — no default, so a
   // misconfigured deploy fails loudly instead of silently using local URLs.
@@ -19,10 +20,14 @@ const envSchema = z.object({
     .default("info"),
 
   // Required — without any of these the server cannot do its job.
-  BETTER_AUTH_SECRET: z.string().min(1), // Better Auth + WS ticket HMAC key
-  DATABASE_URL: z.string().url(), // credits ledger + auth tables
-  FAL_KEY: z.string().min(1), // image generation + image-anchor upload
-  AUDD_API_KEY: z.string().min(1), // song recognition
+  // Better Auth + WS ticket HMAC key
+  BETTER_AUTH_SECRET: z.string().min(1),
+  // credits ledger + auth tables
+  DATABASE_URL: z.string().url(),
+  // image generation + image-anchor upload
+  FAL_KEY: z.string().min(1),
+  // song recognition
+  AUDD_API_KEY: z.string().min(1),
 
   // The public origin (Caddy gateway), the WS origin, and the Dodo test/live
   // mode are all derived from APP_ENV via SERVICE_URLS / dodoModeForEnv in
@@ -50,6 +55,12 @@ const envSchema = z.object({
   // song-muse (track → prompt synthesis). Not used by voice — voice is
   // direct dictation with no LLM round-trip.
   FAL_LLM_MODEL: z.string().optional(),
+  // Optional — direct Google Gemini API for the scene expander/moderator. When
+  // GEMINI_API_KEY is set, the scene LLM calls Gemini DIRECTLY, bypassing fal
+  // any-llm's ~1.5-2s queue overhead (measured) for a much faster prompt→frame.
+  // Absent → falls back to the FAL any-llm path. Small fast model by default.
+  GEMINI_API_KEY: z.string().optional(),
+  GEMINI_MODEL: z.string().default("gemini-2.5-flash-lite"),
 
   // Railway Bucket (S3-compatible, Tigris-backed). Stores every persisted
   // generated frame so users can browse their library / timeline. Optional
@@ -64,7 +75,24 @@ const envSchema = z.object({
   // Presigned read URL TTL. 7 days = 604800. Long enough to survive a tab
   // left open for a few days; the library.list RPC always returns fresh
   // URLs so any stale ones just need a refetch.
-  S3_PRESIGN_TTL_SEC: z.coerce.number().int().positive().default(604800),
+  S3_PRESIGN_TTL_SEC: z.coerce.number().int().positive().default(604_800),
+
+  // Monad "stage" (on-chain visual control). All optional — when MONAD_RPC_WSS
+  // and SONARA_STAGE_CONTRACT are both set, the server starts the on-chain
+  // event listener at boot; otherwise the feature is dormant (no listener, the
+  // stage.open endpoint still mints rooms but nothing drives them).
+  MONAD_RPC_WSS: z.string().default("wss://testnet-rpc.monad.xyz"),
+  SONARA_STAGE_CONTRACT: z.string().default(""),
+  // How long each queued prompt holds the projector before the next advances.
+  PROMPT_DWELL_MS: z.coerce.number().int().positive().default(12_000),
+  // EOA key the MCP agent signs with (it pays its own gas in testnet MON).
+  MCP_AGENT_KEY: z.string().default(""),
+  // EOA key the stage airdrop faucet sends USDC from (stage.airdrop).
+  // Needs testnet MON for gas + a USDC float; as the stage treasury, spent
+  // prompts flow back to it. Empty = no airdrops (audience uses faucet.circle.com).
+  STAGE_FAUCET_KEY: z.string().default(""),
+  // Optional Pimlico key to lift the public bundler rate limit before a demo.
+  PIMLICO_API_KEY: z.string().default(""),
 });
 
 export const env = envSchema.parse(Bun.env);

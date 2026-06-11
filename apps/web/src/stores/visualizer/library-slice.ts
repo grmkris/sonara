@@ -1,6 +1,8 @@
-import type { StateCreator } from "zustand";
 import type { LibraryFrame } from "@sonara/shared";
+import type { StateCreator } from "zustand";
+
 import { rpcClient } from "@/lib/orpc";
+
 import type { VisualizerState } from "./types";
 
 // The user's persisted timeline. Bootstraps via library.list on WS open;
@@ -37,21 +39,18 @@ export const createLibrarySlice: StateCreator<
   [],
   LibrarySlice
 > = (set, get) => ({
-  libraryFrames: [],
-  libraryCursor: null,
-  libraryLoading: false,
-  libraryBootstrapped: false,
-  libraryHasMore: false,
-
   libraryAppendFromEvent: (frame) => {
     set((s) => {
-      if (s.libraryFrames.some((f) => f.id === frame.id)) return {};
+      if (s.libraryFrames.some((f) => f.id === frame.id)) {
+        return {};
+      }
       return { libraryFrames: [frame, ...s.libraryFrames] };
     });
   },
-
   libraryBootstrap: async () => {
-    if (get().libraryLoading) return;
+    if (get().libraryLoading) {
+      return;
+    }
     set({ libraryLoading: true });
     try {
       const { frames, nextCursor } = await rpcClient.library.list({});
@@ -62,53 +61,60 @@ export const createLibrarySlice: StateCreator<
         const seen = new Set<string>();
         const merged: LibraryFrame[] = [];
         for (const f of [...s.libraryFrames, ...frames]) {
-          if (seen.has(f.id)) continue;
+          if (seen.has(f.id)) {
+            continue;
+          }
           seen.add(f.id);
           merged.push(f);
         }
         merged.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
         return {
-          libraryFrames: merged,
-          libraryCursor: nextCursor,
-          libraryHasMore: nextCursor !== null,
           libraryBootstrapped: true,
+          libraryCursor: nextCursor,
+          libraryFrames: merged,
+          libraryHasMore: nextCursor !== null,
           libraryLoading: false,
         };
       });
-    } catch (err) {
-      console.warn("[library] bootstrap failed", err);
-      set({ libraryLoading: false, libraryBootstrapped: true });
+    } catch (error) {
+      console.warn("[library] bootstrap failed", error);
+      set({ libraryBootstrapped: true, libraryLoading: false });
     }
   },
-
+  libraryBootstrapped: false,
+  libraryCursor: null,
+  libraryFrames: [],
+  libraryHasMore: false,
   libraryLoadMore: async () => {
     const { libraryLoading, libraryCursor, libraryHasMore } = get();
-    if (libraryLoading || !libraryHasMore || !libraryCursor) return;
+    if (libraryLoading || !libraryHasMore || !libraryCursor) {
+      return;
+    }
     set({ libraryLoading: true });
     try {
       const { frames, nextCursor } = await rpcClient.library.list({
         cursor: libraryCursor,
       });
       set((s) => ({
+        libraryCursor: nextCursor,
         // Append (oldest end) — pagination walks backwards through time.
         libraryFrames: [...s.libraryFrames, ...frames],
-        libraryCursor: nextCursor,
         libraryHasMore: nextCursor !== null,
         libraryLoading: false,
       }));
-    } catch (err) {
-      console.warn("[library] loadMore failed", err);
+    } catch (error) {
+      console.warn("[library] loadMore failed", error);
       set({ libraryLoading: false });
     }
   },
-
+  libraryLoading: false,
   libraryReset: () => {
     set({
-      libraryFrames: [],
-      libraryCursor: null,
-      libraryLoading: false,
       libraryBootstrapped: false,
+      libraryCursor: null,
+      libraryFrames: [],
       libraryHasMore: false,
+      libraryLoading: false,
     });
   },
 });

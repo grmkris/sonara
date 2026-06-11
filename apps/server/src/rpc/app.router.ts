@@ -1,8 +1,12 @@
 import type { RouterClient } from "@orpc/server";
+
 import { authRouter } from "./auth.router";
+import { controlRouter } from "./control.router";
 import { creditsRouter } from "./credits.router";
 import { libraryRouter } from "./library.router";
 import { publicProcedure } from "./procedures";
+import { setsRouter } from "./sets.router";
+import { stageRouter } from "./stage.router";
 
 // The HTTP (oRPC over fetch) router. Mounted by the server's Hono app at
 // /rpc and reached from the browser through the Caddy gateway (same-origin).
@@ -10,10 +14,13 @@ import { publicProcedure } from "./procedures";
 // package export — `import type` is erased at compile time, so none of the
 // server runtime deps (db, dodopayments, fal) leak into the web bundle.
 export const appRouter = {
-  healthCheck: publicProcedure.handler(() => "OK" as const),
   auth: authRouter,
+  control: controlRouter,
   credits: creditsRouter,
+  healthCheck: publicProcedure.handler(() => "OK" as const),
   library: libraryRouter,
+  sets: setsRouter,
+  stage: stageRouter,
 };
 
 export type AppRouter = typeof appRouter;

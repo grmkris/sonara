@@ -1,6 +1,8 @@
-import { drizzle, type NodePgDatabase } from "drizzle-orm/node-postgres";
+import { drizzle } from "drizzle-orm/node-postgres";
+import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 import type { PgliteDatabase } from "drizzle-orm/pglite";
-import pg from "pg";
+import { Pool } from "pg";
+
 import * as SCHEMA from "./schema";
 
 export { SCHEMA };
@@ -10,17 +12,16 @@ export type Database =
 
 // Cached pool per connection string — keeps warm pg.Pools across Next.js
 // route handlers within the same lambda instance.
-const POOLS = new Map<string, pg.Pool>();
+const POOLS = new Map<string, Pool>();
 
-function getPool(databaseUrl: string): pg.Pool {
+const getPool = (databaseUrl: string): Pool => {
   let pool = POOLS.get(databaseUrl);
   if (!pool) {
-    pool = new pg.Pool({ connectionString: databaseUrl });
+    pool = new Pool({ connectionString: databaseUrl });
     POOLS.set(databaseUrl, pool);
   }
   return pool;
-}
+};
 
-export function createDb(databaseUrl: string): Database {
-  return drizzle(getPool(databaseUrl), { schema: SCHEMA });
-}
+export const createDb = (databaseUrl: string): Database =>
+  drizzle(getPool(databaseUrl), { schema: SCHEMA });

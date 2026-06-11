@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
+
 import { useVisualizerStore } from "@/stores/visualizer";
 
 // Sumi-ink peak-hold overlay. On each RMS peak (detected as a rising local
@@ -13,18 +14,27 @@ import { useVisualizerStore } from "@/stores/visualizer";
 
 const MAX_DROPS = 6;
 const LIFE_MS = 2200;
-const PEAK_HOLD_MS = 300; // minimum time between spawns
-const PEAK_DELTA = 0.12; // minimum rise in RMS vs recent trailing avg
+// minimum time between spawns
+const PEAK_HOLD_MS = 300;
+// minimum rise in RMS vs recent trailing avg
+const PEAK_DELTA = 0.12;
 
 interface Drop {
-  x: number; // 0..1
-  y: number; // 0..1
-  strength: number; // 0..1, shapes radius + opacity
-  born: number; // performance.now()
-  tint: number; // 0..1, bias from paper (0) to indigo (1)
+  // 0..1
+  x: number;
+  // 0..1
+  y: number;
+  // 0..1, shapes radius + opacity
+  strength: number;
+  // performance.now()
+  born: number;
+  // 0..1, bias from paper (0) to indigo (1)
+  tint: number;
 }
 
-export function InkDrops() {
+const lerp = (a: number, b: number, t: number): number => a + (b - a) * t;
+
+export const InkDrops = () => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const dropsRef = useRef<Drop[]>([]);
   const trailingAvgRef = useRef(0);
@@ -32,14 +42,20 @@ export function InkDrops() {
 
   useEffect(() => {
     const canvas = canvasRef.current;
-    if (!canvas) return;
+    if (!canvas) {
+      return;
+    }
     const ctx = canvas.getContext("2d", { alpha: true });
-    if (!ctx) return;
+    if (!ctx) {
+      return;
+    }
 
     let rafId = 0;
 
-    function resize() {
-      if (!canvas) return;
+    const resize = () => {
+      if (!canvas) {
+        return;
+      }
       const dpr = Math.min(2, window.devicePixelRatio || 1);
       const w = canvas.clientWidth;
       const h = canvas.clientHeight;
@@ -48,7 +64,7 @@ export function InkDrops() {
         canvas.height = h * dpr;
         ctx?.setTransform(dpr, 0, 0, dpr, 0, 0);
       }
-    }
+    };
 
     const onResize = () => resize();
     window.addEventListener("resize", onResize);
@@ -56,15 +72,19 @@ export function InkDrops() {
 
     const tick = () => {
       rafId = requestAnimationFrame(tick);
-      if (!canvas) return;
+      if (!canvas) {
+        return;
+      }
       const w = canvas.clientWidth;
       const h = canvas.clientHeight;
-      if (w === 0 || h === 0) return;
+      if (w === 0 || h === 0) {
+        return;
+      }
       resize();
 
       const state = useVisualizerStore.getState();
-      const audio = state.audio;
-      const intensity = state.scene.intensity;
+      const { audio } = state;
+      const { intensity } = state.scene;
       const now = performance.now();
 
       // Peak detection on RMS — rising above the trailing EMA by PEAK_DELTA.
@@ -81,29 +101,34 @@ export function InkDrops() {
         const bassness = audio.bass / Math.max(0.01, audio.bass + audio.treble);
         const y = 0.25 + bassness * 0.5 + (Math.random() - 0.5) * 0.12;
         const drop: Drop = {
+          born: now,
+          strength: Math.min(1, audio.rms * 1.4),
+          tint: audio.centroid,
           x,
           y,
-          strength: Math.min(1, audio.rms * 1.4),
-          born: now,
-          tint: audio.centroid,
         };
         const drops = dropsRef.current;
         drops.push(drop);
-        while (drops.length > MAX_DROPS) drops.shift();
+        while (drops.length > MAX_DROPS) {
+          drops.shift();
+        }
       }
 
       // Render.
       ctx.clearRect(0, 0, w, h);
       const drops = dropsRef.current;
-      for (let i = drops.length - 1; i >= 0; i--) {
+      for (let i = drops.length - 1; i >= 0; i -= 1) {
         const d = drops[i];
-        if (!d) continue;
+        if (!d) {
+          continue;
+        }
         const age = now - d.born;
         if (age > LIFE_MS) {
           drops.splice(i, 1);
           continue;
         }
-        const t = age / LIFE_MS; // 0..1
+        // 0..1
+        const t = age / LIFE_MS;
         const radius = 20 + t * 180 * d.strength;
         // Opacity: rises fast, fades slow. Peaks around 15% life.
         const a =
@@ -121,8 +146,14 @@ export function InkDrops() {
         const b = Math.round(lerp(120, 82, d.tint));
 
         const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, radius);
-        grad.addColorStop(0, `rgba(${r},${g},${b},${(a * d.strength * intensity).toFixed(3)})`);
-        grad.addColorStop(0.6, `rgba(${r},${g},${b},${(a * 0.35 * intensity).toFixed(3)})`);
+        grad.addColorStop(
+          0,
+          `rgba(${r},${g},${b},${(a * d.strength * intensity).toFixed(3)})`
+        );
+        grad.addColorStop(
+          0.6,
+          `rgba(${r},${g},${b},${(a * 0.35 * intensity).toFixed(3)})`
+        );
         grad.addColorStop(1, `rgba(${r},${g},${b},0)`);
         ctx.fillStyle = grad;
         ctx.beginPath();
@@ -146,8 +177,4 @@ export function InkDrops() {
       style={{ willChange: "contents" }}
     />
   );
-}
-
-function lerp(a: number, b: number, t: number): number {
-  return a + (b - a) * t;
-}
+};

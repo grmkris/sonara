@@ -1,9 +1,11 @@
 "use client";
 
-import Meyda from "meyda";
 import type { AudioFeatures, OnsetType } from "@sonara/shared";
+import Meyda from "meyda";
+
 import { classifyOnset } from "./onset-classify";
-import { createClipRecorder, type ClipRecorder } from "./recorder";
+import { createClipRecorder } from "./recorder";
+import type { ClipRecorder } from "./recorder";
 
 // Browser-side audio engine. Runs a single AudioContext + AnalyserNode for the
 // life of the component. Sources (an <audio> element or a mic MediaStream) are
@@ -18,7 +20,171 @@ const MEYDA_BUFFER_SIZE = 512;
 
 // MediaElementAudioSourceNode may only be constructed once per <audio> element
 // per AudioContext. Re-picking a file reuses the cached node.
-const elementSourceCache = new WeakMap<HTMLAudioElement, MediaElementAudioSourceNode>();
+const elementSourceCache = new WeakMap<
+  HTMLAudioElement,
+  MediaElementAudioSourceNode
+>();
+
+const mean = (
+  arr: Uint8Array<ArrayBuffer>,
+  start: number,
+  end: number
+): number => {
+  if (end <= start) {
+    return 0;
+  }
+  let sum = 0;
+  for (let i = start; i < end; i += 1) {
+    sum += arr[i] ?? 0;
+  }
+  return sum / (end - start);
+};
+
+// Krumhansl-Kessler key profiles (major + minor). Each is a 12-entry
+// hierarchy of tonal prominence for a C-rooted scale; other keys are
+// obtained by rotating the profile. Standard MIR reference.
+const KK_MAJOR = [
+  6.35, 2.23, 3.48, 2.33, 4.38, 4.09, 2.52, 5.19, 2.39, 3.66, 2.29, 2.88,
+];
+const KK_MINOR = [
+  6.33, 2.68, 3.52, 5.38, 2.6, 3.53, 2.54, 4.75, 3.98, 2.69, 3.34, 3.17,
+];
+
+// Pearson correlation of two 12-vectors.
+const pearson12 = (a: number[], b: number[]): number => {
+  let meanA = 0;
+  let meanB = 0;
+  for (let i = 0; i < 12; i += 1) {
+    meanA += a[i] ?? 0;
+    meanB += b[i] ?? 0;
+  }
+  meanA /= 12;
+  meanB /= 12;
+  let num = 0;
+  let dA = 0;
+  let dB = 0;
+  for (let i = 0; i < 12; i += 1) {
+    const ai = (a[i] ?? 0) - meanA;
+    const bi = (b[i] ?? 0) - meanB;
+    num += ai * bi;
+    dA += ai * ai;
+    dB += bi * bi;
+  }
+  const denom = Math.sqrt(dA * dB);
+  return denom > 1e-9 ? num / denom : 0;
+};
+
+// Autocorrelation BPM on a flux ring buffer sampled at ~60 Hz. Prefers
+// tempos close to the previous estimate to smooth wobble between halves
+// and doubles (a common failure mode of single-lag picks).
+const estimateBpm = (flux: number[], prevBpm: number): number => {
+  const fps = 60;
+  const minBpm = 60;
+  const maxBpm = 180;
+  let bestBpm = 0;
+  let bestScore = -Infinity;
+  const len = flux.length;
+  // Zero-mean the input so the DC component doesn't dominate.
+  let m = 0;
+  for (let i = 0; i < len; i += 1) {
+    m += flux[i] ?? 0;
+  }
+  m /= len;
+  for (let bpm = minBpm; bpm <= maxBpm; bpm += 1) {
+    const lag = Math.round((fps * 60) / bpm);
+    if (lag <= 0 || lag >= len) {
+      continue;
+    }
+    let corr = 0;
+    for (let i = lag; i < len; i += 1) {
+      corr += ((flux[i] ?? 0) - m) * ((flux[i - lag] ?? 0) - m);
+    }
+    // Prefer BPMs close to the previous estimate — 3% bonus per 10 BPM of
+    // agreement. Prevents half/double jumps when the peak is a near-tie.
+    if (prevBpm > 0) {
+      const dist = Math.abs(bpm - prevBpm);
+      corr *= 1 + Math.max(0, 0.03 * (1 - dist / 10));
+    }
+    if (corr > bestScore) {
+      bestScore = corr;
+      bestBpm = bpm;
+    }
+  }
+  // Reject low-confidence matches: if the peak score is tiny relative to the
+  // signal variance, don't publish a BPM yet.
+  let variance = 0;
+  for (let i = 0; i < len; i += 1) {
+    const d = (flux[i] ?? 0) - m;
+    variance += d * d;
+  }
+  if (variance <= 1e-6 || bestScore / variance < 0.15) {
+    return 0;
+  }
+  return bestBpm;
+};
+
+// Returns the best-matching key (tonic 0..11, mode, correlation 0..1).
+// Null when the chroma vector is empty (no harmonic content detected).
+const detectKey = (
+  chroma: number[]
+): { tonic: number; mode: "major" | "minor"; strength: number } | null => {
+  let total = 0;
+  for (let i = 0; i < 12; i += 1) {
+    total += chroma[i] ?? 0;
+  }
+  if (total < 1e-6) {
+    return null;
+  }
+  let bestTonic = 0;
+  let bestMode: "major" | "minor" = "major";
+  let bestCorr = -Infinity;
+  const rotated: number[] = Array.from({ length: 12 }, () => 0);
+  for (let tonic = 0; tonic < 12; tonic += 1) {
+    // rotate the profile so index 0 corresponds to this tonic
+    for (let i = 0; i < 12; i += 1) {
+      rotated[i] = KK_MAJOR[(i - tonic + 12) % 12] ?? 0;
+    }
+    const cMaj = pearson12(chroma, rotated);
+    for (let i = 0; i < 12; i += 1) {
+      rotated[i] = KK_MINOR[(i - tonic + 12) % 12] ?? 0;
+    }
+    const cMin = pearson12(chroma, rotated);
+    if (cMaj > bestCorr) {
+      bestCorr = cMaj;
+      bestTonic = tonic;
+      bestMode = "major";
+    }
+    if (cMin > bestCorr) {
+      bestCorr = cMin;
+      bestTonic = tonic;
+      bestMode = "minor";
+    }
+  }
+  // Clamp negative correlations to 0 for cleanliness.
+  return { mode: bestMode, strength: Math.max(0, bestCorr), tonic: bestTonic };
+};
+
+const avg = (arr: number[]): number => {
+  if (arr.length === 0) {
+    return 0;
+  }
+  let sum = 0;
+  for (const v of arr) {
+    sum += v;
+  }
+  return sum / arr.length;
+};
+
+const stddev = (arr: number[], m: number): number => {
+  if (arr.length === 0) {
+    return 0;
+  }
+  let sum = 0;
+  for (const v of arr) {
+    sum += (v - m) * (v - m);
+  }
+  return Math.sqrt(sum / arr.length);
+};
 
 export class AudioEngine {
   private ctx: AudioContext | null = null;
@@ -36,7 +202,7 @@ export class AudioEngine {
   // they don't stall at 0 if Meyda's script processor fails to start.
   private flatnessFromMeyda = 0;
   private rolloffFromMeyda = 0;
-  private chromaFromMeyda: number[] = new Array(12).fill(0);
+  private chromaFromMeyda: number[] = Array.from({ length: 12 }, () => 0);
   // Local spectral flux carried across ticks so the arousal EMA has a fresh
   // value before this tick recomputes it. Meyda's own spectralFlux extractor
   // was removed — it throws inside its ScriptProcessorNode callback at ~90Hz
@@ -74,7 +240,9 @@ export class AudioEngine {
   async attachElement(el: HTMLAudioElement): Promise<void> {
     await this.ensureContext();
     this.detachSource();
-    if (!this.ctx || !this.analyser || !this.compressor) return;
+    if (!this.ctx || !this.analyser || !this.compressor) {
+      return;
+    }
     // A cached source node created against a previous (now-closed)
     // AudioContext will throw InvalidAccessError on connect() below — the
     // cache survives stop() because WeakMap keys the node to the <audio>
@@ -105,7 +273,9 @@ export class AudioEngine {
   async attachMic(): Promise<void> {
     await this.ensureContext();
     this.detachSource();
-    if (!this.ctx || !this.analyser || !this.compressor) return;
+    if (!this.ctx || !this.analyser || !this.compressor) {
+      return;
+    }
     // Request RAW capture. The browser defaults echoCancellation /
     // noiseSuppression / autoGainControl to ON and tuned for *speech* — fine
     // for a phone call, destructive for a music feed (AGC pumps levels,
@@ -115,9 +285,9 @@ export class AudioEngine {
     // voice DSP off and analyse the music as-is.
     const stream = await navigator.mediaDevices.getUserMedia({
       audio: {
+        autoGainControl: false,
         echoCancellation: false,
         noiseSuppression: false,
-        autoGainControl: false,
       },
       video: false,
     });
@@ -140,17 +310,23 @@ export class AudioEngine {
   async attachDisplay(): Promise<void> {
     await this.ensureContext();
     this.detachSource();
-    if (!this.ctx || !this.analyser || !this.compressor) return;
+    if (!this.ctx || !this.analyser || !this.compressor) {
+      return;
+    }
     const stream = await navigator.mediaDevices.getDisplayMedia({
       audio: true,
       video: true,
     });
     // We only want audio; stop the video track immediately.
-    for (const t of stream.getVideoTracks()) t.stop();
-    const audioTrack = stream.getAudioTracks()[0];
+    for (const t of stream.getVideoTracks()) {
+      t.stop();
+    }
+    const [audioTrack] = stream.getAudioTracks();
     if (!audioTrack) {
       // User shared a source with no audio (or Safari silently stripped it).
-      for (const t of stream.getTracks()) t.stop();
+      for (const t of stream.getTracks()) {
+        t.stop();
+      }
       throw Object.assign(new Error("no audio track in display capture"), {
         name: "NoAudioTrackError",
       });
@@ -172,6 +348,7 @@ export class AudioEngine {
     });
   }
 
+  // oxlint-disable-next-line prefer-await-to-callbacks -- REVIEW: event-style registration API; a one-shot promise can't model a repeatable source-lost notification
   onSourceLost(cb: () => void): void {
     this.sourceLostCb = cb;
   }
@@ -212,14 +389,19 @@ export class AudioEngine {
       }
     }
     if (this.mediaStream) {
-      for (const t of this.mediaStream.getTracks()) t.stop();
+      for (const t of this.mediaStream.getTracks()) {
+        t.stop();
+      }
       this.mediaStream = null;
     }
   }
 
+  // oxlint-disable-next-line prefer-await-to-callbacks -- REVIEW: per-frame tick subscription; fires ~60x/s, not a one-shot promise
   onTick(cb: TickCallback): void {
     this.callback = cb;
-    if (this.rafId === null) this.loop();
+    if (this.rafId === null) {
+      this.loop();
+    }
   }
 
   // Exposes the live AnalyserNode so high-rate consumers (WaveformRibbon,
@@ -232,11 +414,14 @@ export class AudioEngine {
   // Grab the most recent ~6s of audio from the clip-recorder ring buffer,
   // base64-encoded and ready to ship over WS for song recognition. Null if
   // no source is attached or MediaRecorder isn't available.
+  // oxlint-disable-next-line require-await -- REVIEW: async keeps the return type a Promise on both the null and delegated paths
   async grabClip(): Promise<{
     blob: Blob;
     mimeType: string;
   } | null> {
-    if (!this.clipRecorder) return null;
+    if (!this.clipRecorder) {
+      return null;
+    }
     return this.clipRecorder.grabClip();
   }
 
@@ -252,29 +437,38 @@ export class AudioEngine {
   // recording. Independent of the ClipRecorder ring buffer. Returns null
   // when no source is attached. Caller invokes dispose() to release.
   createRecordingStream(): { stream: MediaStream; dispose: () => void } | null {
-    if (!this.ctx || !this.compressor || !this.source) return null;
-    const compressor = this.compressor;
+    if (!this.ctx || !this.compressor || !this.source) {
+      return null;
+    }
+    const { compressor } = this;
     const dest = this.ctx.createMediaStreamDestination();
     compressor.connect(dest);
     return {
-      stream: dest.stream,
       dispose: () => {
         try {
           compressor.disconnect(dest);
         } catch {
           // noop
         }
-        for (const t of dest.stream.getTracks()) t.stop();
+        for (const t of dest.stream.getTracks()) {
+          t.stop();
+        }
       },
+      stream: dest.stream,
     };
   }
 
   stop(): void {
-    if (this.rafId !== null) cancelAnimationFrame(this.rafId);
+    if (this.rafId !== null) {
+      cancelAnimationFrame(this.rafId);
+    }
     this.rafId = null;
     this.detachSource();
     if (this.ctx) {
-      this.ctx.close().catch(() => undefined);
+      // oxlint-disable-next-line prefer-await-to-then -- REVIEW: stop() is sync; closing the context is fire-and-forget
+      this.ctx.close().catch(() => {
+        // noop
+      });
       this.ctx = null;
     }
     this.analyser = null;
@@ -285,7 +479,9 @@ export class AudioEngine {
   }
 
   private async ensureContext(): Promise<void> {
-    if (this.ctx) return;
+    if (this.ctx) {
+      return;
+    }
     const Ctor =
       window.AudioContext ??
       (window as unknown as { webkitAudioContext: typeof AudioContext })
@@ -315,40 +511,40 @@ export class AudioEngine {
     this.ctx = ctx;
     this.compressor = compressor;
     this.analyser = analyser;
-    this.freqBuffer = new Uint8Array(new ArrayBuffer(analyser.frequencyBinCount));
+    this.freqBuffer = new Uint8Array(
+      new ArrayBuffer(analyser.frequencyBinCount)
+    );
     this.timeBuffer = new Uint8Array(new ArrayBuffer(analyser.fftSize));
     this.prevSpectrum = new Float32Array(analyser.frequencyBinCount);
   }
 
   private startClipRecorder(source: AudioNode): void {
-    if (!this.ctx) return;
+    if (!this.ctx) {
+      return;
+    }
     try {
       this.clipRecorder = createClipRecorder(this.ctx, source, {
         windowMs: 6000,
       });
       if (!this.clipRecorder) {
         console.warn(
-          "[AudioEngine] MediaRecorder unsupported — song recognition disabled in this browser",
+          "[AudioEngine] MediaRecorder unsupported — song recognition disabled in this browser"
         );
       }
-    } catch (err) {
-      console.warn("[AudioEngine] clip recorder init failed", err);
+    } catch (error) {
+      console.warn("[AudioEngine] clip recorder init failed", error);
       this.clipRecorder = null;
     }
   }
 
   private startMeyda(source: AudioNode): void {
-    if (!this.ctx) return;
+    if (!this.ctx) {
+      return;
+    }
     try {
       this.meydaAnalyzer = Meyda.createMeydaAnalyzer({
         audioContext: this.ctx,
-        source,
         bufferSize: MEYDA_BUFFER_SIZE,
-        featureExtractors: [
-          "spectralFlatness",
-          "spectralRolloff",
-          "chroma",
-        ],
         callback: (features: {
           spectralFlatness?: number;
           spectralRolloff?: number;
@@ -366,20 +562,23 @@ export class AudioEngine {
             this.chromaFromMeyda = features.chroma;
           }
         },
+        featureExtractors: ["spectralFlatness", "spectralRolloff", "chroma"],
+        source,
       });
       this.meydaAnalyzer.start();
-    } catch (err) {
+    } catch (error) {
       // Meyda supplies flatness/rolloff/chroma. RMS, centroid, and flux are
       // computed locally so this failure degrades gracefully — log so we notice
       // instead of silently losing features.
       console.warn(
         "[AudioEngine] Meyda init failed — spectral flatness/rolloff/chroma will stay at 0",
-        err,
+        error
       );
       this.meydaAnalyzer = null;
     }
   }
 
+  // oxlint-disable-next-line complexity -- REVIEW: single per-frame DSP pipeline; splitting it would add per-call overhead at 60Hz and obscure the data flow
   private loop = (): void => {
     this.rafId = requestAnimationFrame(this.loop);
     if (
@@ -388,8 +587,9 @@ export class AudioEngine {
       !this.callback ||
       !this.freqBuffer ||
       !this.timeBuffer
-    )
+    ) {
       return;
+    }
 
     const bins = this.analyser.frequencyBinCount;
     const freq = this.freqBuffer;
@@ -400,8 +600,8 @@ export class AudioEngine {
     // RMS computed from time-domain samples (byte, centred on 128). Matches
     // WaveformRibbon's formula; independent of Meyda so it never stalls at 0.
     let sumSq = 0;
-    for (let i = 0; i < time.length; i++) {
-      const d = (time[i] ?? 128) - 128;
+    for (const sample of time) {
+      const d = (sample ?? 128) - 128;
       sumSq += d * d;
     }
     const rms = Math.sqrt(sumSq / time.length) / 128;
@@ -410,7 +610,7 @@ export class AudioEngine {
     // the Meyda dependency for this core feature.
     let num = 0;
     let den = 0;
-    for (let i = 0; i < bins; i++) {
+    for (let i = 0; i < bins; i += 1) {
       const v = (freq[i] ?? 0) / 255;
       num += i * v;
       den += v;
@@ -432,8 +632,8 @@ export class AudioEngine {
     // stays in a 0..1-ish range; the EMA τ of 1.3s absorbs the 1-frame lag.
     const fluxNorm = Math.tanh(this.lastFluxLocal * 6);
     const arousalRaw = rms * 0.5 + fluxNorm * 0.5;
-    this.valenceSmoothed = this.valenceSmoothed + alpha * (valenceRaw - this.valenceSmoothed);
-    this.arousalSmoothed = this.arousalSmoothed + alpha * (arousalRaw - this.arousalSmoothed);
+    this.valenceSmoothed += alpha * (valenceRaw - this.valenceSmoothed);
+    this.arousalSmoothed += alpha * (arousalRaw - this.arousalSmoothed);
 
     // Harmonic key correlation from Meyda's chroma. keyStrength smooths on a
     // slower τ (~3s) than mood because harmony is a slower signal. tonalCenter
@@ -441,8 +641,8 @@ export class AudioEngine {
     const keyAlpha = 1 - Math.exp(-dtMs / 3000);
     const key = detectKey(this.chromaFromMeyda);
     const keyStrengthRaw = key ? key.strength : 0;
-    this.keyStrengthSmoothed =
-      this.keyStrengthSmoothed + keyAlpha * (keyStrengthRaw - this.keyStrengthSmoothed);
+    this.keyStrengthSmoothed +=
+      keyAlpha * (keyStrengthRaw - this.keyStrengthSmoothed);
     if (key && key.strength > 0.6) {
       this.tonalCenterLatched = key.tonic;
     }
@@ -462,10 +662,12 @@ export class AudioEngine {
     let flux = 0;
     const prev = this.prevSpectrum;
     if (prev && prev.length === bins) {
-      for (let i = 0; i < bins; i++) {
+      for (let i = 0; i < bins; i += 1) {
         const curr = (freq[i] ?? 0) / 255;
         const delta = curr - (prev[i] ?? 0);
-        if (delta > 0) flux += delta;
+        if (delta > 0) {
+          flux += delta;
+        }
       }
       flux /= bins;
     }
@@ -474,13 +676,17 @@ export class AudioEngine {
     }
     const p = this.prevSpectrum;
     if (p) {
-      for (let i = 0; i < bins; i++) p[i] = (freq[i] ?? 0) / 255;
+      for (let i = 0; i < bins; i += 1) {
+        p[i] = (freq[i] ?? 0) / 255;
+      }
     }
 
     this.lastFluxLocal = flux;
 
     this.fluxHistory.push(flux);
-    if (this.fluxHistory.length > 60) this.fluxHistory.shift();
+    if (this.fluxHistory.length > 60) {
+      this.fluxHistory.shift();
+    }
     const fluxMean = avg(this.fluxHistory);
     const fluxStd = stddev(this.fluxHistory, fluxMean);
 
@@ -493,23 +699,27 @@ export class AudioEngine {
       this.lastOnsetAt = now;
       onsetType = classifyOnset({
         bass,
-        mids,
-        treble,
         centroid,
-        rms,
         flatness: this.flatnessFromMeyda,
+        mids,
+        rms,
+        treble,
       });
     }
 
     this.rmsHistory.push(rms);
-    if (this.rmsHistory.length > 60) this.rmsHistory.shift();
+    if (this.rmsHistory.length > 60) {
+      this.rmsHistory.shift();
+    }
     const sectionEnergy = avg(this.rmsHistory);
 
     // Autocorrelation BPM detection on the local (fine-grained) flux signal.
     // Re-estimate every ~500ms. Phase advances every frame from the current
     // bpm estimate so it stays continuous across re-estimations.
     this.beatFluxHistory.push(flux);
-    if (this.beatFluxHistory.length > 480) this.beatFluxHistory.shift();
+    if (this.beatFluxHistory.length > 480) {
+      this.beatFluxHistory.shift();
+    }
     if (
       this.beatFluxHistory.length >= 240 &&
       now - this.lastBpmAnalysisAt > 500
@@ -517,163 +727,32 @@ export class AudioEngine {
       this.lastBpmAnalysisAt = now;
       this.bpmEst = estimateBpm(this.beatFluxHistory, this.bpmEst);
     }
-    if (this.bpmEst > 0) {
-      this.bpmPhase =
-        (this.bpmPhase + (dtMs / 1000) * (this.bpmEst / 60)) % 1;
-    } else {
-      this.bpmPhase = 0;
-    }
+    this.bpmPhase =
+      this.bpmEst > 0
+        ? (this.bpmPhase + (dtMs / 1000) * (this.bpmEst / 60)) % 1
+        : 0;
 
     const payload: AudioFeatures = {
-      rms,
-      bass,
-      mids,
-      treble,
-      centroid,
-      flatness: this.flatnessFromMeyda,
-      rolloff: this.rolloffFromMeyda,
-      onset,
-      sectionEnergy,
-      valence: Math.max(0, Math.min(1, this.valenceSmoothed)),
       arousal: Math.max(0, Math.min(1, this.arousalSmoothed)),
-      keyStrength: Math.max(0, Math.min(1, this.keyStrengthSmoothed)),
-      tonalCenter: this.tonalCenterLatched,
+      bass,
       bpm: this.bpmEst,
       bpmPhase: this.bpmPhase,
+      centroid,
+      flatness: this.flatnessFromMeyda,
+      keyStrength: Math.max(0, Math.min(1, this.keyStrengthSmoothed)),
+      mids,
+      onset,
+      rms,
+      rolloff: this.rolloffFromMeyda,
+      sectionEnergy,
+      tonalCenter: this.tonalCenterLatched,
+      treble,
+      valence: Math.max(0, Math.min(1, this.valenceSmoothed)),
     };
-    if (onsetType) payload.onsetType = onsetType;
+    if (onsetType) {
+      payload.onsetType = onsetType;
+    }
 
     this.callback(payload);
   };
-}
-
-function mean(arr: Uint8Array<ArrayBuffer>, start: number, end: number): number {
-  if (end <= start) return 0;
-  let sum = 0;
-  for (let i = start; i < end; i++) sum += arr[i] ?? 0;
-  return sum / (end - start);
-}
-
-// Krumhansl-Kessler key profiles (major + minor). Each is a 12-entry
-// hierarchy of tonal prominence for a C-rooted scale; other keys are
-// obtained by rotating the profile. Standard MIR reference.
-const KK_MAJOR = [6.35, 2.23, 3.48, 2.33, 4.38, 4.09, 2.52, 5.19, 2.39, 3.66, 2.29, 2.88];
-const KK_MINOR = [6.33, 2.68, 3.52, 5.38, 2.60, 3.53, 2.54, 4.75, 3.98, 2.69, 3.34, 3.17];
-
-// Pearson correlation of two 12-vectors.
-function pearson12(a: number[], b: number[]): number {
-  let meanA = 0;
-  let meanB = 0;
-  for (let i = 0; i < 12; i++) {
-    meanA += a[i] ?? 0;
-    meanB += b[i] ?? 0;
-  }
-  meanA /= 12;
-  meanB /= 12;
-  let num = 0;
-  let dA = 0;
-  let dB = 0;
-  for (let i = 0; i < 12; i++) {
-    const ai = (a[i] ?? 0) - meanA;
-    const bi = (b[i] ?? 0) - meanB;
-    num += ai * bi;
-    dA += ai * ai;
-    dB += bi * bi;
-  }
-  const denom = Math.sqrt(dA * dB);
-  return denom > 1e-9 ? num / denom : 0;
-}
-
-// Autocorrelation BPM on a flux ring buffer sampled at ~60 Hz. Prefers
-// tempos close to the previous estimate to smooth wobble between halves
-// and doubles (a common failure mode of single-lag picks).
-function estimateBpm(flux: number[], prevBpm: number): number {
-  const fps = 60;
-  const minBpm = 60;
-  const maxBpm = 180;
-  let bestBpm = 0;
-  let bestScore = -Infinity;
-  const len = flux.length;
-  // Zero-mean the input so the DC component doesn't dominate.
-  let m = 0;
-  for (let i = 0; i < len; i++) m += flux[i] ?? 0;
-  m /= len;
-  for (let bpm = minBpm; bpm <= maxBpm; bpm++) {
-    const lag = Math.round((fps * 60) / bpm);
-    if (lag <= 0 || lag >= len) continue;
-    let corr = 0;
-    for (let i = lag; i < len; i++) {
-      corr += ((flux[i] ?? 0) - m) * ((flux[i - lag] ?? 0) - m);
-    }
-    // Prefer BPMs close to the previous estimate — 3% bonus per 10 BPM of
-    // agreement. Prevents half/double jumps when the peak is a near-tie.
-    if (prevBpm > 0) {
-      const dist = Math.abs(bpm - prevBpm);
-      corr *= 1 + Math.max(0, 0.03 * (1 - dist / 10));
-    }
-    if (corr > bestScore) {
-      bestScore = corr;
-      bestBpm = bpm;
-    }
-  }
-  // Reject low-confidence matches: if the peak score is tiny relative to the
-  // signal variance, don't publish a BPM yet.
-  let variance = 0;
-  for (let i = 0; i < len; i++) {
-    const d = (flux[i] ?? 0) - m;
-    variance += d * d;
-  }
-  if (variance <= 1e-6 || bestScore / variance < 0.15) return 0;
-  return bestBpm;
-}
-
-// Returns the best-matching key (tonic 0..11, mode, correlation 0..1).
-// Null when the chroma vector is empty (no harmonic content detected).
-function detectKey(
-  chroma: number[],
-): { tonic: number; mode: "major" | "minor"; strength: number } | null {
-  let total = 0;
-  for (let i = 0; i < 12; i++) total += chroma[i] ?? 0;
-  if (total < 1e-6) return null;
-  let bestTonic = 0;
-  let bestMode: "major" | "minor" = "major";
-  let bestCorr = -Infinity;
-  const rotated: number[] = new Array(12);
-  for (let tonic = 0; tonic < 12; tonic++) {
-    // rotate the profile so index 0 corresponds to this tonic
-    for (let i = 0; i < 12; i++) {
-      rotated[i] = KK_MAJOR[(i - tonic + 12) % 12] ?? 0;
-    }
-    const cMaj = pearson12(chroma, rotated);
-    for (let i = 0; i < 12; i++) {
-      rotated[i] = KK_MINOR[(i - tonic + 12) % 12] ?? 0;
-    }
-    const cMin = pearson12(chroma, rotated);
-    if (cMaj > bestCorr) {
-      bestCorr = cMaj;
-      bestTonic = tonic;
-      bestMode = "major";
-    }
-    if (cMin > bestCorr) {
-      bestCorr = cMin;
-      bestTonic = tonic;
-      bestMode = "minor";
-    }
-  }
-  // Clamp negative correlations to 0 for cleanliness.
-  return { tonic: bestTonic, mode: bestMode, strength: Math.max(0, bestCorr) };
-}
-
-function avg(arr: number[]): number {
-  if (arr.length === 0) return 0;
-  let sum = 0;
-  for (const v of arr) sum += v;
-  return sum / arr.length;
-}
-
-function stddev(arr: number[], m: number): number {
-  if (arr.length === 0) return 0;
-  let sum = 0;
-  for (const v of arr) sum += (v - m) * (v - m);
-  return Math.sqrt(sum / arr.length);
 }

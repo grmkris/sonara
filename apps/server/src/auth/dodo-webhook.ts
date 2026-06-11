@@ -1,7 +1,9 @@
-import { sql } from "drizzle-orm";
-import { type Database, SCHEMA } from "@sonara/db";
+import { SCHEMA } from "@sonara/db";
+import type { Database } from "@sonara/db";
 import { findPack } from "@sonara/shared";
-import { typeIdGenerator, type UserId } from "@sonara/shared/typeid";
+import { typeIdGenerator } from "@sonara/shared/typeid";
+import type { UserId } from "@sonara/shared/typeid";
+import { sql } from "drizzle-orm";
 
 // Minimal payload shape we care about — Dodo's full PaymentSucceededPayload
 // has many more fields. Typed loose because the plugin already validated it.
@@ -22,13 +24,15 @@ interface DodoPaymentPayload {
  * unique index `usage_ledger_tx_hash_idx WHERE tx_hash IS NOT NULL` makes
  * duplicate webhook deliveries no-ops.
  */
-export function createDodoWebhookHandlers(props: { db: Database }) {
+export const createDodoWebhookHandlers = (props: { db: Database }) => {
   const { db } = props;
 
   return {
     onPaymentSucceeded: async (payload: DodoPaymentPayload) => {
       const meta = payload.data.metadata ?? {};
-      if (meta.type !== "credit_pack") return;
+      if (meta.type !== "credit_pack") {
+        return;
+      }
 
       const userIdRaw = typeof meta.userId === "string" ? meta.userId : null;
       const packId = typeof meta.packId === "string" ? meta.packId : null;
@@ -52,37 +56,37 @@ export function createDodoWebhookHandlers(props: { db: Database }) {
       try {
         await db.transaction(async (tx) => {
           await tx.insert(SCHEMA.usageLedger).values({
-            id: typeIdGenerator("usageLedger"),
-            userId,
-            kind: "topup",
-            delta: pack.frames,
             amountCents: pack.usd * 100,
-            txHash: payload.data.payment_id,
             chainId: null,
+            delta: pack.frames,
+            id: typeIdGenerator("usageLedger"),
+            kind: "topup",
+            txHash: payload.data.payment_id,
+            userId,
           });
           await tx
             .insert(SCHEMA.credits)
             .values({
+              balanceFrames: pack.frames,
               id: typeIdGenerator("credits"),
               userId,
-              balanceFrames: pack.frames,
             })
             .onConflictDoUpdate({
-              target: SCHEMA.credits.userId,
               set: {
                 balanceFrames: sql`${SCHEMA.credits.balanceFrames} + ${pack.frames}`,
                 updatedAt: new Date(),
               },
+              target: SCHEMA.credits.userId,
             });
         });
         console.info("[dodo-webhook] credited", {
-          userId,
-          packId,
           frames: pack.frames,
+          packId,
           paymentId: payload.data.payment_id,
+          userId,
         });
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
+      } catch (error) {
+        const msg = error instanceof Error ? error.message : String(error);
         // Idempotency: a duplicate payment_id violates the partial unique
         // index on tx_hash. Treat as success.
         if (
@@ -95,8 +99,8 @@ export function createDodoWebhookHandlers(props: { db: Database }) {
           return;
         }
         console.error("[dodo-webhook] db write failed", { err: msg });
-        throw err;
+        throw error;
       }
     },
   };
-}
+};

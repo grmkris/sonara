@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
+
 import { CENTER, DOT_R, RINGS, VIEWBOX } from "@/lib/brand";
 import { useVisualizerStore } from "@/stores/visualizer";
 
@@ -11,21 +12,27 @@ import { useVisualizerStore } from "@/stores/visualizer";
 // `reactive` wires the outer rings to live audio (RMS → `--amp`), the same
 // signal that pulses the wordmark underline — so the ripple "breathes" with
 // the music. Done via a ref + store subscription (no React re-render).
-export function Mark({
+export const Mark = ({
   className,
   reactive = false,
 }: {
   className?: string;
   reactive?: boolean;
-}) {
+}) => {
   const ref = useRef<SVGSVGElement | null>(null);
 
   useEffect(() => {
-    if (!reactive) return;
+    if (!reactive) {
+      return;
+    }
     const unsub = useVisualizerStore.subscribe((s, prev) => {
-      if (s.audio.rms === prev.audio.rms) return;
+      if (s.audio.rms === prev.audio.rms) {
+        return;
+      }
       const el = ref.current;
-      if (!el) return;
+      if (!el) {
+        return;
+      }
       const clamped = Math.max(0, Math.min(1, s.audio.rms));
       el.style.setProperty("--amp", clamped.toFixed(3));
     });
@@ -68,4 +75,4 @@ export function Mark({
       <circle cx={CENTER} cy={CENTER} r={DOT_R} fill="currentColor" />
     </svg>
   );
-}
+};

@@ -1,8 +1,9 @@
 "use client";
 
-import { Suspense, useEffect } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
+import { Suspense, useEffect } from "react";
+
 import { CanvasBackplate } from "@/components/canvas-backplate";
 import { SiteFooter } from "@/components/site-footer";
 
@@ -10,6 +11,40 @@ import { SiteFooter } from "@/components/site-footer";
 // demo self-start live in <CanvasBackplate />, shared with /about. Marketing
 // copy scrolls over it in a z-10 column. Audio-reactivity is a /play concern
 // once the visitor brings sound.
+
+const OldShareLinkRedirect = () => {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  useEffect(() => {
+    if (searchParams.get("record") !== null) {
+      const qs = searchParams.toString();
+      router.replace(`/play${qs ? `?${qs}` : ""}`);
+    }
+  }, [router, searchParams]);
+  return null;
+};
+
+const Capability = ({
+  eyebrow,
+  hook,
+  body,
+}: {
+  eyebrow: string;
+  hook: string;
+  body: string;
+}) => (
+  <div className="flex flex-col gap-3 md:border-r md:border-[color:var(--hairline)]/25 md:pr-8 md:last:border-r-0">
+    <span className="font-mono text-[10px] uppercase tracking-[0.28em] text-[color:var(--stone)]">
+      {eyebrow}
+    </span>
+    <span className="font-serif text-[28px] italic leading-tight text-[color:var(--paper)] md:text-[32px]">
+      {hook}
+    </span>
+    <p className="font-sans text-[14px] leading-relaxed text-[color:var(--paper)]/80">
+      {body}
+    </p>
+  </div>
+);
 
 export default function LandingPage() {
   return (
@@ -45,9 +80,7 @@ export default function LandingPage() {
               <br />
               made visible.
             </h1>
-            <p
-              className="reveal reveal-1 font-sans max-w-[38ch] text-[15px] leading-relaxed text-[color:var(--paper)]/85 md:text-[16px]"
-            >
+            <p className="reveal reveal-1 font-sans max-w-[38ch] text-[15px] leading-relaxed text-[color:var(--paper)]/85 md:text-[16px]">
               it listens to whatever you're playing and paints what it hears, as
               it happens.
             </p>
@@ -67,7 +100,10 @@ export default function LandingPage() {
                 className="focus-ring group font-serif relative inline-flex items-center gap-1.5 text-[15px] italic text-[color:var(--paper)]/70 transition-colors hover:text-[color:var(--paper)]"
               >
                 studio
-                <span aria-hidden className="transition-transform duration-300 group-hover:translate-x-0.5">
+                <span
+                  aria-hidden
+                  className="transition-transform duration-300 group-hover:translate-x-0.5"
+                >
                   &rarr;
                 </span>
                 <span
@@ -103,41 +139,5 @@ export default function LandingPage() {
         <SiteFooter />
       </div>
     </main>
-  );
-}
-
-function OldShareLinkRedirect() {
-  const router = useRouter();
-  const searchParams = useSearchParams();
-  useEffect(() => {
-    if (searchParams.get("record") !== null) {
-      const qs = searchParams.toString();
-      router.replace(`/play${qs ? `?${qs}` : ""}`);
-    }
-  }, [router, searchParams]);
-  return null;
-}
-
-function Capability({
-  eyebrow,
-  hook,
-  body,
-}: {
-  eyebrow: string;
-  hook: string;
-  body: string;
-}) {
-  return (
-    <div className="flex flex-col gap-3 md:border-r md:border-[color:var(--hairline)]/25 md:pr-8 md:last:border-r-0">
-      <span className="font-mono text-[10px] uppercase tracking-[0.28em] text-[color:var(--stone)]">
-        {eyebrow}
-      </span>
-      <span className="font-serif text-[28px] italic leading-tight text-[color:var(--paper)] md:text-[32px]">
-        {hook}
-      </span>
-      <p className="font-sans text-[14px] leading-relaxed text-[color:var(--paper)]/80">
-        {body}
-      </p>
-    </div>
   );
 }

@@ -1,7 +1,8 @@
 "use client";
 
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useRef } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+
 import type { SessionSend } from "@/lib/session-actions";
 import { useVisualizerStore } from "@/stores/visualizer";
 
@@ -21,9 +22,11 @@ interface StudioActionConsumerProps {
 //
 // Lives in its own component (wrapped in Suspense at the call site) so
 // useSearchParams doesn't gate the rest of the page on the boundary.
-export function StudioActionConsumer({ send }: StudioActionConsumerProps) {
+export const StudioActionConsumer = ({ send }: StudioActionConsumerProps) => {
   const params = useSearchParams();
   const router = useRouter();
+  // Clear params on WHATEVER screen route mounted us (/play or /stage/<code>/screen).
+  const pathname = usePathname();
   const connected = useVisualizerStore((s) => s.connected);
   // Snapshot the params on first mount so we don't react to clears we
   // make ourselves below.
@@ -36,25 +39,31 @@ export function StudioActionConsumer({ send }: StudioActionConsumerProps) {
   if (snapshotRef.current === null) {
     snapshotRef.current = {
       anchor: params.get("anchor"),
-      strength: params.get("strength"),
       prompt: params.get("prompt"),
+      strength: params.get("strength"),
     };
   }
 
   useEffect(() => {
-    if (!connected) return;
+    if (!connected) {
+      return;
+    }
     const snap = snapshotRef.current;
-    if (!snap) return;
+    if (!snap) {
+      return;
+    }
     const { anchor, strength, prompt } = snap;
-    if (!anchor && !prompt) return;
+    if (!anchor && !prompt) {
+      return;
+    }
 
     // Anchor first — independent of prompt; both can be set at once.
     if (anchor) {
       const strengthNum = strength ? Number(strength) : 0.55;
       send({
+        strength: Number.isFinite(strengthNum) ? strengthNum : 0.55,
         type: "image.anchor.set",
         url: anchor,
-        strength: Number.isFinite(strengthNum) ? strengthNum : 0.55,
       });
     }
 
@@ -63,17 +72,17 @@ export function StudioActionConsumer({ send }: StudioActionConsumerProps) {
     // is the canonical "set scene then run" action.
     if (prompt) {
       send({
-        type: "session.goLive",
         prompt,
         seedFrameUrl: null,
+        type: "session.goLive",
       });
     }
 
     // Clear so refresh doesn't repeat. router.replace keeps the user on
     // /play, drops the query string.
     snapshotRef.current = null;
-    router.replace("/play");
-  }, [connected, send, router]);
+    router.replace(pathname);
+  }, [connected, send, router, pathname]);
 
   return null;
-}
+};

@@ -1,3 +1,4 @@
+// oxlint-disable-next-line no-barrel-file -- REVIEW: intentional public barrel for the @sonara/shared package; consumers import from the package root
 export * from "./scene";
 export * from "./scene-resolved";
 export * from "./audio";
@@ -9,6 +10,9 @@ export * from "./visual-presets";
 export * from "./demo";
 export * from "./decks";
 export * from "./library";
+export * from "./models";
 export * from "./pricing";
+export * from "./prompt-safety";
 export * from "./services";
+export * from "./stage-feed";
 export * from "./ws-ticket";

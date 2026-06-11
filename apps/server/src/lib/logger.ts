@@ -1,11 +1,12 @@
 import { createLogger } from "@sonara/logger";
+
 import { env } from "../env";
 
 export const logger = createLogger({
-  name: "sonara-server",
+  env: { environment: env.APP_ENV, service: "sonara-server" },
   level: env.LOG_LEVEL,
+  name: "sonara-server",
   pretty: env.APP_ENV !== "prod",
-  env: { service: "sonara-server", environment: env.APP_ENV },
 });
 
 export type Logger = typeof logger;

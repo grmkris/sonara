@@ -30,6 +30,7 @@ COPY packages/db/package.json ./packages/db/
 COPY packages/logger/package.json ./packages/logger/
 COPY packages/shared/package.json ./packages/shared/
 COPY packages/test-utils/package.json ./packages/test-utils/
+COPY packages/onchain/package.json ./packages/onchain/
 
 RUN bun install --no-summary
 
@@ -41,6 +42,7 @@ COPY packages/api ./packages/api
 COPY packages/db ./packages/db
 COPY packages/logger ./packages/logger
 COPY packages/shared ./packages/shared
+COPY packages/onchain ./packages/onchain
 
 # ---- runtime ---------------------------------------------------------------
 FROM oven/bun:1.3.14-slim AS runtime

@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect } from "react";
+
 import { SonaraCanvas } from "@/components/visualizer/canvas/sonara-canvas";
-import { useWsSession } from "@/hooks/use-ws-session";
 import { useDemoFrameLoop } from "@/hooks/use-demo-frame-loop";
 import { useVisualizerStore } from "@/stores/visualizer";
 
@@ -15,18 +15,24 @@ import { useVisualizerStore } from "@/stores/visualizer";
 // A single `.page-veil` sits between the canvas (z-0, behind the grain at z-1)
 // and the page content (z-10): one uniform ink wash so the backplate reads as
 // ONE continuous image top-to-bottom, with no per-section panel seam.
-export function CanvasBackplate() {
-  useWsSession();
+export const CanvasBackplate = () => {
+  // NO WebSocket here, deliberately: the backplate is fully client-native
+  // (static deck manifests), and a WS would attach this tab as the visitor's
+  // default-stage SCREEN — a signed-in user browsing the homepage would take
+  // over their own projector mid-gig.
   useDemoFrameLoop();
 
-  // Self-start demo regardless of auth/connectivity. The anon WS snapshot sets
-  // these for most visitors, but signed-in or offline visitors get no anon pin
-  // — without this the backplate would be black. Only fills gaps (won't
-  // override a deck the snapshot already chose).
+  // Self-start demo regardless of auth/connectivity — without this the
+  // backplate would be black. Only fills gaps (won't override a deck a
+  // previous page already chose).
   useEffect(() => {
     const st = useVisualizerStore.getState();
-    if (!st.demoMode) st.setDemoMode(true);
-    if (!st.demoDeck) st.setDemoDeck("liquid");
+    if (!st.demoMode) {
+      st.setDemoMode(true);
+    }
+    if (!st.demoDeck) {
+      st.setDemoDeck("liquid");
+    }
   }, []);
 
   return (
@@ -35,7 +41,10 @@ export function CanvasBackplate() {
         <SonaraCanvas />
       </div>
       <div aria-hidden className="grain-overlay" />
-      <div aria-hidden className="page-veil pointer-events-none fixed inset-0 z-[2]" />
+      <div
+        aria-hidden
+        className="page-veil pointer-events-none fixed inset-0 z-[2]"
+      />
     </>
   );
-}
+};

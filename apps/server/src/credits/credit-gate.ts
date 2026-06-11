@@ -1,4 +1,5 @@
 import { FRAME_COST_CREDITS } from "@sonara/shared";
+
 import type { Logger } from "../lib/logger";
 import { debitFrame, refundFrame, tryConsumeFreeTier } from "./credits.service";
 
@@ -62,50 +63,46 @@ export type CreditGateResult = CreditGateOk | CreditGateDenied;
  *
  * Any exception inside debitFrame/tryConsumeFreeTier → `system_error`.
  */
-export async function tryDebitCredit(
-  input: CreditGateInput,
-): Promise<CreditGateResult> {
+export const tryDebitCredit = async (
+  input: CreditGateInput
+): Promise<CreditGateResult> => {
   const cost = input.cost ?? COST_PER_FRAME;
   try {
-    const remaining = await debitFrame(
-      input.userId,
-      cost,
-      input.logger,
-    );
+    const remaining = await debitFrame(input.userId, cost, input.logger);
     if (remaining !== null) {
-      input.logger.debug({ remaining, cost }, "credit debited");
-      return { ok: true, paidCost: cost, nextLastDenialAt: 0 };
+      input.logger.debug({ cost, remaining }, "credit debited");
+      return { nextLastDenialAt: 0, ok: true, paidCost: cost };
     }
 
     const freeOk = await tryConsumeFreeTier(
       input.userId,
       FREE_TIER_HOURLY,
-      input.logger,
+      input.logger
     );
     if (freeOk) {
       input.logger.debug("free-tier slot consumed");
-      return { ok: true, paidCost: null, nextLastDenialAt: 0 };
+      return { nextLastDenialAt: 0, ok: true, paidCost: null };
     }
 
     const shouldEmit =
       input.isUserInitiated ||
       input.now - input.lastCreditDenialAt > CREDIT_DENIAL_COOLDOWN_MS;
     return {
+      nextLastDenialAt: shouldEmit ? input.now : input.lastCreditDenialAt,
       ok: false,
       reason: "out_of_credits",
       shouldEmit,
-      nextLastDenialAt: shouldEmit ? input.now : input.lastCreditDenialAt,
     };
-  } catch (err) {
-    input.logger.error({ err }, "credit gate errored");
+  } catch (error) {
+    input.logger.error({ error }, "credit gate errored");
     return {
+      nextLastDenialAt: input.lastCreditDenialAt,
       ok: false,
       reason: "system_error",
       shouldEmit: true,
-      nextLastDenialAt: input.lastCreditDenialAt,
     };
   }
-}
+};
 
 /**
  * Fire-and-forget refund after a fal generation fails. Free-tier paths pass
@@ -113,16 +110,22 @@ export async function tryDebitCredit(
  * but never propagated — refund failures shouldn't poison the outer error
  * path.
  */
-export function refundOnError(
+export const refundOnError = (
   userId: string,
   paidCost: number | null,
-  logger: Logger,
-): void {
-  if (paidCost === null) return;
-  refundFrame(userId, paidCost, logger).catch((err) => {
+  logger: Logger
+): void => {
+  if (paidCost === null) {
+    return;
+  }
+  // Intentionally fire-and-forget: this is a synchronous void helper called
+  // from non-async error paths; awaiting would change its contract and the
+  // caller's control flow. Errors are swallowed here by design.
+  // oxlint-disable-next-line prefer-await-to-then, prefer-await-to-callbacks -- REVIEW: fire-and-forget void helper
+  refundFrame(userId, paidCost, logger).catch((error) => {
     logger.error(
-      { err, cost: paidCost },
-      "refundFrame after fal error failed",
+      { cost: paidCost, error },
+      "refundFrame after fal error failed"
     );
   });
-}
+};

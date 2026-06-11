@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+
 import { Slider } from "@/components/ui/slider";
 import {
   Tooltip,
@@ -15,7 +16,7 @@ interface SliderRowProps {
   onChange: (v: number) => void;
 }
 
-export function SliderRow({ label, value, onChange }: SliderRowProps) {
+export const SliderRow = ({ label, value, onChange }: SliderRowProps) => {
   const [dragging, setDragging] = useState(false);
   // Optimistic local value drives the thumb at pointer speed. Without it the
   // thumb is bound to `value` (round-tripped store state behind a 60ms debounce
@@ -28,7 +29,9 @@ export function SliderRow({ label, value, onChange }: SliderRowProps) {
   const emit = useMemo(() => debounce(onChange, 60), [onChange]);
 
   useEffect(() => {
-    if (!draggingRef.current) setLocal(value);
+    if (!draggingRef.current) {
+      setLocal(value);
+    }
   }, [value]);
 
   const endDrag = () => {
@@ -85,4 +88,4 @@ export function SliderRow({ label, value, onChange }: SliderRowProps) {
       </span>
     </div>
   );
-}
+};

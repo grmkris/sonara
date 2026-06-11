@@ -1,3 +1,10 @@
+import type { InspectorContext } from "@sonara/shared";
+import { typeIdGenerator } from "@sonara/shared/typeid";
+import type {
+  ImageLibraryId,
+  LiveSessionId,
+  UserId,
+} from "@sonara/shared/typeid";
 import { sql } from "drizzle-orm";
 import {
   index,
@@ -7,13 +14,7 @@ import {
   text,
   uniqueIndex,
 } from "drizzle-orm/pg-core";
-import type { InspectorContext } from "@sonara/shared";
-import {
-  type ImageLibraryId,
-  type LiveSessionId,
-  type UserId,
-  typeIdGenerator,
-} from "@sonara/shared/typeid";
+
 import { baseEntityFields, typeId } from "../utils";
 import { user } from "./auth.db";
 
@@ -40,6 +41,7 @@ import { user } from "./auth.db";
 // rows for the timeline + gallery.
 export const imageLibrary = pgTable(
   "image_library",
+  // oxlint-disable-next-line sort-keys -- REVIEW: columns are grouped by concern (core / live-session / inspector) with field-specific doc comments; reordering would scramble the documentation, key order has no SQL effect
   {
     id: typeId("imageLibrary", "id")
       .primaryKey()
@@ -120,5 +122,5 @@ export const imageLibrary = pgTable(
     index("image_library_session_tms_idx")
       .on(table.sessionId, table.tMs)
       .where(sql`session_id IS NOT NULL`),
-  ],
+  ]
 );

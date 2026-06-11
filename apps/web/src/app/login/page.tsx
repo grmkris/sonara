@@ -1,7 +1,8 @@
 "use client";
 
-import { Suspense, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { Suspense, useState } from "react";
+
 import { authClient } from "@/lib/auth-client";
 
 type Mode = "signin" | "signup";
@@ -9,36 +10,40 @@ type Mode = "signin" | "signup";
 // Only accept same-origin relative paths as a post-login destination, so a
 // crafted `?next=//evil.com` or `?next=https://…` can't turn login into an
 // open redirect. Falls back to /play.
-function safeNext(next: string | null): string {
-  if (next && next.startsWith("/") && !next.startsWith("//") && !next.includes("://")) {
+const safeNext = (next: string | null): string => {
+  if (
+    next &&
+    next.startsWith("/") &&
+    !next.startsWith("//") &&
+    !next.includes("://")
+  ) {
     return next;
   }
   return "/play";
-}
+};
 
 // Maps Better Auth + our APIError(code) values to friendly UI copy.
-function friendlyError(rawMessage: string | undefined): string {
-  if (!rawMessage) return "Something went wrong. Try again.";
+const friendlyError = (rawMessage: string | undefined): string => {
+  if (!rawMessage) {
+    return "Something went wrong. Try again.";
+  }
   const msg = rawMessage.toLowerCase();
-  if (msg.includes("invalid email or password")) return "Wrong email or password.";
-  if (msg.includes("user already exists") || msg.includes("user_already_exists")) {
+  if (msg.includes("invalid email or password")) {
+    return "Wrong email or password.";
+  }
+  if (
+    msg.includes("user already exists") ||
+    msg.includes("user_already_exists")
+  ) {
     return "An account with this email already exists. Try signing in.";
   }
   if (msg.includes("password") && msg.includes("short")) {
     return "Password must be at least 12 characters.";
   }
   return rawMessage;
-}
+};
 
-export default function LoginPage() {
-  return (
-    <Suspense fallback={null}>
-      <LoginForm />
-    </Suspense>
-  );
-}
-
-function LoginForm() {
+const LoginForm = () => {
   const router = useRouter();
   const next = safeNext(useSearchParams().get("next"));
   const [mode, setMode] = useState<Mode>("signin");
@@ -48,7 +53,7 @@ function LoginForm() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
-  async function onSubmit(e: React.FormEvent) {
+  const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
     setBusy(true);
@@ -66,8 +71,8 @@ function LoginForm() {
         }
         const res = await authClient.signUp.email({
           email,
-          password,
           name: name.trim(),
+          password,
         });
         if (res.error) {
           setError(friendlyError(res.error.message));
@@ -76,15 +81,17 @@ function LoginForm() {
       }
       router.push(next);
       router.refresh();
+      // oxlint-disable-next-line catch-error-name -- REVIEW: `error` would shadow the outer error state; renamed to `err`
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       setError(friendlyError(msg));
     } finally {
       setBusy(false);
     }
-  }
+  };
 
   const isSignup = mode === "signup";
+  const signInLabel = isSignup ? "Create account" : "Sign in";
 
   return (
     <main className="min-h-screen flex items-center justify-center bg-[color:var(--ink)] text-[color:var(--paper)] px-4">
@@ -107,6 +114,7 @@ function LoginForm() {
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 autoComplete="name"
+                aria-label="Display name"
                 required
                 className="mt-1 w-full bg-transparent border-b border-white/20 focus:border-white/60 outline-none py-2 font-serif text-lg"
               />
@@ -122,6 +130,7 @@ function LoginForm() {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               autoComplete="email"
+              aria-label="Email"
               required
               className="mt-1 w-full bg-transparent border-b border-white/20 focus:border-white/60 outline-none py-2 font-serif text-lg"
             />
@@ -136,6 +145,7 @@ function LoginForm() {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               autoComplete={isSignup ? "new-password" : "current-password"}
+              aria-label="Password"
               required
               minLength={isSignup ? 12 : undefined}
               className="mt-1 w-full bg-transparent border-b border-white/20 focus:border-white/60 outline-none py-2 font-serif text-lg"
@@ -161,11 +171,7 @@ function LoginForm() {
             disabled={busy}
             className="w-full mt-2 py-3 border border-white/30 hover:border-white/60 disabled:opacity-40 disabled:cursor-not-allowed font-serif italic text-lg transition-colors"
           >
-            {busy
-              ? "…"
-              : isSignup
-                ? "Create account"
-                : "Sign in"}
+            {busy ? "…" : signInLabel}
           </button>
         </form>
 
@@ -200,8 +206,15 @@ function LoginForm() {
             </>
           )}
         </div>
-
       </div>
     </main>
+  );
+};
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={null}>
+      <LoginForm />
+    </Suspense>
   );
 }

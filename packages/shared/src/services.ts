@@ -25,20 +25,20 @@ export interface ServiceUrls {
 }
 
 export const SERVICE_URLS: Record<Environment, ServiceUrls> = {
-  local: {
-    web: "http://localhost:4470",
-    ws: "ws://localhost:4470/ws",
-    apiInternal: "http://localhost:4471",
-  },
   dev: {
+    apiInternal: "http://server.railway.internal:4471",
     web: "https://dev.sonara.fm",
     ws: "wss://dev.sonara.fm/ws",
-    apiInternal: "http://server.railway.internal:4471",
+  },
+  local: {
+    apiInternal: "http://localhost:4471",
+    web: "http://localhost:4470",
+    ws: "ws://localhost:4470/ws",
   },
   prod: {
+    apiInternal: "http://server.railway.internal:4471",
     web: "https://sonara.fm",
     ws: "wss://sonara.fm/ws",
-    apiInternal: "http://server.railway.internal:4471",
   },
 } as const;
 

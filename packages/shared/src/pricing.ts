@@ -9,8 +9,8 @@
 // frames OR ~40 anchor frames. The credit gate (apps/server credit-gate.ts)
 // imports these so the server and the UI never disagree.
 export const FRAME_COST_CREDITS = {
-  text: 1,
   anchor: 8,
+  text: 1,
 } as const;
 
 export type FrameMode = keyof typeof FRAME_COST_CREDITS;
@@ -33,18 +33,17 @@ export interface Pack {
 
 export const PACKS: readonly Pack[] = [
   {
-    id: "starter",
-    usd: 10,
     frames: 320,
+    id: "starter",
     productIdEnv: "DODO_PRODUCT_STARTER",
+    usd: 10,
   },
-  { id: "pro", usd: 30, frames: 960, productIdEnv: "DODO_PRODUCT_PRO" },
-  { id: "max", usd: 100, frames: 3200, productIdEnv: "DODO_PRODUCT_MAX" },
+  { frames: 960, id: "pro", productIdEnv: "DODO_PRODUCT_PRO", usd: 30 },
+  { frames: 3200, id: "max", productIdEnv: "DODO_PRODUCT_MAX", usd: 100 },
 ] as const;
 
-export function findPack(id: string): Pack | undefined {
-  return PACKS.find((p) => p.id === id);
-}
+export const findPack = (id: string): Pack | undefined =>
+  PACKS.find((p) => p.id === id);
 
 /**
  * Reverse-lookup a Pack from the Dodo product id observed in a webhook
@@ -52,9 +51,7 @@ export function findPack(id: string): Pack | undefined {
  * `metadata.packId` we set at checkout time, but this helper is the
  * fallback for diagnostic / audit code paths.
  */
-export function resolveDodoProduct(
+export const resolveDodoProduct = (
   productId: string,
-  envMap: Record<DodoProductEnv, string>,
-): Pack | undefined {
-  return PACKS.find((p) => envMap[p.productIdEnv] === productId);
-}
+  envMap: Record<DodoProductEnv, string>
+): Pack | undefined => PACKS.find((p) => envMap[p.productIdEnv] === productId);

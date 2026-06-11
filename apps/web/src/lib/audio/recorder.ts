@@ -18,13 +18,17 @@ const PREFERRED_MIME_TYPES = [
   "audio/ogg",
 ];
 
-function pickMimeType(): string | undefined {
-  if (typeof MediaRecorder === "undefined") return undefined;
+const pickMimeType = (): string | undefined => {
+  if (typeof MediaRecorder === "undefined") {
+    return undefined;
+  }
   for (const mt of PREFERRED_MIME_TYPES) {
-    if (MediaRecorder.isTypeSupported(mt)) return mt;
+    if (MediaRecorder.isTypeSupported(mt)) {
+      return mt;
+    }
   }
   return undefined;
-}
+};
 
 export interface ClipRecorder {
   /** Returns a Blob containing roughly the last `windowMs` of audio. */
@@ -34,13 +38,15 @@ export interface ClipRecorder {
   readonly mimeType: string;
 }
 
-export function createClipRecorder(
+export const createClipRecorder = (
   ctx: AudioContext,
   source: AudioNode,
-  opts: { windowMs?: number } = {},
-): ClipRecorder | null {
+  opts: { windowMs?: number } = {}
+): ClipRecorder | null => {
   const mimeType = pickMimeType();
-  if (!mimeType) return null;
+  if (!mimeType) {
+    return null;
+  }
 
   const windowMs = Math.max(3000, opts.windowMs ?? 6000);
   const maxChunks = Math.ceil(windowMs / TIMESLICE_MS) + 1;
@@ -51,8 +57,8 @@ export function createClipRecorder(
   source.connect(dest);
 
   const recorder = new MediaRecorder(dest.stream, {
-    mimeType,
     audioBitsPerSecond: 64_000,
+    mimeType,
   });
 
   // Chrome's MediaRecorder emits the WebM init segment (EBML + Segment header
@@ -65,19 +71,23 @@ export function createClipRecorder(
   let initChunk: Blob | null = null;
   const ring: Blob[] = [];
   recorder.ondataavailable = (ev) => {
-    if (!ev.data || ev.data.size === 0) return;
+    if (!ev.data || ev.data.size === 0) {
+      return;
+    }
     if (initChunk === null) {
       initChunk = ev.data;
       return;
     }
     ring.push(ev.data);
-    while (ring.length > maxChunks) ring.shift();
+    while (ring.length > maxChunks) {
+      ring.shift();
+    }
   };
 
   try {
     recorder.start(TIMESLICE_MS);
-  } catch (err) {
-    console.warn("[ClipRecorder] start failed", err);
+  } catch (error) {
+    console.warn("[ClipRecorder] start failed", error);
     try {
       source.disconnect(dest);
     } catch {
@@ -89,9 +99,10 @@ export function createClipRecorder(
   let stopped = false;
 
   return {
-    mimeType,
     async grabClip() {
-      if (stopped) return null;
+      if (stopped) {
+        return null;
+      }
       // `requestData` fires an ondataavailable synchronously from the user's
       // perspective — we await a short microtask window to ensure the chunk
       // lands in the ring before we snapshot it.
@@ -100,13 +111,21 @@ export function createClipRecorder(
       } catch {
         // some browsers complain if state != "recording"; ignore
       }
-      await new Promise((r) => setTimeout(r, 60));
-      if (initChunk === null || ring.length === 0) return null;
+      // oxlint-disable-next-line promise/avoid-new -- REVIEW: setTimeout delay has no library-promise equivalent
+      await new Promise<void>((resolve) => {
+        setTimeout(resolve, 60);
+      });
+      if (initChunk === null || ring.length === 0) {
+        return null;
+      }
       const blob = new Blob([initChunk, ...ring], { type: mimeType });
       return { blob, mimeType };
     },
+    mimeType,
     stop() {
-      if (stopped) return;
+      if (stopped) {
+        return;
+      }
       stopped = true;
       try {
         recorder.stop();
@@ -118,23 +137,25 @@ export function createClipRecorder(
       } catch {
         // noop
       }
-      for (const track of dest.stream.getTracks()) track.stop();
+      for (const track of dest.stream.getTracks()) {
+        track.stop();
+      }
       ring.length = 0;
       initChunk = null;
     },
   };
-}
+};
 
-export async function blobToBase64(blob: Blob): Promise<string> {
+export const blobToBase64 = async (blob: Blob): Promise<string> => {
   const buf = await blob.arrayBuffer();
   const bytes = new Uint8Array(buf);
   // btoa needs a binary string. Chunk to avoid call-stack limits on large clips.
   let binary = "";
-  const CHUNK = 0x8000;
+  const CHUNK = 0x80_00;
   for (let i = 0; i < bytes.length; i += CHUNK) {
-    binary += String.fromCharCode(
-      ...bytes.subarray(i, Math.min(i + CHUNK, bytes.length)),
+    binary += String.fromCodePoint(
+      ...bytes.subarray(i, Math.min(i + CHUNK, bytes.length))
     );
   }
   return btoa(binary);
-}
+};

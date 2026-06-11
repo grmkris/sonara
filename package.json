@@ -1,6 +1,7 @@
 {
   "name": "sonara",
   "private": true,
+  "license": "PolyForm-Noncommercial-1.0.0",
   "type": "module",
   "workspaces": [
     "apps/*",
@@ -18,21 +19,24 @@
     "check": "ultracite check --type-aware --type-check",
     "fix": "ultracite fix --type-aware --type-check",
     "fix:unsafe": "ultracite fix --unsafe --type-aware --type-check",
-    "ci:local": "turbo run lint typecheck test build --concurrency=1",
+    "ci:local": "turbo run lint typecheck test build --concurrency=4",
+    "ci:step": "turbo run lint typecheck:fast",
     "db:start": "bun --filter @sonara/db db:start",
     "db:stop": "bun --filter @sonara/db db:stop",
     "db:down": "bun --filter @sonara/db db:down",
     "db:watch": "bun --filter @sonara/db db:watch"
   },
   "devDependencies": {
-    "@types/bun": "^1.1.14",
-    "@types/node": "^25.6.0",
-    "oxfmt": "^0.46.0",
-    "oxlint": "1.61.0",
-    "shadcn": "^4.4.0",
-    "turbo": "^2.9.6",
+    "@types/bun": "^1.3.14",
+    "@types/node": "^25.9.2",
+    "@typescript/native-preview": "^7.0.0-dev.20260610.1",
+    "oxfmt": "^0.53.0",
+    "oxlint": "1.68.0",
+    "oxlint-tsgolint": "^0.23.0",
+    "shadcn": "^4.11.0",
+    "turbo": "^2.9.17",
     "typescript": "^6.0.3",
-    "ultracite": "^7.6.0"
+    "ultracite": "7.8.1"
   },
   "packageManager": "bun@1.3.13"
 }

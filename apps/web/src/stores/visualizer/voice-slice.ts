@@ -1,4 +1,5 @@
 import type { StateCreator } from "zustand";
+
 import type { VisualizerState } from "./types";
 
 // Tap-to-dictate state. The mic button on PromptInput toggles between

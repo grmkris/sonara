@@ -1,39 +1,64 @@
+import { EventPublisher } from "@orpc/server";
+import type {
+  ControllableSession,
+  ControlSnapshot,
+  SessionSource,
+} from "@sonara/api/server";
 import {
-  type AudioFeatures,
-  type ClientScenePatch,
-  type DeckKey,
-  type ImageAnchor,
-  type SonaraSceneState,
-  type NowPlaying,
-  type ServerEvent,
-  DECK_KEYS,
+  DEFAULT_RESOLUTION,
+  DEFAULT_TEXT_MODEL,
+  LISTED_DECK_KEYS,
+  TEXT_MODELS,
+  clampPrompt,
   deckStyle,
   defaultScene,
   libraryCadenceMs,
 } from "@sonara/shared";
-import {
-  type LiveSessionId,
-  typeIdGenerator,
+import type {
+  AudioFeatures,
+  ClientScenePatch,
+  DeckKey,
+  ImageAnchor,
+  RenderResolution,
+  SonaraSceneState,
+  NowPlaying,
+  ServerEvent,
+  TextModelKey,
+} from "@sonara/shared";
+import { typeIdGenerator, typeIdToUuid } from "@sonara/shared/typeid";
+import type {
+  ImageLibraryId,
+  LiveSessionId,
+  StageId,
 } from "@sonara/shared/typeid";
-import { EventPublisher } from "@orpc/server";
-import type { Logger } from "../lib/logger";
-import { env } from "../env";
-import { streamPreview } from "../generation/fal-provider";
-import { streamAnchor } from "../generation/anchor-provider";
-import { serializeResolvedScene } from "../generation/prompt-compiler";
-import { DriftTrajectory } from "../generation/prompt-drift";
-import { resolveScene, resolveSceneAwaited } from "../generation/scene-resolver";
+
 import {
   ANCHOR_FRAME_COST_CREDITS,
   refundOnError,
   tryDebitCredit,
 } from "../credits/credit-gate";
-import { persistFrame } from "../library/persist-frame";
-import { recognizeClip } from "../recognition/recognition.service";
+import { getPool } from "../db/pool";
+import { env } from "../env";
+import { streamAnchor } from "../generation/anchor-provider";
+import { streamPreview } from "../generation/fal-provider";
+import { serializeResolvedScene } from "../generation/prompt-compiler";
+import { DriftTrajectory } from "../generation/prompt-drift";
+import { RealtimeImagePool } from "../generation/realtime-provider";
 import {
-  synthesizeFromTrack,
-  type SongMusePatch,
-} from "../generation/song-muse";
+  resolveScene,
+  resolveSceneAwaited,
+} from "../generation/scene-resolver";
+import { synthesizeFromTrack } from "../generation/song-muse";
+import type { SongMusePatch } from "../generation/song-muse";
+import type { Logger } from "../lib/logger";
+import { persistFrame } from "../library/persist-frame";
+import {
+  appendRecordingFrame,
+  ensureRecordingSet,
+  finalizeRecordingSet,
+} from "../library/recording-set";
+import { stageRooms } from "../onchain/stage-rooms";
+import { recognizeClip } from "../recognition/recognition.service";
 import { semanticDiff } from "./semantic-diff";
 
 export interface SessionOpts {
@@ -43,6 +68,15 @@ export interface SessionOpts {
   // no AudD recognition) — see constructor + trigger() + recognize().
   userId: string | null;
   logger: Logger;
+  // Durable identifier for the logical performance, owned by the client and
+  // re-sent on every (re)connect. When supplied, frames keep grouping under
+  // one session_id across reconnects; absent/null (old/direct client, or an
+  // unvalidated id) → fresh mint.
+  liveSessionId?: LiveSessionId | null;
+  // Durable stage (stg_ typeid) this run is performed on — from the WS
+  // ticket. Null for anon and for legacy clients (conn-keyed). Stamped onto
+  // the recording set so /studio can group sets by stage.
+  stageId?: string | null;
 }
 
 // `source` is the granular reason a trigger fired — used only for logging and
@@ -95,13 +129,9 @@ const RMS_SILENT = 0.02;
 
 // 2^31 - 1 is the widest safe range for fal's int seed.
 const SEED_MAX = 2_147_483_647;
-function rollSeed(): number {
-  return Math.floor(Math.random() * SEED_MAX);
-}
+const rollSeed = (): number => Math.floor(Math.random() * SEED_MAX);
 
-function lerp(a: number, b: number, t: number): number {
-  return a + (b - a) * t;
-}
+const lerp = (a: number, b: number, t: number): number => a + (b - a) * t;
 
 // Intensity 0..1 → periodic + pause timing.
 //
@@ -110,15 +140,20 @@ function lerp(a: number, b: number, t: number): number {
 // displacement, bloom, hue every render frame), so slowing the cadence saves
 // FAL credits without making the visual feel less alive. pauseMs unchanged —
 // the user still wants snappy feedback after a deliberate edit.
-function cadenceFromIntensity(i: number): { periodicMs: number; pauseMs: number } {
+const cadenceFromIntensity = (
+  i: number
+): {
+  periodicMs: number;
+  pauseMs: number;
+} => {
   const I = Math.max(0, Math.min(1, i));
   return {
+    pauseMs: Math.round(lerp(1500, 400, I)),
     periodicMs: libraryCadenceMs(I),
-    pauseMs: Math.round(lerp(1_500, 400, I)),
   };
-}
+};
 
-export class Session {
+export class Session implements ControllableSession {
   readonly id: string;
   readonly userId: string | null;
   private scene: SonaraSceneState;
@@ -131,7 +166,27 @@ export class Session {
   private readonly publisher = new EventPublisher<{ event: ServerEvent }>();
   private readonly logger: Logger;
 
+  // Mirror of the last frame.final URL and job.status the session emitted.
+  // Tracked here (the single send() chokepoint) so the operator remote can
+  // read them via getControlSnapshot() without subscribing to the stream.
+  private lastFrameUrl: string | null = null;
+  private lastJobStatus: ControlSnapshot["jobStatus"] = "idle";
+
+  // The frame the producer's projector reports as on-screen (frame.report),
+  // covering the modes the server never generates in (decks, reel replay) as
+  // well as live. May be an origin-relative /library/… path for deck frames.
+  private currentFrameUrl: string | null = null;
+
+  // What the projector reports it is showing (source.report) — live, a deck,
+  // a set replay, or idle. Same producer-truth contract as currentFrameUrl.
+  private currentSource: SessionSource | null = null;
+
   private send(event: ServerEvent): void {
+    if (event.type === "frame.final") {
+      this.lastFrameUrl = event.imageUrl;
+    } else if (event.type === "job.status") {
+      this.lastJobStatus = event.status;
+    }
     this.publisher.publish("event", event);
   }
 
@@ -140,6 +195,19 @@ export class Session {
   }
 
   private seed: number = rollSeed();
+
+  // Text-mode image model + render resolution, A/B-switchable from the studio
+  // (setModel / setResolution). The model key selects the fal endpoint AND the
+  // transport (realtime websocket vs queue) via TEXT_MODELS. Per-session, in
+  // memory; the client re-sends its choice on every (re)connect, so a fresh
+  // Session adopts it. Realtime models stream through `realtimePool`.
+  private model: TextModelKey = DEFAULT_TEXT_MODEL;
+  private resolution: RenderResolution = DEFAULT_RESOLUTION;
+  // Warm per-session websocket pool for realtime models. Lazily dials on first
+  // use; closed in close(). No-op cost if the session only ever uses the queue
+  // (klein) model. Assigned in the constructor (needs this.logger, which is set
+  // there) — a field initializer would run before this.logger exists.
+  private readonly realtimePool: RealtimeImagePool;
 
   private lastSectionEnergy = 0;
   private sectionDeltaStartedAt: number | null = null;
@@ -157,11 +225,25 @@ export class Session {
   private sessionStartAt = Date.now();
   private lastCreditDenialAt = 0;
 
-  // Stable identifier for this live WS session. Stays fixed for the WS
-  // lifetime (reset() does NOT mint a new one — the user's library-row
-  // grouping survives a scene reset). Distinct from Better Auth's
-  // SessionId / opts.id (which is the WS-connection id).
-  readonly liveSessionId: LiveSessionId = typeIdGenerator("liveSession");
+  // Stable identifier for this live session — one logical performance
+  // segment ("a set"). Legacy clients own it (sessionStorage) and re-send it
+  // on every (re)connect; stage-keyed clients get a server mint, learn it via
+  // the `run.started` event, and resume it through the registry's grace
+  // window. Mutable only through startNewRun() ("new set" — same Session,
+  // same publisher, fresh segment). reset() keeps it. Distinct from opts.id
+  // (the ephemeral per-tab WS-connection id).
+  liveSessionId: LiveSessionId;
+
+  // Durable stage this run plays on (stg_ typeid; null = anon/legacy). Lets
+  // the stage subsystem and lens resolve session → stage without a registry
+  // scan, and stamps recording sets with their stage.
+  readonly stageId: string | null;
+
+  // Whether a screen (producer WS) is currently attached. The registry flips
+  // this on detach/resume; while false the periodic tick must not fire —
+  // otherwise a graced run keeps burning paid fal generations with nobody
+  // watching for up to the whole grace window.
+  private attached = true;
 
   // DEMO mode state. Frame-driving is client-side now (use-demo-frame-loop);
   // the server only tracks these to relay in the connect snapshot + anon pinning.
@@ -195,26 +277,108 @@ export class Session {
   constructor(opts: SessionOpts) {
     this.id = opts.id;
     this.userId = opts.userId;
+    this.liveSessionId = opts.liveSessionId ?? typeIdGenerator("liveSession");
+    this.stageId = opts.stageId ?? null;
     this.logger = opts.logger.child({
+      anon: opts.userId === null,
       sessionId: opts.id,
       userId: opts.userId,
-      anon: opts.userId === null,
     });
+    this.realtimePool = new RealtimeImagePool(this.logger);
     this.scene = { ...defaultScene };
     this.lastGeneratedScene = { ...defaultScene };
     // Anonymous sessions default to demo mode; the connect snapshot relays
     // demoMode/demoDeck to the client, whose demo loop (use-demo-frame-loop)
-    // drives the frames locally. A random deck is suggested; the picker swaps it.
+    // drives the frames locally. A random deck is suggested; the picker swaps
+    // it. Listed decks only — unlisted (show-specific) decks never land on
+    // strangers.
     if (opts.userId === null) {
       this.demoMode = true;
-      this.demoDeck = DECK_KEYS[Math.floor(Math.random() * DECK_KEYS.length)] ?? null;
+      this.demoDeck =
+        LISTED_DECK_KEYS[Math.floor(Math.random() * LISTED_DECK_KEYS.length)] ??
+        null;
     }
     this.startPeriodic();
   }
 
   init(): void {
-    this.send({ type: "scene.state", state: this.scene });
-    this.send({ type: "job.status", status: "idle" });
+    this.send({ state: this.scene, type: "scene.state" });
+    this.send({ status: "idle", type: "job.status" });
+    // The client never mints run identity — it learns the current segment
+    // here (and again from startNewRun). Idempotent on reconnect/resume.
+    this.send({ liveSessionId: this.liveSessionId, type: "run.started" });
+    // A projector reconnecting while its crowd stage is open must relearn the
+    // room code (stage bindings outlive WS connections).
+    const stage = this.stageId
+      ? stageRooms.statusForStage(this.stageId)
+      : stageRooms.statusFor(this.liveSessionId);
+    if (stage) {
+      this.notifyStage(stage.room, stage.allowPrompts, stage.showQr);
+    }
+  }
+
+  // Registry hook: producer WS attached/detached. Gates the periodic
+  // auto-trigger so a graced (screenless) run never generates.
+  setAttached(attached: boolean): void {
+    this.attached = attached;
+  }
+
+  isAttached(): boolean {
+    return this.attached;
+  }
+
+  // Takeover signal — rides the shared publisher so both the kicked and the
+  // new screen receive it; clients compare connectionId with their own.
+  notifyTakenOver(connectionId: string): void {
+    this.send({ connectionId, type: "screen.takenOver" });
+  }
+
+  // Remote source switch relay (control.setSource). The screen applies it
+  // exactly like a local pick and confirms via source.report.
+  notifySource(source: {
+    deck?: string;
+    kind: "set" | "deck" | "idle";
+    label?: string | null;
+    setId?: string;
+  }): void {
+    this.send({ source, type: "source.set" });
+  }
+
+  // "New set": close out the current recording segment and start the next
+  // one in place. Same Session object (the long-lived events iterator stays
+  // subscribed to this publisher), same scene — only the run identity and
+  // the timing origin change. The previous set finalizes fire-and-forget.
+  startNewRun(): LiveSessionId {
+    const previous = this.liveSessionId;
+    this.activeJob?.abort();
+    if (this.userId !== null) {
+      void (async () => {
+        try {
+          await finalizeRecordingSet(getPool(), previous);
+        } catch (error) {
+          this.logger.warn(
+            { error, liveSessionId: previous },
+            "recording-set finalize failed on new run"
+          );
+        }
+      })();
+    }
+    this.liveSessionId = typeIdGenerator("liveSession");
+    this.sessionStartAt = Date.now();
+    this.lastKeyframeAt = 0;
+    this.send({ liveSessionId: this.liveSessionId, type: "run.started" });
+    this.logger.info(
+      { from: previous, to: this.liveSessionId },
+      "new run started"
+    );
+    return this.liveSessionId;
+  }
+
+  // `stage.status` push — the control router calls this when the owner opens
+  // or closes the Monad crowd stage (or toggles the join QR), so the projector
+  // can mount/unmount its wire overlay + QR and dial the public /ws/stage feed.
+  notifyStage(room: string | null, allowPrompts?: boolean, showQr?: boolean): void {
+    this.send({ allowPrompts, room, showQr, type: "stage.status" });
   }
 
   // Idempotent snapshot of server-authoritative state for the client's
@@ -239,17 +403,52 @@ export class Session {
     return this.scene.imageAnchor ?? null;
   }
 
+  // Read-only window for the operator remote (apps/web /control), pulled over
+  // HTTP by the authed `control` router. The Display still owns the WS event
+  // stream; this lets a second device show the current prompt / thumbnail /
+  // status while it drives the same session. See SessionRegistry.
+  getControlSnapshot(): ControlSnapshot {
+    return {
+      currentFrameUrl: this.currentFrameUrl ?? this.lastFrameUrl,
+      currentSource: this.currentSource,
+      demoDeck: this.demoDeck,
+      demoMode: this.demoMode,
+      imageAnchor: this.scene.imageAnchor ?? null,
+      jobStatus: this.lastJobStatus,
+      lastFrameUrl: this.lastFrameUrl,
+      liveSessionId: this.liveSessionId,
+      nowPlaying: this.scene.nowPlaying ?? null,
+      scene: this.scene,
+      startedAt: this.sessionStartAt,
+    };
+  }
+
+  // Producer-reported on-screen frame (WS frame.report). The projector is the
+  // only client that sends this — once per keyframe change (every 2–6s), in
+  // every mode. Not validated as a URL: deck frames are origin-relative paths.
+  setCurrentFrame(url: string): void {
+    this.currentFrameUrl = url;
+  }
+
+  // Producer-reported source (WS source.report) — sent once per transport
+  // switch, same producer-only contract as setCurrentFrame.
+  setCurrentSource(source: SessionSource): void {
+    this.currentSource = source;
+  }
+
   // Set or clear the live session's image anchor. Setting clears demoMode
   // (anchor and demo are mutually exclusive — anchor wins). Fires a trigger
   // immediately so the first anchor frame lands without waiting for the
   // semantic-diff gate.
   setImageAnchor(
-    input: { url: string; strength: number } | { clear: true },
+    input: { url: string; strength: number } | { clear: true }
   ): void {
     if ("clear" in input) {
-      if (!this.scene.imageAnchor) return;
+      if (!this.scene.imageAnchor) {
+        return;
+      }
       this.scene = { ...this.scene, imageAnchor: undefined };
-      this.send({ type: "scene.state", state: this.scene });
+      this.send({ state: this.scene, type: "scene.state" });
       this.logger.info({}, "image anchor cleared");
       return;
     }
@@ -265,7 +464,9 @@ export class Session {
     // Uploading an anchor from a deck is also "going live" — remember the deck
     // so its style keeps nudging generation (deckStyle drift).
     if (this.demoMode) {
-      if (this.demoDeck) this.lastDeck = this.demoDeck;
+      if (this.demoDeck) {
+        this.lastDeck = this.demoDeck;
+      }
       this.demoMode = false;
       this.demoDeck = null;
     }
@@ -273,16 +474,45 @@ export class Session {
     this.anchorFailureCount = 0;
     this.scene = {
       ...this.scene,
-      imageAnchor: { url: input.url, strength: input.strength },
+      imageAnchor: { strength: input.strength, url: input.url },
     };
-    this.send({ type: "scene.state", state: this.scene });
+    this.send({ state: this.scene, type: "scene.state" });
     this.logger.info(
-      { url: input.url, strength: input.strength },
-      "image anchor set",
+      { strength: input.strength, url: input.url },
+      "image anchor set"
     );
     // Fire trigger immediately — bypasses semantic-diff gate so the first
     // anchor frame lands without waiting.
     void this.trigger("semantic");
+  }
+
+  // A/B-switch the text-mode image model. The key selects the fal endpoint +
+  // transport (realtime vs queue) via TEXT_MODELS. Fires a frame immediately
+  // (skips the semantic-diff gate) so the switch is visible at once; trigger()
+  // no-ops for demo/anon/empty-prompt sessions. Skipped when an image anchor
+  // is active — the model setting is text-path only.
+  setModel(model: TextModelKey): void {
+    if (this.model === model) {
+      return;
+    }
+    this.model = model;
+    this.logger.info({ model }, "text model set");
+    if (!this.scene.imageAnchor) {
+      void this.trigger("semantic");
+    }
+  }
+
+  // A/B-switch the render resolution (512² / 768²). Lower = faster + smaller
+  // payload. Same immediate-frame + anchor-skip semantics as setModel.
+  setResolution(resolution: RenderResolution): void {
+    if (this.resolution === resolution) {
+      return;
+    }
+    this.resolution = resolution;
+    this.logger.info({ resolution }, "render resolution set");
+    if (!this.scene.imageAnchor) {
+      void this.trigger("semantic");
+    }
   }
 
   // Transition from deck/library phase to live generation. The browser flips
@@ -297,28 +527,30 @@ export class Session {
     if (this.userId === null) {
       this.logger.info({}, "anon goLive refused");
       this.send({
-        type: "job.status",
-        status: "error",
         message: "Sign in to bring your own scenes",
+        status: "error",
+        type: "job.status",
       });
       return;
     }
-    if (this.demoDeck) this.lastDeck = this.demoDeck;
+    if (this.demoDeck) {
+      this.lastDeck = this.demoDeck;
+    }
     this.demoMode = false;
     this.demoDeck = null;
-    this.scene = { ...this.scene, prompt };
+    this.scene = { ...this.scene, prompt: clampPrompt(prompt) };
     if (seedFrameUrl) {
       this.handoffAnchor = true;
       this.anchorFailureCount = 0;
       this.scene = {
         ...this.scene,
-        imageAnchor: { url: seedFrameUrl, strength: 0.55 },
+        imageAnchor: { strength: 0.55, url: seedFrameUrl },
       };
     }
-    this.send({ type: "scene.state", state: this.scene });
+    this.send({ state: this.scene, type: "scene.state" });
     this.logger.info(
-      { prompt, seedFrameUrl, lastDeck: this.lastDeck },
-      "go live",
+      { lastDeck: this.lastDeck, prompt, seedFrameUrl },
+      "go live"
     );
     // Fire immediately — bypasses the semantic-diff gate so the handoff frame
     // (or first text frame) lands without waiting.
@@ -327,11 +559,16 @@ export class Session {
 
   applyPatch(
     patch: ClientScenePatch,
-    origin: "client" | "voice" = "client",
+    origin: "client" | "voice" = "client"
   ): void {
-    const next: SonaraSceneState = { ...this.scene, ...patch };
+    // Cap the prompt server-side (defense in depth — the input also caps it).
+    const safePatch =
+      typeof patch.prompt === "string"
+        ? { ...patch, prompt: clampPrompt(patch.prompt) }
+        : patch;
+    const next: SonaraSceneState = { ...this.scene, ...safePatch };
     this.scene = next;
-    this.send({ type: "scene.state", state: next });
+    this.send({ state: next, type: "scene.state" });
 
     const threshold =
       origin === "voice" ? SEMANTIC_THRESHOLD_VOICE : SEMANTIC_THRESHOLD;
@@ -354,22 +591,24 @@ export class Session {
     // Silence-clear for nowPlaying. Kept independent of section detection
     // because sectionEnergy is EMA-smoothed and lags actual silence.
     if (features.rms < RMS_SILENT) {
-      if (this.silentSinceAt === null) this.silentSinceAt = now;
+      if (this.silentSinceAt === null) {
+        this.silentSinceAt = now;
+      }
       if (
         this.scene.nowPlaying &&
         now - this.silentSinceAt > NOW_PLAYING_SILENCE_CLEAR_MS
       ) {
         this.logger.info(
           { title: this.scene.nowPlaying.title },
-          "silence sustained — clearing nowPlaying",
+          "silence sustained — clearing nowPlaying"
         );
         this.scene = { ...this.scene, nowPlaying: undefined };
-        this.send({ type: "scene.state", state: this.scene });
+        this.send({ state: this.scene, type: "scene.state" });
         this.send({
-          type: "now.playing",
-          track: null,
           source: "audd",
+          track: null,
           trigger: "auto",
+          type: "now.playing",
         });
       }
     } else {
@@ -387,7 +626,6 @@ export class Session {
           this.lastSectionTriggerAt = now;
           this.trigger("section");
         }
-        return;
       }
     } else {
       this.sectionDeltaStartedAt = null;
@@ -399,19 +637,21 @@ export class Session {
   async recognize(
     clipBase64: string,
     mimeType: string,
-    trigger: "auto" | "manual",
+    trigger: "auto" | "manual"
   ): Promise<NowPlaying | null> {
     // Anonymous sessions never call AudD or the LLM muse — both have
     // per-call cost and the demo loop doesn't need song titles. The UI
     // hides the now-playing trigger for anon already; this is defence in
     // depth in case a stale client posts here anyway.
-    if (this.userId === null) return null;
+    if (this.userId === null) {
+      return null;
+    }
     // Auto-trigger dedupe: if we already know a song, don't burn an AudD
     // call. Manual always goes through so the user can force a refresh.
     if (trigger === "auto" && this.scene.nowPlaying) {
       this.logger.debug(
         { title: this.scene.nowPlaying.title },
-        "recognize: nowPlaying already set, skipping auto",
+        "recognize: nowPlaying already set, skipping auto"
       );
       return this.scene.nowPlaying;
     }
@@ -422,8 +662,8 @@ export class Session {
     let outcome: Awaited<ReturnType<typeof recognizeClip>>;
     try {
       outcome = await recognizeClip(clipBase64, mimeType, this.logger);
-    } catch (err) {
-      this.logger.warn({ err }, "recognize: threw");
+    } catch (error) {
+      this.logger.warn({ error }, "recognize: threw");
       return null;
     } finally {
       if (this.recognitionInFlight === controller) {
@@ -431,31 +671,35 @@ export class Session {
       }
     }
 
-    if (controller.signal.aborted) return null;
+    if (controller.signal.aborted) {
+      return null;
+    }
 
     const { track, source } = outcome;
 
     this.logger.info(
       {
-        trigger,
-        source,
-        matched: Boolean(track),
-        title: track?.title,
         artist: track?.artist,
+        matched: Boolean(track),
+        source,
+        title: track?.title,
+        trigger,
       },
-      "recognize: result",
+      "recognize: result"
     );
 
-    this.send({ type: "now.playing", track, source, trigger });
+    this.send({ source, track, trigger, type: "now.playing" });
 
-    if (!track) return null;
+    if (!track) {
+      return null;
+    }
 
     // Pin nowPlaying to the scene so the HUD can show it. Track metadata no
     // longer auto-fills scene fields deterministically — the LLM muse below
     // synthesises a single evocative prompt that abstracts the song, and
     // overwrites scene.prompt only when the user hasn't authored their own.
     this.scene = { ...this.scene, nowPlaying: track };
-    this.send({ type: "scene.state", state: this.scene });
+    this.send({ state: this.scene, type: "scene.state" });
 
     // LLM muse — translate the track into an evocative visual prompt sentence.
     // Awaited so we fire a single trigger with the synthesised prompt instead
@@ -466,17 +710,19 @@ export class Session {
     try {
       muse = await synthesizeFromTrack(
         {
-          track,
-          valence: this.lastValence,
           arousal: this.lastArousal,
           bpm: this.lastBpm,
+          track,
+          valence: this.lastValence,
         },
-        { signal: controller.signal, logger: this.logger },
+        { logger: this.logger, signal: controller.signal }
       );
-    } catch (err) {
-      this.logger.warn({ err }, "song-muse: unhandled");
+    } catch (error) {
+      this.logger.warn({ error }, "song-muse: unhandled");
     }
-    if (controller.signal.aborted) return null;
+    if (controller.signal.aborted) {
+      return null;
+    }
 
     // Only fill the prompt slot if the user hasn't typed their own. "Hasn't
     // typed" === scene.prompt still matches defaultScene.prompt (""). Voice
@@ -489,10 +735,10 @@ export class Session {
       // used to read as quotation inside FLUX).
       const nextPrompt = muse?.prompt?.trim() || track.title;
       this.scene = { ...this.scene, prompt: nextPrompt };
-      this.send({ type: "scene.state", state: this.scene });
+      this.send({ state: this.scene, type: "scene.state" });
       this.logger.info(
-        { prompt: nextPrompt, hasLlmSynth: muse !== null },
-        "song-muse: scene enriched",
+        { hasLlmSynth: muse !== null, prompt: nextPrompt },
+        "song-muse: scene enriched"
       );
     }
 
@@ -513,7 +759,10 @@ export class Session {
     }
     this.demoMode = on;
     this.demoDeck = on ? deck : null;
-    this.logger.info({ demoMode: on, demoDeck: this.demoDeck }, "demo mode set");
+    this.logger.info(
+      { demoDeck: this.demoDeck, demoMode: on },
+      "demo mode set"
+    );
     // Demo frames are driven client-side (use-demo-frame-loop); the client
     // starts/stops its own loop on this toggle, so nothing to trigger here.
   }
@@ -532,6 +781,8 @@ export class Session {
     this.lastGeneratedScene = { ...defaultScene };
     this.activeVersion = 0;
     this.lastKeyframeAt = 0;
+    this.currentFrameUrl = null;
+    this.currentSource = null;
     this.seed = rollSeed();
     this.sessionStartAt = Date.now();
     this.silentSinceAt = null;
@@ -540,24 +791,39 @@ export class Session {
     this.recognitionInFlight?.abort();
     this.recognitionInFlight = null;
     this.startPeriodic();
-    this.send({ type: "scene.state", state: this.scene });
-    this.send({ type: "now.playing", track: null, source: "audd", trigger: "auto" });
-    this.send({ type: "job.status", status: "idle" });
+    this.send({ state: this.scene, type: "scene.state" });
+    this.send({
+      source: "audd",
+      track: null,
+      trigger: "auto",
+      type: "now.playing",
+    });
+    this.send({ status: "idle", type: "job.status" });
   }
 
   close(): void {
     this.activeJob?.abort();
-    if (this.pauseTimer) clearTimeout(this.pauseTimer);
-    if (this.periodicTimer) clearInterval(this.periodicTimer);
+    if (this.pauseTimer) {
+      clearTimeout(this.pauseTimer);
+    }
+    if (this.periodicTimer) {
+      clearInterval(this.periodicTimer);
+    }
+    // Tear down the warm realtime websocket(s) — nothing else closes them.
+    this.realtimePool.close();
   }
 
   private schedulePause(): void {
-    if (this.pauseTimer) clearTimeout(this.pauseTimer);
+    if (this.pauseTimer) {
+      clearTimeout(this.pauseTimer);
+    }
     const { pauseMs } = cadenceFromIntensity(this.scene.intensity);
     this.pauseTimer = setTimeout(() => {
       this.pauseTimer = undefined;
       const diff = semanticDiff(this.lastGeneratedScene, this.scene);
-      if (diff > 0.05) this.trigger("pause");
+      if (diff > 0.05) {
+        this.trigger("pause");
+      }
     }, pauseMs);
   }
 
@@ -565,15 +831,58 @@ export class Session {
     this.periodicTimer = setInterval(() => {
       const now = Date.now();
       const { periodicMs } = cadenceFromIntensity(this.scene.intensity);
-      if (now - this.lastKeyframeAt < periodicMs) return;
+      if (now - this.lastKeyframeAt < periodicMs) {
+        return;
+      }
       // Demo is client-driven (use-demo-frame-loop); the server only
       // auto-triggers LIVE generation, and never while in demo mode.
-      if (this.demoMode) return;
+      if (this.demoMode) {
+        return;
+      }
+      // No screen attached (reconnect grace window) → nobody is watching;
+      // never burn paid generations into the void.
+      if (!this.attached) {
+        return;
+      }
       const hasAudio = now - this.lastAudioAt < 5000;
       const hasScene = this.scene.prompt.trim().length > 0;
-      if (!hasAudio && !hasScene) return;
+      if (!hasAudio && !hasScene) {
+        return;
+      }
       this.trigger("periodic");
     }, 1000);
+  }
+
+  // Append a just-persisted frame to this performance's recording set
+  // (frame_set origin 'recording' — see library/recording-set.ts). Fire-and-
+  // forget: recording must never break or slow generation; failures log and
+  // skip. The ensure upsert is cheap and reconnect-safe, so it runs per frame.
+  private recordFrame(frameId: ImageLibraryId, tMs: number): void {
+    const { userId } = this;
+    // Anonymous sessions never persist (library-only mode); defence in depth.
+    if (userId === null) {
+      return;
+    }
+    void (async () => {
+      try {
+        const pool = getPool();
+        await ensureRecordingSet(pool, {
+          liveSessionId: this.liveSessionId,
+          stageUuid: this.stageId
+            ? typeIdToUuid(this.stageId as StageId).uuid
+            : null,
+          startedAt: new Date(this.sessionStartAt),
+          userUuid: userId,
+        });
+        await appendRecordingFrame(pool, {
+          frameUuid: typeIdToUuid(frameId).uuid,
+          liveSessionId: this.liveSessionId,
+          tMs,
+        });
+      } catch (error) {
+        this.logger.warn({ error, frameId }, "recording-set append failed");
+      }
+    })();
   }
 
   private async trigger(source: TriggerSource): Promise<void> {
@@ -586,7 +895,9 @@ export class Session {
     // the browser cycles a static per-deck manifest, so demo works on slow/no
     // internet and the server never generates in demo mode. This path runs
     // only for live generation.
-    if (this.demoMode) return;
+    if (this.demoMode) {
+      return;
+    }
 
     // Image-anchor short-circuit. When the user has pinned an uploaded
     // image as a reference, route to flux-pro/v1.1-ultra with image_url
@@ -606,7 +917,7 @@ export class Session {
       this.logger.warn({ reason }, "anon trigger reached fal path — bailing");
       return;
     }
-    const userId = this.userId;
+    const { userId } = this;
 
     // Empty-prompt fast-exit. `serializeResolvedScene` also returns "" when
     // subjects[0] is blank, but short-circuiting here saves the resolver and
@@ -623,40 +934,37 @@ export class Session {
     this.lastKeyframeAt = Date.now();
 
     const gate = await tryDebitCredit({
-      userId,
       isUserInitiated: kind === "user",
       lastCreditDenialAt: this.lastCreditDenialAt,
-      now: Date.now(),
       logger: this.logger,
+      now: Date.now(),
+      userId,
     });
     this.lastCreditDenialAt = gate.nextLastDenialAt;
 
     if (!gate.ok) {
-      this.logger.info(
-        { reason, gateReason: gate.reason },
-        "trigger denied",
-      );
+      this.logger.info({ gateReason: gate.reason, reason }, "trigger denied");
       if (gate.shouldEmit) {
         this.send({
-          type: "job.status",
-          status: "error",
-          reason,
           message:
             gate.reason === "system_error"
               ? "Payment system unavailable"
               : "Out of credits — top up to keep generating",
+          reason,
+          status: "error",
+          type: "job.status",
         });
       }
       return;
     }
 
-    const paidCost = gate.paidCost;
+    const { paidCost } = gate;
 
     // Drift modifier. Trajectory is LLM-seeded when scene-llm-expander has
     // filled drift_candidates; otherwise it walks the curated static pool.
     const sessionProgress = Math.min(
       1,
-      (Date.now() - this.sessionStartAt) / SESSION_ARC_MS,
+      (Date.now() - this.sessionStartAt) / SESSION_ARC_MS
     );
     const drift = this.driftTrajectory.next();
     const driftSource: "pool" | "none" = drift ? "pool" : "none";
@@ -673,7 +981,7 @@ export class Session {
     this.scene = { ...this.scene, version };
     const snapshot: SonaraSceneState = this.scene;
 
-    this.send({ type: "scene.state", state: this.scene });
+    this.send({ state: this.scene, type: "scene.state" });
 
     // Resolve the flat scene into the structured ResolvedScene, then serialise
     // to the FLUX prompt. Single source of truth: the inspector HUD's
@@ -686,17 +994,17 @@ export class Session {
     // is large. Auto-triggers (periodic / section) keep the sync path so
     // they never block.
     const resolveOpts = {
+      audio: {
+        energyDelta: 0,
+        intensity: this.scene.intensity,
+        section: this.lastSectionEnergy,
+      },
       // Drift = pool/LLM walk + (when we came from a deck) that deck's style,
       // so live frames stay on-vibe with the deck the user left.
       driftModifiers: [
         drift,
         this.lastDeck ? deckStyle(this.lastDeck) : null,
       ].filter((m): m is string => !!m),
-      audio: {
-        intensity: this.scene.intensity,
-        section: this.lastSectionEnergy,
-        energyDelta: 0,
-      },
       logger: this.logger,
       signal: controller.signal,
     };
@@ -704,7 +1012,9 @@ export class Session {
       kind === "user"
         ? await resolveSceneAwaited(this.scene, resolveOpts)
         : resolveScene(this.scene, resolveOpts);
-    if (controller.signal.aborted) return;
+    if (controller.signal.aborted) {
+      return;
+    }
     // Reseed the drift trajectory whenever fresh LLM candidates land. Same-
     // pool calls are no-ops (trajectory checks pool equality), so this is
     // safe to call on every trigger.
@@ -716,7 +1026,7 @@ export class Session {
       if (reseeded) {
         this.logger.debug(
           { candidates: resolved.drift_candidates.length },
-          "drift trajectory reseeded",
+          "drift trajectory reseeded"
         );
       }
     }
@@ -727,135 +1037,191 @@ export class Session {
       // surfaces instead of silently firing an empty FAL request.
       this.logger.debug(
         { reason, resolved },
-        "trigger skipped: empty resolved prompt",
+        "trigger skipped: empty resolved prompt"
       );
       return;
     }
 
     this.logger.info(
       {
-        reason,
-        version,
-        prompt,
         drift,
         driftSource,
-        sessionProgress: Number(sessionProgress.toFixed(2)),
+        prompt,
+        reason,
         seed: this.seed,
+        sessionProgress: Number(sessionProgress.toFixed(2)),
+        version,
       },
-      "trigger fire",
+      "trigger fire"
     );
-    this.send({ type: "job.status", status: "running", reason });
+    this.send({ reason, status: "running", type: "job.status" });
 
     const requestedAt = Date.now();
     const { periodicMs } = cadenceFromIntensity(this.scene.intensity);
     this.send({
-      type: "generation.requested",
-      reason,
-      version,
-      promptString: prompt,
       driftSource,
-      resolvedScene: resolved,
-      requestedAt,
       nextKeyframeAt: this.lastKeyframeAt + periodicMs,
+      promptString: prompt,
+      reason,
+      requestedAt,
+      resolvedScene: resolved,
+      type: "generation.requested",
+      version,
     });
 
-    streamPreview({
-      prompt,
-      seed: this.seed,
-      signal: controller.signal,
+    const modelCfg = TEXT_MODELS[this.model];
+    const size = { height: this.resolution, width: this.resolution };
+
+    // Transport-agnostic callbacks. The realtime websocket pool and the klein
+    // queue path share identical onPreview/onFinal/onError wiring — the version
+    // check + refund-on-error semantics don't care which transport delivered
+    // (or failed to deliver) the frame.
+    const frameCallbacks = {
       logger: this.logger,
-      onPreview: (url) => {
-        if (version !== this.activeVersion) return;
-        this.send({ type: "frame.preview", imageUrl: url, version });
-      },
-      onFinal: (url) => {
-        if (version !== this.activeVersion) return;
-        this.lastGeneratedScene = snapshot;
-        const tMs = Date.now() - this.sessionStartAt;
-        const frameId = typeIdGenerator("imageLibrary");
-        this.send({
-          type: "frame.final",
-          imageUrl: url,
-          version,
-          frameId,
-          tMs,
-        });
-        this.send({ type: "job.status", status: "idle" });
-        this.send({
-          type: "generation.completed",
-          version,
-          durationMs: Date.now() - requestedAt,
-          success: true,
-        });
-        // Fire-and-forget persist. Never blocks the rendering hot path;
-        // failures log and skip. Emits library.appended on success so the
-        // client's timeline can append the row without polling.
-        void persistFrame({
-          id: frameId,
-          userId,
-          sessionId: this.liveSessionId,
-          deck: this.lastDeck ?? "live",
-          prompt,
-          model: env.FAL_TEXT_MODEL,
-          seed: this.seed,
-          palette: resolved.color_palette,
-          falUrl: url,
-          tMs,
-          width: 768,
-          height: 768,
-          triggerReason: source,
-          inspectorContext: {
-            audio: {
-              valence: this.lastValence,
-              arousal: this.lastArousal,
-              bpm: this.lastBpm,
-              sectionEnergy: this.lastSectionEnergy,
-              rms: this.lastRms,
-            },
-            nowPlaying: this.scene.nowPlaying,
-            driftModifier: drift ?? undefined,
-            resolvedSummary: {
-              subjects: resolved.subjects.map((s) => s.description),
-              palette: resolved.color_palette,
-              lighting: resolved.lighting,
-              mood: resolved.mood,
-            },
-          },
-          logger: this.logger,
-        }).then((row) => {
-          if (!row) return;
-          this.send({ type: "library.appended", frame: row });
-        });
-      },
-      onError: (err) => {
-        // Refund regardless of abort — fal-provider routes superseded
+      onError: (err: unknown) => {
+        // Refund regardless of abort — the provider routes superseded
         // generations through onError too, and the user should get the
         // credit back since no frame was delivered. Free-tier paths set
         // paidCost=null so this is a no-op for them.
         refundOnError(userId, paidCost, this.logger);
         // Aborts are expected (newer trigger superseded this one). Don't
         // log noisily or surface to the client.
-        if (controller.signal.aborted) return;
+        if (controller.signal.aborted) {
+          return;
+        }
         this.logger.error({ err }, "generation failed");
         const message = err instanceof Error ? err.message : String(err);
         this.send({
-          type: "job.status",
-          status: "error",
           message,
+          status: "error",
+          type: "job.status",
         });
         this.send({
+          durationMs: Date.now() - requestedAt,
+          message,
+          success: false,
           type: "generation.completed",
           version,
-          durationMs: Date.now() - requestedAt,
-          success: false,
-          message,
         });
       },
-    }).catch((err) => {
-      if (!controller.signal.aborted) {
-        this.logger.error({ err }, "streamPreview unhandled");
-      }
-    });
+      onFinal: (url: string) => {
+        if (version !== this.activeVersion) {
+          return;
+        }
+        // Reset the idle-cadence clock to THIS rendered frame, so the next
+        // periodic/ambient frame lands a full interval later. A deliberate
+        // prompt edit fires immediately (ungated by cadence), and this keeps it
+        // from being followed by a periodic frame stacking right on top.
+        this.lastKeyframeAt = Date.now();
+        this.lastGeneratedScene = snapshot;
+        const tMs = Date.now() - this.sessionStartAt;
+        const frameId = typeIdGenerator("imageLibrary");
+        this.send({
+          frameId,
+          imageUrl: url,
+          tMs,
+          type: "frame.final",
+          version,
+        });
+        this.send({ status: "idle", type: "job.status" });
+        this.send({
+          durationMs: Date.now() - requestedAt,
+          success: true,
+          type: "generation.completed",
+          version,
+        });
+        // Fire-and-forget persist. Never blocks the rendering hot path;
+        // failures log and skip. Emits library.appended on success so the
+        // client's timeline can append the row without polling.
+        const persisted = persistFrame({
+          deck: this.lastDeck ?? "live",
+          falUrl: url,
+          height: size.height,
+          id: frameId,
+          inspectorContext: {
+            audio: {
+              arousal: this.lastArousal,
+              bpm: this.lastBpm,
+              rms: this.lastRms,
+              sectionEnergy: this.lastSectionEnergy,
+              valence: this.lastValence,
+            },
+            driftModifier: drift ?? undefined,
+            nowPlaying: this.scene.nowPlaying,
+            resolvedSummary: {
+              lighting: resolved.lighting,
+              mood: resolved.mood,
+              palette: resolved.color_palette,
+              subjects: resolved.subjects.map((s) => s.description),
+            },
+          },
+          logger: this.logger,
+          model: modelCfg.falId,
+          palette: resolved.color_palette,
+          prompt,
+          seed: this.seed,
+          sessionId: this.liveSessionId,
+          tMs,
+          triggerReason: source,
+          userId,
+          width: size.width,
+        });
+        void (async () => {
+          try {
+            const row = await persisted;
+            if (!row) {
+              return;
+            }
+            this.send({ frame: row, type: "library.appended" });
+            // Persist succeeded → append to the auto-recorded set.
+            this.recordFrame(frameId, tMs);
+          } catch (error) {
+            // Fire-and-forget: a persist/send failure here must never become an
+            // unhandled rejection (on a single-replica in-memory server that can
+            // crash Bun and drop every live session). Mirror the streamPreview/
+            // streamAnchor .catch guard above.
+            this.logger.error({ error }, "persistFrame unhandled");
+          }
+        })();
+      },
+      onPreview: (url: string) => {
+        if (version !== this.activeVersion) {
+          return;
+        }
+        this.send({ imageUrl: url, type: "frame.preview", version });
+      },
+      prompt,
+      seed: this.seed,
+      signal: controller.signal,
+    };
+
+    if (modelCfg.transport === "realtime") {
+      // Warm websocket — bypasses the queue for the ~150-300ms warm floor.
+      // Fire-and-forget: the pool reports via the callbacks above and never
+      // throws synchronously past its own guard.
+      this.realtimePool.stream({
+        ...frameCallbacks,
+        falModelId: modelCfg.falId,
+        guidanceScale: modelCfg.guidanceScale,
+        size,
+        steps: modelCfg.steps,
+      });
+    } else {
+      // Queue path (klein/9b quality baseline). Fire-and-forget: streamPreview
+      // must stream in the background; awaiting would block trigger() on the
+      // live hot path. Its onError/onFinal/onPreview are its callback contract.
+      const queued = streamPreview({
+        ...frameCallbacks,
+        model: modelCfg.falId,
+        size,
+      });
+      // oxlint-disable-next-line promise/prefer-await-to-then, promise/prefer-await-to-callbacks -- REVIEW: see the fire-and-forget note above; the trigger() hot path cannot await.
+      queued.catch((error) => {
+        if (!controller.signal.aborted) {
+          this.logger.error({ error }, "streamPreview unhandled");
+        }
+      });
+    }
   }
 
   // Image-anchor-mode trigger. Calls fal flux-pro/v1.1-ultra with the user's
@@ -863,51 +1229,56 @@ export class Session {
   // as the text-mode path so the client doesn't need to distinguish.
   private async triggerAnchor(source: TriggerSource): Promise<void> {
     const anchor = this.scene.imageAnchor;
-    if (!anchor) return;
+    if (!anchor) {
+      return;
+    }
 
     // Anon defence in depth — the upload route is authed-only, but if a
     // null userId somehow reached this path we refuse to bill phantom.
     if (this.userId === null) {
-      this.logger.warn({ source }, "anon trigger reached anchor path — bailing");
+      this.logger.warn(
+        { source },
+        "anon trigger reached anchor path — bailing"
+      );
       return;
     }
-    const userId = this.userId;
+    const { userId } = this;
     const kind = kindFromSource(source);
     const reason = source;
 
     const gate = await tryDebitCredit({
-      userId,
+      cost: ANCHOR_FRAME_COST_CREDITS,
       isUserInitiated: kind === "user",
       lastCreditDenialAt: this.lastCreditDenialAt,
-      now: Date.now(),
       logger: this.logger,
-      cost: ANCHOR_FRAME_COST_CREDITS,
+      now: Date.now(),
+      userId,
     });
     this.lastCreditDenialAt = gate.nextLastDenialAt;
 
     if (!gate.ok) {
       this.logger.info(
-        { reason, gateReason: gate.reason, cost: ANCHOR_FRAME_COST_CREDITS },
-        "anchor trigger denied",
+        { cost: ANCHOR_FRAME_COST_CREDITS, gateReason: gate.reason, reason },
+        "anchor trigger denied"
       );
       if (gate.shouldEmit) {
         this.send({
-          type: "job.status",
-          status: "error",
-          reason,
           message:
             gate.reason === "system_error"
               ? "Payment system unavailable"
               : "Out of credits — top up to keep generating",
+          reason,
+          status: "error",
+          type: "job.status",
         });
       }
       return;
     }
-    const paidCost = gate.paidCost;
+    const { paidCost } = gate;
 
     const sessionProgress = Math.min(
       1,
-      (Date.now() - this.sessionStartAt) / SESSION_ARC_MS,
+      (Date.now() - this.sessionStartAt) / SESSION_ARC_MS
     );
     const drift = this.driftTrajectory.next();
     const driftSource: "pool" | "none" = drift ? "pool" : "none";
@@ -921,7 +1292,7 @@ export class Session {
     this.scene = { ...this.scene, version };
     const snapshot: SonaraSceneState = this.scene;
 
-    this.send({ type: "scene.state", state: this.scene });
+    this.send({ state: this.scene, type: "scene.state" });
 
     // Resolve the prompt through the same LLM expander as text-mode so the
     // inspector HUD shows coherent metadata and so the drift trajectory
@@ -929,17 +1300,17 @@ export class Session {
     // expansion (richer first frame after a prompt edit); auto-triggers
     // stay on the sync deterministic-then-cache path.
     const resolveOpts = {
+      audio: {
+        energyDelta: 0,
+        intensity: this.scene.intensity,
+        section: this.lastSectionEnergy,
+      },
       // Drift = pool/LLM walk + (when we came from a deck) that deck's style,
       // so live frames stay on-vibe with the deck the user left.
       driftModifiers: [
         drift,
         this.lastDeck ? deckStyle(this.lastDeck) : null,
       ].filter((m): m is string => !!m),
-      audio: {
-        intensity: this.scene.intensity,
-        section: this.lastSectionEnergy,
-        energyDelta: 0,
-      },
       logger: this.logger,
       signal: controller.signal,
     };
@@ -947,7 +1318,9 @@ export class Session {
       kind === "user"
         ? await resolveSceneAwaited(this.scene, resolveOpts)
         : resolveScene(this.scene, resolveOpts);
-    if (controller.signal.aborted) return;
+    if (controller.signal.aborted) {
+      return;
+    }
     if (resolved.drift_candidates.length > 0) {
       this.driftTrajectory.reseed({
         candidates: resolved.drift_candidates,
@@ -958,116 +1331,40 @@ export class Session {
 
     this.logger.info(
       {
-        reason,
-        version,
-        prompt,
-        anchorUrl: anchor.url,
         anchorStrength: anchor.strength,
+        anchorUrl: anchor.url,
+        prompt,
+        reason,
         seed: this.seed,
+        version,
       },
-      "anchor trigger fire",
+      "anchor trigger fire"
     );
-    this.send({ type: "job.status", status: "running", reason });
+    this.send({ reason, status: "running", type: "job.status" });
 
     const requestedAt = Date.now();
     const { periodicMs } = cadenceFromIntensity(this.scene.intensity);
     this.send({
-      type: "generation.requested",
-      reason,
-      version,
-      promptString: prompt,
       driftSource,
-      resolvedScene: resolved,
-      requestedAt,
       nextKeyframeAt: this.lastKeyframeAt + periodicMs,
+      promptString: prompt,
+      reason,
+      requestedAt,
+      resolvedScene: resolved,
+      type: "generation.requested",
+      version,
     });
 
     streamAnchor({
-      prompt,
       imageUrl: anchor.url,
-      strength: anchor.strength,
-      seed: this.seed,
-      signal: controller.signal,
       logger: this.logger,
-      onPreview: (url) => {
-        if (version !== this.activeVersion) return;
-        this.send({ type: "frame.preview", imageUrl: url, version });
-      },
-      onFinal: (url) => {
-        if (version !== this.activeVersion) return;
-        this.anchorFailureCount = 0; // success clears the failure streak
-        // One-shot deck→live handoff anchor: clear it now that the continuity
-        // frame has landed, so the NEXT trigger uses the cheap text path
-        // instead of re-billing 8 cr on every periodic tick.
-        if (this.handoffAnchor) {
-          this.handoffAnchor = false;
-          this.scene = { ...this.scene, imageAnchor: undefined };
-          this.send({ type: "scene.state", state: this.scene });
-        }
-        this.lastGeneratedScene = snapshot;
-        const tMs = Date.now() - this.sessionStartAt;
-        const frameId = typeIdGenerator("imageLibrary");
-        this.send({
-          type: "frame.final",
-          imageUrl: url,
-          version,
-          frameId,
-          tMs,
-        });
-        this.send({ type: "job.status", status: "idle" });
-        this.send({
-          type: "generation.completed",
-          version,
-          durationMs: Date.now() - requestedAt,
-          success: true,
-        });
-        // Fire-and-forget persist for the generated frame. Note: the
-        // anchor INPUT image (user upload at fal.storage) is NOT
-        // persisted — only the generated output gets a library row.
-        void persistFrame({
-          id: frameId,
-          userId,
-          sessionId: this.liveSessionId,
-          deck: this.lastDeck ?? "live",
-          prompt,
-          model: env.FAL_ANCHOR_MODEL,
-          seed: this.seed,
-          palette: resolved.color_palette,
-          falUrl: url,
-          tMs,
-          // flux-pro/v1.1-ultra at aspect_ratio: "1:1" returns 1024².
-          width: 1024,
-          height: 1024,
-          triggerReason: source,
-          anchorUrl: anchor.url,
-          inspectorContext: {
-            audio: {
-              valence: this.lastValence,
-              arousal: this.lastArousal,
-              bpm: this.lastBpm,
-              sectionEnergy: this.lastSectionEnergy,
-              rms: this.lastRms,
-            },
-            nowPlaying: this.scene.nowPlaying,
-            driftModifier: drift ?? undefined,
-            resolvedSummary: {
-              subjects: resolved.subjects.map((s) => s.description),
-              palette: resolved.color_palette,
-              lighting: resolved.lighting,
-              mood: resolved.mood,
-            },
-          },
-          logger: this.logger,
-        }).then((row) => {
-          if (!row) return;
-          this.send({ type: "library.appended", frame: row });
-        });
-      },
       onError: (err) => {
         refundOnError(userId, paidCost, this.logger);
         // Aborts are expected supersessions (newer trigger won) — they don't
         // count toward the failure streak.
-        if (controller.signal.aborted) return;
+        if (controller.signal.aborted) {
+          return;
+        }
         // One-shot deck→live handoff anchor that failed (e.g. a seed URL fal
         // can't fetch — local dev serves /library from localhost). Don't retry
         // it: clear it so the next periodic tick generates from text. Doesn't
@@ -1075,23 +1372,23 @@ export class Session {
         if (this.handoffAnchor) {
           this.handoffAnchor = false;
           this.scene = { ...this.scene, imageAnchor: undefined };
-          this.send({ type: "scene.state", state: this.scene });
+          this.send({ state: this.scene, type: "scene.state" });
           this.logger.info(
             { err: err instanceof Error ? err.message : String(err) },
-            "handoff anchor failed — cleared, continuing text-only",
+            "handoff anchor failed — cleared, continuing text-only"
           );
           this.send({
-            type: "generation.completed",
-            version,
             durationMs: Date.now() - requestedAt,
             success: false,
+            type: "generation.completed",
+            version,
           });
           return;
         }
         this.anchorFailureCount += 1;
         this.logger.error(
-          { err, anchorFailureCount: this.anchorFailureCount },
-          "anchor generation failed",
+          { anchorFailureCount: this.anchorFailureCount, err },
+          "anchor generation failed"
         );
         const message = err instanceof Error ? err.message : String(err);
         if (this.anchorFailureCount >= Session.ANCHOR_FAILURE_LIMIT) {
@@ -1100,29 +1397,126 @@ export class Session {
           // tick. The user can re-upload to try again.
           this.anchorFailureCount = 0;
           this.scene = { ...this.scene, imageAnchor: undefined };
-          this.send({ type: "scene.state", state: this.scene });
+          this.send({ state: this.scene, type: "scene.state" });
           this.send({
-            type: "job.status",
-            status: "error",
             message:
               "Image anchor failed repeatedly — cleared it. Re-upload to try again.",
+            status: "error",
+            type: "job.status",
           });
         } else {
-          this.send({ type: "job.status", status: "error", message });
+          this.send({ message, status: "error", type: "job.status" });
         }
         this.send({
+          durationMs: Date.now() - requestedAt,
+          message,
+          success: false,
           type: "generation.completed",
           version,
-          durationMs: Date.now() - requestedAt,
-          success: false,
-          message,
         });
       },
-    }).catch((err) => {
+      onFinal: (url) => {
+        if (version !== this.activeVersion) {
+          return;
+        }
+        // success clears the failure streak
+        this.anchorFailureCount = 0;
+        // One-shot deck→live handoff anchor: clear it now that the continuity
+        // frame has landed, so the NEXT trigger uses the cheap text path
+        // instead of re-billing 8 cr on every periodic tick.
+        if (this.handoffAnchor) {
+          this.handoffAnchor = false;
+          this.scene = { ...this.scene, imageAnchor: undefined };
+          this.send({ state: this.scene, type: "scene.state" });
+        }
+        this.lastGeneratedScene = snapshot;
+        const tMs = Date.now() - this.sessionStartAt;
+        const frameId = typeIdGenerator("imageLibrary");
+        this.send({
+          frameId,
+          imageUrl: url,
+          tMs,
+          type: "frame.final",
+          version,
+        });
+        this.send({ status: "idle", type: "job.status" });
+        this.send({
+          durationMs: Date.now() - requestedAt,
+          success: true,
+          type: "generation.completed",
+          version,
+        });
+        // Fire-and-forget persist for the generated frame. Note: the
+        // anchor INPUT image (user upload at fal.storage) is NOT
+        // persisted — only the generated output gets a library row.
+        const persisted = persistFrame({
+          anchorUrl: anchor.url,
+          deck: this.lastDeck ?? "live",
+          falUrl: url,
+          height: 1024,
+          id: frameId,
+          inspectorContext: {
+            audio: {
+              arousal: this.lastArousal,
+              bpm: this.lastBpm,
+              rms: this.lastRms,
+              sectionEnergy: this.lastSectionEnergy,
+              valence: this.lastValence,
+            },
+            driftModifier: drift ?? undefined,
+            nowPlaying: this.scene.nowPlaying,
+            resolvedSummary: {
+              lighting: resolved.lighting,
+              mood: resolved.mood,
+              palette: resolved.color_palette,
+              subjects: resolved.subjects.map((s) => s.description),
+            },
+          },
+          logger: this.logger,
+          model: env.FAL_ANCHOR_MODEL,
+          palette: resolved.color_palette,
+          prompt,
+          seed: this.seed,
+          sessionId: this.liveSessionId,
+          tMs,
+          triggerReason: source,
+          userId,
+          // flux-pro/v1.1-ultra at aspect_ratio: "1:1" returns 1024².
+          width: 1024,
+        });
+        void (async () => {
+          try {
+            const row = await persisted;
+            if (!row) {
+              return;
+            }
+            this.send({ frame: row, type: "library.appended" });
+            // Persist succeeded → append to the auto-recorded set.
+            this.recordFrame(frameId, tMs);
+          } catch (error) {
+            // Fire-and-forget: a persist/send failure here must never become an
+            // unhandled rejection (on a single-replica in-memory server that can
+            // crash Bun and drop every live session). Mirror the streamPreview/
+            // streamAnchor .catch guard above.
+            this.logger.error({ error }, "persistFrame unhandled");
+          }
+        })();
+      },
+      onPreview: (url) => {
+        if (version !== this.activeVersion) {
+          return;
+        }
+        this.send({ imageUrl: url, type: "frame.preview", version });
+      },
+      prompt,
+      seed: this.seed,
+      signal: controller.signal,
+      strength: anchor.strength,
+      // oxlint-disable-next-line promise/prefer-await-to-then, promise/prefer-await-to-callbacks -- REVIEW: fire-and-forget: streamAnchor must stream in the background; awaiting would block triggerAnchor() on the live hot path. streamAnchor's onError/onFinal/onPreview are its callback API contract.
+    }).catch((error) => {
       if (!controller.signal.aborted) {
-        this.logger.error({ err }, "streamAnchor unhandled");
+        this.logger.error({ error }, "streamAnchor unhandled");
       }
     });
   }
-
 }

@@ -8,10 +8,12 @@
   "exports": {
     ".": "./src/index.ts",
     "./schema": "./src/schema/index.ts",
-    "./migrator": "./src/migrator.ts"
+    "./migrator": "./src/migrator.ts",
+    "./migrations-path": "./src/migrations-path.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
+    "typecheck:fast": "tsgo --noEmit",
     "lint": "oxlint",
     "fix": "oxlint --fix",
     "test": "bun test || echo 'no tests yet'",
@@ -26,7 +28,7 @@
   "dependencies": {
     "@sonara/shared": "workspace:*",
     "drizzle-orm": "^0.45.2",
-    "pg": "^8.20.0"
+    "pg": "^8.21.0"
   },
   "devDependencies": {
     "@types/pg": "^8.20.0",

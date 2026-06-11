@@ -1,5 +1,6 @@
-import type { StateCreator } from "zustand";
 import type { ResolvedScene } from "@sonara/shared";
+import type { StateCreator } from "zustand";
+
 import type { VisualizerState } from "./types";
 
 export type TriggerReason =
@@ -45,12 +46,12 @@ export interface InspectorSlice {
 
   pushTrigger: (reason: TriggerReason, version: number) => void;
   setInspectorRequested: (
-    entry: Omit<InspectorState, "completedAt" | "durationMs" | "success">,
+    entry: Omit<InspectorState, "completedAt" | "durationMs" | "success">
   ) => void;
   setInspectorCompleted: (
     version: number,
     durationMs: number,
-    success: boolean,
+    success: boolean
   ) => void;
 }
 
@@ -60,18 +61,36 @@ export const createInspectorSlice: StateCreator<
   [],
   InspectorSlice
 > = (set) => ({
-  triggerLog: [],
   inspector: null,
-
   pushTrigger: (reason, version) =>
     set((s) => {
       const entry: TriggerEntry = {
+        at: Date.now(),
         id: (s.triggerLog[0]?.id ?? 0) + 1,
         reason,
         version,
-        at: Date.now(),
       };
       return { triggerLog: [entry, ...s.triggerLog].slice(0, TRIGGER_LOG_MAX) };
+    }),
+  setInspectorCompleted: (version, durationMs, success) =>
+    set((s) => {
+      const triggerLog = s.triggerLog.map((e) =>
+        e.version === version ? { ...e, durationMs, success } : e
+      );
+      // Stale completion arrives after a newer requested — keep the log
+      // patch but don't overwrite the live inspector header.
+      if (!s.inspector || s.inspector.version !== version) {
+        return { triggerLog };
+      }
+      return {
+        inspector: {
+          ...s.inspector,
+          completedAt: Date.now(),
+          durationMs,
+          success,
+        },
+        triggerLog,
+      };
     }),
   setInspectorRequested: (entry) =>
     set({
@@ -82,24 +101,5 @@ export const createInspectorSlice: StateCreator<
         success: null,
       },
     }),
-  setInspectorCompleted: (version, durationMs, success) =>
-    set((s) => {
-      const triggerLog = s.triggerLog.map((e) =>
-        e.version === version ? { ...e, durationMs, success } : e,
-      );
-      // Stale completion arrives after a newer requested — keep the log
-      // patch but don't overwrite the live inspector header.
-      if (!s.inspector || s.inspector.version !== version) {
-        return { triggerLog };
-      }
-      return {
-        triggerLog,
-        inspector: {
-          ...s.inspector,
-          completedAt: Date.now(),
-          durationMs,
-          success,
-        },
-      };
-    }),
+  triggerLog: [],
 });

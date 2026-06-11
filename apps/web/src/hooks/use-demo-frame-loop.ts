@@ -1,5 +1,7 @@
+import { libraryCadenceMs } from "@sonara/shared";
+import type { LibraryManifest } from "@sonara/shared";
 import { useEffect } from "react";
-import { libraryCadenceMs, type LibraryManifest } from "@sonara/shared";
+
 import { useVisualizerStore } from "@/stores/visualizer";
 
 const LRU = 10;
@@ -9,12 +11,16 @@ const LRU = 10;
 // list. The Service Worker also caches the manifest at the HTTP layer.
 const manifestCache = new Map<string, string[]>();
 
-async function loadManifest(deck: string): Promise<string[]> {
+const loadManifest = async (deck: string): Promise<string[]> => {
   const cached = manifestCache.get(deck);
-  if (cached) return cached;
+  if (cached) {
+    return cached;
+  }
   try {
     const res = await fetch(`/library/${deck}/manifest.json`);
-    if (!res.ok) return [];
+    if (!res.ok) {
+      return [];
+    }
     const data = (await res.json()) as Partial<LibraryManifest>;
     const frames = Array.isArray(data.frames) ? data.frames : [];
     manifestCache.set(deck, frames);
@@ -22,7 +28,7 @@ async function loadManifest(deck: string): Promise<string[]> {
   } catch {
     return [];
   }
-}
+};
 
 /**
  * Client-native demo loop. Demo no longer depends on the server/WebSocket:
@@ -32,9 +38,13 @@ async function loadManifest(deck: string): Promise<string[]> {
  *
  * Mounted once in the play page alongside useWsSession().
  */
-export function useDemoFrameLoop(): void {
+export const useDemoFrameLoop = (): void => {
   const demoMode = useVisualizerStore((s) => s.demoMode);
   const demoDeck = useVisualizerStore((s) => s.demoDeck);
+  // While a set replay is active it owns the frame pipeline — the
+  // demo loop must stand down so the two never co-produce frames (even if a WS
+  // state() hydration flips demoMode back on mid-replay).
+  const setPlaybackActive = useVisualizerStore((s) => s.setPlaybackActive);
 
   useEffect(() => {
     const store = useVisualizerStore;
@@ -43,7 +53,9 @@ export function useDemoFrameLoop(): void {
     // as stale by pushFrame.
     store.getState().resetFrameVersion();
 
-    if (!demoMode || !demoDeck) return;
+    if (!demoMode || !demoDeck || setPlaybackActive) {
+      return;
+    }
 
     let cancelled = false;
     let timer: ReturnType<typeof setTimeout> | null = null;
@@ -52,32 +64,44 @@ export function useDemoFrameLoop(): void {
     let frames: string[] = [];
 
     const tick = () => {
-      if (cancelled) return;
+      if (cancelled) {
+        return;
+      }
       if (frames.length > 0) {
         let candidates = frames.filter((f) => !recent.includes(f));
         // Mirror the server provider's fallback: if the recent-LRU covers the
         // whole (small) deck, allow the full set so it never stalls.
-        if (candidates.length === 0) candidates = frames;
-        const url =
-          candidates[Math.floor(Math.random() * candidates.length)] as string;
+        if (candidates.length === 0) {
+          candidates = frames;
+        }
+        const url = candidates[
+          Math.floor(Math.random() * candidates.length)
+        ] as string;
         recent = [url, ...recent.filter((f) => f !== url)].slice(0, LRU);
         const s = store.getState();
-        s.pushFrame(url, ++localVersion);
+        localVersion += 1;
+        s.pushFrame(url, localVersion);
         s.pushHero(url);
       }
-      const intensity = store.getState().scene.intensity;
+      const { intensity } = store.getState().scene;
       timer = setTimeout(tick, libraryCadenceMs(intensity, demoDeck));
     };
 
-    void loadManifest(demoDeck).then((f) => {
-      if (cancelled) return;
+    void (async () => {
+      const f = await loadManifest(demoDeck);
+      if (cancelled) {
+        return;
+      }
       frames = f;
-      tick(); // fire one frame immediately, then self-schedule
-    });
+      // fire one frame immediately, then self-schedule
+      tick();
+    })();
 
     return () => {
       cancelled = true;
-      if (timer) clearTimeout(timer);
+      if (timer) {
+        clearTimeout(timer);
+      }
     };
-  }, [demoMode, demoDeck]);
-}
+  }, [demoMode, demoDeck, setPlaybackActive]);
+};

@@ -1,27 +1,36 @@
 "use client";
 
 import { useEffect } from "react";
-import {
-  PRESET_DESCRIPTIONS,
-  PRESET_NAMES,
-  type PresetName,
-} from "@/lib/render/presets";
-import { useVisualizerStore, type PresetMode } from "@/stores/visualizer";
+
+import { PRESET_DESCRIPTIONS, PRESET_NAMES } from "@/lib/render/presets";
+import type { PresetName } from "@/lib/render/presets";
 import { cn } from "@/lib/utils";
+import { useVisualizerStore } from "@/stores/visualizer";
+import type { PresetMode } from "@/stores/visualizer";
 
 const MODES: { id: PresetMode; label: string; title: string }[] = [
-  { id: "manual", label: "manual",  title: "Stay on the selected preset until changed." },
-  { id: "cycle",  label: "cycle",   title: "Rotate through presets on a timer." },
-  { id: "section",label: "section", title: "Switch preset whenever the server detects a music section change." },
-  { id: "llm",    label: "llm",     title: "Let the LLM pick the preset from your voice + the music." },
+  {
+    id: "manual",
+    label: "manual",
+    title: "Stay on the selected preset until changed.",
+  },
+  { id: "cycle", label: "cycle", title: "Rotate through presets on a timer." },
+  {
+    id: "section",
+    label: "section",
+    title: "Switch preset whenever the server detects a music section change.",
+  },
+  {
+    id: "llm",
+    label: "llm",
+    title: "Let the LLM pick the preset from your voice + the music.",
+  },
 ];
 
 // Pretty labels for the preset names (replace underscores).
-function pretty(name: PresetName): string {
-  return name.replace(/_/g, " ");
-}
+const pretty = (name: PresetName): string => name.replaceAll("_", " ");
 
-export function PresetPicker() {
+export const PresetPicker = () => {
   const preset = useVisualizerStore((s) => s.preset);
   const mode = useVisualizerStore((s) => s.presetMode);
   const cycleMs = useVisualizerStore((s) => s.presetCycleMs);
@@ -31,7 +40,7 @@ export function PresetPicker() {
   const savedPresets = useVisualizerStore((s) => s.savedPresets);
   const customPreset = useVisualizerStore((s) => s.customPreset);
   const snapshotCurrentPreset = useVisualizerStore(
-    (s) => s.snapshotCurrentPreset,
+    (s) => s.snapshotCurrentPreset
   );
   const selectSavedPreset = useVisualizerStore((s) => s.selectSavedPreset);
   const deleteSavedPreset = useVisualizerStore((s) => s.deleteSavedPreset);
@@ -42,14 +51,16 @@ export function PresetPicker() {
   const activeSavedName =
     customPreset === null
       ? null
-      : savedNames.find(
+      : (savedNames.find(
           (n) =>
-            JSON.stringify(savedPresets[n]) === JSON.stringify(customPreset),
-        ) ?? null;
+            JSON.stringify(savedPresets[n]) === JSON.stringify(customPreset)
+        ) ?? null);
 
   // ===== Cycle mode: swap presets on a timer =====
   useEffect(() => {
-    if (mode !== "cycle") return;
+    if (mode !== "cycle") {
+      return;
+    }
     let timer: ReturnType<typeof setTimeout> | null = null;
     const schedule = () => {
       timer = setTimeout(() => {
@@ -57,13 +68,17 @@ export function PresetPicker() {
         // Pick a random different preset.
         const pool = PRESET_NAMES.filter((n) => n !== cur);
         const next = pool[Math.floor(Math.random() * pool.length)];
-        if (next) setPreset(next);
+        if (next) {
+          setPreset(next);
+        }
         schedule();
       }, cycleMs);
     };
     schedule();
     return () => {
-      if (timer) clearTimeout(timer);
+      if (timer) {
+        clearTimeout(timer);
+      }
     };
   }, [mode, cycleMs, setPreset]);
 
@@ -72,17 +87,25 @@ export function PresetPicker() {
   // section change. pushTrigger mirrors those into the client log. We watch
   // the log for new section entries and pick a new preset.
   useEffect(() => {
-    if (mode !== "section") return;
+    if (mode !== "section") {
+      return;
+    }
     let lastSeenId = useVisualizerStore.getState().triggerLog[0]?.id ?? 0;
     const unsub = useVisualizerStore.subscribe((state) => {
-      const head = state.triggerLog[0];
-      if (!head || head.id <= lastSeenId) return;
+      const [head] = state.triggerLog;
+      if (!head || head.id <= lastSeenId) {
+        return;
+      }
       lastSeenId = head.id;
-      if (head.reason !== "section") return;
+      if (head.reason !== "section") {
+        return;
+      }
       const cur = useVisualizerStore.getState().preset;
       const pool = PRESET_NAMES.filter((n) => n !== cur);
       const next = pool[Math.floor(Math.random() * pool.length)];
-      if (next) setPreset(next);
+      if (next) {
+        setPreset(next);
+      }
     });
     return unsub;
   }, [mode, setPreset]);
@@ -113,7 +136,7 @@ export function PresetPicker() {
                 "border-b px-1 pb-0.5",
                 active
                   ? "border-[color:var(--paper)] text-[color:var(--paper)]"
-                  : "border-transparent text-[color:var(--stone)] hover:text-[color:var(--paper)]/90 hover:border-[color:var(--hairline)]/40",
+                  : "border-transparent text-[color:var(--stone)] hover:text-[color:var(--paper)]/90 hover:border-[color:var(--hairline)]/40"
               )}
             >
               {pretty(name)}
@@ -129,6 +152,7 @@ export function PresetPicker() {
               onClick={() => selectSavedPreset(name)}
               onContextMenu={(ev) => {
                 ev.preventDefault();
+                // oxlint-disable-next-line no-alert -- REVIEW: native confirm is the intended lightweight delete guard
                 if (window.confirm(`Delete saved preset "${name}"?`)) {
                   deleteSavedPreset(name);
                 }
@@ -140,7 +164,7 @@ export function PresetPicker() {
                 "before:mr-1 before:text-[color:var(--paper)]/60 before:content-['\u2022']",
                 active
                   ? "border-[color:var(--paper)] text-[color:var(--paper)]"
-                  : "border-transparent text-[color:var(--stone)] hover:text-[color:var(--paper)]/90 hover:border-[color:var(--hairline)]/40",
+                  : "border-transparent text-[color:var(--stone)] hover:text-[color:var(--paper)]/90 hover:border-[color:var(--hairline)]/40"
               )}
             >
               {name}
@@ -150,8 +174,11 @@ export function PresetPicker() {
         <button
           type="button"
           onClick={() => {
+            // oxlint-disable-next-line no-alert -- REVIEW: native prompt is the intended lightweight name capture
             const name = window.prompt("name this mid-state")?.trim();
-            if (name) snapshotCurrentPreset(name);
+            if (name) {
+              snapshotCurrentPreset(name);
+            }
           }}
           title="Capture the current effective preset (including any in-progress crossfade and drift) as a saved snapshot."
           className="font-mono text-[9px] uppercase tracking-[0.22em] text-[color:var(--stone)] hover:text-[color:var(--paper)] border-b border-dashed border-[color:var(--hairline)]/40 px-1 pb-0.5"
@@ -179,7 +206,7 @@ export function PresetPicker() {
                   "border-b px-1 pb-0.5",
                   active
                     ? "border-[color:var(--paper)] text-[color:var(--paper)]"
-                    : "border-transparent text-[color:var(--stone)] hover:text-[color:var(--paper)]/80 hover:border-[color:var(--hairline)]/40",
+                    : "border-transparent text-[color:var(--stone)] hover:text-[color:var(--paper)]/80 hover:border-[color:var(--hairline)]/40"
                 )}
               >
                 {m.label}
@@ -203,6 +230,7 @@ export function PresetPicker() {
             value={Math.round(cycleMs / 1000)}
             onChange={(ev) => setCycleMs(Number(ev.target.value) * 1000)}
             className="flex-1 accent-[color:var(--paper)]"
+            aria-label="cycle period in seconds"
           />
           <span className="font-mono nums text-[10px] text-[color:var(--paper)]/80 w-10 text-right">
             {Math.round(cycleMs / 1000)}s
@@ -211,4 +239,4 @@ export function PresetPicker() {
       )}
     </div>
   );
-}
+};

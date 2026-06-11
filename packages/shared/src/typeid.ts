@@ -5,18 +5,31 @@ import { z } from "zod";
 // Prefixes must be unique, lowercase, and stable — they become part of the
 // serialized id format and renaming one is a breaking change.
 export const idTypesMapNameToPrefix = {
-  user: "usr",
-  session: "ses",
   account: "acc",
-  verification: "ver",
-  credits: "crd",
-  usageLedger: "usg",
   allowedEmail: "alw",
+  credits: "crd",
+  // The unified "set" entity (frame_set): a named, ordered, playable
+  // collection of frames. Subsumes built-in decks, session recordings, and
+  // curated reels (origin column). "set" is the UI word; code says frameSet
+  // to dodge JS Set / SQL SET collisions.
+  frameSet: "set",
+  frameSetFrame: "fsf",
   imageLibrary: "img",
   // Visualizer WS session — minted in-memory on each Session construction.
   // Distinct from `session` (Better Auth's browser session). Used to group
   // image_library rows by live-play session for the timeline view.
   liveSession: "lse",
+  // NOTE: the retired reel ("rel_") / reel-frame ("rlf_") prefixes live on in
+  // old links only — migration 0006 copied reels into frame_set with the
+  // same uuid, so legacy ids remap to set ids by a literal prefix swap.
+  session: "ses",
+  // A **stage** is the durable place an account performs at — named, with a
+  // permanent 5-char join code (the QR handle). Live runs (lse_) and their
+  // recording sets hang off a stage. See docs/rooms-and-roles-plan.md rev 2.
+  stage: "stg",
+  usageLedger: "usg",
+  user: "usr",
+  verification: "ver",
 } as const;
 
 export type IdTypePrefixNames = keyof typeof idTypesMapNameToPrefix;
@@ -29,35 +42,33 @@ export const typeIdGenerator = <const T extends IdTypePrefixNames>(prefix: T) =>
 
 export const typeIdFromUuid = <const T extends IdTypePrefixNames>(
   prefix: T,
-  uuid: string,
+  uuid: string
 ) => {
   const actualPrefix = idTypesMapNameToPrefix[prefix];
   return TypeID.fromUUID(actualPrefix, uuid).toString() as TypeIdString<T>;
 };
 
 export const typeIdToUuid = <const T extends IdTypePrefixNames>(
-  input: TypeIdString<T>,
+  input: TypeIdString<T>
 ) => {
   const id = fromString(input);
   return {
-    uuid: toUUID(id).toString(),
     prefix: getType(id),
+    uuid: toUUID(id).toString(),
   };
 };
 
 // Zod validator for an entity's typeid. Usable directly in RPC input schemas
 // so wrong-prefix ids are rejected at the boundary.
 export const typeIdValidator = <const T extends IdTypePrefixNames>(
-  prefix: T,
+  prefix: T
 ) => {
   const expected = idTypesMapNameToPrefix[prefix];
   return z
     .string()
     .refine(
-      (v) =>
-        v.startsWith(`${expected}_`) &&
-        v.length > expected.length + 1,
-      { message: `Expected a ${prefix} id (prefix "${expected}_")` },
+      (v) => v.startsWith(`${expected}_`) && v.length > expected.length + 1,
+      { message: `Expected a ${prefix} id (prefix "${expected}_")` }
     )
     .transform((v) => v as TypeIdString<T>);
 };
@@ -73,6 +84,9 @@ export type UsageLedgerId = TypeIdString<"usageLedger">;
 export type AllowedEmailId = TypeIdString<"allowedEmail">;
 export type ImageLibraryId = TypeIdString<"imageLibrary">;
 export type LiveSessionId = TypeIdString<"liveSession">;
+export type FrameSetId = TypeIdString<"frameSet">;
+export type FrameSetFrameId = TypeIdString<"frameSetFrame">;
+export type StageId = TypeIdString<"stage">;
 
 export const UserIdSchema = typeIdValidator("user");
 export const SessionIdSchema = typeIdValidator("session");
@@ -83,3 +97,6 @@ export const UsageLedgerIdSchema = typeIdValidator("usageLedger");
 export const AllowedEmailIdSchema = typeIdValidator("allowedEmail");
 export const ImageLibraryIdSchema = typeIdValidator("imageLibrary");
 export const LiveSessionIdSchema = typeIdValidator("liveSession");
+export const FrameSetIdSchema = typeIdValidator("frameSet");
+export const FrameSetFrameIdSchema = typeIdValidator("frameSetFrame");
+export const StageIdSchema = typeIdValidator("stage");

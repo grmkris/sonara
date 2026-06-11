@@ -1,7 +1,7 @@
 import { ORPCError, os } from "@sonara/api/server";
 import type { ApiContext } from "@sonara/api/server";
-import type { UserId } from "@sonara/shared/typeid";
 import type { Database } from "@sonara/db";
+import type { UserId } from "@sonara/shared/typeid";
 
 export type ServerHttpContext = ApiContext<Database>;
 

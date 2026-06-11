@@ -36,18 +36,18 @@ interface SpeechRecognitionLike {
   stop(): void;
   abort(): void;
 }
-interface SRConstructor {
-  new (): SpeechRecognitionLike;
-}
+type SRConstructor = new () => SpeechRecognitionLike;
 
-function getSR(): SRConstructor | null {
-  if (typeof window === "undefined") return null;
+const getSR = (): SRConstructor | null => {
+  if (typeof window === "undefined") {
+    return null;
+  }
   const w = window as unknown as {
     SpeechRecognition?: SRConstructor;
     webkitSpeechRecognition?: SRConstructor;
   };
   return w.SpeechRecognition ?? w.webkitSpeechRecognition ?? null;
-}
+};
 
 export interface UseVoiceRecognitionOpts {
   /**
@@ -74,9 +74,9 @@ export interface VoiceRecognitionState {
  * the pending final; the hook concatenates each `isFinal` chunk into a
  * session buffer so multi-utterance holds don't lose earlier chunks.
  */
-export function useVoiceRecognition(
-  opts: UseVoiceRecognitionOpts,
-): VoiceRecognitionState {
+export const useVoiceRecognition = (
+  opts: UseVoiceRecognitionOpts
+): VoiceRecognitionState => {
   const [supported, setSupported] = useState(false);
   const [listening, setListening] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -89,9 +89,13 @@ export function useVoiceRecognition(
   }, [opts.onResult]);
 
   const ensureRecognizer = useCallback((): SpeechRecognitionLike | null => {
-    if (recRef.current) return recRef.current;
+    if (recRef.current) {
+      return recRef.current;
+    }
     const Ctor = getSR();
-    if (!Ctor) return null;
+    if (!Ctor) {
+      return null;
+    }
     const rec = new Ctor();
     rec.continuous = true;
     rec.interimResults = true;
@@ -105,13 +109,16 @@ export function useVoiceRecognition(
     rec.onend = () => {
       setListening(false);
     };
+    // oxlint-disable-next-line prefer-add-event-listener -- REVIEW: SpeechRecognitionLike exposes only on* handler props, no addEventListener
     rec.onerror = (ev: unknown) => {
       const code =
         typeof ev === "object" && ev && "error" in ev
           ? String((ev as { error: unknown }).error)
           : "error";
       // `no-speech` / `aborted` are routine PTT outcomes — don't surface.
-      if (code !== "no-speech" && code !== "aborted") setError(code);
+      if (code !== "no-speech" && code !== "aborted") {
+        setError(code);
+      }
     };
     rec.onresult = (ev: SREvent) => {
       // Concatenate every result-list entry from the current event. Finalized
@@ -119,11 +126,13 @@ export function useVoiceRecognition(
       // appended for display. Web Speech delivers cumulative results across
       // events, so this stays accurate across long bursts.
       let interim = "";
-      for (let i = ev.resultIndex; i < ev.results.length; i++) {
+      for (let i = ev.resultIndex; i < ev.results.length; i += 1) {
         const r = ev.results.item(i);
         const alt = r.item(0);
         const text = alt?.transcript?.trim();
-        if (!text) continue;
+        if (!text) {
+          continue;
+        }
         if (r.isFinal) {
           bufferRef.current = bufferRef.current
             ? `${bufferRef.current} ${text}`
@@ -138,11 +147,13 @@ export function useVoiceRecognition(
       const last = ev.results.item(ev.results.length - 1);
       const lastAlt = last?.item(0);
       const confidence =
-        typeof lastAlt?.confidence === "number" ? lastAlt.confidence : undefined;
+        typeof lastAlt?.confidence === "number"
+          ? lastAlt.confidence
+          : undefined;
       onResultRef.current(
         merged,
         last?.isFinal ?? false,
-        ...(typeof confidence === "number" ? ([confidence] as const) : []),
+        ...(typeof confidence === "number" ? ([confidence] as const) : [])
       );
     };
     recRef.current = rec;
@@ -181,13 +192,16 @@ export function useVoiceRecognition(
 
   const stop = useCallback(() => {
     const rec = recRef.current;
-    if (!rec) return;
+    if (!rec) {
+      return;
+    }
     try {
-      rec.stop(); // flushes pending final; `abort()` would discard it
+      // flushes pending final; `abort()` would discard it
+      rec.stop();
     } catch {
       /* noop */
     }
   }, []);
 
-  return { supported, listening, error, start, stop };
-}
+  return { error, listening, start, stop, supported };
+};

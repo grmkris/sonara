@@ -12,14 +12,15 @@ import type { OnsetType } from "@sonara/shared";
 //
 // Centroid arrives from Meyda normalized to 0..1 against the FFT buffer
 // (bin index / bufferSize/2). These thresholds are empirical.
-export function classifyOnset(input: {
+export const classifyOnset = (input: {
   bass: number;
   mids: number;
   treble: number;
-  centroid: number; // 0..1
+  // 0..1
+  centroid: number;
   rms: number;
   flatness: number;
-}): OnsetType {
+}): OnsetType => {
   const { bass, mids, treble, centroid, rms, flatness } = input;
 
   // Hats: treble-dominant over bass, high centroid, modest RMS.
@@ -51,4 +52,4 @@ export function classifyOnset(input: {
   }
 
   return "other";
-}
+};

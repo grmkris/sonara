@@ -1,24 +1,25 @@
 "use client";
 
-import { useCallback } from "react";
 import { Eye, EyeOff } from "lucide-react";
+import { useCallback } from "react";
+
+import { TelemetryButton } from "@/components/visualizer/controls/telemetry-button";
 import { useHotkey } from "@/hooks/use-hotkey";
 import { HOTKEYS } from "@/lib/hotkeys";
-import { TelemetryButton } from "@/components/visualizer/controls/telemetry-button";
 import { useVisualizerStore } from "@/stores/visualizer";
 
-export function HideToggle() {
+export const HideToggle = () => {
   const uiVisible = useVisualizerStore((s) => s.uiVisible);
   const toggleUi = useVisualizerStore((s) => s.toggleUi);
   const setUiVisible = useVisualizerStore((s) => s.setUiVisible);
 
   useHotkey(
     HOTKEYS.toggleUi,
-    useCallback(() => toggleUi(), [toggleUi]),
+    useCallback(() => toggleUi(), [toggleUi])
   );
   useHotkey(
     HOTKEYS.hideUi,
-    useCallback(() => setUiVisible(false), [setUiVisible]),
+    useCallback(() => setUiVisible(false), [setUiVisible])
   );
 
   const Icon = uiVisible ? EyeOff : Eye;
@@ -31,4 +32,4 @@ export function HideToggle() {
       label={uiVisible ? "hide" : "show"}
     />
   );
-}
+};

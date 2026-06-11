@@ -23,13 +23,8 @@
 //   V' = V + Dv*∇²V + U*V² - (F + k)*V
 // with Du=1.0, Dv=0.5 (standard).
 
-import {
-  createFbo,
-  createProgram,
-  createShader,
-  type Fbo,
-  type QuadBuffer,
-} from "./webgl-util";
+import { createFbo, createProgram, createShader } from "./webgl-util";
+import type { Fbo, QuadBuffer } from "./webgl-util";
 
 const RD_SIZE = 256;
 const ITERATIONS_PER_FRAME = 6;
@@ -124,7 +119,8 @@ void main() {
 export interface RDFrameOpts {
   feed: number;
   kill: number;
-  kickImpulse: number; // 0..1, rising edge seeds a dot
+  // 0..1, rising edge seeds a dot
+  kickImpulse: number;
   rms: number;
 }
 
@@ -170,20 +166,17 @@ export class RDLayer {
 
     this.uni = {
       seed: {
-        uSrc: gl.getUniformLocation(this.seedProgram, "uSrc"),
         uSeedPos: gl.getUniformLocation(this.seedProgram, "uSeedPos"),
         uSeedRadius: gl.getUniformLocation(this.seedProgram, "uSeedRadius"),
-        uSeedStrength: gl.getUniformLocation(
-          this.seedProgram,
-          "uSeedStrength",
-        ),
+        uSeedStrength: gl.getUniformLocation(this.seedProgram, "uSeedStrength"),
+        uSrc: gl.getUniformLocation(this.seedProgram, "uSrc"),
       },
       update: {
-        uSrc: gl.getUniformLocation(this.updateProgram, "uSrc"),
-        uTexel: gl.getUniformLocation(this.updateProgram, "uTexel"),
+        uDt: gl.getUniformLocation(this.updateProgram, "uDt"),
         uFeed: gl.getUniformLocation(this.updateProgram, "uFeed"),
         uKill: gl.getUniformLocation(this.updateProgram, "uKill"),
-        uDt: gl.getUniformLocation(this.updateProgram, "uDt"),
+        uSrc: gl.getUniformLocation(this.updateProgram, "uSrc"),
+        uTexel: gl.getUniformLocation(this.updateProgram, "uTexel"),
       },
     };
 
@@ -191,7 +184,7 @@ export class RDLayer {
   }
 
   reset(): void {
-    const gl = this.gl;
+    const { gl } = this;
     gl.useProgram(this.resetProgram);
     gl.bindVertexArray(this.quad.vao);
     for (const fbo of [this.fboA, this.fboB]) {
@@ -207,18 +200,13 @@ export class RDLayer {
   // Run one display-frame's worth of substeps (default 6). Returns the
   // texture holding the latest state.
   update(opts: RDFrameOpts): WebGLTexture {
-    const gl = this.gl;
+    const { gl } = this;
     gl.bindVertexArray(this.quad.vao);
 
     // Rising-edge kick detection — seed a dot when kick crosses threshold.
     // Random UV so seeds accumulate into a scattered pattern.
     if (opts.kickImpulse > 0.3 && this.prevKick <= 0.3) {
-      this.seedAt(
-        Math.random(),
-        Math.random(),
-        0.06,
-        1.0,
-      );
+      this.seedAt(Math.random(), Math.random(), 0.06, 1);
     }
     this.prevKick = opts.kickImpulse;
 
@@ -226,11 +214,11 @@ export class RDLayer {
     gl.uniform2f(this.uni.update.uTexel, 1 / RD_SIZE, 1 / RD_SIZE);
     gl.uniform1f(this.uni.update.uFeed, opts.feed);
     gl.uniform1f(this.uni.update.uKill, opts.kill);
-    gl.uniform1f(this.uni.update.uDt, 1.0);
+    gl.uniform1f(this.uni.update.uDt, 1);
     gl.activeTexture(gl.TEXTURE0);
     gl.uniform1i(this.uni.update.uSrc, 0);
 
-    for (let i = 0; i < ITERATIONS_PER_FRAME; i++) {
+    for (let i = 0; i < ITERATIONS_PER_FRAME; i += 1) {
       const write = this.writeIsA ? this.fboA : this.fboB;
       const read = this.writeIsA ? this.fboB : this.fboA;
       gl.bindFramebuffer(gl.FRAMEBUFFER, write.fbo);
@@ -251,13 +239,8 @@ export class RDLayer {
     return this.writeIsA ? this.fboB.tex : this.fboA.tex;
   }
 
-  private seedAt(
-    x: number,
-    y: number,
-    radius: number,
-    strength: number,
-  ): void {
-    const gl = this.gl;
+  private seedAt(x: number, y: number, radius: number, strength: number): void {
+    const { gl } = this;
     const write = this.writeIsA ? this.fboA : this.fboB;
     const read = this.writeIsA ? this.fboB : this.fboA;
     gl.useProgram(this.seedProgram);
@@ -274,7 +257,7 @@ export class RDLayer {
   }
 
   dispose(): void {
-    const gl = this.gl;
+    const { gl } = this;
     gl.deleteFramebuffer(this.fboA.fbo);
     gl.deleteTexture(this.fboA.tex);
     gl.deleteFramebuffer(this.fboB.fbo);

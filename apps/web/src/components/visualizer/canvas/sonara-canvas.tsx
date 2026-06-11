@@ -1,12 +1,13 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { cn } from "@/lib/utils";
-import { isWebgl2Available } from "@/lib/render/webgl-util";
+
 import { CanvasGrain } from "@/components/visualizer/audio/canvas-grain";
-import { InkDrops } from "@/components/visualizer/canvas/ink-drops";
-import { DisplacementCanvas } from "@/components/visualizer/canvas/displacement-canvas";
 import { CanvasOscilloscope } from "@/components/visualizer/audio/canvas-oscilloscope";
+import { DisplacementCanvas } from "@/components/visualizer/canvas/displacement-canvas";
+import { InkDrops } from "@/components/visualizer/canvas/ink-drops";
+import { isWebgl2Available } from "@/lib/render/webgl-util";
+import { cn } from "@/lib/utils";
 
 // WebGL2-only renderer. The previous CSS fallback path drifted from the WebGL
 // pipeline (missed reveal, presets, RD, glitch-peek) and was deleted.
@@ -25,20 +26,34 @@ import { CanvasOscilloscope } from "@/components/visualizer/audio/canvas-oscillo
 // `dimmed` desaturates + darkens the whole stack while no audio source is
 // connected, so the deck cycle reads as "asleep" until the visitor brings
 // sound — then it eases back to full and "wakes up" (see /play).
-export function SonaraCanvas({ dimmed = false }: { dimmed?: boolean }) {
+const Webgl2RequiredOverlay = () => (
+  <div className="absolute inset-0 flex items-center justify-center bg-[color:var(--ink)] text-[color:var(--paper)]">
+    <div className="max-w-md p-8 text-center font-serif">
+      <p className="mb-2 text-2xl italic">WebGL2 required</p>
+      <p className="text-sm opacity-70">
+        The visualiser needs a browser with WebGL2 support. Try the latest
+        Chrome, Safari, Firefox, or Edge.
+      </p>
+    </div>
+  </div>
+);
+
+export const SonaraCanvas = ({ dimmed = false }: { dimmed?: boolean }) => {
   const [hasWebgl2, setHasWebgl2] = useState<boolean | null>(null);
 
   useEffect(() => {
     setHasWebgl2(isWebgl2Available());
   }, []);
 
-  if (hasWebgl2 === false) return <Webgl2RequiredOverlay />;
+  if (hasWebgl2 === false) {
+    return <Webgl2RequiredOverlay />;
+  }
 
   return (
     <div
       className={cn(
         "absolute inset-0 overflow-hidden bg-[color:var(--ink)] transition-[filter] duration-1000 ease-out",
-        dimmed && "[filter:brightness(0.5)_saturate(0.6)]",
+        dimmed && "[filter:brightness(0.5)_saturate(0.6)]"
       )}
       style={{ isolation: "isolate" }}
     >
@@ -49,18 +64,4 @@ export function SonaraCanvas({ dimmed = false }: { dimmed?: boolean }) {
       <div aria-hidden className="vignette-mask absolute inset-0" />
     </div>
   );
-}
-
-function Webgl2RequiredOverlay() {
-  return (
-    <div className="absolute inset-0 flex items-center justify-center bg-[color:var(--ink)] text-[color:var(--paper)]">
-      <div className="max-w-md p-8 text-center font-serif">
-        <p className="mb-2 text-2xl italic">WebGL2 required</p>
-        <p className="text-sm opacity-70">
-          The visualiser needs a browser with WebGL2 support. Try the latest
-          Chrome, Safari, Firefox, or Edge.
-        </p>
-      </div>
-    </div>
-  );
-}
+};

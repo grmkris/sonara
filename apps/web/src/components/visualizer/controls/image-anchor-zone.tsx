@@ -1,22 +1,27 @@
 "use client";
 
+import { FRAME_COST_CREDITS } from "@sonara/shared";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
-import { FRAME_COST_CREDITS } from "@sonara/shared";
+
 import type { SessionSend } from "@/lib/session-actions";
+import { cn } from "@/lib/utils";
+import { useVisualizerStore } from "@/stores/visualizer";
 import {
   STRENGTH_PRESET_LABELS,
   STRENGTH_PRESET_VALUES,
-  type StrengthPreset,
 } from "@/stores/visualizer/image-anchor-slice";
-import { useVisualizerStore } from "@/stores/visualizer";
-import { cn } from "@/lib/utils";
+import type { StrengthPreset } from "@/stores/visualizer/image-anchor-slice";
 
 interface ImageAnchorZoneProps {
   send: SessionSend;
 }
 
-const PRESETS: StrengthPreset[] = ["style-only", "style-subject", "lock-subject"];
+const PRESETS: StrengthPreset[] = [
+  "style-only",
+  "style-subject",
+  "lock-subject",
+];
 const MAX_BYTES = 5 * 1024 * 1024;
 const ALLOWED_MIME = new Set(["image/jpeg", "image/png", "image/webp"]);
 
@@ -24,14 +29,16 @@ const ALLOWED_MIME = new Set(["image/jpeg", "image/png", "image/webp"]);
 // success the live Session pins the fal URL as `imageAnchor` and the next
 // frame uses flux-pro/v1.1-ultra with image conditioning. Preset picker
 // underneath controls strength; changing it re-sends setImageAnchor.
-export function ImageAnchorZone({ send }: ImageAnchorZoneProps) {
+export const ImageAnchorZone = ({ send }: ImageAnchorZoneProps) => {
   const anchorImageUrl = useVisualizerStore((s) => s.anchorImageUrl);
   const anchorLocalPreview = useVisualizerStore((s) => s.anchorLocalPreview);
   const strengthPreset = useVisualizerStore((s) => s.strengthPreset);
   const uploadState = useVisualizerStore((s) => s.uploadState);
   const clickwrapAccepted = useVisualizerStore((s) => s.clickwrapAccepted);
   const setAnchorImageUrl = useVisualizerStore((s) => s.setAnchorImageUrl);
-  const setAnchorLocalPreview = useVisualizerStore((s) => s.setAnchorLocalPreview);
+  const setAnchorLocalPreview = useVisualizerStore(
+    (s) => s.setAnchorLocalPreview
+  );
   const setStrengthPreset = useVisualizerStore((s) => s.setStrengthPreset);
   const acceptClickwrap = useVisualizerStore((s) => s.acceptClickwrap);
   const setUploadState = useVisualizerStore((s) => s.setUploadState);
@@ -48,7 +55,10 @@ export function ImageAnchorZone({ send }: ImageAnchorZoneProps) {
   // unmounts so we don't leak Blob URLs.
   const localPreviewRef = useRef<string | null>(null);
   useEffect(() => {
-    if (localPreviewRef.current && localPreviewRef.current !== anchorLocalPreview) {
+    if (
+      localPreviewRef.current &&
+      localPreviewRef.current !== anchorLocalPreview
+    ) {
       URL.revokeObjectURL(localPreviewRef.current);
     }
     localPreviewRef.current = anchorLocalPreview;
@@ -80,8 +90,8 @@ export function ImageAnchorZone({ send }: ImageAnchorZoneProps) {
         const form = new FormData();
         form.set("image", file);
         const res = await fetch("/api/upload/image", {
-          method: "POST",
           body: form,
+          method: "POST",
         });
         if (!res.ok) {
           const errText = await res.text().catch(() => "");
@@ -99,14 +109,14 @@ export function ImageAnchorZone({ send }: ImageAnchorZoneProps) {
         setDemoMode(false);
         setDemoDeck(null);
         send({
+          strength: STRENGTH_PRESET_VALUES[strengthPreset],
           type: "image.anchor.set",
           url: data.url,
-          strength: STRENGTH_PRESET_VALUES[strengthPreset],
         });
-      } catch (err) {
+      } catch (error) {
         setUploadState("error");
         setAnchorLocalPreview(null);
-        const message = err instanceof Error ? err.message : String(err);
+        const message = error instanceof Error ? error.message : String(error);
         toast.error(`Couldn't upload image — ${message}`);
       }
     },
@@ -118,7 +128,7 @@ export function ImageAnchorZone({ send }: ImageAnchorZoneProps) {
       setUploadState,
       setDemoMode,
       setDemoDeck,
-    ],
+    ]
   );
 
   const handleFile = useCallback(
@@ -130,7 +140,7 @@ export function ImageAnchorZone({ send }: ImageAnchorZoneProps) {
       }
       void doUpload(file);
     },
-    [clickwrapAccepted, doUpload],
+    [clickwrapAccepted, doUpload]
   );
 
   const onAcceptClickwrap = useCallback(() => {
@@ -138,7 +148,9 @@ export function ImageAnchorZone({ send }: ImageAnchorZoneProps) {
     setShowClickwrap(false);
     const file = pendingFileRef.current;
     pendingFileRef.current = null;
-    if (file) void doUpload(file);
+    if (file) {
+      void doUpload(file);
+    }
   }, [acceptClickwrap, doUpload]);
 
   const onCancelClickwrap = useCallback(() => {
@@ -149,20 +161,25 @@ export function ImageAnchorZone({ send }: ImageAnchorZoneProps) {
   const onFileChange = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
       const file = e.target.files?.[0];
-      e.target.value = ""; // allow re-selecting the same file
-      if (file) handleFile(file);
+      // allow re-selecting the same file
+      e.target.value = "";
+      if (file) {
+        handleFile(file);
+      }
     },
-    [handleFile],
+    [handleFile]
   );
 
   const onDrop = useCallback(
     (e: React.DragEvent<HTMLDivElement>) => {
       e.preventDefault();
       setDragOver(false);
-      const file = e.dataTransfer.files[0];
-      if (file) handleFile(file);
+      const [file] = e.dataTransfer.files;
+      if (file) {
+        handleFile(file);
+      }
     },
-    [handleFile],
+    [handleFile]
   );
 
   const onClear = useCallback(() => {
@@ -176,13 +193,13 @@ export function ImageAnchorZone({ send }: ImageAnchorZoneProps) {
       const url = anchorImageUrl;
       if (url) {
         send({
+          strength: STRENGTH_PRESET_VALUES[preset],
           type: "image.anchor.set",
           url,
-          strength: STRENGTH_PRESET_VALUES[preset],
         });
       }
     },
-    [anchorImageUrl, send, setStrengthPreset],
+    [anchorImageUrl, send, setStrengthPreset]
   );
 
   const thumbnail = anchorLocalPreview ?? anchorImageUrl;
@@ -209,7 +226,7 @@ export function ImageAnchorZone({ send }: ImageAnchorZoneProps) {
             alt="anchor reference"
             className={cn(
               "h-14 w-14 object-cover border border-[color:var(--hairline)]/40",
-              uploadState === "uploading" && "opacity-60 animate-pulse",
+              uploadState === "uploading" && "opacity-60 animate-pulse"
             )}
           />
           <div className="flex flex-col gap-1.5">
@@ -223,7 +240,7 @@ export function ImageAnchorZone({ send }: ImageAnchorZoneProps) {
                     "font-sans text-[10px] uppercase tracking-[0.14em] transition-colors border-b px-1.5 py-0.5",
                     strengthPreset === p
                       ? "text-[color:var(--paper)] border-[color:var(--paper)]"
-                      : "text-[color:var(--stone)] border-[color:var(--hairline)]/30 hover:text-[color:var(--paper)] hover:border-[color:var(--paper)]/60",
+                      : "text-[color:var(--stone)] border-[color:var(--hairline)]/30 hover:text-[color:var(--paper)] hover:border-[color:var(--paper)]/60"
                   )}
                 >
                   {STRENGTH_PRESET_LABELS[p]}
@@ -255,7 +272,7 @@ export function ImageAnchorZone({ send }: ImageAnchorZoneProps) {
             dragOver
               ? "border-[color:var(--paper)] text-[color:var(--paper)]"
               : "border-[color:var(--hairline)]/40 text-[color:var(--stone)] hover:border-[color:var(--paper)]/60 hover:text-[color:var(--paper)]",
-            uploadState === "uploading" && "opacity-60 animate-pulse",
+            uploadState === "uploading" && "opacity-60 animate-pulse"
           )}
         >
           {uploadState === "uploading"
@@ -267,6 +284,7 @@ export function ImageAnchorZone({ send }: ImageAnchorZoneProps) {
             accept="image/jpeg,image/png,image/webp"
             onChange={onFileChange}
             className="hidden"
+            aria-label="upload anchor image"
           />
         </div>
       )}
@@ -274,8 +292,8 @@ export function ImageAnchorZone({ send }: ImageAnchorZoneProps) {
       {showClickwrap && (
         <div className="flex flex-col gap-2 p-2 border border-[color:var(--hairline)]/50 bg-[color:var(--ink)]/40">
           <span className="font-sans text-[10px] leading-[1.5] text-[color:var(--stone)]">
-            By uploading you confirm you have the right to use this image. It
-            is stored on fal&apos;s CDN for the duration of your session and
+            By uploading you confirm you have the right to use this image. It is
+            stored on fal&apos;s CDN for the duration of your session and
             dropped on disconnect.
           </span>
           <div className="flex gap-2">
@@ -298,4 +316,4 @@ export function ImageAnchorZone({ send }: ImageAnchorZoneProps) {
       )}
     </div>
   );
-}
+};

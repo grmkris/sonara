@@ -1,9 +1,7 @@
 import { createFalClient } from "@fal-ai/client";
-import {
-  type SonaraSceneState,
-  ResolvedSceneCoreSchema,
-  type ResolvedSceneCore,
-} from "@sonara/shared";
+import { ResolvedSceneCoreSchema } from "@sonara/shared";
+import type { SonaraSceneState, ResolvedSceneCore } from "@sonara/shared";
+
 import { env } from "../env";
 import type { Logger } from "../lib/logger";
 
@@ -18,8 +16,14 @@ import type { Logger } from "../lib/logger";
 const DEFAULT_MODEL = "google/gemini-2.5-flash-lite";
 const MAX_OUTPUT_TOKENS = 600;
 
-function buildSystemPrompt(): string {
-  return `You parse a single user-written prompt sentence into a structured FLUX.2 prompt object. Given the user's prompt and 5 slider values, emit a SINGLE JSON object — no prose, no markdown fences. The object MUST match this schema exactly:
+// Used ONLY when the moderator flags a prompt unsafe but returns a malformed
+// scene object (rare) — a neutral SFW stand-in so we never fall through to the
+// raw prompt. One constant, not a content list.
+const DENIAL_FALLBACK_PROMPT =
+  "a friendly cartoon mascot holding a playful 'let's keep it PG' sign";
+
+const buildSystemPrompt = (): string =>
+  `You parse a single user-written prompt sentence into a structured FLUX.2 prompt object. Given the user's prompt and 5 slider values, emit a SINGLE JSON object — no prose, no markdown fences. The object MUST match this schema exactly:
 
 {
   "scene": string,                          // 2-5 word title for this look
@@ -40,7 +44,8 @@ function buildSystemPrompt(): string {
     "lens": string,                          // 2-5 words (e.g., "50mm normal", "85mm portrait", "24mm wide")
     "depth_of_field": string                 // 2-5 words (e.g., "shallow, soft falloff", "deep focus")
   },
-  "drift_candidates": [string]               // 6-10 short atmospheric clauses (1-4 words each); will be sampled across keyframes
+  "drift_candidates": [string],              // 6-10 short atmospheric clauses (1-4 words each); will be sampled across keyframes
+  "safe": boolean                            // false ONLY if the prompt is inappropriate for a PUBLIC venue screen (see SAFETY)
 }
 
 RULES:
@@ -56,10 +61,10 @@ RULES:
     - stability < 0.4 → off-balance composition, dutch tilt
 - drift_candidates: evocative ink/paper/light/motion clauses thematically tied to subjects[0] + mood. Vary them — don't repeat words across entries.
 - Stay sumi-e / ethereal / dreamlike unless the user's prompt explicitly names a different register.
+- SAFETY (single pass — you are ALSO the moderator): judge if the prompt is appropriate for a PUBLIC venue screen. Set "safe": true for normal, artistic, abstract, or mildly edgy prompts. Set "safe": false ONLY for sexually explicit content, graphic violence/gore, hateful/harassing content, or anything sexualizing minors. When "safe" is false, DO NOT depict the request — instead fill ALL scene fields with a light-hearted, crowd-friendly SFW "request denied" visual of your OWN invention (e.g. a comedic bouncer at a velvet rope, a shrugging mascot with a "nope" sign, a googly-eyed robot holding STOP). Still emit a complete, valid object.
 - Output ONLY the JSON object. No fences. No commentary.`;
-}
 
-function buildUserPrompt(s: SonaraSceneState): string {
+const buildUserPrompt = (s: SonaraSceneState): string => {
   const prompt = s.prompt.trim();
   return `User prompt: ${prompt.length > 0 ? `"${prompt}"` : "(blank)"}
 
@@ -71,37 +76,46 @@ Sliders (0..1):
   stability: ${s.stability.toFixed(2)}
 
 Emit the JSON object.`;
-}
+};
 
 interface AnyLlmResult {
   output?: string;
 }
 
-function extractOutput(data: unknown): string | null {
-  if (!data || typeof data !== "object") return null;
+const extractOutput = (data: unknown): string | null => {
+  if (!data || typeof data !== "object") {
+    return null;
+  }
   const r = data as AnyLlmResult;
-  if (typeof r.output === "string") return r.output;
+  if (typeof r.output === "string") {
+    return r.output;
+  }
   return null;
-}
+};
 
-function stripFences(text: string): string {
+const stripFences = (text: string): string => {
   let out = text.trim();
-  const fence = /^```(?:json)?\s*\n?([\s\S]*?)\n?```$/;
+  const fence = /^```(?:json)?\s*\n?(?<body>[\s\S]*?)\n?```$/u;
   const m = out.match(fence);
-  if (m?.[1]) out = m[1].trim();
+  const body = m?.groups?.body;
+  if (body !== undefined && body.length > 0) {
+    out = body.trim();
+  }
   return out;
-}
+};
 
 // Heuristic anchor extraction: take the first ~5 words of the prompt as the
 // stand-in subject. Used for the deterministic fallback when the LLM hasn't
 // expanded yet (cold cache or error path). The LLM rewrites `subjects[0]`
 // with a better choice on its hot-path completion.
-function anchorFromPrompt(prompt: string): string {
+const anchorFromPrompt = (prompt: string): string => {
   const trimmed = prompt.trim();
-  if (trimmed.length === 0) return "abstract form";
-  const words = trimmed.split(/\s+/);
+  if (trimmed.length === 0) {
+    return "abstract form";
+  }
+  const words = trimmed.split(/\s+/u);
   return words.slice(0, 5).join(" ");
-}
+};
 
 // Deterministic fallback used when the LLM errors / returns garbage, AND on
 // cold-cache first frames before the background LLM expansion lands. No
@@ -109,72 +123,156 @@ function anchorFromPrompt(prompt: string): string {
 // on the expander. Hex palette is intentionally empty — serializer falls back
 // to `palette_text` (which is also empty here; the user's raw prompt carries
 // the palette signal directly in this case).
-export function deterministicResolve(s: SonaraSceneState): ResolvedSceneCore {
+export const deterministicResolve = (
+  s: SonaraSceneState
+): ResolvedSceneCore => {
   const anchor = anchorFromPrompt(s.prompt);
   const compositionParts: string[] = [];
-  if (s.surrealness > 0.7) compositionParts.push("surreal fluid composition");
-  if (s.abstraction > 0.6) compositionParts.push("dissolving edges");
-  if (s.stability < 0.4) compositionParts.push("off-balance, shifting");
-  if (compositionParts.length === 0) compositionParts.push("centered traditional");
+  if (s.surrealness > 0.7) {
+    compositionParts.push("surreal fluid composition");
+  }
+  if (s.abstraction > 0.6) {
+    compositionParts.push("dissolving edges");
+  }
+  if (s.stability < 0.4) {
+    compositionParts.push("off-balance, shifting");
+  }
+  if (compositionParts.length === 0) {
+    compositionParts.push("centered traditional");
+  }
 
   const styleParts: string[] = ["sumi-e ink wash"];
-  if (s.surrealness > 0.7) styleParts.push("fluid transformations");
+  if (s.surrealness > 0.7) {
+    styleParts.push("fluid transformations");
+  }
 
   const lightingParts: string[] = ["soft ambient"];
-  if (s.softness > 0.7) lightingParts.push("diffuse gossamer light");
+  if (s.softness > 0.7) {
+    lightingParts.push("diffuse gossamer light");
+  }
 
   const moodParts: string[] = ["contemplative"];
-  if (s.abstraction > 0.6) moodParts.push("luminous ambiguity");
+  if (s.abstraction > 0.6) {
+    moodParts.push("luminous ambiguity");
+  }
 
   return {
-    scene: anchor,
-    subjects: [{ description: anchor }],
-    style: styleParts.join(", "),
-    color_palette: [],
-    palette_text: "",
-    lighting: lightingParts.join(", "),
-    mood: moodParts.join(", "),
     background: "negative space",
-    composition: compositionParts.join(", "),
     camera: {
       angle: "eye level",
-      lens: "50mm normal",
       depth_of_field:
         s.softness > 0.7 ? "shallow, soft falloff" : "moderate focus",
+      lens: "50mm normal",
     },
+    color_palette: [],
+    composition: compositionParts.join(", "),
     drift_candidates: [],
+    lighting: lightingParts.join(", "),
+    mood: moodParts.join(", "),
+    palette_text: "",
+    scene: anchor,
+    style: styleParts.join(", "),
+    subjects: [{ description: anchor }],
   };
-}
+};
 
 export interface ExpandSceneOpts {
   signal?: AbortSignal;
   logger: Logger;
 }
 
-export async function expandScene(
-  scene: SonaraSceneState,
-  opts: ExpandSceneOpts,
-): Promise<ResolvedSceneCore> {
+// Pull the text payload out of a Gemini generateContent response.
+const extractGeminiText = (data: unknown): string | null => {
+  if (data === null || typeof data !== "object") {
+    return null;
+  }
+  const { candidates } = data as { candidates?: unknown };
+  if (!Array.isArray(candidates) || candidates.length === 0) {
+    return null;
+  }
+  const parts = (candidates[0] as { content?: { parts?: unknown } })?.content
+    ?.parts;
+  if (!Array.isArray(parts) || parts.length === 0) {
+    return null;
+  }
+  const { text } = parts[0] as { text?: unknown };
+  return typeof text === "string" ? text : null;
+};
+
+// Direct Google Gemini call — bypasses fal any-llm's ~1.5-2s queue overhead.
+// responseMimeType JSON forces a bare JSON object (no markdown fences).
+const callGemini = async (
+  apiKey: string,
+  system: string,
+  user: string,
+  signal: AbortSignal | undefined
+): Promise<string | null> => {
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${env.GEMINI_MODEL}:generateContent`;
+  const res = await fetch(url, {
+    body: JSON.stringify({
+      contents: [{ parts: [{ text: user }] }],
+      generationConfig: {
+        maxOutputTokens: MAX_OUTPUT_TOKENS,
+        responseMimeType: "application/json",
+        temperature: 0.8,
+      },
+      systemInstruction: { parts: [{ text: system }] },
+    }),
+    // This key authenticates via the header, not a ?key= query param.
+    headers: { "Content-Type": "application/json", "x-goog-api-key": apiKey },
+    method: "POST",
+    signal,
+  });
+  if (!res.ok) {
+    const errBody = await res.text();
+    throw new Error(`gemini ${res.status}: ${errBody.slice(0, 200)}`);
+  }
+  const json = await res.json();
+  return extractGeminiText(json);
+};
+
+// FAL any-llm fallback (the original transport). Used when GEMINI_API_KEY is
+// unset. Carries the queue overhead; kept for zero-config deploys.
+const callFalAnyLlm = async (
+  system: string,
+  user: string,
+  signal: AbortSignal | undefined
+): Promise<string | null> => {
   const model = env.FAL_LLM_MODEL ?? DEFAULT_MODEL;
   const scoped = createFalClient({ credentials: env.FAL_KEY });
+  const result = await scoped.subscribe("fal-ai/any-llm", {
+    abortSignal: signal,
+    input: {
+      max_tokens: MAX_OUTPUT_TOKENS,
+      model,
+      priority: "latency",
+      prompt: user,
+      system_prompt: system,
+    },
+    logs: false,
+  });
+  return extractOutput(result?.data);
+};
+
+export const expandScene = async (
+  scene: SonaraSceneState,
+  opts: ExpandSceneOpts
+): Promise<ResolvedSceneCore> => {
+  const system = buildSystemPrompt();
+  const user = buildUserPrompt(scene);
+  const apiKey = env.GEMINI_API_KEY;
+  const useGemini = apiKey !== undefined && apiKey.length > 0;
 
   try {
-    const result = await scoped.subscribe("fal-ai/any-llm", {
-      input: {
-        model,
-        system_prompt: buildSystemPrompt(),
-        prompt: buildUserPrompt(scene),
-        max_tokens: MAX_OUTPUT_TOKENS,
-        priority: "latency",
-      },
-      logs: false,
-      abortSignal: opts.signal,
-    });
-    if (opts.signal?.aborted) return deterministicResolve(scene);
+    const output = useGemini
+      ? await callGemini(apiKey, system, user, opts.signal)
+      : await callFalAnyLlm(system, user, opts.signal);
+    if (opts.signal?.aborted) {
+      return deterministicResolve(scene);
+    }
 
-    const output = extractOutput(result?.data);
-    if (!output) {
-      opts.logger.debug({ result }, "scene-expander: empty output");
+    if (output === null || output.length === 0) {
+      opts.logger.debug({ useGemini }, "scene-expander: empty LLM output");
       return deterministicResolve(scene);
     }
 
@@ -182,27 +280,48 @@ export async function expandScene(
     let parsed: unknown;
     try {
       parsed = JSON.parse(stripped);
-    } catch (err) {
+    } catch (error) {
       opts.logger.warn(
-        { err, output: stripped },
-        "scene-expander: JSON parse failed",
+        { error, output: stripped },
+        "scene-expander: JSON parse failed"
       );
       return deterministicResolve(scene);
     }
+
+    // Single-pass moderation: the LLM sets `safe:false` and authors its own
+    // funny SFW denial scene in the SAME object, so when unsafe we still just
+    // render `validated.data` (the LLM's denial) — `safe` is for logging.
+    const flaggedUnsafe =
+      parsed !== null &&
+      typeof parsed === "object" &&
+      (parsed as { safe?: unknown }).safe === false;
 
     const validated = ResolvedSceneCoreSchema.safeParse(parsed);
     if (!validated.success) {
       opts.logger.warn(
         { issues: validated.error.issues, parsed },
-        "scene-expander: schema validation failed",
+        "scene-expander: schema validation failed"
       );
-      return deterministicResolve(scene);
+      // If flagged unsafe but the object was malformed, never fall through to
+      // the raw prompt — seed the deterministic stand-in with a neutral phrase.
+      return flaggedUnsafe
+        ? deterministicResolve({ ...scene, prompt: DENIAL_FALLBACK_PROMPT })
+        : deterministicResolve(scene);
+    }
+
+    if (flaggedUnsafe) {
+      opts.logger.info(
+        { prompt: scene.prompt },
+        "scene-expander: prompt flagged unsafe — rendering LLM denial scene"
+      );
     }
 
     return validated.data;
-  } catch (err) {
-    if (opts.signal?.aborted) return deterministicResolve(scene);
-    opts.logger.warn({ err }, "scene-expander: fal any-llm error");
+  } catch (error) {
+    if (opts.signal?.aborted) {
+      return deterministicResolve(scene);
+    }
+    opts.logger.warn({ error }, "scene-expander: LLM error");
     return deterministicResolve(scene);
   }
-}
+};

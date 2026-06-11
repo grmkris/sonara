@@ -1,8 +1,10 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import type { ReactNode } from "react";
+import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
+
 import { rpcClient } from "@/lib/orpc";
 
 // Poll cadence + ceiling. Dodo webhook delivery is async — the user lands
@@ -13,7 +15,7 @@ const POLL_TIMEOUT_MS = 20_000;
 export default function CheckoutSuccessPage() {
   const router = useRouter();
   const [status, setStatus] = useState<"waiting" | "credited" | "timeout">(
-    "waiting",
+    "waiting"
   );
   const initialFrames = useRef<number | null>(null);
 
@@ -24,14 +26,18 @@ export default function CheckoutSuccessPage() {
     const poll = async (): Promise<void> => {
       try {
         const { frames } = await rpcClient.credits.getBalance();
-        if (cancelled) return;
+        if (cancelled) {
+          return;
+        }
         if (initialFrames.current === null) {
           initialFrames.current = frames;
         } else if (frames > initialFrames.current) {
           setStatus("credited");
           toast.success(`+${frames - initialFrames.current} frames credited`);
           setTimeout(() => {
-            if (!cancelled) router.push("/play");
+            if (!cancelled) {
+              router.push("/play");
+            }
           }, 1200);
           return;
         }
@@ -39,7 +45,9 @@ export default function CheckoutSuccessPage() {
         // ignore transient errors; keep polling
       }
       if (Date.now() - startedAt > POLL_TIMEOUT_MS) {
-        if (!cancelled) setStatus("timeout");
+        if (!cancelled) {
+          setStatus("timeout");
+        }
         return;
       }
       setTimeout(poll, POLL_INTERVAL_MS);
@@ -51,35 +59,44 @@ export default function CheckoutSuccessPage() {
     };
   }, [router]);
 
+  let statusBody: ReactNode;
+  if (status === "waiting") {
+    statusBody = (
+      <p className="font-sans text-[12px] leading-relaxed text-[color:var(--paper)]/80">
+        Crediting your account. This usually takes a few seconds…
+      </p>
+    );
+  } else if (status === "credited") {
+    statusBody = (
+      <p className="font-sans text-[12px] leading-relaxed text-[color:var(--paper)]">
+        Frames credited — back to the visualizer.
+      </p>
+    );
+  } else {
+    statusBody = (
+      <>
+        <p className="font-sans text-[12px] leading-relaxed text-[color:var(--paper)]/80">
+          Payment confirmed but credits haven&apos;t shown up yet. They should
+          arrive shortly. If not, contact support.
+        </p>
+        <button
+          type="button"
+          className="font-mono text-[11px] uppercase tracking-[0.2em] text-[color:var(--signal)] underline"
+          onClick={() => router.push("/play")}
+        >
+          back to visualiser
+        </button>
+      </>
+    );
+  }
+
   return (
     <main className="flex min-h-screen items-center justify-center bg-[color:var(--ink)] p-8">
       <div className="flex w-full max-w-sm flex-col gap-4 border border-[color:var(--hairline)]/50 bg-[color:var(--ink)]/95 p-6 text-center">
         <h1 className="font-mono text-[11px] uppercase tracking-[0.28em] text-[color:var(--stone)]">
           payment received
         </h1>
-        {status === "waiting" ? (
-          <p className="font-sans text-[12px] leading-relaxed text-[color:var(--paper)]/80">
-            Crediting your account. This usually takes a few seconds…
-          </p>
-        ) : status === "credited" ? (
-          <p className="font-sans text-[12px] leading-relaxed text-[color:var(--paper)]">
-            Frames credited — back to the visualizer.
-          </p>
-        ) : (
-          <>
-            <p className="font-sans text-[12px] leading-relaxed text-[color:var(--paper)]/80">
-              Payment confirmed but credits haven&apos;t shown up yet. They
-              should arrive shortly. If not, contact support.
-            </p>
-            <button
-              type="button"
-              className="font-mono text-[11px] uppercase tracking-[0.2em] text-[color:var(--signal)] underline"
-              onClick={() => router.push("/play")}
-            >
-              back to visualiser
-            </button>
-          </>
-        )}
+        {statusBody}
       </div>
     </main>
   );

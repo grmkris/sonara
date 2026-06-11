@@ -1,4 +1,5 @@
 import { createFalClient } from "@fal-ai/client";
+
 import { env } from "../env";
 import type { Logger } from "../lib/logger";
 
@@ -32,15 +33,21 @@ interface FalResult {
   image?: FalImage;
 }
 
-function extractImageUrl(ev: unknown): string | undefined {
-  if (!ev || typeof ev !== "object") return undefined;
+const extractImageUrl = (ev: unknown): string | undefined => {
+  if (!ev || typeof ev !== "object") {
+    return undefined;
+  }
   const e = ev as Partial<FalResult>;
-  if (e.image?.url) return e.image.url;
-  if (Array.isArray(e.images) && e.images[0]?.url) return e.images[0].url;
+  if (e.image?.url) {
+    return e.image.url;
+  }
+  if (Array.isArray(e.images) && e.images[0]?.url) {
+    return e.images[0].url;
+  }
   return undefined;
-}
+};
 
-export async function streamAnchor(input: StreamAnchorInput): Promise<void> {
+export const streamAnchor = async (input: StreamAnchorInput): Promise<void> => {
   // Per-call scoped client (same reasoning as fal-provider — avoid global
   // credential races under hot reload / parallel sessions).
   const scoped = createFalClient({
@@ -62,23 +69,28 @@ export async function streamAnchor(input: StreamAnchorInput): Promise<void> {
   // `safety_tolerance` lower = stricter; "2" is fal's own default for
   // user-facing surfaces and actually engages the output gate.
   const payload: Record<string, unknown> = {
-    prompt: input.prompt,
-    image_url: input.imageUrl,
-    image_prompt_strength: input.strength,
-    num_images: 1,
     aspect_ratio: "1:1",
+    image_prompt_strength: input.strength,
+    image_url: input.imageUrl,
+    num_images: 1,
     output_format: "jpeg",
+    prompt: input.prompt,
     safety_tolerance: "2",
   };
-  if (typeof input.seed === "number") payload.seed = input.seed;
+  if (typeof input.seed === "number") {
+    payload.seed = input.seed;
+  }
 
-  input.logger.info({ model, strength: input.strength }, "anchor subscribe start");
+  input.logger.info(
+    { model, strength: input.strength },
+    "anchor subscribe start"
+  );
 
   try {
     const result = await scoped.subscribe(model, {
+      abortSignal: input.signal,
       input: payload,
       logs: false,
-      abortSignal: input.signal,
       onQueueUpdate: (u) => {
         input.logger.debug({ model, status: u.status }, "anchor queue update");
       },
@@ -96,10 +108,10 @@ export async function streamAnchor(input: StreamAnchorInput): Promise<void> {
     input.onPreview(url);
     input.onFinal(url);
     input.logger.info({ model, url }, "anchor subscribe complete");
-  } catch (err) {
+  } catch (error) {
     if (!input.signal.aborted) {
-      input.logger.warn({ err, model }, "anchor generation errored");
+      input.logger.warn({ error, model }, "anchor generation errored");
     }
-    input.onError(err);
+    input.onError(error);
   }
-}
+};

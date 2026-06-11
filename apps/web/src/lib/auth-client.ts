@@ -1,7 +1,7 @@
 "use client";
 
-import { createAuthClient } from "better-auth/react";
 import { dodopaymentsClient } from "@dodopayments/better-auth";
+import { createAuthClient } from "better-auth/react";
 
 export interface SessionUser {
   id: string;
@@ -11,20 +11,21 @@ export interface SessionUser {
 }
 
 export const authClient = createAuthClient({
-  baseURL:
-    typeof window !== "undefined" ? window.location.origin : undefined,
+  baseURL: typeof window === "undefined" ? undefined : window.location.origin,
   plugins: [dodopaymentsClient()],
 });
 
 const { useSession: _useSession, signOut } = authClient;
 
-function useSession() {
+const useSession = () => {
   const session = _useSession();
   return session as typeof session & {
-    data: typeof session.data & {
-      user: SessionUser;
-    } | null;
+    data:
+      | (typeof session.data & {
+          user: SessionUser;
+        })
+      | null;
   };
-}
+};
 
 export { useSession, signOut };

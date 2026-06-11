@@ -1,11 +1,12 @@
 "use client";
 
-import { useMemo } from "react";
 import type { SonaraSceneState } from "@sonara/shared";
-import type { SessionSend } from "@/lib/session-actions";
+import { useMemo } from "react";
+
 import { Slider } from "@/components/ui/slider";
-import { useVisualizerStore } from "@/stores/visualizer";
 import { debounce } from "@/lib/debounce";
+import type { SessionSend } from "@/lib/session-actions";
+import { useVisualizerStore } from "@/stores/visualizer";
 
 interface IntensityDialProps {
   send: SessionSend;
@@ -14,7 +15,7 @@ interface IntensityDialProps {
 // Master audio→visual coupling dial. Continuous 0..1. Composes VU
 // time-constants, onset impulse gain, hue pump range, zoom impulse, AI
 // cadence (periodicMs), pause threshold, onset refractory.
-export function IntensityDial({ send }: IntensityDialProps) {
+export const IntensityDial = ({ send }: IntensityDialProps) => {
   const intensity = useVisualizerStore((s) => s.scene.intensity);
 
   // Radix Slider fires onValueChange per pointer-move. Debounce WS emits to
@@ -23,11 +24,11 @@ export function IntensityDial({ send }: IntensityDialProps) {
     () =>
       debounce((v: number) => {
         send({
-          type: "scene.patch",
           patch: { intensity: v } as Partial<SonaraSceneState>,
+          type: "scene.patch",
         });
       }, 60),
-    [send],
+    [send]
   );
 
   return (
@@ -43,7 +44,9 @@ export function IntensityDial({ send }: IntensityDialProps) {
         step={0.01}
         onValueChange={(v) => {
           const next = Array.isArray(v) ? v[0] : v;
-          if (typeof next === "number") emit(next);
+          if (typeof next === "number") {
+            emit(next);
+          }
         }}
         onPointerUp={() => emit.flush()}
         onPointerLeave={() => emit.flush()}
@@ -54,4 +57,4 @@ export function IntensityDial({ send }: IntensityDialProps) {
       </span>
     </div>
   );
-}
+};

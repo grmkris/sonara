@@ -1,34 +1,35 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
 import { Circle, Volume2, VolumeX } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
-import { useSession } from "@/lib/auth-client";
+
 import { useHotkey } from "@/hooks/use-hotkey";
+import { useSession } from "@/lib/auth-client";
 import { HOTKEYS } from "@/lib/hotkeys";
-import { cn } from "@/lib/utils";
 import {
   buildFilename,
   downloadBlob,
   isMp4Mime,
   isRecordingSupported,
   startRecording,
-  type VideoRecorderHandle,
 } from "@/lib/recording/video-recorder";
+import type { VideoRecorderHandle } from "@/lib/recording/video-recorder";
+import { cn } from "@/lib/utils";
 
 const AUDIO_PREF_KEY = "mv:record-audio";
 const MAX_DURATION_MS = 10 * 60_000;
 
 type Phase = "idle" | "recording" | "exporting";
 
-function formatDuration(ms: number): string {
+const formatDuration = (ms: number): string => {
   const total = Math.floor(ms / 1000);
   const mm = Math.floor(total / 60);
   const ss = total % 60;
   return `${String(mm).padStart(2, "0")}:${String(ss).padStart(2, "0")}`;
-}
+};
 
-export function RecordToggle() {
+export const RecordToggle = () => {
   const { data: sessionData } = useSession();
   const isSignedIn = !!sessionData?.session;
   const [supported, setSupported] = useState(true);
@@ -42,21 +43,27 @@ export function RecordToggle() {
   useEffect(() => {
     setSupported(isRecordingSupported());
     const stored = window.localStorage.getItem(AUDIO_PREF_KEY);
-    if (stored === "0") setWithAudio(false);
+    if (stored === "0") {
+      setWithAudio(false);
+    }
   }, []);
 
-  useEffect(() => {
-    return () => {
+  useEffect(
+    () => () => {
       if (tickRef.current !== null) {
         cancelAnimationFrame(tickRef.current);
         tickRef.current = null;
       }
       if (handleRef.current) {
-        handleRef.current.stop().catch(() => undefined);
+        // oxlint-disable-next-line prefer-await-to-then -- REVIEW: sync effect cleanup; fire-and-forget stop, cannot await
+        handleRef.current.stop().catch(() => {
+          // noop
+        });
         handleRef.current = null;
       }
-    };
-  }, []);
+    },
+    []
+  );
 
   const persistAudioPref = useCallback((value: boolean) => {
     setWithAudio(value);
@@ -69,7 +76,9 @@ export function RecordToggle() {
 
   const stop = useCallback(async () => {
     const handle = handleRef.current;
-    if (!handle) return;
+    if (!handle) {
+      return;
+    }
     handleRef.current = null;
     if (tickRef.current !== null) {
       cancelAnimationFrame(tickRef.current);
@@ -84,23 +93,22 @@ export function RecordToggle() {
         toast.success("recording saved");
       } else {
         try {
-          const { transcodeToMp4 } = await import(
-            "@/lib/recording/transcode-to-mp4"
-          );
+          const { transcodeToMp4 } =
+            await import("@/lib/recording/transcode-to-mp4");
           const mp4 = await transcodeToMp4(blob, {
             hasAudio: handle.hasAudio,
             onProgress: (r) => setExportPct(Math.round(r * 100)),
           });
           downloadBlob(mp4, buildFilename("mp4"));
           toast.success("recording saved as mp4");
-        } catch (err) {
-          console.warn("[RecordToggle] transcode failed, saving webm", err);
+        } catch (error) {
+          console.warn("[RecordToggle] transcode failed, saving webm", error);
           downloadBlob(blob, buildFilename("webm"));
           toast.warning("mp4 conversion failed — saved as webm");
         }
       }
-    } catch (err) {
-      console.error("[RecordToggle] stop failed", err);
+    } catch (error) {
+      console.error("[RecordToggle] stop failed", error);
       toast.error("recording failed");
     } finally {
       setPhase("idle");
@@ -117,7 +125,9 @@ export function RecordToggle() {
       setElapsed(0);
       const loop = () => {
         const h = handleRef.current;
-        if (!h) return;
+        if (!h) {
+          return;
+        }
         const ms = h.getDuration();
         setElapsed(ms);
         if (ms >= MAX_DURATION_MS) {
@@ -131,10 +141,10 @@ export function RecordToggle() {
       if (!handle.hasAudio && withAudio) {
         toast.message("no audio source — recording video only");
       }
-    } catch (err) {
-      console.error("[RecordToggle] start failed", err);
+    } catch (error) {
+      console.error("[RecordToggle] start failed", error);
       toast.error(
-        err instanceof Error ? err.message : "could not start recording",
+        error instanceof Error ? error.message : "could not start recording"
       );
       handleRef.current = null;
       setPhase("idle");
@@ -142,8 +152,11 @@ export function RecordToggle() {
   }, [stop, withAudio]);
 
   const toggle = useCallback(() => {
-    if (phase === "idle") start();
-    else if (phase === "recording") void stop();
+    if (phase === "idle") {
+      start();
+    } else if (phase === "recording") {
+      void stop();
+    }
   }, [phase, start, stop]);
 
   useHotkey(HOTKEYS.record, toggle);
@@ -151,11 +164,24 @@ export function RecordToggle() {
   // Anonymous visitors don't get recording — it's a power-user affordance
   // for signed-in sessions only. Hiding (rather than disabling) keeps the
   // chrome cluster tight on the anon landing experience.
-  if (!isSignedIn) return null;
-  if (!supported) return null;
+  if (!isSignedIn) {
+    return null;
+  }
+  if (!supported) {
+    return null;
+  }
 
   const isRecording = phase === "recording";
   const isExporting = phase === "exporting";
+
+  let statusLabel: string;
+  if (isExporting) {
+    statusLabel = `saving ${exportPct}%`;
+  } else if (isRecording) {
+    statusLabel = formatDuration(elapsed);
+  } else {
+    statusLabel = "rec · r";
+  }
 
   return (
     <div className="pointer-events-auto flex items-center gap-3">
@@ -163,12 +189,14 @@ export function RecordToggle() {
         type="button"
         onClick={() => persistAudioPref(!withAudio)}
         disabled={phase !== "idle"}
-        aria-label={withAudio ? "Disable audio in recording" : "Enable audio in recording"}
+        aria-label={
+          withAudio ? "Disable audio in recording" : "Enable audio in recording"
+        }
         className={cn(
           "flex items-center font-sans text-[10px] uppercase tracking-[0.28em] transition-colors disabled:opacity-40",
           withAudio
             ? "text-[color:var(--stone)] hover:text-[color:var(--paper)]"
-            : "text-[color:var(--stone)]/50 hover:text-[color:var(--paper)]",
+            : "text-[color:var(--stone)]/50 hover:text-[color:var(--paper)]"
         )}
       >
         {withAudio ? (
@@ -187,7 +215,7 @@ export function RecordToggle() {
           isRecording
             ? "text-[color:var(--signal)] hover:text-[color:var(--paper)]"
             : "text-[color:var(--stone)] hover:text-[color:var(--paper)]",
-          isExporting && "text-[color:var(--stone)]/60",
+          isExporting && "text-[color:var(--stone)]/60"
         )}
       >
         <Circle
@@ -199,16 +227,12 @@ export function RecordToggle() {
           className={cn(
             // Always show the saving / elapsed counter; hide the resting
             // "rec · r" label on narrow screens to keep the top bar tight.
-            (!isExporting && !isRecording) && "hidden sm:inline",
+            !isExporting && !isRecording && "hidden sm:inline"
           )}
         >
-          {isExporting
-            ? `saving ${exportPct}%`
-            : isRecording
-              ? formatDuration(elapsed)
-              : "rec · r"}
+          {statusLabel}
         </span>
       </button>
     </div>
   );
-}
+};

@@ -6,29 +6,39 @@ import type { MetadataRoute } from "next";
 // All icons are generated from the canonical mark by brand/scripts/build.ts.
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: "Sonara — music, made visible",
-    short_name: "Sonara",
+    background_color: "#1a1612",
     description:
       "It listens to whatever you're playing and paints what it hears, as it happens.",
-    start_url: "/",
     display: "standalone",
-    background_color: "#1a1612",
-    theme_color: "#1a1612",
     icons: [
       {
-        src: "/icon.svg",
-        sizes: "any",
-        type: "image/svg+xml",
         purpose: "any",
+        sizes: "any",
+        src: "/icon.svg",
+        type: "image/svg+xml",
       },
-      { src: "/icon-192.png", sizes: "192x192", type: "image/png", purpose: "any" },
-      { src: "/icon-512.png", sizes: "512x512", type: "image/png", purpose: "any" },
       {
-        src: "/maskable-512.png",
-        sizes: "512x512",
+        purpose: "any",
+        sizes: "192x192",
+        src: "/icon-192.png",
         type: "image/png",
+      },
+      {
+        purpose: "any",
+        sizes: "512x512",
+        src: "/icon-512.png",
+        type: "image/png",
+      },
+      {
         purpose: "maskable",
+        sizes: "512x512",
+        src: "/maskable-512.png",
+        type: "image/png",
       },
     ],
+    name: "Sonara — music, made visible",
+    short_name: "Sonara",
+    start_url: "/",
+    theme_color: "#1a1612",
   };
 }
