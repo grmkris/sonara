@@ -8,7 +8,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import { Mark } from "@/components/brand/mark";
-import { HandleGlyph } from "@/components/stage/address-glyph";
+import { HandleGlyph } from "@/components/stage/handle-glyph";
 import { OwnerConsoleBanner } from "@/components/stage/owner-console-banner";
 import { useVoiceRecognition } from "@/hooks/use-voice-recognition";
 import { rpcClient } from "@/lib/orpc";
@@ -192,7 +192,7 @@ export default function StagePage() {
     setHandle(getOrCreateStageHandle());
   }, []);
 
-  const [localTx, setLocalTx] = useState(0);
+  const [localTaps, setLocalTaps] = useState(0);
   const lastSliderAt = useRef(0);
 
   // "tap → on screen" latency: mark every send, match the first feed event
@@ -214,11 +214,11 @@ export default function StagePage() {
   // Fire a write fire-and-forget; bump the optimistic counter, surface failures.
   const fire = useCallback((action: () => Promise<unknown>) => {
     const mark = trackerRef.current.markSend();
-    setLocalTx((n) => n + 1);
+    setLocalTaps((n) => n + 1);
     // oxlint-disable-next-line prefer-await-to-then, prefer-await-to-callbacks -- fire-and-forget: a tap must not block the UI
     action().catch((error: unknown) => {
       trackerRef.current.cancel(mark);
-      setLocalTx((n) => Math.max(0, n - 1));
+      setLocalTaps((n) => Math.max(0, n - 1));
       toast.error(error instanceof Error ? error.message : "send failed");
     });
   }, []);
@@ -257,7 +257,7 @@ export default function StagePage() {
     });
   };
 
-  const txCount = Math.max(localTx, feed.txCount);
+  const tapCount = Math.max(localTaps, feed.tapCount);
 
   return (
     <Shell>
@@ -299,7 +299,7 @@ export default function StagePage() {
             crowd taps
           </p>
           <p className="font-mono text-[28px] tabular-nums leading-none text-[color:var(--paper)]">
-            {txCount}
+            {tapCount}
           </p>
           {latencyMs !== null && (
             <p

@@ -5,10 +5,10 @@ import { useEffect, useState } from "react";
 import { useStageFeed } from "@/lib/stage/use-stage-feed";
 import { useVisualizerStore } from "@/stores/visualizer";
 
-import { HandleGlyph } from "./address-glyph";
+import { HandleGlyph } from "./handle-glyph";
 import { Seismograph } from "./seismograph";
 import { StageJoinQr } from "./stage-join-qr";
-import { TxTicker } from "./tx-ticker";
+import { TapTicker } from "./tap-ticker";
 
 // The projector's crowd wire overlay — the layer the room watches. Mounts
 // only while this session's crowd stage is open (stageRoom in the store, fed
@@ -74,10 +74,10 @@ const StageWireInner = ({ room }: { room: string }) => {
         {/* The wire: ticker + room pulse, bottom-left above the audio strip. */}
         <div className="absolute bottom-32 left-4 flex w-[340px] max-w-[80vw] flex-col gap-2 md:bottom-36 md:left-10">
           <div aria-hidden className="paper-scrim absolute -inset-4 -z-10" />
-          <TxTicker events={feed.activity} max={6} />
+          <TapTicker events={feed.activity} max={6} />
           <Seismograph height={22} ring={feed.ring} />
           <p className="font-mono text-[9px] uppercase tracking-[0.26em] text-[color:var(--stone)] tabular-nums">
-            wire · {feed.txCount} taps · room {room}
+            wire · {feed.tapCount} taps · room {room}
           </p>
         </div>
 

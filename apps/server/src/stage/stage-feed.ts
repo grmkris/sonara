@@ -64,7 +64,7 @@ export const publishActivity = (
   send(room, { event, type: "activity" });
   const live = stageState.get(room);
   send(room, {
-    txCount: live.txCount,
+    tapCount: live.tapCount,
     type: "count",
   });
   return event;
@@ -127,7 +127,7 @@ export const stageFeedHooks = {
         queue: { nowPlaying: live.nowPlaying, upNext: live.upNext },
         recent: stageActivity.recent(room),
         room,
-        txCount: live.txCount,
+        tapCount: live.tapCount,
         type: "hello",
       } satisfies StageFeedMessage)
     );

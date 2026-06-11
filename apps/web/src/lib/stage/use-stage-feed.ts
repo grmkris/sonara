@@ -60,7 +60,7 @@ export interface StageFeed {
   queue: StageQueueView;
   // events-per-second buckets, read by the Seismograph at RAF
   ring: RefObject<StageFeedRing>;
-  txCount: number;
+  tapCount: number;
 }
 
 const EMPTY_QUEUE: StageQueueView = { nowPlaying: null, upNext: [] };
@@ -76,7 +76,7 @@ export const useStageFeed = (
   const [connected, setConnected] = useState(false);
   const [kindCounts, setKindCounts] = useState(ZERO_KINDS);
   const [queue, setQueue] = useState<StageQueueView>(EMPTY_QUEUE);
-  const [txCount, setTxCount] = useState(0);
+  const [tapCount, setTapCount] = useState(0);
 
   const ring = useRef<StageFeedRing>(makeRing());
   // Keep the callback in a ref so an inline closure doesn't churn the socket.
@@ -90,7 +90,7 @@ export const useStageFeed = (
       setConnected(false);
       setKindCounts(ZERO_KINDS);
       setQueue(EMPTY_QUEUE);
-      setTxCount(0);
+      setTapCount(0);
       ring.current = makeRing();
       return;
     }
@@ -157,7 +157,7 @@ export const useStageFeed = (
           }
           setAllowPrompts(msg.allowPrompts);
           setQueue(msg.queue);
-          setTxCount(msg.txCount);
+          setTapCount(msg.tapCount);
           break;
         }
         case "activity": {
@@ -171,7 +171,7 @@ export const useStageFeed = (
           break;
         }
         case "count": {
-          setTxCount(msg.txCount);
+          setTapCount(msg.tapCount);
           break;
         }
         case "closed": {
@@ -200,6 +200,6 @@ export const useStageFeed = (
     kindCounts,
     queue,
     ring,
-    txCount,
+    tapCount,
   };
 };

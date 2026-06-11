@@ -9,7 +9,7 @@ import { rpcClient } from "@/lib/orpc";
 import { useStageFeed } from "@/lib/stage/use-stage-feed";
 
 import { Seismograph } from "./seismograph";
-import { TxTicker } from "./tx-ticker";
+import { TapTicker } from "./tap-ticker";
 
 import type { ControlTarget } from "@/lib/control-actions";
 
@@ -151,7 +151,7 @@ export const StageHostPanel = ({
                 {room}
               </span>
               <span className="font-mono text-[9px] uppercase tracking-[0.18em] text-[color:var(--stone)]">
-                {feed.txCount} crowd taps · {feed.queue.upNext.length} queued
+                {feed.tapCount} crowd taps · {feed.queue.upNext.length} queued
               </span>
               <span className="font-mono text-[9px] uppercase tracking-[0.18em] text-[color:var(--stone)] tabular-nums">
                 {feed.kindCounts.nudge} nudges · {feed.kindCounts.set} sets ·{" "}
@@ -168,7 +168,7 @@ export const StageHostPanel = ({
           {/* The wire — last few crowd actions + the room's pulse. */}
           {feed.activity.length > 0 && (
             <div className="flex flex-col gap-2 border-t border-[color:var(--hairline)]/20 pt-3">
-              <TxTicker dense events={feed.activity} max={5} />
+              <TapTicker dense events={feed.activity} max={5} />
               <Seismograph height={20} ring={feed.ring} />
             </div>
           )}

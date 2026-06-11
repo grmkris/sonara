@@ -174,7 +174,7 @@ describe("live tense (registry hit)", () => {
     try {
       const open = await anon.lens({ id: setId });
       expect(open).toMatchObject({
-        stage: { allowPrompts: true, open: true, room, txCount: 0 },
+        stage: { allowPrompts: true, open: true, room, tapCount: 0 },
         tense: "live",
       });
     } finally {

@@ -7,21 +7,21 @@ import type { PromptQueueSnapshot, PromptView } from "./prompt-queue";
 // context.
 
 export interface StageLiveState {
-  txCount: number;
+  tapCount: number;
   nowPlaying: PromptView | null;
   upNext: PromptView[];
 }
 
 const EMPTY: StageLiveState = {
   nowPlaying: null,
-  txCount: 0,
+  tapCount: 0,
   upNext: [],
 };
 
 class StageState {
   private readonly byRoom = new Map<
     string,
-    { txCount: number; queue: PromptQueueSnapshot }
+    { tapCount: number; queue: PromptQueueSnapshot }
   >();
 
   private entry(room: string) {
@@ -29,7 +29,7 @@ class StageState {
     if (!e) {
       e = {
         queue: { nowPlaying: null, upNext: [] },
-        txCount: 0,
+        tapCount: 0,
       };
       this.byRoom.set(room, e);
     }
@@ -38,7 +38,7 @@ class StageState {
 
   // One crowd action landed for this room (any of nudge/set/prompt).
   bump(room: string): void {
-    this.entry(room).txCount += 1;
+    this.entry(room).tapCount += 1;
   }
 
   setQueue(room: string, queue: PromptQueueSnapshot): void {
@@ -52,7 +52,7 @@ class StageState {
     }
     return {
       nowPlaying: e.queue.nowPlaying,
-      txCount: e.txCount,
+      tapCount: e.tapCount,
       upNext: e.queue.upNext,
     };
   }

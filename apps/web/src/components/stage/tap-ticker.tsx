@@ -4,7 +4,7 @@ import type { StageActivityEvent } from "@sonara/shared";
 
 import { cn } from "@/lib/utils";
 
-import { HandleGlyph } from "./address-glyph";
+import { HandleGlyph } from "./handle-glyph";
 
 // Teleprinter feed of crowd actions, newest at the BOTTOM — the paper feeds
 // upward, like the hardware. Stable seq keys mean only genuinely new lines
@@ -53,7 +53,7 @@ const TickerLine = ({
   </li>
 );
 
-export const TxTicker = ({
+export const TapTicker = ({
   className,
   dense = false,
   events,

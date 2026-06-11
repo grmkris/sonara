@@ -12,7 +12,7 @@ import { AppNavLinks } from "@/components/app-nav";
 import { Mark } from "@/components/brand/mark";
 import { Seismograph } from "@/components/stage/seismograph";
 import { StageJoinQr } from "@/components/stage/stage-join-qr";
-import { TxTicker } from "@/components/stage/tx-ticker";
+import { TapTicker } from "@/components/stage/tap-ticker";
 import { SonaraCanvas } from "@/components/visualizer/canvas/sonara-canvas";
 import { FullscreenToggle } from "@/components/visualizer/controls/fullscreen-toggle";
 import { HideToggle } from "@/components/visualizer/controls/hide-toggle";
@@ -301,10 +301,10 @@ const ViewerWire = ({ room }: { room: string }) => {
     <div aria-hidden className="pointer-events-none absolute inset-0 z-20">
       <div className="absolute bottom-24 left-4 flex w-[340px] max-w-[80vw] flex-col gap-2 md:bottom-28 md:left-10">
         <div aria-hidden className="paper-scrim absolute -inset-4 -z-10" />
-        <TxTicker events={feed.activity} max={6} />
+        <TapTicker events={feed.activity} max={6} />
         <Seismograph height={22} ring={feed.ring} />
         <p className="font-mono text-[9px] uppercase tracking-[0.26em] text-[color:var(--stone)] tabular-nums">
-          wire · {feed.txCount} taps · room {room}
+          wire · {feed.tapCount} taps · room {room}
         </p>
       </div>
     </div>
