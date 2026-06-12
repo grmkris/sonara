@@ -2,7 +2,7 @@ import { Pool } from "pg";
 
 import { env } from "../env";
 
-// Shared singleton pg.Pool used by credits.service and library-provider.
+// Shared singleton pg.Pool used by credits.service.
 // Direct pg (no drizzle) keeps apps/server free of schema-package imports —
 // each consumer writes plain SQL against the tables it owns.
 

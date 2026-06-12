@@ -90,3 +90,19 @@ export const finalizeRecordingSet = async (
     [liveSessionId]
   );
 };
+
+// Boot sweep: the session registry is in-memory, so any row still 'recording'
+// at process start belongs to a run that died with the previous process
+// (crash, or a deploy racing the shutdown drain) — no live owner can exist.
+// Finalizing all of them is safe: runs never resume across restarts (a
+// reconnecting screen mints a fresh lse id), and the one resumable case —
+// legacy clients re-sending their sessionStorage lse — re-opens the set via
+// ensureRecordingSet's ON CONFLICT anyway. Returns the swept count.
+export const finalizeStaleRecordingSets = async (
+  pool: PoolLike
+): Promise<number> => {
+  const res = await pool.query(
+    "UPDATE frame_set SET status = 'final' WHERE status = 'recording'"
+  );
+  return res.rowCount ?? 0;
+};

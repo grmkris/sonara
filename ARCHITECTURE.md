@@ -7,12 +7,12 @@ A code tour for refactoring decisions. Read top-down: data flow first, then a la
 > **Status at last update (2026-06-01):**
 > - ✅ Gateway cutover live in prod — `https://sonara.fm` resolves to the `gateway` service; `via: 1.1 Caddy` on every response.
 > - ✅ Scene state collapsed to a single `prompt` field (`SonaraSceneState` in `packages/shared/src/scene.ts`); song-muse outputs `{ prompt }`; the per-field UI (`field-row.tsx`, `scene-fields.ts`) is deleted.
-> - ✅ Image-anchor upload shipped end-to-end: `apps/server/src/http/upload.ts`, `apps/server/src/generation/anchor-provider.ts`, `setImageAnchor` mutation, `image-anchor-zone.tsx`, third trigger branch in `session.ts`.
+> - ✅ Image-anchor upload shipped end-to-end: `apps/server/src/http/upload.ts`, `setImageAnchor` mutation, `image-anchor-zone.tsx`. (Since the frame-chaining pass the anchor is a one-shot chain seed — the ultra `anchor-provider.ts` path is deleted.)
 > - ✅ Demo image library + decks; anon sessions pinned to demo-library mode (no fal, no credits).
 > - ✅ Public demo without signup; email allowlist removed.
 > - ✅ Dodo Payments wired (SIWE/Reown/USDC ripped out in `b906ac4`).
 > - ✅ CSS fallback renderer deleted; Papari–Kuwahara painterly pass; `uSalt`/`uCauliflower`/`uSplatter` primitives.
-> - ⚠️ **Smell #1 worse, not better.** `session.ts` is now **1016 lines** (was 687 at last note). Voice handling, image-anchor branch, demo-library branch, and the song-muse hook all accreted there. Worth a focused extraction pass.
+> - ⚠️ **Smell #1 still open.** `session.ts` is ~1285 lines (2026-06-12, after the cleanup pass deleted the anchor/realtime/demo branches — chaining added some back). Voice handling and the song-muse hook are still the extraction candidates.
 > - ❌ Lygia refactor dropped (license incompatible).
 
 Open cleanup items are tracked in §3 (smell list) below. The visual / shader refactor list — which used to live in `REFACTOR-PLAN.md` — closed out and the file has been retired.

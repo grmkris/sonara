@@ -2,12 +2,7 @@ import { ORPCError } from "@sonara/api/server";
 import type { ControllableSession } from "@sonara/api/server";
 import { SCHEMA } from "@sonara/db";
 import { ClientScenePatch, DeckKeySchema } from "@sonara/shared";
-import {
-  FrameSetIdSchema,
-  LiveSessionIdSchema,
-  StageIdSchema,
-  typeIdToUuid,
-} from "@sonara/shared/typeid";
+import { FrameSetIdSchema, StageIdSchema } from "@sonara/shared/typeid";
 import { eq } from "drizzle-orm";
 import { z } from "zod";
 
@@ -17,7 +12,6 @@ import {
   listStages,
   renameStage,
 } from "../stage/stage-service";
-import { resolveOwnedSession } from "./owned-session";
 import { resolveOwnedStageRun } from "./owned-stage";
 import type { ServerHttpContext } from "./procedures";
 import { protectedProcedure, publicProcedure } from "./procedures";
@@ -28,13 +22,10 @@ import { protectedProcedure, publicProcedure } from "./procedures";
 // session.router calls, so the screen's canvas + HUD update for free over its
 // existing socket.
 //
-// Targeting is dual-keyed during the stages rollout: new clients address the
-// durable { stageId } (DB-owned identity, registry-resolved liveness); the
-// shipped web still addresses { liveSessionId } (registry scan). The legacy
-// arm — and liveSessions() — are deleted in the post-W2 cleanup.
+// Targeting is stage-keyed: clients address the durable { stageId } (DB-owned
+// identity, registry-resolved liveness).
 
-const ByLiveSession = z.object({ liveSessionId: LiveSessionIdSchema });
-const ByTarget = z.union([z.object({ stageId: StageIdSchema }), ByLiveSession]);
+const ByTarget = z.object({ stageId: StageIdSchema });
 
 type Target = z.infer<typeof ByTarget>;
 type AuthedCtx = ServerHttpContext & {
@@ -44,30 +35,17 @@ type AuthedCtx = ServerHttpContext & {
 const resolveTarget = async (
   context: AuthedCtx,
   input: Target
-): Promise<ControllableSession> => {
-  if ("stageId" in input) {
-    return await resolveOwnedStageRun(
-      { db: context.db, registry: context.registry },
-      context.userId,
-      input.stageId
-    );
-  }
-  return resolveOwnedSession(
-    context.registry,
+): Promise<ControllableSession> =>
+  await resolveOwnedStageRun(
+    { db: context.db, registry: context.registry },
     context.userId,
-    input.liveSessionId
+    input.stageId
   );
-};
 
 const ScenePatchInput = ByTarget.and(z.object({ patch: ClientScenePatch }));
 const GoLiveInput = ByTarget.and(z.object({ prompt: z.string() }));
-const SetDemoModeInput = ByTarget.and(
-  z.object({ deck: DeckKeySchema.nullable(), on: z.boolean() })
-);
 const SetImageAnchorInput = z.union([
-  ByTarget.and(
-    z.object({ strength: z.number().min(0).max(1), url: z.string().url() })
-  ),
+  ByTarget.and(z.object({ url: z.string().url() })),
   ByTarget.and(z.object({ clear: z.literal(true) })),
 ]);
 
@@ -102,30 +80,6 @@ export const controlRouter = {
       const session = await resolveTarget(context, input);
       session.goLive(input.prompt, session.getControlSnapshot().lastFrameUrl);
     }),
-
-  // LEGACY discovery (pre-stages web) — deleted in the post-W2 cleanup.
-  liveSessions: protectedProcedure.handler(({ context }) => {
-    const rawUuid = typeIdToUuid(context.userId).uuid;
-    const sessions = context.registry
-      .listByUserId(rawUuid)
-      .map((s) => {
-        const snap = s.getControlSnapshot();
-        return {
-          currentFrameUrl: snap.currentFrameUrl,
-          demoDeck: snap.demoDeck,
-          demoMode: snap.demoMode,
-          jobStatus: snap.jobStatus,
-          lastFrameUrl: snap.lastFrameUrl,
-          liveSessionId: snap.liveSessionId,
-          nowPlaying: snap.nowPlaying,
-          prompt: snap.scene.prompt,
-          startedAt: snap.startedAt,
-        };
-      })
-      // Newest session first so the projector you just opened leads the list.
-      .toSorted((a, b) => b.startedAt - a.startedAt);
-    return { sessions };
-  }),
 
   // "New set": finalize the current recording segment, start the next one on
   // the same run — the screen learns the new id via `run.started`.
@@ -188,21 +142,6 @@ export const controlRouter = {
       session.applyPatch(input.patch, "client");
     }),
 
-  setDemoMode: protectedProcedure
-    .input(SetDemoModeInput)
-    .handler(async ({ context, input }) => {
-      const session = await resolveTarget(context, input);
-      session.setDemoMode(input.on, input.deck);
-      // Relay the deck pick to the screen as a source switch — without this a
-      // remote console's deck pick only mutates server state and the screen
-      // keeps playing the old deck until its next reconnect. HTTP control
-      // path only (the screen's own WS picks don't come through here, so no
-      // echo). Demo-off stays with the existing stop flow.
-      if (input.on && input.deck) {
-        session.notifySource({ deck: input.deck, kind: "deck" });
-      }
-    }),
-
   setImageAnchor: protectedProcedure
     .input(SetImageAnchorInput)
     .handler(async ({ context, input }) => {
@@ -210,7 +149,7 @@ export const controlRouter = {
       session.setImageAnchor(
         "clear" in input
           ? { clear: true }
-          : { strength: input.strength, url: input.url }
+          : { url: input.url }
       );
     }),
 
@@ -242,17 +181,28 @@ export const controlRouter = {
         ) {
           throw new ORPCError("NOT_FOUND", { message: "Unknown set." });
         }
+        // Optimistic server state first (so trigger() stops generating at
+        // once), then the relay; the screen's source.report confirms or
+        // corrects within one switch.
+        const label = input.source.label ?? set.name;
+        session.setSource({
+          kind: "set",
+          label,
+          setId: input.source.setId,
+        });
         session.notifySource({
           kind: "set",
-          label: input.source.label ?? set.name,
+          label,
           setId: input.source.setId,
         });
         return { ok: true };
       }
       if (input.source.kind === "deck") {
+        session.setSource({ deck: input.source.deck, kind: "deck" });
         session.notifySource({ deck: input.source.deck, kind: "deck" });
         return { ok: true };
       }
+      session.setSource({ kind: "idle" });
       session.notifySource({ kind: "idle" });
       return { ok: true };
     }),
@@ -282,12 +232,11 @@ export const controlRouter = {
           run: snap
             ? {
                 currentFrameUrl: snap.currentFrameUrl,
-                demoDeck: snap.demoDeck,
-                demoMode: snap.demoMode,
                 jobStatus: snap.jobStatus,
                 liveSessionId: snap.liveSessionId,
                 nowPlaying: snap.nowPlaying,
                 prompt: snap.scene.prompt,
+                source: snap.source,
                 startedAt: snap.startedAt,
               }
             : null,

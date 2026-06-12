@@ -15,6 +15,7 @@ import {
   appendRecordingFrame,
   ensureRecordingSet,
   finalizeRecordingSet,
+  finalizeStaleRecordingSets,
 } from "./recording-set";
 
 // Real schema via the shared harness. Tests in this file are cumulative
@@ -177,5 +178,27 @@ describe("recording-set", () => {
       [setUuid]
     );
     expect(kept.rows[0]?.stage_id).toBe(stageUuid);
+  });
+
+  test("boot sweep finalizes every stuck 'recording' row, then finds nothing", async () => {
+    // A run the previous process died holding (crash/deploy — no shutdown
+    // drain): its set is stuck in 'recording' with no live owner.
+    const stuckLse = typeIdGenerator("liveSession") as LiveSessionId;
+    await ensureRecordingSet(pool, {
+      liveSessionId: stuckLse,
+      startedAt,
+      userUuid,
+    });
+
+    const swept = await finalizeStaleRecordingSets(pool);
+    expect(swept).toBeGreaterThanOrEqual(1);
+    const status = await pool.query<{ status: string }>(
+      "SELECT status FROM frame_set WHERE live_session_id = $1",
+      [stuckLse]
+    );
+    expect(status.rows[0]?.status).toBe("final");
+
+    // Idempotent: a second sweep has nothing left to finalize.
+    expect(await finalizeStaleRecordingSets(pool)).toBe(0);
   });
 });

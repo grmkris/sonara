@@ -44,13 +44,10 @@ const envSchema = z.object({
   DODO_PRODUCT_PRO: z.string().default(""),
   DODO_PRODUCT_MAX: z.string().default(""),
 
-  // Optional — text-mode fal model. Every text-mode keyframe goes through
-  // this one text-to-image endpoint. No /edit pipeline.
+  // Optional — fal model for the offline deck generator (gen:deck). The live
+  // pipeline's models live in packages/shared TEXT_MODELS (incl. the /edit
+  // chaining endpoint).
   FAL_TEXT_MODEL: z.string().default("fal-ai/flux-2/klein/9b"),
-  // Image-anchor fal model — accepts image_url + image_prompt_strength.
-  // Separate code path from FAL_TEXT_MODEL (see anchor-provider.ts).
-  // Heavier model, billed at ANCHOR_FRAME_COST_CREDITS per frame.
-  FAL_ANCHOR_MODEL: z.string().default("fal-ai/flux-pro/v1.1-ultra"),
   // LLM endpoint used by scene-llm-expander (drift candidate generation) and
   // song-muse (track → prompt synthesis). Not used by voice — voice is
   // direct dictation with no LLM round-trip.
@@ -77,22 +74,10 @@ const envSchema = z.object({
   // URLs so any stale ones just need a refetch.
   S3_PRESIGN_TTL_SEC: z.coerce.number().int().positive().default(604_800),
 
-  // Monad "stage" (on-chain visual control). All optional — when MONAD_RPC_WSS
-  // and SONARA_STAGE_CONTRACT are both set, the server starts the on-chain
-  // event listener at boot; otherwise the feature is dormant (no listener, the
-  // stage.open endpoint still mints rooms but nothing drives them).
-  MONAD_RPC_WSS: z.string().default("wss://testnet-rpc.monad.xyz"),
-  SONARA_STAGE_CONTRACT: z.string().default(""),
-  // How long each queued prompt holds the projector before the next advances.
+  // How long each queued crowd prompt holds the projector before the next
+  // advances (the stage dwell queue — also the cap on owner-charged
+  // generation from crowd prompts: at most one plays per dwell per room).
   PROMPT_DWELL_MS: z.coerce.number().int().positive().default(12_000),
-  // EOA key the MCP agent signs with (it pays its own gas in testnet MON).
-  MCP_AGENT_KEY: z.string().default(""),
-  // EOA key the stage airdrop faucet sends USDC from (stage.airdrop).
-  // Needs testnet MON for gas + a USDC float; as the stage treasury, spent
-  // prompts flow back to it. Empty = no airdrops (audience uses faucet.circle.com).
-  STAGE_FAUCET_KEY: z.string().default(""),
-  // Optional Pimlico key to lift the public bundler rate limit before a demo.
-  PIMLICO_API_KEY: z.string().default(""),
 });
 
 export const env = envSchema.parse(Bun.env);

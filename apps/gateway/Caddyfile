@@ -7,7 +7,7 @@
 # everything else to the Next.js web app, all over Railway's internal network.
 # Hosts default to *.railway.internal; override SERVER_URL / WEB_URL per env.
 :{$PORT} {
-	@server path /api/auth/* /rpc/* /api/upload/* /api/mcp /api/mcp/* /ws /ws/stage
+	@server path /api/auth/* /rpc/* /api/upload/* /ws /ws/stage
 
 	handle @server {
 		reverse_proxy {$SERVER_URL:http://server.railway.internal:4471} {

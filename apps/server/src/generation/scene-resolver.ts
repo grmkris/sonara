@@ -155,11 +155,3 @@ export const resolveSceneAwaited = async (
     drift_modifiers: opts.driftModifiers,
   };
 };
-
-// Test/maintenance helpers.
-export const _clearResolverCache = (): void => {
-  cache.clear();
-  inFlight.clear();
-};
-
-export const _resolverCacheSize = (): number => cache.size;

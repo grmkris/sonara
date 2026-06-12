@@ -15,12 +15,12 @@ import { FrameInspector } from "@/components/studio/frame-inspector";
 import { FrameInspectorContent } from "@/components/studio/frame-inspector-content";
 import { LiveNowCard } from "@/components/studio/live-now-card";
 import { SelectionBar } from "@/components/studio/selection-bar";
+import { BuiltinSetDetail } from "@/components/studio/builtin-set-detail";
 import { SetEditor } from "@/components/studio/set-editor";
 import { SetsList } from "@/components/studio/sets-list";
 import { RecordingTimeline } from "@/components/studio/recording-timeline";
 import { RecordingsList } from "@/components/studio/recordings-list";
 import { SetsDropShelf } from "@/components/studio/sets-drop-shelf";
-import { StagesSection } from "@/components/studio/stages-section";
 import { StudioSidebarTabs } from "@/components/studio/studio-sidebar-tabs";
 import type { StudioTab } from "@/components/studio/studio-sidebar-tabs";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
@@ -34,6 +34,15 @@ import { makeFramePayload } from "@/lib/curation-dnd";
 import type { FrameDragPayload } from "@/lib/curation-dnd";
 import { recordingsHref, setsHref } from "@/lib/studio-hrefs";
 import { cn } from "@/lib/utils";
+
+const parseTab = (raw: string | null): StudioTab => {
+  if (raw === "sets" || raw === "decks") {
+    // "decks" predates the fold-in — built-ins live on the sets tab now.
+    return "sets";
+  }
+  return "recordings";
+};
+
 
 // /studio — the user's set library. Two tabs: "recordings" (auto-captured
 // live performances; frame list frozen, replayable on original timing) and
@@ -120,7 +129,7 @@ const StudioInner = () => {
   const router = useRouter();
   const isMobile = useIsMobile();
 
-  const tab: StudioTab = sp.get("tab") === "sets" ? "sets" : "recordings";
+  const tab = parseTab(sp.get("tab"));
   const selectedRecordingId = sp.get("recording");
   const selectedSetId = sp.get("set");
   const selectedFrameId = sp.get("frame");
@@ -140,6 +149,7 @@ const StudioInner = () => {
 
   // --- Sets (curated) ---
   const [curatedSets, setCuratedSets] = useState<FrameSetSummary[]>([]);
+  const [builtinSets, setBuiltinSets] = useState<FrameSetSummary[]>([]);
   const [setsLoading, setSetsLoading] = useState(false);
   const [setsBootstrapped, setSetsBootstrapped] = useState(false);
   const [setDetail, setSetDetail] = useState<FrameSet | null>(null);
@@ -238,6 +248,29 @@ const StudioInner = () => {
     }
   }, [tab, setsBootstrapped, selectedSetId, curatedSets, router]);
 
+  // Built-in sets ("decks" — same entity) for the sets tab's built-ins group.
+  // One fetch; the list only changes on deploys (and allowlist gating is
+  // server-side in sets.list).
+  useEffect(() => {
+    if (!isSignedIn) {
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      try {
+        const { sets: s } = await rpcClient.sets.list({ origin: "builtin" });
+        if (!cancelled) {
+          setBuiltinSets(s);
+        }
+      } catch {
+        // non-fatal — the group just stays empty
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [isSignedIn]);
+
   // Load the recording detail when the recording selection changes.
   useEffect(() => {
     if (!isSignedIn || !selectedRecordingId) {
@@ -315,8 +348,9 @@ const StudioInner = () => {
 
   // --- Multi-select curation ---
   const displayOrder = useMemo(() => {
+    const openSet = setDetail?.origin === "builtin" ? null : setDetail;
     const pool =
-      tab === "sets" ? (setDetail?.frames ?? []) : (recordingDetail?.frames ?? []);
+      tab === "sets" ? (openSet?.frames ?? []) : (recordingDetail?.frames ?? []);
     return pool.map((f) => f.id as string);
   }, [tab, recordingDetail, setDetail]);
 
@@ -358,7 +392,7 @@ const StudioInner = () => {
   // --- Navigation handlers ---
   const onTab = useCallback(
     (next: StudioTab) => {
-      router.push(next === "sets" ? "/studio?tab=sets" : "/studio");
+      router.push(next === "recordings" ? "/studio" : `/studio?tab=${next}`);
     },
     [router]
   );
@@ -641,6 +675,46 @@ const StudioInner = () => {
     );
   };
 
+
+  // Center pane, sets tab: built-ins render read-only; everything else gets
+  // the full editor. Extracted (like renderRecordingsCenter) so the branches
+  // don't inflate StudioInner's complexity.
+  const renderSetsCenter = () => {
+    if (setDetail?.origin === "builtin") {
+      return <BuiltinSetDetail frameSet={setDetail} />;
+    }
+    return (
+      <SetEditor
+        frameSet={setDetail}
+        loading={setDetailLoading}
+        error={setDetailError}
+        onRetry={retrySetDetail}
+        selectedFrameId={selectedFrameId}
+        coverFrameId={setDetail?.coverFrameId ?? null}
+        onRename={onRenameSet}
+        onDelete={onDeleteSet}
+        onMoveFrame={onMoveFrame}
+        onRemoveFrame={onRemoveFrame}
+        onSetCover={onSetCover}
+        onVisibilityChange={onSetVisibility}
+        onLookChange={mutations.setLook}
+        onFrameClick={onFrameClick}
+        onFrameOpen={onFrameOpen}
+        onFrameCheck={onFrameCheck}
+        isSelected={selection.isSelected}
+        isSelecting={isSelecting}
+        pinned={selection.pinned}
+        onTogglePinned={selection.togglePinned}
+        onMarquee={onMarquee}
+        onWhitespaceClick={onWhitespaceClick}
+        marqueeEnabled={!dragActive}
+        getDragPayload={getSetDragPayload}
+        selectionApi={selection}
+        onRemoveFrames={mutations.removeFrames}
+      />
+    );
+  };
+
   return (
     <main className="relative flex min-h-svh flex-col overflow-hidden bg-[color:var(--ink)] text-[color:var(--paper)]">
       {/* Header */}
@@ -690,6 +764,7 @@ const StudioInner = () => {
           {tab === "sets" && (
             <SetsList
               sets={curatedSets}
+              builtins={builtinSets}
               loading={setsLoading}
               bootstrapped={setsBootstrapped}
               selectedSetId={selectedSetId}
@@ -698,9 +773,6 @@ const StudioInner = () => {
               dragCount={dragCount}
             />
           )}
-          {/* Stages are account objects like sets — managed here, not on a
-              separate resolver page. */}
-          <StagesSection />
         </aside>
 
         {/* Center pane */}
@@ -724,37 +796,7 @@ const StudioInner = () => {
             </div>
           )}
 
-          {tab === "recordings" ? (
-            renderRecordingsCenter()
-          ) : (
-            <SetEditor
-              frameSet={setDetail}
-              loading={setDetailLoading}
-              error={setDetailError}
-              onRetry={retrySetDetail}
-              selectedFrameId={selectedFrameId}
-              coverFrameId={setDetail?.coverFrameId ?? null}
-              onRename={onRenameSet}
-              onDelete={onDeleteSet}
-              onMoveFrame={onMoveFrame}
-              onRemoveFrame={onRemoveFrame}
-              onSetCover={onSetCover}
-              onVisibilityChange={onSetVisibility}
-              onFrameClick={onFrameClick}
-              onFrameOpen={onFrameOpen}
-              onFrameCheck={onFrameCheck}
-              isSelected={selection.isSelected}
-              isSelecting={isSelecting}
-              pinned={selection.pinned}
-              onTogglePinned={selection.togglePinned}
-              onMarquee={onMarquee}
-              onWhitespaceClick={onWhitespaceClick}
-              marqueeEnabled={!dragActive}
-              getDragPayload={getSetDragPayload}
-              selectionApi={selection}
-              onRemoveFrames={mutations.removeFrames}
-            />
-          )}
+          {tab === "recordings" ? renderRecordingsCenter() : renderSetsCenter()}
         </section>
 
         {/* Desktop inspector pane */}

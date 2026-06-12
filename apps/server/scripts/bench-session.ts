@@ -109,7 +109,7 @@ const main = async (): Promise<void> => {
     `\n=== live-session flow latency (user=${USER.slice(0, 8)}…, default model) ===\n`
   );
   process.stdout.write(
-    "(resolve+gate = LLM expand/moderate + credit; fal gen = realtime/queue round-trip)\n\n"
+    "(resolve+gate = LLM expand/moderate + credit; fal gen = queue round-trip)\n\n"
   );
 
   await measure("goLive (cold)", () => {

@@ -1,31 +1,28 @@
 "use client";
 
-import { formatUsdc } from "@sonara/onchain";
 import { useEffect, useState } from "react";
 
-import { publicEnv } from "@/env";
 import { useStageFeed } from "@/lib/stage/use-stage-feed";
 import { useVisualizerStore } from "@/stores/visualizer";
 
-import { AddressGlyph, shortAddress } from "./address-glyph";
-import { BlockPulse } from "./block-pulse";
+import { HandleGlyph } from "./handle-glyph";
 import { Seismograph } from "./seismograph";
 import { StageJoinQr } from "./stage-join-qr";
-import { TxTicker } from "./tx-ticker";
+import { TapTicker } from "./tap-ticker";
 
-// The projector's Monad wire overlay — the layer the room (and the judges)
-// watch. Mounts only while this session's crowd stage is open (stageRoom in
-// the store, fed by stage.status): a teleprinter tx ticker + seismograph
-// bottom-left, the block odometer under the wordmark cluster, and a
-// "sent by 0x…" credit when a queued prompt takes the screen. Entirely
-// pointer-transparent (tx links re-enable their own events) and deliberately
-// IGNORES the hide-UI chrome toggle — the wire is part of the show.
+// The projector's crowd wire overlay — the layer the room watches. Mounts
+// only while this session's crowd stage is open (stageRoom in the store, fed
+// by stage.status): a teleprinter activity ticker + seismograph bottom-left,
+// and a "sent by K7QX" credit when a queued prompt takes the screen.
+// Entirely pointer-transparent. The wire is PROJECTOR furniture: it shows
+// when the operator chrome is hidden and steps aside while the chrome is up
+// (the operator has the stage sheet; the big join QR would z-fight the
+// rail). The feed socket stays mounted either way so nothing is missed.
 
 const CREDIT_HOLD_MS = 6000;
 
 interface PromptCredit {
   text: string;
-  tip: string;
   who: string;
 }
 
@@ -39,16 +36,8 @@ const NowPlayingCredit = ({ credit }: { credit: PromptCredit }) => (
     </p>
     <p className="flex items-center gap-1.5 font-mono text-[9px] uppercase tracking-[0.26em] text-[color:var(--stone)]">
       sent by
-      <AddressGlyph address={credit.who} size={10} />
-      <span className="text-[color:var(--paper)]/75">
-        {shortAddress(credit.who)}
-      </span>
-      {credit.tip !== "0" && (
-        <span className="text-[color:var(--signal)]">
-          · +{formatUsdc(BigInt(credit.tip)).replace(/\.0+$|(\.\d*?)0+$/u, "$1")}{" "}
-          USDC
-        </span>
-      )}
+      <HandleGlyph size={10} who={credit.who} />
+      <span className="text-[color:var(--paper)]/75">{credit.who}</span>
     </p>
   </div>
 );
@@ -56,6 +45,7 @@ const NowPlayingCredit = ({ credit }: { credit: PromptCredit }) => (
 const StageWireInner = ({ room }: { room: string }) => {
   const feed = useStageFeed(room);
   const showQr = useVisualizerStore((s) => s.stageShowQr);
+  const uiVisible = useVisualizerStore((s) => s.uiVisible);
 
   // Hold a credit card for a few seconds whenever a new prompt takes the
   // screen; identity is who+text so re-plays of the same prompt don't flash.
@@ -66,36 +56,30 @@ const StageWireInner = ({ room }: { room: string }) => {
     if (!playingKey || !playing) {
       return;
     }
-    setCredit({ text: playing.text, tip: playing.tip, who: playing.who });
+    setCredit({ text: playing.text, who: playing.who });
     const timer = setTimeout(() => setCredit(null), CREDIT_HOLD_MS);
     return () => clearTimeout(timer);
     // playingKey is the identity; `playing` only changes alongside it.
     // oxlint-disable-next-line exhaustive-deps
   }, [playingKey]);
 
+  if (uiVisible) {
+    return null;
+  }
+
   return (
     <>
-      {/* The whole wire is show-layer, not operator chrome: hiding the UI
-         (h) keeps the QR, ticker, odometer and credits up — incoming txs ARE
-         the show. Only the host's /control QR toggle and the stage closing
-         remove anything. */}
       {showQr && <StageJoinQr room={room} />}
       <div aria-hidden className="pointer-events-none absolute inset-0 z-20">
-      {/* Block odometer — just under the wordmark cluster. */}
-      <BlockPulse
-        blockNumber={feed.blockNumber}
-        className="absolute left-4 top-[120px] md:left-10 md:top-[132px]"
-      />
-
-      {/* The wire: ticker + room pulse, bottom-left above the audio strip. */}
-      <div className="absolute bottom-32 left-4 flex w-[340px] max-w-[80vw] flex-col gap-2 md:bottom-36 md:left-10">
-        <div aria-hidden className="paper-scrim absolute -inset-4 -z-10" />
-        <TxTicker events={feed.activity} max={6} />
-        <Seismograph height={22} ring={feed.ring} />
-        <p className="font-mono text-[9px] uppercase tracking-[0.26em] text-[color:var(--stone)] tabular-nums">
-          wire · {feed.txCount} tx · room {room}
-        </p>
-      </div>
+        {/* The wire: ticker + room pulse, bottom-left above the audio strip. */}
+        <div className="absolute bottom-32 left-4 flex w-[340px] max-w-[80vw] flex-col gap-2 md:bottom-36 md:left-10">
+          <div aria-hidden className="paper-scrim absolute -inset-4 -z-10" />
+          <TapTicker events={feed.activity} max={6} />
+          <Seismograph height={22} ring={feed.ring} />
+          <p className="font-mono text-[9px] uppercase tracking-[0.26em] text-[color:var(--stone)] tabular-nums">
+            wire · {feed.tapCount} taps · room {room}
+          </p>
+        </div>
 
         {credit && <NowPlayingCredit credit={credit} />}
       </div>
@@ -105,7 +89,7 @@ const StageWireInner = ({ room }: { room: string }) => {
 
 export const StageWire = () => {
   const room = useVisualizerStore((s) => s.stageRoom);
-  if (!publicEnv.NEXT_PUBLIC_SONARA_STAGE_CONTRACT || !room) {
+  if (!room) {
     return null;
   }
   return <StageWireInner room={room} />;

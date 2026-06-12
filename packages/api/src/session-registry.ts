@@ -16,10 +16,20 @@ export type JobStatus = "idle" | "running" | "cancelled" | "error";
 // (source.report) on every source change, same producer-truth rationale as
 // frame.report / currentFrameUrl.
 export interface SessionSource {
+  deck?: DeckKey;
   kind: "live" | "deck" | "set" | "idle";
   label: string | null;
   setId?: string;
 }
+
+// The server's authoritative playback-source state. Mutated by control commands (optimistically) and adopted from
+// producer reports; trigger() refuses fal generation while a client-driven
+// source (deck/set) is showing.
+export type SessionSourceState =
+  | { kind: "live" }
+  | { kind: "idle" }
+  | { kind: "deck"; deck: DeckKey }
+  | { kind: "set"; setId: string; label: string | null };
 
 // Server-authoritative snapshot of a live Session, pulled over HTTP by the
 // operator remote (apps/web /control) instead of the WebSocket event stream.
@@ -28,8 +38,10 @@ export interface SessionSource {
 export interface ControlSnapshot {
   liveSessionId: LiveSessionId;
   scene: SonaraSceneState;
-  demoMode: boolean;
-  demoDeck: DeckKey | null;
+  // Server intent — what the session should be showing. The producer confirm
+  // lives in currentSource; keep both (console pills read intent, viewers
+  // read producer truth).
+  source: SessionSourceState;
   imageAnchor: ImageAnchor | null;
   nowPlaying: NowPlaying | null;
   jobStatus: JobStatus;
@@ -58,9 +70,9 @@ export interface ControllableSession {
   readonly stageId: string | null;
   applyPatch(patch: ClientScenePatch, origin?: "client" | "voice"): void;
   goLive(prompt: string, seedFrameUrl: string | null): void;
-  setDemoMode(on: boolean, deck: DeckKey | null): void;
+  setSource(source: SessionSourceState): void;
   setImageAnchor(
-    input: { url: string; strength: number } | { clear: true }
+    input: { url: string } | { clear: true }
   ): void;
   setCurrentFrame(url: string): void;
   setCurrentSource(source: SessionSource): void;

@@ -27,9 +27,8 @@ import { useVisualizerStore } from "@/stores/visualizer";
 interface SourceSwitcherProps {
   send: SessionSend;
   // "local": this device owns the canvas — set picks start the client replay
-  // loop here. "remote": a detached console driving another screen — set
-  // picks are hidden until the source.set bridge lands (W5); deck picks
-  // already travel via the unified send (demo.set → control.setDemoMode).
+  // loop here. "remote": a detached console driving another screen — picks
+  // travel as source.set commands the screen applies and confirms.
   mode?: "local" | "remote";
   showSets?: boolean;
 }
@@ -93,45 +92,30 @@ export const SourceSwitcher = ({
   const { data: sessionData } = useSession();
   const isSignedIn = !!sessionData?.session;
   const visibleDecks = visibleDecksFor(sessionData);
-  const demoMode = useVisualizerStore((s) => s.demoMode);
-  const demoDeck = useVisualizerStore((s) => s.demoDeck);
-  const prompt = useVisualizerStore((s) => s.scene.prompt);
-  const setPlaybackActive = useVisualizerStore((s) => s.setPlaybackActive);
-  const setPlaybackId = useVisualizerStore((s) => s.setPlaybackId);
-  const setPlaybackName = useVisualizerStore((s) => s.setPlaybackName);
-  const stopSetPlayback = useVisualizerStore((s) => s.stopSetPlayback);
+  const source = useVisualizerStore((s) => s.source);
+  const stopToIdle = useVisualizerStore((s) => s.stopToIdle);
   const pickDeck = usePickDeck(send);
 
   const [open, setOpen] = useState(false);
   const [sets, setSets] = useState<FrameSetSummary[]>([]);
   const [loading, setLoading] = useState(false);
 
-  // Same precedence as use-source-reporter: set replay wins, then deck, then
-  // live (a generation prompt exists), else idle.
-  const onDeck = demoMode && demoDeck !== null;
+  // One source, one label — the unified slice replaced the old precedence
+  // dance across three state fields.
   let label = "idle";
-  if (setPlaybackActive) {
-    label = setPlaybackName ?? "set";
-  } else if (onDeck && demoDeck) {
-    label = deckLabel(demoDeck);
-  } else if (prompt.trim().length > 0) {
+  if (source.kind === "set") {
+    label = source.name ?? "set";
+  } else if (source.kind === "deck") {
+    label = deckLabel(source.deck);
+  } else if (source.kind === "live") {
     label = "live";
   }
-  const stoppable = setPlaybackActive || onDeck;
+  const stoppable = source.kind === "set" || source.kind === "deck";
 
-  // ■ stop → idle canvas. Stop the replay first, THEN read fresh state: the
-  // set-playback slice restores the pre-replay demoMode, and an explicit stop must
-  // override that restore too.
+  // ■ stop → idle canvas (holds the last frame). The source reporter tells
+  // the server.
   const onStop = () => {
-    if (setPlaybackActive) {
-      stopSetPlayback();
-    }
-    const st = useVisualizerStore.getState();
-    if (st.demoMode) {
-      st.setDemoMode(false);
-      st.setDemoDeck(null);
-      send({ deck: null, on: false, type: "demo.set" });
-    }
+    stopToIdle();
   };
 
   // Recordings + cuts load lazily on every open so a just-finished take shows
@@ -158,10 +142,8 @@ export const SourceSwitcher = ({
 
   const onPickDeck = (deck: string) => {
     setOpen(false);
-    // One source at a time: leaving a replay for a deck stops the replay.
-    if (useVisualizerStore.getState().setPlaybackActive) {
-      stopSetPlayback();
-    }
+    // setSource is the single transition — leaving a replay for a deck is
+    // just the next source.
     pickDeck(deck);
   };
 
@@ -176,7 +158,7 @@ export const SourceSwitcher = ({
       });
       return;
     }
-    await startSetReplayById(summary.id);
+    await startSetReplayById(summary.id, send);
   };
 
   const recordings = sets.filter((s) => s.origin === "recording");
@@ -229,9 +211,8 @@ export const SourceSwitcher = ({
                 className={cn(
                   "focus-ring font-sans rounded-sm border border-[color:var(--hairline)]/30 px-1.5 py-0.5 text-[10px] uppercase tracking-[0.14em] text-[color:var(--stone)] transition-colors",
                   "hover:border-[color:var(--paper)]/60 hover:text-[color:var(--paper)]",
-                  onDeck &&
-                    !setPlaybackActive &&
-                    demoDeck === d.key &&
+                  source.kind === "deck" &&
+                    source.deck === d.key &&
                     "border-[color:var(--paper)] bg-[color:var(--paper)] text-[color:var(--ink)]"
                 )}
               >
@@ -253,7 +234,7 @@ export const SourceSwitcher = ({
                     <div className={GROUP_HEADER}>recordings</div>
                     <div className="max-h-[160px] overflow-y-auto">
                       <SetRows
-                        active={setPlaybackActive ? setPlaybackId : null}
+                        active={source.kind === "set" ? source.setId : null}
                         onPick={(s) => void onPickSet(s)}
                         sets={recordings}
                       />
@@ -265,7 +246,7 @@ export const SourceSwitcher = ({
                     <div className={GROUP_HEADER}>my sets</div>
                     <div className="max-h-[160px] overflow-y-auto">
                       <SetRows
-                        active={setPlaybackActive ? setPlaybackId : null}
+                        active={source.kind === "set" ? source.setId : null}
                         onPick={(s) => void onPickSet(s)}
                         sets={cuts}
                       />

@@ -29,14 +29,6 @@ WORKDIR /app
 # "missing" even though the Railway vars are set).
 ARG NEXT_PUBLIC_APP_ENV=local
 ENV NEXT_PUBLIC_APP_ENV=${NEXT_PUBLIC_APP_ENV}
-ARG NEXT_PUBLIC_SONARA_STAGE_CONTRACT=""
-ENV NEXT_PUBLIC_SONARA_STAGE_CONTRACT=${NEXT_PUBLIC_SONARA_STAGE_CONTRACT}
-ARG NEXT_PUBLIC_PIMLICO_API_KEY=""
-ENV NEXT_PUBLIC_PIMLICO_API_KEY=${NEXT_PUBLIC_PIMLICO_API_KEY}
-ARG NEXT_PUBLIC_PIMLICO_SPONSORSHIP_POLICY_ID=""
-ENV NEXT_PUBLIC_PIMLICO_SPONSORSHIP_POLICY_ID=${NEXT_PUBLIC_PIMLICO_SPONSORSHIP_POLICY_ID}
-ARG NEXT_PUBLIC_MONAD_RPC=""
-ENV NEXT_PUBLIC_MONAD_RPC=${NEXT_PUBLIC_MONAD_RPC}
 
 # Workspace manifests + lockfile → install once. Cacheable across source
 # edits.
@@ -48,7 +40,6 @@ COPY packages/db/package.json ./packages/db/
 COPY packages/logger/package.json ./packages/logger/
 COPY packages/shared/package.json ./packages/shared/
 COPY packages/test-utils/package.json ./packages/test-utils/
-COPY packages/onchain/package.json ./packages/onchain/
 
 RUN bun install --no-summary
 
@@ -63,7 +54,6 @@ COPY packages/api ./packages/api
 COPY packages/db ./packages/db
 COPY packages/logger ./packages/logger
 COPY packages/shared ./packages/shared
-COPY packages/onchain ./packages/onchain
 
 # Build. next.config.ts sets output: "standalone" so this emits a
 # self-contained server bundle at apps/web/.next/standalone.

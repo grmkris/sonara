@@ -2,7 +2,6 @@ import { create } from "zustand";
 
 import type { PresetConfig, PresetName } from "@/lib/render/presets";
 
-import { createDemoSlice, readDemoPrefs } from "./demo-slice";
 import {
   createImageAnchorSlice,
   readClickwrapAccepted,
@@ -11,7 +10,6 @@ import { createInspectorSlice } from "./inspector-slice";
 import { createLibrarySlice } from "./library-slice";
 import { createModelSlice, readModelPrefs } from "./model-slice";
 import { createPlaybackSlice } from "./playback-slice";
-import { createSetPlaybackSlice } from "./set-playback-slice";
 import {
   PRESET_KEY,
   PRESET_MODE_KEY,
@@ -20,6 +18,7 @@ import {
   createPresetSlice,
 } from "./preset-slice";
 import { createSceneSlice } from "./scene-slice";
+import { createSourceSlice, readSourcePref } from "./source-slice";
 import { createStageSlice } from "./stage-slice";
 import type { VisualizerState } from "./types";
 import { UI_VISIBLE_KEY, createUiSlice } from "./ui-slice";
@@ -32,11 +31,10 @@ export const useVisualizerStore = create<VisualizerState>()((...a) => ({
   ...createInspectorSlice(...a),
   ...createVoiceSlice(...a),
   ...createPresetSlice(...a),
-  ...createDemoSlice(...a),
+  ...createSourceSlice(...a),
   ...createImageAnchorSlice(...a),
   ...createLibrarySlice(...a),
   ...createModelSlice(...a),
-  ...createSetPlaybackSlice(...a),
   ...createStageSlice(...a),
 }));
 
@@ -90,14 +88,17 @@ export const hydratePresetPrefs = (): void => {
   }
 };
 
-// Same hydration pattern as preset prefs — apply localStorage values
-// post-mount so SSR + first client render stay consistent.
-export const hydrateDemoPrefs = (): void => {
+// Same hydration pattern as preset prefs — apply the persisted playback
+// source (deck/idle only) post-mount so SSR + first client render stay
+// consistent.
+export const hydrateSourcePref = (): void => {
   if (typeof window === "undefined") {
     return;
   }
-  const { demoMode, demoDeck } = readDemoPrefs();
-  useVisualizerStore.setState({ demoDeck, demoMode });
+  const source = readSourcePref();
+  if (source) {
+    useVisualizerStore.setState({ source });
+  }
 };
 
 // Same hydration pattern — apply the stored A/B model + resolution picks
@@ -106,8 +107,8 @@ export const hydrateModelPrefs = (): void => {
   if (typeof window === "undefined") {
     return;
   }
-  const { model, resolution } = readModelPrefs();
-  useVisualizerStore.setState({ model, resolution });
+  const { resolution } = readModelPrefs();
+  useVisualizerStore.setState({ resolution });
 };
 
 // Hydrates the clickwrap-acceptance flag from localStorage so the user

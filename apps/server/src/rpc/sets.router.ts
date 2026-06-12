@@ -1,7 +1,11 @@
 import { ORPCError } from "@sonara/api/server";
 import { SCHEMA } from "@sonara/db";
 import type { Database } from "@sonara/db";
-import { FrameSetVisibilitySchema } from "@sonara/shared";
+import {
+  FrameSetVisibilitySchema,
+  VISUAL_PRESET_NAMES,
+  canSeeUnlistedDecks,
+} from "@sonara/shared";
 import type { FrameSet, FrameSetSummary } from "@sonara/shared";
 import {
   FrameSetIdSchema,
@@ -16,11 +20,23 @@ import type {
   StageId,
   UserId,
 } from "@sonara/shared/typeid";
-import { and, asc, desc, eq, gte, inArray, lt, max, or, sql } from "drizzle-orm";
+import {
+  and,
+  asc,
+  desc,
+  eq,
+  gte,
+  inArray,
+  lt,
+  max,
+  ne,
+  or,
+  sql,
+} from "drizzle-orm";
 import { z } from "zod";
 
-import { stageRooms } from "../onchain/stage-rooms";
-import { stageState } from "../onchain/stage-state";
+import { stageRooms } from "../stage/stage-rooms";
+import { stageState } from "../stage/stage-state";
 import { FRAME_COLUMNS, frameReadUrl, rowToFrame } from "./frame-mapping";
 import { protectedProcedure, publicProcedure } from "./procedures";
 
@@ -70,9 +86,14 @@ const SET_COLUMNS = {
   frameCount: SCHEMA.frameSet.frameCount,
   id: SCHEMA.frameSet.id,
   liveSessionId: SCHEMA.frameSet.liveSessionId,
+  lookCadenceCalmMs: SCHEMA.frameSet.lookCadenceCalmMs,
+  lookCadenceLoudMs: SCHEMA.frameSet.lookCadenceLoudMs,
+  lookIntensity: SCHEMA.frameSet.lookIntensity,
+  lookPreset: SCHEMA.frameSet.lookPreset,
   name: SCHEMA.frameSet.name,
   origin: SCHEMA.frameSet.origin,
   status: SCHEMA.frameSet.status,
+  styleDrift: SCHEMA.frameSet.styleDrift,
   userId: SCHEMA.frameSet.userId,
   visibility: SCHEMA.frameSet.visibility,
 } as const;
@@ -187,6 +208,20 @@ const requireOwnedFrames = async (
 const canRead = (set: SetRow, userId: UserId | null): boolean =>
   set.visibility !== "private" || (userId !== null && set.userId === userId);
 
+// A look exists only when all four authored values are present (they're
+// written atomically by setLook / the boot converger).
+const toLook = (row: SetRow): FrameSetSummary["look"] =>
+  row.lookPreset !== null &&
+  row.lookIntensity !== null &&
+  row.lookCadenceCalmMs !== null &&
+  row.lookCadenceLoudMs !== null
+    ? {
+        cadence: { calm: row.lookCadenceCalmMs, loud: row.lookCadenceLoudMs },
+        intensity: row.lookIntensity,
+        preset: row.lookPreset,
+      }
+    : null;
+
 const toSummary = (row: SetRow, coverUrl: string | null): FrameSetSummary => ({
   coverUrl,
   createdAt: row.createdAt,
@@ -194,9 +229,11 @@ const toSummary = (row: SetRow, coverUrl: string | null): FrameSetSummary => ({
   frameCount: row.frameCount,
   id: row.id,
   liveSessionId: row.liveSessionId,
+  look: toLook(row),
   name: row.name,
   origin: row.origin,
   status: row.status,
+  styleDrift: row.styleDrift,
   visibility: row.visibility,
 });
 
@@ -598,7 +635,7 @@ export const setsRouter = {
           callerId !== null && session.userId === typeIdToUuid(callerId).uuid;
         const room = session.stageId
           ? stageRooms.roomForStage(session.stageId)
-          : stageRooms.roomFor(liveSessionId as string);
+          : undefined;
         const binding = room ? stageRooms.resolve(room) : undefined;
         const stageCode = await durableStageCode(context.db, session.stageId);
         return {
@@ -659,11 +696,16 @@ export const setsRouter = {
       const { db, userId } = context;
       const limit = input.limit ?? LIST_DEFAULT_LIMIT;
 
+      // Unlisted builtins (show-specific decks) are operator-only — without
+      // this gate every signed-in user would see them in the list.
+      const builtinArm = canSeeUnlistedDecks(context.session.user.email)
+        ? eq(SCHEMA.frameSet.origin, "builtin")
+        : and(
+            eq(SCHEMA.frameSet.origin, "builtin"),
+            ne(SCHEMA.frameSet.visibility, "unlisted")
+          );
       const conditions = [
-        or(
-          eq(SCHEMA.frameSet.userId, userId),
-          eq(SCHEMA.frameSet.origin, "builtin")
-        ),
+        or(eq(SCHEMA.frameSet.userId, userId), builtinArm),
       ];
       if (input.origin) {
         conditions.push(eq(SCHEMA.frameSet.origin, input.origin));
@@ -902,6 +944,45 @@ export const setsRouter = {
       await db
         .update(SCHEMA.frameSet)
         .set({ coverFrameId: input.frameId })
+        .where(eq(SCHEMA.frameSet.id, input.setId));
+      return { ok: true as const };
+    }),
+
+  /**
+   * Author or clear the set's baked look (preset + intensity + cadence) —
+   * applied as a unit when the set is picked, like a deck's DECK_LOOK.
+   * Metadata-class edit: allowed on any owned set (recordings included);
+   * builtins are system-owned so the ownership check rejects them. Writes
+   * validate the preset against VISUAL_PRESET_NAMES; reads stay plain
+   * strings so renames degrade instead of breaking.
+   */
+  setLook: protectedProcedure
+    .input(
+      z.object({
+        look: z
+          .object({
+            cadence: z.object({
+              calm: z.number().int().min(1000).max(30_000),
+              loud: z.number().int().min(500).max(30_000),
+            }),
+            intensity: z.number().min(0).max(1),
+            preset: z.enum(VISUAL_PRESET_NAMES),
+          })
+          .nullable(),
+        setId: FrameSetIdSchema,
+      })
+    )
+    .handler(async ({ context, input }) => {
+      const { db, userId } = context;
+      await requireOwnedSet(db, userId, input.setId);
+      await db
+        .update(SCHEMA.frameSet)
+        .set({
+          lookCadenceCalmMs: input.look?.cadence.calm ?? null,
+          lookCadenceLoudMs: input.look?.cadence.loud ?? null,
+          lookIntensity: input.look?.intensity ?? null,
+          lookPreset: input.look?.preset ?? null,
+        })
         .where(eq(SCHEMA.frameSet.id, input.setId));
       return { ok: true as const };
     }),

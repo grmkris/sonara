@@ -9,7 +9,7 @@ import type { RefObject } from "react";
 import { publicEnv } from "../../env";
 
 // Live connection to the public per-room stage feed (/ws/stage?room=…) — the
-// push channel behind the Monad "wire" UI. No ticket: the room code is the
+// push channel behind the crowd "wire" UI. No ticket: the room code is the
 // capability, same as stage.snapshot. partysocket re-dials with
 // backoff; the seq cursor makes the hello backlog idempotent across
 // reconnects (and React strict-mode's double-effect in dev).
@@ -53,7 +53,6 @@ export interface StageFeed {
   // newest first, capped at MAX_ACTIVITY
   activity: StageActivityEvent[];
   allowPrompts: boolean;
-  blockNumber: number | null;
   // the server closed the room — terminal, no reconnect
   closed: boolean;
   connected: boolean;
@@ -61,9 +60,7 @@ export interface StageFeed {
   queue: StageQueueView;
   // events-per-second buckets, read by the Seismograph at RAF
   ring: RefObject<StageFeedRing>;
-  // total USDC paid into this room's prompts (6-dec units as string)
-  revenueUnits: string;
-  txCount: number;
+  tapCount: number;
 }
 
 const EMPTY_QUEUE: StageQueueView = { nowPlaying: null, upNext: [] };
@@ -75,13 +72,11 @@ export const useStageFeed = (
 ): StageFeed => {
   const [activity, setActivity] = useState<StageActivityEvent[]>([]);
   const [allowPrompts, setAllowPrompts] = useState(true);
-  const [blockNumber, setBlockNumber] = useState<number | null>(null);
   const [closed, setClosed] = useState(false);
   const [connected, setConnected] = useState(false);
   const [kindCounts, setKindCounts] = useState(ZERO_KINDS);
   const [queue, setQueue] = useState<StageQueueView>(EMPTY_QUEUE);
-  const [revenueUnits, setRevenueUnits] = useState("0");
-  const [txCount, setTxCount] = useState(0);
+  const [tapCount, setTapCount] = useState(0);
 
   const ring = useRef<StageFeedRing>(makeRing());
   // Keep the callback in a ref so an inline closure doesn't churn the socket.
@@ -91,13 +86,11 @@ export const useStageFeed = (
   useEffect(() => {
     if (!room) {
       setActivity([]);
-      setBlockNumber(null);
       setClosed(false);
       setConnected(false);
       setKindCounts(ZERO_KINDS);
       setQueue(EMPTY_QUEUE);
-      setRevenueUnits("0");
-      setTxCount(0);
+      setTapCount(0);
       ring.current = makeRing();
       return;
     }
@@ -163,10 +156,8 @@ export const useStageFeed = (
             );
           }
           setAllowPrompts(msg.allowPrompts);
-          setBlockNumber((b) => msg.block ?? b);
           setQueue(msg.queue);
-          setRevenueUnits(msg.revenueUnits);
-          setTxCount(msg.txCount);
+          setTapCount(msg.tapCount);
           break;
         }
         case "activity": {
@@ -175,17 +166,12 @@ export const useStageFeed = (
           }
           break;
         }
-        case "block": {
-          setBlockNumber(msg.number);
-          break;
-        }
         case "queue": {
           setQueue(msg.queue);
           break;
         }
         case "count": {
-          setRevenueUnits(msg.revenueUnits);
-          setTxCount(msg.txCount);
+          setTapCount(msg.tapCount);
           break;
         }
         case "closed": {
@@ -209,13 +195,11 @@ export const useStageFeed = (
   return {
     activity,
     allowPrompts,
-    blockNumber,
     closed,
     connected,
     kindCounts,
     queue,
-    revenueUnits,
     ring,
-    txCount,
+    tapCount,
   };
 };

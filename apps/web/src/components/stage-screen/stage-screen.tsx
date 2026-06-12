@@ -1,6 +1,5 @@
 "use client";
 
-import { deckLabel } from "@sonara/shared";
 import { SlidersHorizontal, Smartphone } from "lucide-react";
 import Link from "next/link";
 import { Suspense, useCallback, useEffect, useRef, useState } from "react";
@@ -35,11 +34,10 @@ import { SetPlaybackHud } from "@/components/visualizer/set-playback-hud";
 import { StudioActionConsumer } from "@/components/visualizer/studio-action-consumer";
 import { useAudioFeatures } from "@/hooks/use-audio-features";
 import type { AudioSource } from "@/hooks/use-audio-features";
-import { useDemoFrameLoop } from "@/hooks/use-demo-frame-loop";
 import { useFrameReporter } from "@/hooks/use-frame-reporter";
 import { useHotkey } from "@/hooks/use-hotkey";
 import { useOwnStage } from "@/hooks/use-own-stage";
-import { useSetPlaybackLoop } from "@/hooks/use-set-playback-loop";
+import { usePlaybackLoop } from "@/hooks/use-playback-loop";
 import { useSongRecognition } from "@/hooks/use-song-recognition";
 import { useSourceReporter } from "@/hooks/use-source-reporter";
 import { useWsSession } from "@/hooks/use-ws-session";
@@ -48,9 +46,9 @@ import { HOTKEYS } from "@/lib/hotkeys";
 import { cn } from "@/lib/utils";
 import {
   hydrateAnchorPrefs,
-  hydrateDemoPrefs,
   hydrateModelPrefs,
   hydratePresetPrefs,
+  hydrateSourcePref,
   hydrateUiVisible,
   useVisualizerStore,
 } from "@/stores/visualizer";
@@ -74,24 +72,6 @@ const AnonPromptPlaceholder = () => (
     </Button>
   </div>
 );
-
-// Quiet caption under the wordmark naming the look you're starting from. Shows
-// only while on a deck; once you commit a prompt and go live it disappears (the
-// deck picker's "live · generating" chip carries the live state). Replaces the
-// old SceneHud telemetry; the audio-reactive 1px rule under "sonara"
-// (`.wordmark::after` via `--amp`) carries live-presence more elegantly.
-const LookChip = () => {
-  const demoMode = useVisualizerStore((s) => s.demoMode);
-  const demoDeck = useVisualizerStore((s) => s.demoDeck);
-  if (!demoMode || !demoDeck) {
-    return null;
-  }
-  return (
-    <span className="font-mono pointer-events-none text-[10px] uppercase tracking-[0.22em] text-[color:var(--paper)]/85">
-      {deckLabel(demoDeck)}
-    </span>
-  );
-};
 
 // Discreet link to THIS stage's console (permanent URL). Opens in a new tab
 // so the projector keeps playing; in practice you open it on a second device,
@@ -151,13 +131,10 @@ const Logotype = () => {
 // never mount them.
 export const StageScreen = ({ code }: { code: string | null }) => {
   const { send, newSet, takenOver, reclaim } = useWsSession({ code });
-  // Demo is client-native: the browser drives demo frames from a static
-  // manifest, so it works on slow/no internet (the server never generates in
-  // demo mode).
-  useDemoFrameLoop();
-  // Client-side set replay producer (inert until a ?set= param — or a legacy
-  // param, retired in C5 — activates it via SetPlaybackConsumer).
-  useSetPlaybackLoop();
+  // THE client-side producer for decks and set replays — one loop, one
+  // version guard. Deck/builtin playback runs from static manifests, so it
+  // works on slow/no internet (the server never generates during playback).
+  usePlaybackLoop();
   // /play is the producer: report the on-screen frame upward so /control (and
   // viewers) see it in every mode. Viewer surfaces must never mount this.
   useFrameReporter(send);
@@ -220,14 +197,14 @@ export const StageScreen = ({ code }: { code: string | null }) => {
   useEffect(() => {
     hydrateUiVisible();
     hydratePresetPrefs();
-    hydrateDemoPrefs();
+    hydrateSourcePref();
     hydrateAnchorPrefs();
     hydrateModelPrefs();
   }, []);
 
-  // Anonymous visitors have no server session pinning them to demo mode, and
-  // offline there's no connect snapshot either — default them into demo so the
-  // client-native loop runs. Signed-in users control their own demo toggle.
+  // Anonymous visitors normally get a deck source from the server snapshot
+  // (constructor-pinned) — but offline there's no connect snapshot, so
+  // default them onto a deck locally to keep the client-native loop running.
   useEffect(() => {
     // session still resolving
     if (sessionData === undefined) {
@@ -237,11 +214,8 @@ export const StageScreen = ({ code }: { code: string | null }) => {
       return;
     }
     const st = useVisualizerStore.getState();
-    if (!st.demoMode) {
-      st.setDemoMode(true);
-    }
-    if (!st.demoDeck) {
-      st.setDemoDeck("liquid");
+    if (st.source.kind === "idle" || st.source.kind === "live") {
+      st.setSource({ deck: "liquid", kind: "deck" });
     }
   }, [sessionData, isSignedIn]);
 
@@ -321,11 +295,8 @@ export const StageScreen = ({ code }: { code: string | null }) => {
         <div className="pointer-events-auto flex flex-col gap-3">
           <Logotype />
           <AppNavLinks current="play" />
-          <StageChip current={ownStage} />
-          <LookChip />
         </div>
         <div className="pointer-events-auto flex items-center gap-3 pt-2 sm:gap-5">
-          <NowPlaying />
           {/* Operator remote: drive this session from a phone so the projector
               stays a clean canvas (hide the HUD with the toggle beside this).
               Signed-in only — control needs an owned live session. */}
@@ -381,15 +352,27 @@ export const StageScreen = ({ code }: { code: string | null }) => {
           uiVisible ? "ui-fade-in" : "ui-fade-out"
         )}
       >
-        {/* Scene rail — left-anchored, top third. */}
+        {/* Scene rail — left-anchored, top third. The scene card carries the
+            stage identity as its eyebrow ("on this stage, this scene") so the
+            chip no longer crowds the header stack; bordered like the console
+            card across the canvas (scrims alone stopped being the rule when
+            the right rail grew its frame). */}
         <section className="pointer-events-auto mt-24 flex flex-1 gap-6 px-4 md:mt-28 md:gap-10 md:px-10">
           <div className="relative w-full md:w-[360px] md:shrink-0">
-            <div aria-hidden className="paper-scrim absolute -inset-6 -z-10" />
-            {isSignedIn ? (
-              <PromptInput send={send} />
-            ) : (
-              <AnonPromptPlaceholder />
-            )}
+            <div aria-hidden className="paper-scrim absolute -inset-4 -z-10" />
+            <div className="flex flex-col rounded-sm border border-[color:var(--hairline)]/25 p-3">
+              <div className="mb-3 flex items-center justify-between gap-2 border-b border-[color:var(--hairline)]/25 pb-2">
+                <span className="font-sans text-[9px] uppercase tracking-[0.28em] text-[color:var(--stone)]">
+                  scene
+                </span>
+                <StageChip current={ownStage} />
+              </div>
+              {isSignedIn ? (
+                <PromptInput send={send} variant="card" />
+              ) : (
+                <AnonPromptPlaceholder />
+              )}
+            </div>
           </div>
 
           <div className="hidden flex-1 md:block" />
@@ -418,21 +401,18 @@ export const StageScreen = ({ code }: { code: string | null }) => {
 
           <AudioRibbon height={40} />
 
-          {/* Bring-your-own-audio nudge. The deck cycles dimmed until the
-             visitor connects a source (mic / track / tab); once they do, the
-             canvas wakes up to full brightness + beat reactivity. */}
-          {!audioConnected && (
-            <p className="mt-2 font-sans text-[10px] uppercase tracking-[0.24em] text-[color:var(--signal)]">
-              ▷ bring sound — open the mic, drop a track, or share a tab
-            </p>
-          )}
-
+          {/* One audio row: the source pill, the bring-sound nudge folded
+             inline (only while silent), and the identified track. */}
           <div className="mt-3 flex items-center justify-between gap-3 sm:gap-6">
-            <div className="flex items-center gap-3 sm:gap-6">
+            <div className="flex min-w-0 items-center gap-3 sm:gap-6">
               <MusicSource source={audioSource} setSource={setAudioSource} />
+              {!audioConnected && (
+                <p className="hidden font-sans text-[10px] uppercase tracking-[0.24em] text-[color:var(--signal)] sm:block">
+                  ▷ bring sound — mic, track, or tab
+                </p>
+              )}
             </div>
-            {/* new-session / reset moved into the console footer (StageConsole)
-                so the attached and detached consoles carry the same actions. */}
+            <NowPlaying />
           </div>
         </section>
       </div>

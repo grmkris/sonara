@@ -1,6 +1,6 @@
 import { typeIdGenerator, typeIdToUuid } from "@sonara/shared/typeid";
 
-import { closePool as closeSharedPool, getPool } from "../db/pool";
+import { getPool } from "../db/pool";
 import type { Logger } from "../lib/logger";
 
 // Re-export the test-only pool setter so existing tests
@@ -167,8 +167,4 @@ export const getBalance = async (
     return { frames: 0 };
   }
   return { frames: row.balance_frames };
-};
-
-export const closePool = async (): Promise<void> => {
-  await closeSharedPool();
 };

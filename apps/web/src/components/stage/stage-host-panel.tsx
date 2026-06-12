@@ -1,34 +1,41 @@
 "use client";
 
-import { formatUsdc } from "@sonara/onchain";
 import QRCode from "qrcode";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
-import { publicEnv } from "@/env";
 import { rpcClient } from "@/lib/orpc";
 import { useStageFeed } from "@/lib/stage/use-stage-feed";
 
 import { Seismograph } from "./seismograph";
-import { TxTicker } from "./tx-ticker";
+import { TapTicker } from "./tap-ticker";
 
 import type { ControlTarget } from "@/lib/control-actions";
 
 // Owner-side stage control on the console: open this stage to the crowd
 // (stage-keyed targets use the stage's PERMANENT code — printable QR; legacy
 // run targets mint a per-gig code), show the QR people scan to drive the
-// visuals over Monad txs, and watch the wire — live tx ticker, room pulse,
-// per-kind counts — climb. Opens/closes via stage.open/close; live state
-// rides the public /ws/stage feed (no polling).
+// visuals from their phones, and watch the wire — live activity ticker, room
+// pulse, per-kind counts — climb. Opens/closes via stage.open/close; live
+// state rides the public /ws/stage feed (no polling).
 
 export const StageHostPanel = ({
   target,
+  initialRoom = null,
 }: {
   target: ControlTarget | null;
+  // Server-truth room (store.stageRoom via the stage.status push) — re-syncs
+  // the panel when it remounts inside a sheet. The panel's own open/close
+  // actions still update local state optimistically.
+  initialRoom?: string | null;
 }) => {
-  const configured = !!publicEnv.NEXT_PUBLIC_SONARA_STAGE_CONTRACT;
-  const [room, setRoom] = useState<string | null>(null);
+  const [room, setRoom] = useState<string | null>(initialRoom);
+  // Track server truth while mounted (open/close from another device, or the
+  // stage.status echo of our own action).
+  useEffect(() => {
+    setRoom(initialRoom);
+  }, [initialRoom]);
   const [busy, setBusy] = useState(false);
   const [qr, setQr] = useState<string | null>(null);
   const [stageUrl, setStageUrl] = useState("");
@@ -36,7 +43,6 @@ export const StageHostPanel = ({
   const [displayQr, setDisplayQr] = useState(true);
 
   const feed = useStageFeed(room);
-  const revenueUnits = BigInt(feed.revenueUnits);
   const nowPlaying = feed.queue.nowPlaying?.text ?? null;
 
   // Build the shareable URL + QR once a room is minted.
@@ -62,7 +68,7 @@ export const StageHostPanel = ({
     }
   };
 
-  if (!(configured && target)) {
+  if (!target) {
     return null;
   }
 
@@ -112,7 +118,7 @@ export const StageHostPanel = ({
     <div className="flex flex-col gap-3 rounded-sm border border-[color:var(--hairline)]/25 p-4">
       <div className="flex items-center justify-between">
         <span className="font-sans text-[9px] uppercase tracking-[0.26em] text-[color:var(--stone)]">
-          crowd stage · monad
+          crowd stage
         </span>
         {room ? (
           <Button onClick={close} size="sm" variant="ghost" disabled={busy}>
@@ -145,9 +151,7 @@ export const StageHostPanel = ({
                 {room}
               </span>
               <span className="font-mono text-[9px] uppercase tracking-[0.18em] text-[color:var(--stone)]">
-                {feed.txCount} on-chain taps · {feed.queue.upNext.length}{" "}
-                queued
-                {revenueUnits > 0n && ` · ${formatUsdc(revenueUnits)} usdc`}
+                {feed.tapCount} crowd taps · {feed.queue.upNext.length} queued
               </span>
               <span className="font-mono text-[9px] uppercase tracking-[0.18em] text-[color:var(--stone)] tabular-nums">
                 {feed.kindCounts.nudge} nudges · {feed.kindCounts.set} sets ·{" "}
@@ -161,10 +165,10 @@ export const StageHostPanel = ({
             </div>
           </div>
 
-          {/* The wire — last few on-chain actions + the room's pulse. */}
+          {/* The wire — last few crowd actions + the room's pulse. */}
           {feed.activity.length > 0 && (
             <div className="flex flex-col gap-2 border-t border-[color:var(--hairline)]/20 pt-3">
-              <TxTicker dense events={feed.activity} max={5} />
+              <TapTicker dense events={feed.activity} max={5} />
               <Seismograph height={20} ring={feed.ring} />
             </div>
           )}

@@ -4,7 +4,6 @@ import type {
   ClientScenePatch,
   DeckKey,
   RenderResolution,
-  TextModelKey,
 } from "@sonara/shared";
 
 // Client-side convenience union for the session surface. Purely local — the
@@ -33,16 +32,17 @@ export type SessionAction =
   | {
       type: "source.report";
       source: {
+        // The deck key rides along so the server can adopt deck reports into
+        // its authoritative source state.
+        deck?: DeckKey;
         kind: "live" | "deck" | "set" | "idle";
         label: string | null;
         setId?: string;
       };
     }
-  | { type: "demo.set"; on: boolean; deck: DeckKey | null }
   | { type: "session.goLive"; prompt: string; seedFrameUrl: string | null }
-  | { type: "image.anchor.set"; url: string; strength: number }
+  | { type: "image.anchor.set"; url: string }
   | { type: "image.anchor.clear" }
-  | { type: "model.set"; model: TextModelKey }
   | { type: "resolution.set"; resolution: RenderResolution }
   | {
       type: "audio.recognize";
@@ -89,9 +89,6 @@ export const dispatchSessionAction = (
     case "source.report": {
       return client.reportSource({ source: action.source });
     }
-    case "demo.set": {
-      return client.setDemoMode({ deck: action.deck, on: action.on });
-    }
     case "session.goLive": {
       return client.goLive({
         prompt: action.prompt,
@@ -99,16 +96,10 @@ export const dispatchSessionAction = (
       });
     }
     case "image.anchor.set": {
-      return client.setImageAnchor({
-        strength: action.strength,
-        url: action.url,
-      });
+      return client.setImageAnchor({ url: action.url });
     }
     case "image.anchor.clear": {
       return client.setImageAnchor({ clear: true });
-    }
-    case "model.set": {
-      return client.setModel({ model: action.model });
     }
     case "resolution.set": {
       return client.setResolution({ resolution: action.resolution });

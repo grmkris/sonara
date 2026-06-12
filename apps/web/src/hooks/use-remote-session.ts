@@ -41,9 +41,8 @@ export interface RemoteSession {
 // hydrates the SAME zustand store from ~1s snapshot polls, so the reused
 // controls read current state exactly as they do on /play.
 export const useRemoteSession = (
-  // Stage-addressed for the per-stage console; run-addressed only as the
-  // legacy fallback (pre-redirect /s/[id]/control). Stage-keyed snapshots
-  // make "new set" run swaps invisible — no rebind needed.
+  // Stage-addressed; stage-keyed snapshots make "new set" run swaps
+  // invisible — no rebind needed.
   target: ControlTarget | null
 ): RemoteSession => {
   const [snapshot, setSnapshot] = useState<ControlSnapshot | null>(null);
@@ -60,13 +59,7 @@ export const useRemoteSession = (
   const lastSceneEditAtRef = useRef(0);
 
   // Key the poll effect on the serialized target (object identity churns).
-  let targetKey: string | null = null;
-  if (target) {
-    targetKey =
-      "stageId" in target
-        ? `stg:${target.stageId}`
-        : `lse:${target.liveSessionId}`;
-  }
+  const targetKey = target ? `stg:${target.stageId}` : null;
 
   useEffect(() => {
     const boundTarget = idRef.current;
@@ -97,16 +90,43 @@ export const useRemoteSession = (
           s.setScene(snap.scene);
         }
         s.setStatus(snap.jobStatus);
-        s.setDemoMode(snap.demoMode);
-        s.setDemoDeck(snap.demoDeck);
+        // Reconcile the source only when it actually changed — setSource
+        // builds a fresh object, and a 1s poll would otherwise re-render
+        // every `source` selector each tick.
+        const cur = s.source;
+        const next = snap.source;
+        const sameSource =
+          cur.kind === next.kind &&
+          (next.kind !== "deck" ||
+            (cur.kind === "deck" && cur.deck === next.deck)) &&
+          (next.kind !== "set" ||
+            (cur.kind === "set" && cur.setId === next.setId));
+        if (!sameSource) {
+          if (next.kind === "set") {
+            // Display-only mapping for the console (it never mounts the
+            // playback loop): origin/look aren't in the snapshot.
+            s.setSource({
+              deckKey: null,
+              kind: "set",
+              look: null,
+              name: next.label,
+              origin: "curated",
+              setId: next.setId,
+            });
+          } else if (next.kind === "deck") {
+            s.setSource({ deck: next.deck, kind: "deck" });
+          } else {
+            s.setSource({ kind: next.kind });
+          }
+        }
         if (snap.imageAnchor) {
           s.setAnchorImageUrl(snap.imageAnchor.url);
         } else {
           s.clearAnchor();
         }
       } catch {
-        // NOT_FOUND (session gone) / transient error → drop the connected flag;
-        // /control re-resolves the live session from liveSessions() and rebinds.
+        // NOT_FOUND (no live run on the stage) / transient error → drop the
+        // connected flag; the stage console surfaces "no screen connected".
         if (!cancelled) {
           setConnected(false);
         }

@@ -10,19 +10,18 @@ import { toast } from "sonner";
 
 import { AppNavLinks } from "@/components/app-nav";
 import { Mark } from "@/components/brand/mark";
-import { BlockPulse } from "@/components/stage/block-pulse";
 import { Seismograph } from "@/components/stage/seismograph";
 import { StageJoinQr } from "@/components/stage/stage-join-qr";
-import { TxTicker } from "@/components/stage/tx-ticker";
+import { TapTicker } from "@/components/stage/tap-ticker";
 import { SonaraCanvas } from "@/components/visualizer/canvas/sonara-canvas";
 import { FullscreenToggle } from "@/components/visualizer/controls/fullscreen-toggle";
 import { HideToggle } from "@/components/visualizer/controls/hide-toggle";
 import { MusicSource } from "@/components/visualizer/controls/music-source";
-import { publicEnv } from "@/env";
 import { useAudioFeatures } from "@/hooks/use-audio-features";
 import type { AudioSource } from "@/hooks/use-audio-features";
-import { useSetPlaybackLoop } from "@/hooks/use-set-playback-loop";
+import { usePlaybackLoop } from "@/hooks/use-playback-loop";
 import { rpcClient } from "@/lib/orpc";
+import { isKnownPreset } from "@/lib/render/presets";
 import { useStageFeed } from "@/lib/stage/use-stage-feed";
 import { cn } from "@/lib/utils";
 import { useVisualizerStore } from "@/stores/visualizer";
@@ -223,24 +222,40 @@ const useLiveFrameFeed = (
   }, [tense, frameUrl]);
 };
 
-// Replay rides the existing set-playback machinery: load the frames into the
-// store and let useSetPlaybackLoop (mounted by the page) drive pushFrame at
-// the right cadence — original timing for recordings, fixed loop otherwise.
+// Replay rides the unified playback machinery: hand the set to the source
+// slice and let usePlaybackLoop (mounted by the page) drive pushFrame at the
+// right cadence — original timing for recordings, the authored look's
+// reactive cadence otherwise. The set's look also applies here (preset +
+// intensity, viewer-locally) so the authored vibe travels to permalinks.
 // Viewer-local only: the loop writes to the store, never to the server.
 const useReplayPlayback = (replaySet: ReplaySet | null): void => {
   useEffect(() => {
-    if (!replaySet || replaySet.frames.length === 0) {
+    if (!replaySet || (replaySet.frames.length === 0 && !replaySet.deckKey)) {
       return;
     }
     const s = useVisualizerStore.getState();
-    s.startSetPlayback({
-      cadence: replaySet.origin === "recording" ? "original" : "fixed",
-      frames: replaySet.frames,
-      id: replaySet.id,
-      name: replaySet.name,
-    });
+    const { look } = replaySet;
+    if (look) {
+      if (isKnownPreset(look.preset)) {
+        s.setPreset(look.preset);
+      }
+      useVisualizerStore.setState((st) => ({
+        scene: { ...st.scene, intensity: look.intensity },
+      }));
+    }
+    s.setSource(
+      {
+        deckKey: replaySet.deckKey,
+        kind: "set",
+        look: replaySet.look,
+        name: replaySet.name,
+        origin: replaySet.origin,
+        setId: replaySet.id,
+      },
+      replaySet.frames
+    );
     return () => {
-      useVisualizerStore.getState().stopSetPlayback();
+      useVisualizerStore.getState().stopToIdle();
     };
   }, [replaySet]);
 };
@@ -275,25 +290,21 @@ const useViewerAudio = (): {
   return { audioSource, setAudioSource };
 };
 
-// The Monad wire, viewer edition: live on-chain activity over the public
-// per-room WS feed (/ws/stage — the room code is the capability, no auth),
-// composed from the projector overlay's own exported pieces. Mounts only
-// while the host's stage is open; pairs with the StageJoinQr bottom-right so
-// anyone looking at this screen can scan in and drive what they're seeing.
+// The crowd wire, viewer edition: live activity over the public per-room WS
+// feed (/ws/stage — the room code is the capability, no auth), composed from
+// the projector overlay's own exported pieces. Mounts only while the host's
+// stage is open; pairs with the StageJoinQr bottom-right so anyone looking
+// at this screen can scan in and drive what they're seeing.
 const ViewerWire = ({ room }: { room: string }) => {
   const feed = useStageFeed(room);
   return (
     <div aria-hidden className="pointer-events-none absolute inset-0 z-20">
-      <BlockPulse
-        blockNumber={feed.blockNumber}
-        className="absolute left-4 top-[150px] md:left-10 md:top-[160px]"
-      />
       <div className="absolute bottom-24 left-4 flex w-[340px] max-w-[80vw] flex-col gap-2 md:bottom-28 md:left-10">
         <div aria-hidden className="paper-scrim absolute -inset-4 -z-10" />
-        <TxTicker events={feed.activity} max={6} />
+        <TapTicker events={feed.activity} max={6} />
         <Seismograph height={22} ring={feed.ring} />
         <p className="font-mono text-[9px] uppercase tracking-[0.26em] text-[color:var(--stone)] tabular-nums">
-          wire · {feed.txCount} tx · room {room}
+          wire · {feed.tapCount} taps · room {room}
         </p>
       </div>
     </div>
@@ -327,7 +338,7 @@ const lensViewModel = (lens: FoundLens, replaySet: ReplaySet | null) => {
     name: lens.set?.name ?? "live session",
     nowPlaying: live?.nowPlaying ?? null,
     stageRoom:
-      stage?.open && publicEnv.NEXT_PUBLIC_SONARA_STAGE_CONTRACT
+      stage?.open
         ? stage.room
         : null,
   };
@@ -439,7 +450,7 @@ export default function SetPermalinkPage() {
 
   // The viewer's render pipeline: set-playback loop (inert until replay
   // loads frames), live frame feed, and local audio analysis.
-  useSetPlaybackLoop();
+  usePlaybackLoop();
   useLiveFrameFeed(
     tense,
     lens?.exists && lens.tense === "live"

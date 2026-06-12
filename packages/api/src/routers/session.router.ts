@@ -9,17 +9,14 @@ import {
   SonaraSceneState,
   NowPlaying,
   ServerEvent,
-  TextModelKeySchema,
 } from "@sonara/shared";
 import type {
-  DeckKey,
   ImageAnchor as ImageAnchorType,
   RenderResolution,
-  TextModelKey,
 } from "@sonara/shared";
 import { z } from "zod";
 
-import type { SessionSource } from "../session-registry";
+import type { SessionSource, SessionSourceState } from "../session-registry";
 
 // Structural interface for a live session. apps/server's Session class
 // implements this; the router never imports from apps/server so the package
@@ -33,12 +30,11 @@ export interface SessionLike {
     mimeType: string,
     trigger: "auto" | "manual"
   ): Promise<NowPlaying | null>;
-  setDemoMode(on: boolean, deck: DeckKey | null): void;
+  setSource(source: SessionSourceState): void;
   goLive(prompt: string, seedFrameUrl: string | null): void;
   setImageAnchor(
-    input: { url: string; strength: number } | { clear: true }
+    input: { url: string } | { clear: true }
   ): void;
-  setModel(model: TextModelKey): void;
   setResolution(resolution: RenderResolution): void;
   setCurrentFrame(url: string): void;
   setCurrentSource(source: SessionSource): void;
@@ -48,8 +44,7 @@ export interface SessionLike {
   reset(): void;
   subscribe(signal?: AbortSignal): AsyncGenerator<ServerEvent>;
   getSnapshot(): SonaraSceneState;
-  isDemoMode(): boolean;
-  getDemoDeck(): DeckKey | null;
+  getSource(): SessionSourceState;
   getImageAnchor(): ImageAnchorType | null;
 }
 
@@ -73,11 +68,6 @@ const VoicePatchInput = z.object({
   patch: ClientScenePatch,
 });
 
-const DemoModeInput = z.object({
-  deck: DeckKeySchema.nullable(),
-  on: z.boolean(),
-});
-
 const GoLiveInput = z.object({
   // The scene the user typed to leave the deck and start generating.
   prompt: z.string(),
@@ -88,17 +78,12 @@ const GoLiveInput = z.object({
 });
 
 const SetImageAnchorInput = z.union([
-  z.object({
-    strength: z.number().min(0).max(1),
-    url: z.string().url(),
-  }),
+  z.object({ url: z.string().url() }),
   z.object({ clear: z.literal(true) }),
 ]);
 
-// A/B model + resolution switches. Validated against the shared allowlist so a
-// client can never drive an arbitrary fal model id (cost/abuse) — only the
-// curated TEXT_MODEL_KEYS / RENDER_RESOLUTIONS flow through.
-const SetModelInput = z.object({ model: TextModelKeySchema });
+// Resolution A/B switch. Validated against the shared allowlist — only the
+// curated RENDER_RESOLUTIONS flow through.
 const SetResolutionInput = z.object({ resolution: RenderResolutionSchema });
 
 const RecognizeInput = z.object({
@@ -117,27 +102,40 @@ const ReportFrameInput = z.object({
 
 // Companion of frame.report: WHAT is showing (live / deck / set / idle), not
 // just which frame. label is the human name (deck label / set name); setId
-// rides along for set playback so viewers can link to the permalink.
+// rides along for set playback so viewers can link to the permalink; deck
+// carries the key so the server can adopt deck reports into its
+// authoritative source state.
 const ReportSourceInput = z.object({
   source: z.object({
+    deck: DeckKeySchema.optional(),
     kind: z.enum(["live", "deck", "set", "idle"]),
     label: z.string().max(200).nullable(),
     setId: z.string().max(64).optional(),
   }),
 });
 
+// The server's authoritative source state, carried in the connect snapshot.
+const SourceStateOutput = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("live") }),
+  z.object({ kind: z.literal("idle") }),
+  z.object({ deck: DeckKeySchema, kind: z.literal("deck") }),
+  z.object({
+    kind: z.literal("set"),
+    label: z.string().nullable(),
+    setId: z.string(),
+  }),
+]);
+
 const StateOutput = z.object({
-  demoDeck: DeckKeySchema.nullable(),
-  // Server-authoritative demo state. Anon sessions are pinned to demoMode=true
-  // at Session construction with a random deck; signed-in sessions reflect
-  // whatever the user last toggled. The client hydrates the zustand demo
-  // slice from this on every (re)connect — that's what starts the client-native
-  // demo loop (use-demo-frame-loop) for the right deck.
-  demoMode: z.boolean(),
   // Server-authoritative image anchor. Set via setImageAnchor; survives a
   // tab refresh because the live Session keeps it in memory until disconnect.
   imageAnchor: ImageAnchor.nullable(),
   scene: SonaraSceneState,
+  // Server-authoritative playback source. Anon sessions are pinned to a
+  // random deck source at Session construction; signed-in sessions reflect
+  // the last command/report. The client hydrates its source slice from this
+  // on every (re)connect — that's what starts the client playback loop.
+  source: SourceStateOutput,
 });
 
 export const sessionRouter = {
@@ -210,16 +208,9 @@ export const sessionRouter = {
     context.session.applyPatch(input.patch, "client");
   }),
 
-  // DEMO mode switch. When on with a deck selected, the session pulls
-  // pre-generated images from image_library instead of calling fal. Toggling
-  // off resumes the standard fal path on the next trigger.
-  setDemoMode: sessionOs.input(DemoModeInput).handler(({ context, input }) => {
-    context.session.setDemoMode(input.on, input.deck);
-  }),
-
   // Image-anchor switch. The browser uploaded an image via the web service's
   // /api/upload/image route and got back a fal-hosted URL; this mutation
-  // pins that URL + strength preset onto the live Session, which fires an
+  // pins that URL onto the live Session as a one-shot chain seed; fires an
   // immediate triggerAnchor. Pass { clear: true } to remove the anchor.
   // Setting an anchor implicitly clears demo mode (anchor wins).
   setImageAnchor: sessionOs
@@ -228,14 +219,9 @@ export const sessionRouter = {
       context.session.setImageAnchor(input);
     }),
 
-  // A/B-switch the text-mode image model (realtime lightning-sdxl, or the
-  // klein queue baseline). The session fires a frame immediately so the switch
-  // is visible at once. Client re-sends its choice on every (re)connect.
-  setModel: sessionOs.input(SetModelInput).handler(({ context, input }) => {
-    context.session.setModel(input.model);
-  }),
-
-  // A/B-switch the render resolution (512² / 768²).
+  // A/B-switch the render resolution (512² / 768²). The session fires a
+  // frame immediately so the switch is visible at once; the client re-sends
+  // its choice on every (re)connect.
   setResolution: sessionOs
     .input(SetResolutionInput)
     .handler(({ context, input }) => {
@@ -247,10 +233,9 @@ export const sessionRouter = {
   // publishes land before the events() subscribe has attached. Also useful for
   // post-drift resync later.
   state: sessionOs.output(StateOutput).handler(({ context }) => ({
-    demoDeck: context.session.getDemoDeck(),
-    demoMode: context.session.isDemoMode(),
     imageAnchor: context.session.getImageAnchor(),
     scene: context.session.getSnapshot(),
+    source: context.session.getSource(),
   })),
 
   // Direct field-keyed PTT patch. The client routes each push-to-talk

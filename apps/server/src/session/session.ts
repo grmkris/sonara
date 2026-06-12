@@ -3,6 +3,7 @@ import type {
   ControllableSession,
   ControlSnapshot,
   SessionSource,
+  SessionSourceState,
 } from "@sonara/api/server";
 import {
   DEFAULT_RESOLUTION,
@@ -32,18 +33,11 @@ import type {
   StageId,
 } from "@sonara/shared/typeid";
 
-import {
-  ANCHOR_FRAME_COST_CREDITS,
-  refundOnError,
-  tryDebitCredit,
-} from "../credits/credit-gate";
+import { refundOnError, tryDebitCredit } from "../credits/credit-gate";
 import { getPool } from "../db/pool";
-import { env } from "../env";
-import { streamAnchor } from "../generation/anchor-provider";
 import { streamPreview } from "../generation/fal-provider";
 import { serializeResolvedScene } from "../generation/prompt-compiler";
 import { DriftTrajectory } from "../generation/prompt-drift";
-import { RealtimeImagePool } from "../generation/realtime-provider";
 import {
   resolveScene,
   resolveSceneAwaited,
@@ -57,7 +51,7 @@ import {
   ensureRecordingSet,
   finalizeRecordingSet,
 } from "../library/recording-set";
-import { stageRooms } from "../onchain/stage-rooms";
+import { stageRooms } from "../stage/stage-rooms";
 import { recognizeClip } from "../recognition/recognition.service";
 import { semanticDiff } from "./semantic-diff";
 
@@ -153,12 +147,33 @@ const cadenceFromIntensity = (
   };
 };
 
+// Stability 0..1 → how many CHAINED keyframes are allowed between fresh
+// text-to-image "I-frames". Chaining (klein/9b/edit on the previous frame)
+// gives true frame-to-frame evolution but slowly flattens style over long
+// chains — periodic fresh frames re-anchor quality, exactly like video
+// I-frames between P-frames. stability 0 = every frame fresh (max variety);
+// stability 1 = 24 chained frames per fresh one (~3-6 min of pure morphing
+// at the periodic cadence). Probed empirically: 12-step chains hold quality
+// and hard prompt pivots take in a single chained step.
+export const freshCadenceFromStability = (stability: number): number =>
+  Math.round(24 * Math.max(0, Math.min(1, stability)));
+
 export class Session implements ControllableSession {
   readonly id: string;
   readonly userId: string | null;
   private scene: SonaraSceneState;
   private lastGeneratedScene: SonaraSceneState;
   private activeJob?: AbortController;
+  // Wall-clock start of the in-flight job; 0 when none is running. Drives
+  // the periodic no-cannibalize guard in trigger().
+  private activeJobStartedAt = 0;
+  // Frame-chaining state: the last queue-path output URL (fresh or chained)
+  // that the NEXT keyframe conditions on, and how many chained frames have
+  // run since the last fresh t2i (drives the stability I-frame cadence).
+  // Deliberately separate from lastFrameUrl (a UI mirror kept across reset
+  // for the control snapshot).
+  private chainUrl: string | null = null;
+  private framesSinceFresh = 0;
   private activeVersion = 0;
   private pauseTimer?: ReturnType<typeof setTimeout>;
   private periodicTimer?: ReturnType<typeof setInterval>;
@@ -186,6 +201,11 @@ export class Session implements ControllableSession {
       this.lastFrameUrl = event.imageUrl;
     } else if (event.type === "job.status") {
       this.lastJobStatus = event.status;
+    } else if (event.type === "generation.completed") {
+      // Every generation path (fresh or chained) emits this at the end —
+      // the single chokepoint that marks "no job in
+      // flight" for the periodic no-cannibalize guard in trigger().
+      this.activeJobStartedAt = 0;
     }
     this.publisher.publish("event", event);
   }
@@ -196,18 +216,11 @@ export class Session implements ControllableSession {
 
   private seed: number = rollSeed();
 
-  // Text-mode image model + render resolution, A/B-switchable from the studio
-  // (setModel / setResolution). The model key selects the fal endpoint AND the
-  // transport (realtime websocket vs queue) via TEXT_MODELS. Per-session, in
-  // memory; the client re-sends its choice on every (re)connect, so a fresh
-  // Session adopts it. Realtime models stream through `realtimePool`.
-  private model: TextModelKey = DEFAULT_TEXT_MODEL;
+  // Text-mode image model + render resolution. The model key selects the fal
+  // endpoint config via TEXT_MODELS; the resolution is A/B-switchable from
+  // the studio (setResolution) and re-sent by the client on (re)connect.
+  private readonly model: TextModelKey = DEFAULT_TEXT_MODEL;
   private resolution: RenderResolution = DEFAULT_RESOLUTION;
-  // Warm per-session websocket pool for realtime models. Lazily dials on first
-  // use; closed in close(). No-op cost if the session only ever uses the queue
-  // (klein) model. Assigned in the constructor (needs this.logger, which is set
-  // there) — a field initializer would run before this.logger exists.
-  private readonly realtimePool: RealtimeImagePool;
 
   private lastSectionEnergy = 0;
   private sectionDeltaStartedAt: number | null = null;
@@ -245,28 +258,21 @@ export class Session implements ControllableSession {
   // watching for up to the whole grace window.
   private attached = true;
 
-  // DEMO mode state. Frame-driving is client-side now (use-demo-frame-loop);
-  // the server only tracks these to relay in the connect snapshot + anon pinning.
-  private demoMode = false;
-  private demoDeck: DeckKey | null = null;
+  // The authoritative playback source: what
+  // this session should be showing. Frame-driving for deck/set sources is
+  // client-side; the server tracks this for the connect snapshot, anon
+  // pinning, and the trigger() generation gate. Mutated by control commands
+  // (optimistic) and adopted from producer source.report confirmations.
+  private source: SessionSourceState = { kind: "idle" };
 
-  // Consecutive image-anchor generation failures. Resets on any anchor
-  // success; once it hits ANCHOR_FAILURE_LIMIT we auto-clear the anchor so a
-  // dead fal.storage URL (or repeated rejections) stops re-triggering on
-  // every periodic tick.
-  private anchorFailureCount = 0;
-  private static readonly ANCHOR_FAILURE_LIMIT = 3;
-
-  // One-shot handoff anchor. Set by goLive() when the user leaves a deck: the
-  // first live frame anchors off the deck frame on screen for visual
-  // continuity ("take it from there"), then triggerAnchor() clears it so
-  // subsequent frames take the cheap text path. Distinct from a user-uploaded
-  // anchor, which persists.
-  private handoffAnchor = false;
+  // How long an in-flight generation may run before a periodic tick is
+  // allowed to abort-and-replace it (guards against hung fal jobs without
+  // letting the cadence starve slow models).
+  private static readonly JOB_SUPERSEDE_MS = 60_000;
 
   // The deck the session most recently left when going live. Kept so live
   // generation keeps nudging toward that deck's style (see deckStyle drift in
-  // trigger()/triggerAnchor()). Cleared on reset().
+  // trigger()). Cleared on reset().
   private lastDeck: DeckKey | null = null;
 
   // Stateful per-keyframe drift sequence. Reseeded whenever the resolver
@@ -284,19 +290,18 @@ export class Session implements ControllableSession {
       sessionId: opts.id,
       userId: opts.userId,
     });
-    this.realtimePool = new RealtimeImagePool(this.logger);
     this.scene = { ...defaultScene };
     this.lastGeneratedScene = { ...defaultScene };
-    // Anonymous sessions default to demo mode; the connect snapshot relays
-    // demoMode/demoDeck to the client, whose demo loop (use-demo-frame-loop)
-    // drives the frames locally. A random deck is suggested; the picker swaps
-    // it. Listed decks only — unlisted (show-specific) decks never land on
-    // strangers.
+    // Anonymous sessions are pinned to deck playback; the connect snapshot
+    // relays the source to the client, whose playback loop drives the frames
+    // locally. A random deck is suggested; the picker swaps it. Listed decks
+    // only — unlisted (show-specific) decks never land on strangers.
     if (opts.userId === null) {
-      this.demoMode = true;
-      this.demoDeck =
-        LISTED_DECK_KEYS[Math.floor(Math.random() * LISTED_DECK_KEYS.length)] ??
-        null;
+      const deck =
+        LISTED_DECK_KEYS[Math.floor(Math.random() * LISTED_DECK_KEYS.length)];
+      if (deck) {
+        this.source = { deck, kind: "deck" };
+      }
     }
     this.startPeriodic();
   }
@@ -311,7 +316,7 @@ export class Session implements ControllableSession {
     // room code (stage bindings outlive WS connections).
     const stage = this.stageId
       ? stageRooms.statusForStage(this.stageId)
-      : stageRooms.statusFor(this.liveSessionId);
+      : null;
     if (stage) {
       this.notifyStage(stage.room, stage.allowPrompts, stage.showQr);
     }
@@ -351,6 +356,9 @@ export class Session implements ControllableSession {
   startNewRun(): LiveSessionId {
     const previous = this.liveSessionId;
     this.activeJob?.abort();
+    // A new set starts a fresh visual chapter — don't chain across it.
+    this.chainUrl = null;
+    this.framesSinceFresh = 0;
     if (this.userId !== null) {
       void (async () => {
         try {
@@ -388,15 +396,11 @@ export class Session implements ControllableSession {
     return this.scene;
   }
 
-  // Demo state accessors exposed for the bootstrap snapshot. Anon sessions
-  // are constructor-pinned with demoMode=true + a random deck, and the
-  // client has no other way to learn that — so the snapshot carries it.
-  isDemoMode(): boolean {
-    return this.demoMode;
-  }
-
-  getDemoDeck(): DeckKey | null {
-    return this.demoDeck;
+  // Source accessor exposed for the bootstrap snapshot. Anon sessions are
+  // constructor-pinned to a random deck source, and the client has no other
+  // way to learn that — so the snapshot carries it.
+  getSource(): SessionSourceState {
+    return this.source;
   }
 
   getImageAnchor(): ImageAnchor | null {
@@ -411,14 +415,13 @@ export class Session implements ControllableSession {
     return {
       currentFrameUrl: this.currentFrameUrl ?? this.lastFrameUrl,
       currentSource: this.currentSource,
-      demoDeck: this.demoDeck,
-      demoMode: this.demoMode,
       imageAnchor: this.scene.imageAnchor ?? null,
       jobStatus: this.lastJobStatus,
       lastFrameUrl: this.lastFrameUrl,
       liveSessionId: this.liveSessionId,
       nowPlaying: this.scene.nowPlaying ?? null,
       scene: this.scene,
+      source: this.source,
       startedAt: this.sessionStartAt,
     };
   }
@@ -430,19 +433,36 @@ export class Session implements ControllableSession {
     this.currentFrameUrl = url;
   }
 
-  // Producer-reported source (WS source.report) — sent once per transport
+  // Producer-reported source (WS source.report) — sent once per source
   // switch, same producer-only contract as setCurrentFrame.
   setCurrentSource(source: SessionSource): void {
     this.currentSource = source;
+    // Adopt producer truth into the authoritative source so a screen-local
+    // pick (deck chip on /play) and a control command converge on the same
+    // state. Guards: anon stays pinned to playback kinds; deck reports from
+    // stale clients may lack the key — leave intent alone then; set reports
+    // need a setId.
+    if (
+      (source.kind === "live" || source.kind === "idle") &&
+      this.userId !== null
+    ) {
+      this.source = { kind: source.kind };
+    } else if (source.kind === "deck" && source.deck) {
+      this.source = { deck: source.deck, kind: "deck" };
+    } else if (source.kind === "set" && source.setId) {
+      this.source = {
+        kind: "set",
+        label: source.label ?? null,
+        setId: source.setId,
+      };
+    }
   }
 
-  // Set or clear the live session's image anchor. Setting clears demoMode
-  // (anchor and demo are mutually exclusive — anchor wins). Fires a trigger
-  // immediately so the first anchor frame lands without waiting for the
-  // semantic-diff gate.
-  setImageAnchor(
-    input: { url: string; strength: number } | { clear: true }
-  ): void {
+  // Set or clear the live session's image anchor (one-shot chain seed).
+  // Setting kicks the session back to live (anchor wins over a deck/set
+  // source) and fires a trigger immediately so the seeded frame lands
+  // without waiting for the semantic-diff gate.
+  setImageAnchor(input: { url: string } | { clear: true }): void {
     if ("clear" in input) {
       if (!this.scene.imageAnchor) {
         return;
@@ -452,58 +472,34 @@ export class Session implements ControllableSession {
       this.logger.info({}, "image anchor cleared");
       return;
     }
-    // No-op dedupe: re-pinning the exact same {url, strength} (reconnect
-    // re-hydration, or re-clicking the already-active preset) must not fire a
-    // fresh paid generation. A *different* strength still falls through.
-    const cur = this.scene.imageAnchor;
-    if (cur && cur.url === input.url && cur.strength === input.strength) {
+    // No-op dedupe: re-pinning the exact same url (reconnect re-hydration)
+    // must not fire a fresh paid generation.
+    if (this.scene.imageAnchor?.url === input.url) {
       return;
     }
-    // Anchor wins over demo. setDemoMode doesn't touch anchor; if both are
+    // Anchor wins over playback. setSource doesn't touch anchor; if both are
     // attempted to be set simultaneously, the most recent mutation lands.
     // Uploading an anchor from a deck is also "going live" — remember the deck
     // so its style keeps nudging generation (deckStyle drift).
-    if (this.demoMode) {
-      if (this.demoDeck) {
-        this.lastDeck = this.demoDeck;
-      }
-      this.demoMode = false;
-      this.demoDeck = null;
+    if (this.source.kind === "deck") {
+      this.lastDeck = this.source.deck;
     }
-    // Fresh anchor → reset the failure streak from any prior anchor.
-    this.anchorFailureCount = 0;
+    this.source = { kind: "live" };
     this.scene = {
       ...this.scene,
-      imageAnchor: { strength: input.strength, url: input.url },
+      imageAnchor: { url: input.url },
     };
     this.send({ state: this.scene, type: "scene.state" });
-    this.logger.info(
-      { strength: input.strength, url: input.url },
-      "image anchor set"
-    );
+    this.logger.info({ url: input.url }, "image anchor set");
     // Fire trigger immediately — bypasses semantic-diff gate so the first
     // anchor frame lands without waiting.
     void this.trigger("semantic");
   }
 
-  // A/B-switch the text-mode image model. The key selects the fal endpoint +
-  // transport (realtime vs queue) via TEXT_MODELS. Fires a frame immediately
-  // (skips the semantic-diff gate) so the switch is visible at once; trigger()
-  // no-ops for demo/anon/empty-prompt sessions. Skipped when an image anchor
-  // is active — the model setting is text-path only.
-  setModel(model: TextModelKey): void {
-    if (this.model === model) {
-      return;
-    }
-    this.model = model;
-    this.logger.info({ model }, "text model set");
-    if (!this.scene.imageAnchor) {
-      void this.trigger("semantic");
-    }
-  }
-
   // A/B-switch the render resolution (512² / 768²). Lower = faster + smaller
-  // payload. Same immediate-frame + anchor-skip semantics as setModel.
+  // payload. Fires a frame immediately (skips the semantic-diff gate) so the
+  // switch is visible at once; trigger() no-ops for deck/anon/empty-prompt
+  // sessions. Skipped when an image anchor is active.
   setResolution(resolution: RenderResolution): void {
     if (this.resolution === resolution) {
       return;
@@ -515,12 +511,10 @@ export class Session implements ControllableSession {
     }
   }
 
-  // Transition from deck/library phase to live generation. The browser flips
-  // its own demoMode (stopping the client demo loop) and calls this so the
-  // server mirrors the flag, applies the typed scene, and — for visual
-  // continuity — seeds the FIRST live frame off the deck frame currently on
-  // screen as a one-shot anchor (8 cr). triggerAnchor() clears that anchor
-  // after the frame lands, so everything after is the cheap text path (1 cr).
+  // Transition from deck/library playback to live generation: applies the
+  // typed scene and — for visual continuity — seeds the frame chain off the
+  // deck frame currently on screen, so the first live frame morphs out of
+  // what the audience was just watching ("take it from there").
   goLive(prompt: string, seedFrameUrl: string | null): void {
     // Live generation needs credits. Anon is refused here (the client also
     // gates by never showing the prompt input to anon).
@@ -533,18 +527,17 @@ export class Session implements ControllableSession {
       });
       return;
     }
-    if (this.demoDeck) {
-      this.lastDeck = this.demoDeck;
+    if (this.source.kind === "deck") {
+      this.lastDeck = this.source.deck;
     }
-    this.demoMode = false;
-    this.demoDeck = null;
+    this.source = { kind: "live" };
     this.scene = { ...this.scene, prompt: clampPrompt(prompt) };
     if (seedFrameUrl) {
-      this.handoffAnchor = true;
-      this.anchorFailureCount = 0;
+      // One-shot chain seed: the first live frame morphs out of the frame
+      // that was on screen (deck frame / last live frame).
       this.scene = {
         ...this.scene,
-        imageAnchor: { strength: 0.55, url: seedFrameUrl },
+        imageAnchor: { url: seedFrameUrl },
       };
     }
     this.send({ state: this.scene, type: "scene.state" });
@@ -748,23 +741,25 @@ export class Session implements ControllableSession {
     return track;
   }
 
-  setDemoMode(on: boolean, deck: DeckKey | null): void {
-    // Anonymous sessions can switch decks but cannot leave demo mode. Letting
-    // them flip demoMode off would push trigger() into the fal path, where
-    // the userId-null guard would refuse to generate — the visualiser would
-    // just stop. Pin them on; the UI hides the Switch for anon anyway.
-    if (this.userId === null && !on) {
-      this.logger.info({}, "anon setDemoMode(false) ignored — pinned on");
+  setSource(source: SessionSourceState): void {
+    // Anonymous sessions can switch decks/sets but cannot leave client-driven
+    // playback. Letting them go live would push trigger() into the fal path,
+    // where the userId-null guard would refuse to generate — the visualiser
+    // would just stop; idle would blank it. Pin them to playback kinds.
+    if (
+      this.userId === null &&
+      (source.kind === "live" || source.kind === "idle")
+    ) {
+      this.logger.info(
+        { kind: source.kind },
+        "anon setSource ignored — pinned to playback"
+      );
       return;
     }
-    this.demoMode = on;
-    this.demoDeck = on ? deck : null;
-    this.logger.info(
-      { demoDeck: this.demoDeck, demoMode: on },
-      "demo mode set"
-    );
-    // Demo frames are driven client-side (use-demo-frame-loop); the client
-    // starts/stops its own loop on this toggle, so nothing to trigger here.
+    this.source = source;
+    this.logger.info({ source }, "source set");
+    // Deck/set frames are driven client-side; the client starts/stops its
+    // own playback loop on the relayed source.set, so nothing to trigger.
   }
 
   reset(): void {
@@ -786,7 +781,8 @@ export class Session implements ControllableSession {
     this.seed = rollSeed();
     this.sessionStartAt = Date.now();
     this.silentSinceAt = null;
-    this.handoffAnchor = false;
+    this.chainUrl = null;
+    this.framesSinceFresh = 0;
     this.lastDeck = null;
     this.recognitionInFlight?.abort();
     this.recognitionInFlight = null;
@@ -809,8 +805,6 @@ export class Session implements ControllableSession {
     if (this.periodicTimer) {
       clearInterval(this.periodicTimer);
     }
-    // Tear down the warm realtime websocket(s) — nothing else closes them.
-    this.realtimePool.close();
   }
 
   private schedulePause(): void {
@@ -834,9 +828,9 @@ export class Session implements ControllableSession {
       if (now - this.lastKeyframeAt < periodicMs) {
         return;
       }
-      // Demo is client-driven (use-demo-frame-loop); the server only
-      // auto-triggers LIVE generation, and never while in demo mode.
-      if (this.demoMode) {
+      // Deck/set playback is client-driven; the server only auto-triggers
+      // LIVE generation, never while a playback source is showing.
+      if (this.source.kind === "deck" || this.source.kind === "set") {
         return;
       }
       // No screen attached (reconnect grace window) → nobody is watching;
@@ -885,34 +879,83 @@ export class Session implements ControllableSession {
     })();
   }
 
+  // A periodic tick must NOT cannibalize a still-running generation. Slow
+  // models (the anchor's flux-pro ultra on a congested fal queue) can take
+  // longer than the periodic cadence — if every tick aborted the in-flight
+  // job and restarted the queue wait, nothing would ever complete: frames
+  // starve forever while credits churn through debit/refund. Let the running
+  // job land; supersede it only when it's clearly hung (JOB_SUPERSEDE_MS).
+  // User edits (semantic/pause/voice) still abort-and-replace immediately.
+  private jobStillRunning(): boolean {
+    return (
+      this.activeJob !== undefined &&
+      !this.activeJob.signal.aborted &&
+      this.activeJobStartedAt > 0 &&
+      Date.now() - this.activeJobStartedAt < Session.JOB_SUPERSEDE_MS
+    );
+  }
+
+  // One-shot chain seed. Both the deck→live handoff (goLive) and the image
+  // upload set scene.imageAnchor; consuming it points the chain at that
+  // image so the NEXT frame morphs out of it, then clears it. Consume-at-
+  // fire (not at completion): if the seeded edit fails, the error path
+  // clears the chain and the next tick falls back to fresh t2i — no retry
+  // loop.
+  private consumeChainSeed(): boolean {
+    if (!this.scene.imageAnchor) {
+      return false;
+    }
+    this.chainUrl = this.scene.imageAnchor.url;
+    this.framesSinceFresh = 0;
+    this.scene = { ...this.scene, imageAnchor: undefined };
+    this.send({ state: this.scene, type: "scene.state" });
+    return true;
+  }
+
+  // Chain or fresh? Chain when the model has an edit endpoint, a previous
+  // frame exists, and the stability budget allows (a just-consumed seed
+  // always chains so an upload visibly takes even at stability 0).
+  private chainSourceFor(
+    editFalId: string | undefined,
+    seeded: boolean
+  ): string | null {
+    if (!(editFalId && this.chainUrl)) {
+      return null;
+    }
+    if (
+      seeded ||
+      this.framesSinceFresh < freshCadenceFromStability(this.scene.stability)
+    ) {
+      return this.chainUrl;
+    }
+    return null;
+  }
+
   private async trigger(source: TriggerSource): Promise<void> {
     const kind = kindFromSource(source);
     // Keep `reason` for log + event compatibility — it goes on the wire as
     // part of `job.status` / `generation.requested`.
     const reason = source;
 
-    // Demo is fully client-driven (apps/web/src/hooks/use-demo-frame-loop.ts):
-    // the browser cycles a static per-deck manifest, so demo works on slow/no
-    // internet and the server never generates in demo mode. This path runs
-    // only for live generation.
-    if (this.demoMode) {
+    // Deck/set playback is fully client-driven (the browser cycles static
+    // per-deck manifests or fetched set frames, so playback works on slow/no
+    // internet and the server never generates during it). This path runs
+    // only for live generation. Idle + the empty-prompt guard below keep
+    // idle sessions from generating, while a typed prompt still flows.
+    if (this.source.kind === "deck" || this.source.kind === "set") {
       return;
     }
 
-    // Image-anchor short-circuit. When the user has pinned an uploaded
-    // image as a reference, route to flux-pro/v1.1-ultra with image_url
-    // conditioning instead of klein/9b. Distinct credit cost; same
-    // crossfade + observability events on the wire.
-    if (this.scene.imageAnchor) {
-      this.lastKeyframeAt = Date.now();
-      await this.triggerAnchor(reason);
+    if (reason === "periodic" && this.jobStillRunning()) {
       return;
     }
 
-    // Defence in depth. The constructor pins anon sessions to demoMode=true
-    // with a deck, so the short-circuit above always catches them. If that
-    // invariant ever breaks (someone clears demoMode programmatically), we
-    // refuse to enter the paid path rather than billing a phantom user.
+    const seeded = this.consumeChainSeed();
+
+    // Defence in depth. The constructor pins anon sessions to a deck source,
+    // so the short-circuit above always catches them. If that invariant ever
+    // breaks (someone flips the source programmatically), we refuse to enter
+    // the paid path rather than billing a phantom user.
     if (this.userId === null) {
       this.logger.warn({ reason }, "anon trigger reached fal path — bailing");
       return;
@@ -972,12 +1015,10 @@ export class Session implements ControllableSession {
     this.activeJob?.abort();
     const controller = new AbortController();
     this.activeJob = controller;
+    this.activeJobStartedAt = Date.now();
 
     this.activeVersion += 1;
     const version = this.activeVersion;
-    // Every keyframe is a fresh text-to-image generation. No reference
-    // image, no identity lock — prompt changes take effect on the very
-    // next frame.
     this.scene = { ...this.scene, version };
     const snapshot: SonaraSceneState = this.scene;
 
@@ -1072,10 +1113,11 @@ export class Session implements ControllableSession {
     const modelCfg = TEXT_MODELS[this.model];
     const size = { height: this.resolution, width: this.resolution };
 
-    // Transport-agnostic callbacks. The realtime websocket pool and the klein
-    // queue path share identical onPreview/onFinal/onError wiring — the version
-    // check + refund-on-error semantics don't care which transport delivered
-    // (or failed to deliver) the frame.
+    const chainSource = this.chainSourceFor(modelCfg.editFalId, seeded);
+
+    // Callbacks shared by the fresh and chained paths — the version check +
+    // refund-on-error semantics don't care which endpoint delivered (or
+    // failed to deliver) the frame.
     const frameCallbacks = {
       logger: this.logger,
       onError: (err: unknown) => {
@@ -1088,6 +1130,12 @@ export class Session implements ControllableSession {
         // log noisily or surface to the client.
         if (controller.signal.aborted) {
           return;
+        }
+        // A failed chained frame breaks the chain (a dead/unfetchable source
+        // URL would otherwise fail every retry) — next tick is fresh t2i.
+        if (chainSource) {
+          this.chainUrl = null;
+          this.framesSinceFresh = 0;
         }
         this.logger.error({ err }, "generation failed");
         const message = err instanceof Error ? err.message : String(err);
@@ -1114,6 +1162,10 @@ export class Session implements ControllableSession {
         // from being followed by a periodic frame stacking right on top.
         this.lastKeyframeAt = Date.now();
         this.lastGeneratedScene = snapshot;
+        // Chain bookkeeping: this frame becomes the next frame's
+        // conditioning source.
+        this.chainUrl = url;
+        this.framesSinceFresh = chainSource ? this.framesSinceFresh + 1 : 0;
         const tMs = Date.now() - this.sessionStartAt;
         const frameId = typeIdGenerator("imageLibrary");
         this.send({
@@ -1134,6 +1186,7 @@ export class Session implements ControllableSession {
         // failures log and skip. Emits library.appended on success so the
         // client's timeline can append the row without polling.
         const persisted = persistFrame({
+          anchorUrl: chainSource ?? undefined,
           deck: this.lastDeck ?? "live",
           falUrl: url,
           height: size.height,
@@ -1156,7 +1209,7 @@ export class Session implements ControllableSession {
             },
           },
           logger: this.logger,
-          model: modelCfg.falId,
+          model: (chainSource && modelCfg.editFalId) || modelCfg.falId,
           palette: resolved.color_palette,
           prompt,
           seed: this.seed,
@@ -1178,8 +1231,8 @@ export class Session implements ControllableSession {
           } catch (error) {
             // Fire-and-forget: a persist/send failure here must never become an
             // unhandled rejection (on a single-replica in-memory server that can
-            // crash Bun and drop every live session). Mirror the streamPreview/
-            // streamAnchor .catch guard above.
+            // crash Bun and drop every live session). Mirror the
+            // streamPreview .catch guard above.
             this.logger.error({ error }, "persistFrame unhandled");
           }
         })();
@@ -1195,328 +1248,38 @@ export class Session implements ControllableSession {
       signal: controller.signal,
     };
 
-    if (modelCfg.transport === "realtime") {
-      // Warm websocket — bypasses the queue for the ~150-300ms warm floor.
-      // Fire-and-forget: the pool reports via the callbacks above and never
-      // throws synchronously past its own guard.
-      this.realtimePool.stream({
-        ...frameCallbacks,
-        falModelId: modelCfg.falId,
-        guidanceScale: modelCfg.guidanceScale,
-        size,
-        steps: modelCfg.steps,
-      });
-    } else {
-      // Queue path (klein/9b quality baseline). Fire-and-forget: streamPreview
-      // must stream in the background; awaiting would block trigger() on the
-      // live hot path. Its onError/onFinal/onPreview are its callback contract.
-      const queued = streamPreview({
-        ...frameCallbacks,
-        model: modelCfg.falId,
-        size,
-      });
-      // oxlint-disable-next-line promise/prefer-await-to-then, promise/prefer-await-to-callbacks -- REVIEW: see the fire-and-forget note above; the trigger() hot path cannot await.
-      queued.catch((error) => {
-        if (!controller.signal.aborted) {
-          this.logger.error({ error }, "streamPreview unhandled");
-        }
-      });
-    }
+    this.dispatchGeneration({
+      chainSource,
+      controller,
+      frameCallbacks,
+      modelCfg,
+      size,
+    });
   }
 
-  // Image-anchor-mode trigger. Calls fal flux-pro/v1.1-ultra with the user's
-  // uploaded image conditioning the output. Emits the same crossfade events
-  // as the text-mode path so the client doesn't need to distinguish.
-  private async triggerAnchor(source: TriggerSource): Promise<void> {
-    const anchor = this.scene.imageAnchor;
-    if (!anchor) {
-      return;
-    }
-
-    // Anon defence in depth — the upload route is authed-only, but if a
-    // null userId somehow reached this path we refuse to bill phantom.
-    if (this.userId === null) {
-      this.logger.warn(
-        { source },
-        "anon trigger reached anchor path — bailing"
-      );
-      return;
-    }
-    const { userId } = this;
-    const kind = kindFromSource(source);
-    const reason = source;
-
-    const gate = await tryDebitCredit({
-      cost: ANCHOR_FRAME_COST_CREDITS,
-      isUserInitiated: kind === "user",
-      lastCreditDenialAt: this.lastCreditDenialAt,
-      logger: this.logger,
-      now: Date.now(),
-      userId,
+  // Fire the generation: fresh t2i, or a chained edit conditioning on
+  // chainSource. Fire-and-forget — awaiting would block trigger() on the
+  // live hot path; the callbacks are the contract.
+  private dispatchGeneration(opts: {
+    chainSource: string | null;
+    controller: AbortController;
+    frameCallbacks: Parameters<typeof streamPreview>[0];
+    modelCfg: (typeof TEXT_MODELS)[TextModelKey];
+    size: { width: number; height: number };
+  }): void {
+    const { chainSource, controller, frameCallbacks, modelCfg, size } = opts;
+    const queued = streamPreview({
+      ...frameCallbacks,
+      model: (chainSource && modelCfg.editFalId) || modelCfg.falId,
+      size,
+      ...(chainSource ? { imageUrl: chainSource } : {}),
     });
-    this.lastCreditDenialAt = gate.nextLastDenialAt;
-
-    if (!gate.ok) {
-      this.logger.info(
-        { cost: ANCHOR_FRAME_COST_CREDITS, gateReason: gate.reason, reason },
-        "anchor trigger denied"
-      );
-      if (gate.shouldEmit) {
-        this.send({
-          message:
-            gate.reason === "system_error"
-              ? "Payment system unavailable"
-              : "Out of credits — top up to keep generating",
-          reason,
-          status: "error",
-          type: "job.status",
-        });
-      }
-      return;
-    }
-    const { paidCost } = gate;
-
-    const sessionProgress = Math.min(
-      1,
-      (Date.now() - this.sessionStartAt) / SESSION_ARC_MS
-    );
-    const drift = this.driftTrajectory.next();
-    const driftSource: "pool" | "none" = drift ? "pool" : "none";
-
-    this.activeJob?.abort();
-    const controller = new AbortController();
-    this.activeJob = controller;
-
-    this.activeVersion += 1;
-    const version = this.activeVersion;
-    this.scene = { ...this.scene, version };
-    const snapshot: SonaraSceneState = this.scene;
-
-    this.send({ state: this.scene, type: "scene.state" });
-
-    // Resolve the prompt through the same LLM expander as text-mode so the
-    // inspector HUD shows coherent metadata and so the drift trajectory
-    // gets seeded on first call. User-initiated triggers await the LLM
-    // expansion (richer first frame after a prompt edit); auto-triggers
-    // stay on the sync deterministic-then-cache path.
-    const resolveOpts = {
-      audio: {
-        energyDelta: 0,
-        intensity: this.scene.intensity,
-        section: this.lastSectionEnergy,
-      },
-      // Drift = pool/LLM walk + (when we came from a deck) that deck's style,
-      // so live frames stay on-vibe with the deck the user left.
-      driftModifiers: [
-        drift,
-        this.lastDeck ? deckStyle(this.lastDeck) : null,
-      ].filter((m): m is string => !!m),
-      logger: this.logger,
-      signal: controller.signal,
-    };
-    const resolved =
-      kind === "user"
-        ? await resolveSceneAwaited(this.scene, resolveOpts)
-        : resolveScene(this.scene, resolveOpts);
-    if (controller.signal.aborted) {
-      return;
-    }
-    if (resolved.drift_candidates.length > 0) {
-      this.driftTrajectory.reseed({
-        candidates: resolved.drift_candidates,
-        sessionProgress,
-      });
-    }
-    const prompt = serializeResolvedScene(resolved);
-
-    this.logger.info(
-      {
-        anchorStrength: anchor.strength,
-        anchorUrl: anchor.url,
-        prompt,
-        reason,
-        seed: this.seed,
-        version,
-      },
-      "anchor trigger fire"
-    );
-    this.send({ reason, status: "running", type: "job.status" });
-
-    const requestedAt = Date.now();
-    const { periodicMs } = cadenceFromIntensity(this.scene.intensity);
-    this.send({
-      driftSource,
-      nextKeyframeAt: this.lastKeyframeAt + periodicMs,
-      promptString: prompt,
-      reason,
-      requestedAt,
-      resolvedScene: resolved,
-      type: "generation.requested",
-      version,
-    });
-
-    streamAnchor({
-      imageUrl: anchor.url,
-      logger: this.logger,
-      onError: (err) => {
-        refundOnError(userId, paidCost, this.logger);
-        // Aborts are expected supersessions (newer trigger won) — they don't
-        // count toward the failure streak.
-        if (controller.signal.aborted) {
-          return;
-        }
-        // One-shot deck→live handoff anchor that failed (e.g. a seed URL fal
-        // can't fetch — local dev serves /library from localhost). Don't retry
-        // it: clear it so the next periodic tick generates from text. Doesn't
-        // count toward the user-anchor failure streak.
-        if (this.handoffAnchor) {
-          this.handoffAnchor = false;
-          this.scene = { ...this.scene, imageAnchor: undefined };
-          this.send({ state: this.scene, type: "scene.state" });
-          this.logger.info(
-            { err: err instanceof Error ? err.message : String(err) },
-            "handoff anchor failed — cleared, continuing text-only"
-          );
-          this.send({
-            durationMs: Date.now() - requestedAt,
-            success: false,
-            type: "generation.completed",
-            version,
-          });
-          return;
-        }
-        this.anchorFailureCount += 1;
-        this.logger.error(
-          { anchorFailureCount: this.anchorFailureCount, err },
-          "anchor generation failed"
-        );
-        const message = err instanceof Error ? err.message : String(err);
-        if (this.anchorFailureCount >= Session.ANCHOR_FAILURE_LIMIT) {
-          // Dead fal.storage URL or repeated rejections — auto-clear the
-          // anchor so we stop retrying (and refunding) it on every periodic
-          // tick. The user can re-upload to try again.
-          this.anchorFailureCount = 0;
-          this.scene = { ...this.scene, imageAnchor: undefined };
-          this.send({ state: this.scene, type: "scene.state" });
-          this.send({
-            message:
-              "Image anchor failed repeatedly — cleared it. Re-upload to try again.",
-            status: "error",
-            type: "job.status",
-          });
-        } else {
-          this.send({ message, status: "error", type: "job.status" });
-        }
-        this.send({
-          durationMs: Date.now() - requestedAt,
-          message,
-          success: false,
-          type: "generation.completed",
-          version,
-        });
-      },
-      onFinal: (url) => {
-        if (version !== this.activeVersion) {
-          return;
-        }
-        // success clears the failure streak
-        this.anchorFailureCount = 0;
-        // One-shot deck→live handoff anchor: clear it now that the continuity
-        // frame has landed, so the NEXT trigger uses the cheap text path
-        // instead of re-billing 8 cr on every periodic tick.
-        if (this.handoffAnchor) {
-          this.handoffAnchor = false;
-          this.scene = { ...this.scene, imageAnchor: undefined };
-          this.send({ state: this.scene, type: "scene.state" });
-        }
-        this.lastGeneratedScene = snapshot;
-        const tMs = Date.now() - this.sessionStartAt;
-        const frameId = typeIdGenerator("imageLibrary");
-        this.send({
-          frameId,
-          imageUrl: url,
-          tMs,
-          type: "frame.final",
-          version,
-        });
-        this.send({ status: "idle", type: "job.status" });
-        this.send({
-          durationMs: Date.now() - requestedAt,
-          success: true,
-          type: "generation.completed",
-          version,
-        });
-        // Fire-and-forget persist for the generated frame. Note: the
-        // anchor INPUT image (user upload at fal.storage) is NOT
-        // persisted — only the generated output gets a library row.
-        const persisted = persistFrame({
-          anchorUrl: anchor.url,
-          deck: this.lastDeck ?? "live",
-          falUrl: url,
-          height: 1024,
-          id: frameId,
-          inspectorContext: {
-            audio: {
-              arousal: this.lastArousal,
-              bpm: this.lastBpm,
-              rms: this.lastRms,
-              sectionEnergy: this.lastSectionEnergy,
-              valence: this.lastValence,
-            },
-            driftModifier: drift ?? undefined,
-            nowPlaying: this.scene.nowPlaying,
-            resolvedSummary: {
-              lighting: resolved.lighting,
-              mood: resolved.mood,
-              palette: resolved.color_palette,
-              subjects: resolved.subjects.map((s) => s.description),
-            },
-          },
-          logger: this.logger,
-          model: env.FAL_ANCHOR_MODEL,
-          palette: resolved.color_palette,
-          prompt,
-          seed: this.seed,
-          sessionId: this.liveSessionId,
-          tMs,
-          triggerReason: source,
-          userId,
-          // flux-pro/v1.1-ultra at aspect_ratio: "1:1" returns 1024².
-          width: 1024,
-        });
-        void (async () => {
-          try {
-            const row = await persisted;
-            if (!row) {
-              return;
-            }
-            this.send({ frame: row, type: "library.appended" });
-            // Persist succeeded → append to the auto-recorded set.
-            this.recordFrame(frameId, tMs);
-          } catch (error) {
-            // Fire-and-forget: a persist/send failure here must never become an
-            // unhandled rejection (on a single-replica in-memory server that can
-            // crash Bun and drop every live session). Mirror the streamPreview/
-            // streamAnchor .catch guard above.
-            this.logger.error({ error }, "persistFrame unhandled");
-          }
-        })();
-      },
-      onPreview: (url) => {
-        if (version !== this.activeVersion) {
-          return;
-        }
-        this.send({ imageUrl: url, type: "frame.preview", version });
-      },
-      prompt,
-      seed: this.seed,
-      signal: controller.signal,
-      strength: anchor.strength,
-      // oxlint-disable-next-line promise/prefer-await-to-then, promise/prefer-await-to-callbacks -- REVIEW: fire-and-forget: streamAnchor must stream in the background; awaiting would block triggerAnchor() on the live hot path. streamAnchor's onError/onFinal/onPreview are its callback API contract.
-    }).catch((error) => {
+    // oxlint-disable-next-line promise/prefer-await-to-then, promise/prefer-await-to-callbacks -- REVIEW: fire-and-forget; the trigger() hot path cannot await.
+    queued.catch((error) => {
       if (!controller.signal.aborted) {
-        this.logger.error({ error }, "streamAnchor unhandled");
+        this.logger.error({ error }, "streamPreview unhandled");
       }
     });
   }
+
 }

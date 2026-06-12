@@ -19,7 +19,7 @@ import { cn } from "@/lib/utils";
 // the silent-resolver confusion; this chip answers it on-screen and makes
 // switching deliberate. Rows load lazily on open; switching navigates to the
 // explicit /stage/<code>/screen URL (the address bar tells the truth).
-// Management (rename/create/links) lives in /studio.
+// Management (rename/create/links/QR) lives in /stages.
 
 type StageEntry = Awaited<
   ReturnType<AppRouterClient["control"]["stages"]>
@@ -55,9 +55,11 @@ export const StageChip = ({ current }: { current: OwnStage | null }) => {
         <button
           type="button"
           aria-label="switch stage"
-          className="focus-ring pointer-events-auto flex w-fit items-center gap-1.5 font-mono text-[10px] uppercase tracking-[0.22em] text-[color:var(--stone)] transition-colors hover:text-[color:var(--paper)]"
+          className="focus-ring pointer-events-auto flex w-fit min-w-0 items-center gap-1.5 font-mono text-[10px] uppercase tracking-[0.22em] text-[color:var(--stone)] transition-colors hover:text-[color:var(--paper)]"
         >
-          {current.name} · {current.code}
+          <span className="min-w-0 max-w-[180px] truncate">
+            {current.name} · {current.code}
+          </span>
           <ChevronDown className="size-3 shrink-0" strokeWidth={1.5} />
         </button>
       </PopoverTrigger>
@@ -104,7 +106,7 @@ export const StageChip = ({ current }: { current: OwnStage | null }) => {
           ))}
         </ul>
         <Link
-          href="/studio"
+          href="/stages"
           className="focus-ring mt-1 block border-t border-[color:var(--hairline)]/30 px-2 py-1.5 font-sans text-[10px] uppercase tracking-[0.2em] text-[color:var(--stone)] transition-colors hover:text-[color:var(--paper)]"
         >
           manage stages ↗

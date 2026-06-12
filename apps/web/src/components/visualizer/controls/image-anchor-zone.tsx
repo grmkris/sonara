@@ -1,50 +1,37 @@
 "use client";
 
-import { FRAME_COST_CREDITS } from "@sonara/shared";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import type { SessionSend } from "@/lib/session-actions";
 import { cn } from "@/lib/utils";
 import { useVisualizerStore } from "@/stores/visualizer";
-import {
-  STRENGTH_PRESET_LABELS,
-  STRENGTH_PRESET_VALUES,
-} from "@/stores/visualizer/image-anchor-slice";
-import type { StrengthPreset } from "@/stores/visualizer/image-anchor-slice";
 
 interface ImageAnchorZoneProps {
   send: SessionSend;
 }
 
-const PRESETS: StrengthPreset[] = [
-  "style-only",
-  "style-subject",
-  "lock-subject",
-];
 const MAX_BYTES = 5 * 1024 * 1024;
 const ALLOWED_MIME = new Set(["image/jpeg", "image/png", "image/webp"]);
 
 // Sits beneath the PromptInput textarea. Drag-drop or click to upload; on
-// success the live Session pins the fal URL as `imageAnchor` and the next
-// frame uses flux-pro/v1.1-ultra with image conditioning. Preset picker
-// underneath controls strength; changing it re-sends setImageAnchor.
+// success the live Session takes the fal URL as a one-shot CHAIN SEED — the
+// next keyframe morphs out of the uploaded image (klein/9b/edit), then the
+// live chain continues from there. Costs the same one credit as any frame.
 export const ImageAnchorZone = ({ send }: ImageAnchorZoneProps) => {
+  const scene = useVisualizerStore((s) => s.scene);
   const anchorImageUrl = useVisualizerStore((s) => s.anchorImageUrl);
   const anchorLocalPreview = useVisualizerStore((s) => s.anchorLocalPreview);
-  const strengthPreset = useVisualizerStore((s) => s.strengthPreset);
   const uploadState = useVisualizerStore((s) => s.uploadState);
   const clickwrapAccepted = useVisualizerStore((s) => s.clickwrapAccepted);
   const setAnchorImageUrl = useVisualizerStore((s) => s.setAnchorImageUrl);
   const setAnchorLocalPreview = useVisualizerStore(
     (s) => s.setAnchorLocalPreview
   );
-  const setStrengthPreset = useVisualizerStore((s) => s.setStrengthPreset);
   const acceptClickwrap = useVisualizerStore((s) => s.acceptClickwrap);
   const setUploadState = useVisualizerStore((s) => s.setUploadState);
   const clearAnchor = useVisualizerStore((s) => s.clearAnchor);
-  const setDemoMode = useVisualizerStore((s) => s.setDemoMode);
-  const setDemoDeck = useVisualizerStore((s) => s.setDemoDeck);
+  const setSource = useVisualizerStore((s) => s.setSource);
 
   const [showClickwrap, setShowClickwrap] = useState(false);
   const pendingFileRef = useRef<File | null>(null);
@@ -103,16 +90,11 @@ export const ImageAnchorZone = ({ send }: ImageAnchorZoneProps) => {
         }
         setAnchorImageUrl(data.url);
         setUploadState("idle");
-        // Pinning an anchor goes live — stop the client demo loop so it
-        // doesn't fight the server's anchor frames (the server flips its own
-        // demo off inside setImageAnchor).
-        setDemoMode(false);
-        setDemoDeck(null);
-        send({
-          strength: STRENGTH_PRESET_VALUES[strengthPreset],
-          type: "image.anchor.set",
-          url: data.url,
-        });
+        // Pinning an anchor goes live — flip the source so the playback loop
+        // stands down and doesn't fight the server's anchor frames (the
+        // server flips its own source inside setImageAnchor).
+        setSource({ kind: "live" });
+        send({ type: "image.anchor.set", url: data.url });
       } catch (error) {
         setUploadState("error");
         setAnchorLocalPreview(null);
@@ -122,12 +104,10 @@ export const ImageAnchorZone = ({ send }: ImageAnchorZoneProps) => {
     },
     [
       send,
-      strengthPreset,
       setAnchorImageUrl,
       setAnchorLocalPreview,
       setUploadState,
-      setDemoMode,
-      setDemoDeck,
+      setSource,
     ]
   );
 
@@ -187,21 +167,6 @@ export const ImageAnchorZone = ({ send }: ImageAnchorZoneProps) => {
     send({ type: "image.anchor.clear" });
   }, [clearAnchor, send]);
 
-  const onPresetClick = useCallback(
-    (preset: StrengthPreset) => {
-      setStrengthPreset(preset);
-      const url = anchorImageUrl;
-      if (url) {
-        send({
-          strength: STRENGTH_PRESET_VALUES[preset],
-          type: "image.anchor.set",
-          url,
-        });
-      }
-    },
-    [anchorImageUrl, send, setStrengthPreset]
-  );
-
   const thumbnail = anchorLocalPreview ?? anchorImageUrl;
 
   return (
@@ -211,10 +176,10 @@ export const ImageAnchorZone = ({ send }: ImageAnchorZoneProps) => {
           anchor image
         </span>
         <span
-          className="font-sans text-[9px] uppercase tracking-[0.2em] text-[color:var(--signal)]"
-          title={`Image-anchor frames cost ${FRAME_COST_CREDITS.anchor} credits each (vs ${FRAME_COST_CREDITS.text} for normal frames) — the underlying model is heavier.`}
+          className="font-sans text-[9px] uppercase tracking-[0.2em] text-[color:var(--stone)]"
+          title="The next frame morphs out of this image, then the live chain continues."
         >
-          ~{FRAME_COST_CREDITS.anchor} cr / frame
+          next frame morphs from it
         </span>
       </div>
 
@@ -229,24 +194,15 @@ export const ImageAnchorZone = ({ send }: ImageAnchorZoneProps) => {
               uploadState === "uploading" && "opacity-60 animate-pulse"
             )}
           />
-          <div className="flex flex-col gap-1.5">
-            <div className="flex gap-1.5">
-              {PRESETS.map((p) => (
-                <button
-                  key={p}
-                  type="button"
-                  onClick={() => onPresetClick(p)}
-                  className={cn(
-                    "font-sans text-[10px] uppercase tracking-[0.14em] transition-colors border-b px-1.5 py-0.5",
-                    strengthPreset === p
-                      ? "text-[color:var(--paper)] border-[color:var(--paper)]"
-                      : "text-[color:var(--stone)] border-[color:var(--hairline)]/30 hover:text-[color:var(--paper)] hover:border-[color:var(--paper)]/60"
-                  )}
-                >
-                  {STRENGTH_PRESET_LABELS[p]}
-                </button>
-              ))}
-            </div>
+          <div className="flex min-w-0 flex-col gap-1.5">
+            {/* The image is pinned but nothing will happen yet: generation
+                only fires on a prompt commit (the text is the edit
+                instruction) — say so, in the app's nudge voice. */}
+            {!scene.prompt.trim() && uploadState !== "uploading" && (
+              <span className="font-sans text-[10px] uppercase leading-relaxed tracking-[0.18em] text-[color:var(--signal)]">
+                ▷ add a few words + enter — the frame starts from your image
+              </span>
+            )}
             <button
               type="button"
               onClick={onClear}

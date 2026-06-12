@@ -2,27 +2,15 @@ import type { StateCreator } from "zustand";
 
 import type { VisualizerState } from "./types";
 
-// User-uploaded image-anchor state. Holds the fal-hosted URL (set after
-// upload succeeds), the chosen strength preset, an upload-in-flight flag,
-// and a localStorage-backed clickwrap consent. The actual scene-state
-// mutation goes through the oRPC `setImageAnchor` mutation — this slice
-// is just the UI mirror so the upload zone re-renders correctly.
+// User-uploaded image state — now a one-shot CHAIN SEED: the next generated
+// keyframe morphs out of this image (klein/9b/edit), then the live chain
+// takes over. Holds the fal-hosted URL (set after upload succeeds), an
+// upload-in-flight flag, and a localStorage-backed clickwrap consent. The
+// actual scene-state mutation goes through the oRPC `setImageAnchor`
+// mutation — this slice is just the UI mirror so the upload zone re-renders
+// correctly.
 
 export const ANCHOR_CLICKWRAP_KEY = "viz_anchor_clickwrap";
-
-export type StrengthPreset = "style-only" | "style-subject" | "lock-subject";
-
-export const STRENGTH_PRESET_VALUES: Record<StrengthPreset, number> = {
-  "lock-subject": 0.8,
-  "style-only": 0.3,
-  "style-subject": 0.55,
-};
-
-export const STRENGTH_PRESET_LABELS: Record<StrengthPreset, string> = {
-  "lock-subject": "lock subject",
-  "style-only": "style only",
-  "style-subject": "style + subject",
-};
 
 export type UploadState = "idle" | "uploading" | "error";
 
@@ -32,8 +20,6 @@ export interface ImageAnchorSlice {
   anchorImageUrl: string | null;
   /** Local optimistic thumbnail from URL.createObjectURL during upload. */
   anchorLocalPreview: string | null;
-  /** Active preset. Drives `image_prompt_strength` server-side. */
-  strengthPreset: StrengthPreset;
   /** True after the user has accepted the upload-rights clickwrap. */
   clickwrapAccepted: boolean;
   /** Multipart-upload-in-flight indicator. */
@@ -41,7 +27,6 @@ export interface ImageAnchorSlice {
 
   setAnchorImageUrl: (url: string | null) => void;
   setAnchorLocalPreview: (url: string | null) => void;
-  setStrengthPreset: (preset: StrengthPreset) => void;
   acceptClickwrap: () => void;
   setUploadState: (s: UploadState) => void;
   clearAnchor: () => void;
@@ -70,9 +55,7 @@ export const createImageAnchorSlice: StateCreator<
   clickwrapAccepted: false,
   setAnchorImageUrl: (url) => set({ anchorImageUrl: url }),
   setAnchorLocalPreview: (url) => set({ anchorLocalPreview: url }),
-  setStrengthPreset: (preset) => set({ strengthPreset: preset }),
   setUploadState: (s) => set({ uploadState: s }),
-  strengthPreset: "style-subject",
   uploadState: "idle",
 });
 

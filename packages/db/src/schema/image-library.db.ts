@@ -35,9 +35,8 @@ import { user } from "./auth.db";
 //                           as "generated"; deck key is the user-named
 //                           story id. position carries the authored order.
 //
-// Picker: apps/server/src/generation/library-provider.ts only ever returns
-// source='seed' rows (so generated/story rows don't leak into starter
-// playback). The library router returns the user's own generated/story
+// Seed rows are the starter-playback pool (generated/story rows must not
+// leak into it). The library router returns the user's own generated/story
 // rows for the timeline + gallery.
 export const imageLibrary = pgTable(
   "image_library",

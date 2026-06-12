@@ -87,7 +87,7 @@ const LiveStageConsole = ({ stage }: { stage: StageEntry }) => {
         </span>
         <span className="flex items-center gap-4">
           <Link
-            href="/studio"
+            href="/stages"
             className="focus-ring font-sans text-[10px] uppercase tracking-[0.24em] text-[color:var(--stone)] transition-colors hover:text-[color:var(--paper)]"
           >
             stages
@@ -189,7 +189,7 @@ export default function StageConsolePage() {
           </p>
           <Button asChild variant="ghost" size="sm">
             <Link
-              href="/studio"
+              href="/stages"
               className="font-sans text-[11px] uppercase tracking-[0.24em]"
             >
               your stages

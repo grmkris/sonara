@@ -4,11 +4,14 @@ import { deckLabel } from "@sonara/shared";
 import type { DeckKey, SonaraSceneState } from "@sonara/shared";
 import type { ControlSnapshot } from "@sonara/api/server";
 
+import { useEffect, useState } from "react";
+
+import { LookPopover } from "@/components/stage-console/look-popover";
+import { StageSheet } from "@/components/stage-console/stage-sheet";
 import { StageHostPanel } from "@/components/stage/stage-host-panel";
 import { Button } from "@/components/ui/button";
 import { IntensityDial } from "@/components/visualizer/controls/intensity-dial";
-import { ModelPicker } from "@/components/visualizer/controls/model-picker";
-import { PresetPicker } from "@/components/visualizer/controls/preset-picker";
+import { ResolutionPicker } from "@/components/visualizer/controls/resolution-picker";
 import { PromptInput } from "@/components/visualizer/controls/prompt-input";
 import { SliderRow } from "@/components/visualizer/controls/slider-row";
 import { SourceSwitcher } from "@/components/visualizer/controls/source-switcher";
@@ -30,8 +33,8 @@ import { useVisualizerStore } from "@/stores/visualizer";
 //                               and the left-rail prompt.
 //   SourceSwitcher, intensity,  both — fully transport-agnostic.
 //   feel sliders, host panel
-//   ModelPicker / PresetPicker  attached only — model/resolution are CLIENT-
-//                               authoritative localStorage prefs re-sent on
+//   ResolutionPicker /          attached only — the resolution is a CLIENT-
+//   PresetPicker                authoritative localStorage pref re-sent on
 //                               every WS connect (a remote change would be
 //                               clobbered on the next screen reconnect), and
 //                               the render preset is a client-local shader,
@@ -68,13 +71,13 @@ const Divider = () => (
 
 const StatusPill = ({
   status,
-  demoMode,
+  deckMode,
 }: {
   status: "idle" | "running" | "cancelled" | "error";
-  demoMode: boolean;
+  deckMode: boolean;
 }) => {
   let label: string;
-  if (demoMode) {
+  if (deckMode) {
     label = "deck";
   } else if (status === "running") {
     label = "generating";
@@ -94,7 +97,7 @@ const StatusPill = ({
         tone
       )}
     >
-      {status === "running" && !demoMode ? "● " : ""}
+      {status === "running" && !deckMode ? "● " : ""}
       {label}
     </span>
   );
@@ -104,20 +107,20 @@ const PreviewCard = ({
   lastFrameUrl,
   status,
   prompt,
-  demoMode,
-  demoDeck,
+  deck,
   connected,
 }: {
   lastFrameUrl: string | null;
   status: "idle" | "running" | "cancelled" | "error";
   prompt: string;
-  demoMode: boolean;
-  demoDeck: DeckKey | null;
+  // Deck key when the server's source is a deck — drives the pill + copy.
+  deck: DeckKey | null;
   connected: boolean;
 }) => {
+  const deckMode = deck !== null;
   let placeholderLabel: string;
-  if (demoMode) {
-    placeholderLabel = `${demoDeck ? deckLabel(demoDeck) : "deck"} · on projector`;
+  if (deckMode) {
+    placeholderLabel = `${deckLabel(deck)} · on projector`;
   } else if (connected) {
     placeholderLabel = "no frame yet";
   } else {
@@ -139,7 +142,7 @@ const PreviewCard = ({
           </div>
         )}
         <div className="absolute left-2 top-2 flex items-center gap-1.5">
-          <StatusPill status={status} demoMode={demoMode} />
+          <StatusPill status={status} deckMode={deckMode} />
         </div>
       </div>
       <div className="px-3 py-2">
@@ -147,7 +150,7 @@ const PreviewCard = ({
           on screen
         </span>
         <p className="mt-1 line-clamp-2 font-serif text-[13px] leading-snug text-[color:var(--paper)]/85">
-          {prompt.trim() || (demoMode ? "playing a deck" : "—")}
+          {prompt.trim() || (deckMode ? "playing a deck" : "—")}
         </p>
       </div>
     </div>
@@ -212,6 +215,62 @@ const FeelControls = ({ send }: { send: SessionSend }) => {
   );
 };
 
+const AttachedConsole = ({
+  send,
+  hostTarget,
+  onNewSet,
+  onReset,
+}: {
+  send: SessionSend;
+  hostTarget: ControlTarget | null;
+  onNewSet?: () => void;
+  onReset?: () => void;
+}) => {
+  // ?lab=1 reveals the resolution A/B. Read post-mount from
+  // window.location so the page keeps prerendering (no useSearchParams
+  // Suspense bailout for a dev flag).
+  const [lab, setLab] = useState(false);
+  useEffect(() => {
+    setLab(new URLSearchParams(window.location.search).has("lab"));
+  }, []);
+
+  return (
+    <div className="relative flex flex-col gap-5 rounded-sm border border-[color:var(--hairline)]/25 p-4">
+      {/* Source — the Now-Showing transport: what's on the canvas (live /
+          deck / set replay / idle), with the picker + stop. */}
+      <SourceSwitcher send={send} mode="local" />
+
+      <Divider />
+
+      {/* Energy — the master audio→visual coupling. */}
+      <IntensityDial send={send} />
+
+      {/* Feel — the four scene knobs. */}
+      <FeelControls send={send} />
+
+      <Divider />
+
+      {/* Setup-time surfaces, one tap away. */}
+      <div className="flex flex-wrap items-center gap-2">
+        <LookPopover />
+        <StageSheet target={hostTarget} />
+      </div>
+
+      {/* Lab — A/B the render resolution. Dev instrumentation, hidden
+          behind ?lab=1 (the client-authoritative localStorage pref is
+          untouched by the gate). */}
+      {lab && (
+        <>
+          <Divider />
+          <ResolutionPicker send={send} />
+        </>
+      )}
+
+      <Footer onNewSet={onNewSet} onReset={onReset} />
+    </div>
+  );
+};
+
 export const StageConsole = ({
   send,
   variant,
@@ -230,8 +289,9 @@ export const StageConsole = ({
           }
           status={snapshot?.jobStatus ?? "idle"}
           prompt={snapshot?.scene.prompt ?? ""}
-          demoMode={snapshot?.demoMode ?? false}
-          demoDeck={snapshot?.demoDeck ?? null}
+          deck={
+            snapshot?.source.kind === "deck" ? snapshot.source.deck : null
+          }
           connected={connected}
         />
 
@@ -251,39 +311,10 @@ export const StageConsole = ({
     );
   }
 
-  return (
-    <div className="relative flex flex-col gap-5 rounded-sm border border-[color:var(--hairline)]/25 p-4">
-      {/* Source — the Now-Showing transport: what's on the canvas (live /
-          deck / set replay / idle), with the picker + stop. */}
-      <SourceSwitcher send={send} mode="local" />
-
-      <Divider />
-
-      {/* Energy — the master audio→visual coupling. */}
-      <IntensityDial send={send} />
-
-      <Divider />
-
-      {/* Engine — A/B the fal model + render resolution. Client-authoritative,
-          so screen-only (see capability split above). */}
-      <ModelPicker send={send} />
-
-      <Divider />
-
-      {/* Treatment — render preset (client-local shader) + image feel. */}
-      <div className="panel-reveal flex flex-col gap-5">
-        <PresetPicker />
-        <FeelControls send={send} />
-      </div>
-
-      {hostTarget !== null && (
-        <>
-          <Divider />
-          <StageHostPanel target={hostTarget} />
-        </>
-      )}
-
-      <Footer onNewSet={onNewSet} onReset={onReset} />
-    </div>
-  );
+  // The attached console is the INSTRUMENT: transport + intensity + feel,
+  // and nothing else resident. Setup-time surfaces live one tap away —
+  // presets in the look popover, the crowd stage in a sheet — and the
+  // resolution A/B (dev instrumentation) only appears with ?lab=1.
+  return <AttachedConsole {...{ hostTarget, onNewSet, onReset, send }} />;
 };
+

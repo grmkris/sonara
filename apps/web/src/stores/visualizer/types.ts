@@ -1,12 +1,11 @@
-import type { DemoSlice } from "./demo-slice";
 import type { ImageAnchorSlice } from "./image-anchor-slice";
 import type { InspectorSlice } from "./inspector-slice";
 import type { LibrarySlice } from "./library-slice";
 import type { ModelSlice } from "./model-slice";
 import type { PlaybackSlice } from "./playback-slice";
 import type { PresetSlice } from "./preset-slice";
-import type { SetPlaybackSlice } from "./set-playback-slice";
 import type { SceneSlice } from "./scene-slice";
+import type { SourceSlice } from "./source-slice";
 import type { StageSlice } from "./stage-slice";
 import type { UiSlice } from "./ui-slice";
 import type { VoiceSlice } from "./voice-slice";
@@ -20,9 +19,8 @@ export type VisualizerState = SceneSlice &
   InspectorSlice &
   VoiceSlice &
   PresetSlice &
-  DemoSlice &
+  SourceSlice &
   ImageAnchorSlice &
   LibrarySlice &
   ModelSlice &
-  SetPlaybackSlice &
   StageSlice;

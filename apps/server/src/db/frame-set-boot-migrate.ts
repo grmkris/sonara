@@ -1,4 +1,4 @@
-import { DECKS, isDeckUnlisted } from "@sonara/shared";
+import { DECKS, DECK_LOOK, isDeckUnlisted } from "@sonara/shared";
 import { typeIdToUuid } from "@sonara/shared/typeid";
 import type { LiveSessionId } from "@sonara/shared/typeid";
 
@@ -49,6 +49,31 @@ export const migrateFrameSetsOnBoot = async (
       `UPDATE frame_set SET visibility = $2
        WHERE origin = 'builtin' AND deck_key = $1 AND visibility <> $2`,
       [deck.key, visibility]
+    );
+    // Re-converge the baked look from DECK_LOOK + the style drift from
+    // DECKS[].style — shared code stays the source of truth for builtins.
+    // Decks WITHOUT a DECK_LOOK entry keep null look columns (= app
+    // defaults at pick time), so defaults are never frozen into rows.
+    const look = DECK_LOOK[deck.key] ?? null;
+    await pool.query(
+      `UPDATE frame_set SET
+         look_preset = $2, look_intensity = $3,
+         look_cadence_calm_ms = $4, look_cadence_loud_ms = $5,
+         style_drift = $6
+       WHERE origin = 'builtin' AND deck_key = $1
+         AND (look_preset IS DISTINCT FROM $2
+           OR look_intensity IS DISTINCT FROM $3
+           OR look_cadence_calm_ms IS DISTINCT FROM $4
+           OR look_cadence_loud_ms IS DISTINCT FROM $5
+           OR style_drift IS DISTINCT FROM $6)`,
+      [
+        deck.key,
+        look?.preset ?? null,
+        look?.intensity ?? null,
+        look?.cadence.calm ?? null,
+        look?.cadence.loud ?? null,
+        deck.style,
+      ]
     );
     await pool.query(
       `INSERT INTO frame_set_frame (id, set_id, frame_id, position, t_ms)

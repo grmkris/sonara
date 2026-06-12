@@ -7,6 +7,9 @@ import type { SessionRegistry } from "./session-registry";
 // minimal so the api package stays framework-agnostic.
 export interface ApiSession {
   user: {
+    // Drives email-allowlist checks (e.g. unlisted-deck operators). Optional
+    // so the contract stays framework-agnostic.
+    email?: string;
     id: UserId;
   };
 }

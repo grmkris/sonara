@@ -12,6 +12,7 @@ import {
   index,
   integer,
   pgTable,
+  real,
   text,
   uniqueIndex,
 } from "drizzle-orm/pg-core";
@@ -61,6 +62,16 @@ export const frameSet = pgTable(
     // Recordings only: the live session that produced (or is producing) this
     // set. Matches image_library.session_id (a typeid string, not a FK).
     liveSessionId: text("live_session_id").$type<LiveSessionId>(),
+    // The set's optional baked "look" — render preset + audio-reactivity
+    // intensity + frame cadence applied as a unit when the set is picked
+    // (generalizes the deck-only DECK_LOOK). All null = no authored look;
+    // the client keeps its current preset and app-default cadence. Builtin
+    // sets re-converge these from DECK_LOOK on every boot; user sets edit
+    // them via sets.setLook.
+    lookCadenceCalmMs: integer("look_cadence_calm_ms"),
+    lookCadenceLoudMs: integer("look_cadence_loud_ms"),
+    lookIntensity: real("look_intensity"),
+    lookPreset: text("look_preset"),
     name: text("name").notNull(),
     origin: text("origin", {
       enum: ["builtin", "recording", "curated"],
@@ -76,6 +87,10 @@ export const frameSet = pgTable(
     status: text("status", { enum: ["recording", "final"] })
       .notNull()
       .default("final"),
+    // Prompt-drift modifier carried into live generation after leaving this
+    // set (the deckStyle successor). Builtin sets converge it from
+    // DECKS[].style.
+    styleDrift: text("style_drift"),
     // Null = system-owned (builtin sets).
     userId: typeId("user", "user_id")
       .references(() => user.id, { onDelete: "cascade" })

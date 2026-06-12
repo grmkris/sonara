@@ -5,7 +5,7 @@ import type { StageId, UserId } from "@sonara/shared/typeid";
 
 import { getOwnedStage } from "../stage/stage-service";
 
-// Stage-keyed twin of resolveOwnedSession: DB ownership first (the stage row
+// Stage-keyed ownership resolve: DB ownership first (the stage row
 // must exist and be the caller's — FORBIDDEN otherwise), then liveness (a run
 // must currently be in the registry — NOT_FOUND with honest copy otherwise).
 // Ownership precedes liveness so probing someone else's stage id never leaks

@@ -19,7 +19,7 @@ import { makeServerCtx } from "@sonara/test-utils/orpc";
 import { getTestDb } from "@sonara/test-utils/test-db";
 import type { TestDb } from "@sonara/test-utils/test-db";
 
-import { stageRooms } from "../onchain/stage-rooms";
+import { stageRooms } from "../stage/stage-rooms";
 import type { ServerHttpContext } from "./procedures";
 import { setsRouter } from "./sets.router";
 
@@ -49,19 +49,19 @@ const registry: SessionRegistry = {
 // lens only reads userId + getControlSnapshot().
 const makeFakeSession = (opts: {
   liveSessionId: LiveSessionId;
+  stageId?: string | null;
   userId: string | null;
 }): ControllableSession => {
   const snapshot: ControlSnapshot = {
     currentFrameUrl: "https://signed.test/current.webp",
     currentSource: { kind: "live", label: "neon koi" },
-    demoDeck: null,
-    demoMode: false,
     imageAnchor: null,
     jobStatus: "running",
     lastFrameUrl: "https://signed.test/last.webp",
     liveSessionId: opts.liveSessionId,
     nowPlaying: null,
     scene: { ...defaultScene, prompt: "neon koi" },
+    source: { kind: "live" },
     startedAt: Date.now(),
   };
   return {
@@ -74,9 +74,9 @@ const makeFakeSession = (opts: {
     reset: () => {},
     setCurrentFrame: () => {},
     setCurrentSource: () => {},
-    setDemoMode: () => {},
     setImageAnchor: () => {},
-    stageId: null,
+    setSource: () => {},
+    stageId: opts.stageId ?? null,
     startNewRun: () => opts.liveSessionId,
     userId: opts.userId,
   };
@@ -95,12 +95,16 @@ let anon: ControlClient;
 
 // Register a fake live session owned by `userId` (raw-UUID converted, the way
 // the WS ticket stores it on the real Session) and return its lse id.
-const goLiveAs = (userId: UserId | null): LiveSessionId => {
+const goLiveAs = (
+  userId: UserId | null,
+  stageId: string | null = null
+): LiveSessionId => {
   const liveSessionId = typeIdGenerator("liveSession") as LiveSessionId;
   sessions.set(
     liveSessionId,
     makeFakeSession({
       liveSessionId,
+      stageId,
       userId: userId ? typeIdToUuid(userId).uuid : null,
     })
   );
@@ -162,18 +166,20 @@ describe("live tense (registry hit)", () => {
   });
 
   test("open stage rides along; closed stage comes back null", async () => {
-    const liveSessionId = goLiveAs(userA);
+    const stageId = typeIdGenerator("stage");
+    const liveSessionId = goLiveAs(userA, stageId);
     const setId = await insertSet(db, {
       liveSessionId,
       origin: "recording",
       userId: userA,
     });
 
-    const room = stageRooms.open(liveSessionId, true);
+    const room = "QQQX2";
+    stageRooms.openForStage(room, stageId, true);
     try {
       const open = await anon.lens({ id: setId });
       expect(open).toMatchObject({
-        stage: { allowPrompts: true, open: true, room, txCount: 0 },
+        stage: { allowPrompts: true, open: true, room, tapCount: 0 },
         tense: "live",
       });
     } finally {

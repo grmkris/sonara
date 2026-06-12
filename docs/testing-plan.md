@@ -1,5 +1,11 @@
 # Sonara — Testing Plan
 
+> **Note (2026-06):** section **L7 (Stage/onchain)** describes the deleted
+> Monad/Pimlico on-chain stage. The crowd stage is now plain HTTP RPCs
+> (`stage.tap` / `stage.setKnob` / `stage.submitPrompt` in
+> `apps/server/src/stage/`), owner-paid and token-bucket throttled — test
+> those flows instead. L0–L6 remain valid.
+
 > Drafted 2026-06-09 from a full entrypoint/page/flow map (web + server + e2e journeys).
 > Two parts: **A. Manual QA script** (run now on dev) and **B. Automated test backlog**
 > (prioritized). Covers all flows incl. stage/onchain.

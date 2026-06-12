@@ -3,23 +3,19 @@ import { createFalClient } from "@fal-ai/client";
 import { env } from "../env";
 import type { Logger } from "../lib/logger";
 
-// Text-mode generation pipeline. Every text-mode keyframe goes through
-// klein/9b text-to-image at a fixed 768² resolution. We don't use the
-// `/edit` endpoint because (a) it bills 1 MP in + 1 MP out per frame
-// (~3.7× pricier), and (b) reference-image identity-lock fights against
-// prompt changes — when the user pivots subject mid-session we want the
-// next frame to pivot too, not blend with the previous hero. Visual
-// continuity comes from the client-side displacement shader + 60 fps
-// feedback loop, not from server-side identity lock.
-//
-// A low-weight `image_prompt` reference is a SEPARATE code path in
-// `anchor-provider.ts` — it engages only when the user explicitly uploads
-// an image. The "no reference image" invariant above is specifically about
-// `/edit`; the Redux-style image-prompt conditioning is a different fal
-// surface with different cost trade-offs and explicit opt-in.
+// Queue-transport generation pipeline (klein/9b family). Two modes through
+// ONE function:
+//   t2i      no imageUrl — a fresh keyframe from the prompt + session seed.
+//   chained  imageUrl set — the keyframe conditions on the previous frame
+//            via the model's `/edit` endpoint (caller passes editFalId as
+//            `model`), so consecutive frames genuinely evolve rather than
+//            merely rhyme through the seed. Chain pacing and fresh-frame
+//            ("I-frame") cadence live in the session (stability knob);
+//            chained frames bill ~3.7× t2i at fal but still cost the same
+//            one credit.
 
 // Shared callback/lifecycle surface for both text-mode transports (this queue
-// path and the realtime-provider websocket path). A frame stream takes a
+// path). A frame stream takes a
 // cancel signal + logger and reports through three callbacks: onPreview (an
 // intermediate frame), onFinal (the settled frame), onError (failed OR
 // superseded — the session refunds the credit either way and uses the signal
@@ -36,9 +32,13 @@ export interface StreamPreviewInput extends FrameStreamCallbacks {
   prompt: string;
   seed?: number;
   // fal endpoint id. Defaults to env.FAL_TEXT_MODEL when omitted (klein/9b).
+  // For chained frames the caller passes the model's editFalId instead.
   model?: string;
   // Square render size. Defaults to 768² when omitted.
   size?: { width: number; height: number };
+  // Chain conditioning: the previous on-screen frame. When set, the payload
+  // carries image_urls=[imageUrl] (the /edit endpoint's plural input).
+  imageUrl?: string;
 }
 
 type FalClient = ReturnType<typeof createFalClient>;
@@ -92,6 +92,9 @@ export const streamPreview = async (
   };
   if (typeof input.seed === "number") {
     payload.seed = input.seed;
+  }
+  if (input.imageUrl) {
+    payload.image_urls = [input.imageUrl];
   }
 
   input.logger.info({ model }, "fal subscribe start");

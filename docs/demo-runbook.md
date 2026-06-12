@@ -1,5 +1,11 @@
 # Monad hackathon — demo runbook
 
+> **ARCHIVED (2026-06).** This runbook describes the Monad-hackathon stack —
+> Pimlico smart accounts, USDC tips, on-chain taps — which was deleted in the
+> de-chaining pass. The crowd stage now runs on plain owner-paid RPCs
+> (`apps/server/src/stage/`); see AGENTS.md for the current architecture.
+> Kept as a historical record of the hackathon demo.
+
 The pitch in one line: **a live AI visual stage the whole room drives through
 Monad transactions — every tap is a real on-chain tx, gasless, visible on the
 wire within a second.**

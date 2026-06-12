@@ -16,7 +16,7 @@ interface StudioActionConsumerProps {
 // refresh doesn't repeat the action.
 //
 // Handled params:
-//   ?anchor=<url>&strength=<0..1>  → image.anchor.set
+//   ?anchor=<url>                  → image.anchor.set (one-shot chain seed)
 //   ?prompt=<text>                  → session.goLive (transitions out of
 //                                     deck/demo mode + fires a trigger)
 //
@@ -32,7 +32,6 @@ export const StudioActionConsumer = ({ send }: StudioActionConsumerProps) => {
   // make ourselves below.
   const snapshotRef = useRef<{
     anchor: string | null;
-    strength: string | null;
     prompt: string | null;
   } | null>(null);
 
@@ -40,7 +39,6 @@ export const StudioActionConsumer = ({ send }: StudioActionConsumerProps) => {
     snapshotRef.current = {
       anchor: params.get("anchor"),
       prompt: params.get("prompt"),
-      strength: params.get("strength"),
     };
   }
 
@@ -52,16 +50,14 @@ export const StudioActionConsumer = ({ send }: StudioActionConsumerProps) => {
     if (!snap) {
       return;
     }
-    const { anchor, strength, prompt } = snap;
+    const { anchor, prompt } = snap;
     if (!anchor && !prompt) {
       return;
     }
 
     // Anchor first — independent of prompt; both can be set at once.
     if (anchor) {
-      const strengthNum = strength ? Number(strength) : 0.55;
       send({
-        strength: Number.isFinite(strengthNum) ? strengthNum : 0.55,
         type: "image.anchor.set",
         url: anchor,
       });

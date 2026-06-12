@@ -1,5 +1,9 @@
 # Simplify "Demo mode" → reusable Starter Decks
 
+> **Status: largely superseded (2026-06).** Decks/sets were unified (one
+> source state machine, `docs/sets-architecture.md`); demoMode no longer
+> exists as a concept. Kept for the deck-curation ideas.
+
 > Status: **idea / future**. Captured for later — brainstorm the exact UX separately.
 > No code yet.
 

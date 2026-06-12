@@ -1,6 +1,5 @@
 "use client";
 
-import type { LiveSessionId } from "@sonara/shared/typeid";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
@@ -8,12 +7,9 @@ import type { AppRouterClient } from "server/rpc";
 
 import { AppNavLinks } from "@/components/app-nav";
 import { Mark } from "@/components/brand/mark";
-import { StageConsole } from "@/components/stage-console/stage-console";
-import { useRemoteSession } from "@/hooks/use-remote-session";
 import { Button } from "@/components/ui/button";
 import { useSession } from "@/lib/auth-client";
 import { rpcClient } from "@/lib/orpc";
-import { cn } from "@/lib/utils";
 
 // /s/[id]/control — THE console for THIS set. The set id is the spine with
 // two facets: /set/<id> is the public face (viewer/projector), this page is the
@@ -46,24 +42,6 @@ const Shell = ({
       {children}
     </div>
   </main>
-);
-
-const ConnectedPill = ({ connected }: { connected: boolean }) => (
-  <span
-    className={cn(
-      "flex items-center gap-1.5 font-mono text-[9px] uppercase tracking-[0.22em]",
-      connected ? "text-[color:var(--paper)]/70" : "text-[color:var(--stone)]"
-    )}
-  >
-    <span
-      aria-hidden
-      className={cn(
-        "size-1.5 rounded-full",
-        connected ? "bg-[color:var(--signal)]" : "bg-[color:var(--stone)]/60"
-      )}
-    />
-    {connected ? "linked" : "reconnecting…"}
-  </span>
 );
 
 const Notice = ({
@@ -105,42 +83,6 @@ const ConsoleRedirect = ({ code }: { code: string }) => {
     router.replace(`/stage/${code}/console`);
   }, [router, code]);
   return <Shell>{null}</Shell>;
-};
-
-// The page owns the remote binding (1s snapshot poll over the control
-// router); StageConsole is a pure presenter mounted `detached`.
-const LiveConsole = ({
-  id,
-  liveSessionId,
-  name,
-}: {
-  id: string;
-  liveSessionId: LiveSessionId;
-  name: string;
-}) => {
-  const { send, snapshot, connected } = useRemoteSession({ liveSessionId });
-  return (
-    <Shell pill={<ConnectedPill connected={connected} />}>
-      <div className="-mt-2 flex items-center justify-between">
-        <span className="font-sans text-[10px] uppercase tracking-[0.24em] text-[color:var(--stone)]">
-          {name}
-        </span>
-        <Link
-          href={`/set/${id}`}
-          className="focus-ring font-sans text-[10px] uppercase tracking-[0.24em] text-[color:var(--stone)] transition-colors hover:text-[color:var(--paper)]"
-        >
-          public page ↗
-        </Link>
-      </div>
-      <StageConsole
-        variant="detached"
-        send={send}
-        snapshot={snapshot}
-        connected={connected}
-        hostTarget={{ liveSessionId }}
-      />
-    </Shell>
-  );
 };
 
 export default function SetConsolePage() {
@@ -237,12 +179,13 @@ export default function SetConsolePage() {
     return <ConsoleRedirect code={lens.live.stageCode} />;
   }
 
-  // Legacy fallback (run not stage-keyed yet — pre-stages client).
+  // A live run without a stage code can't be remote-controlled (authed
+  // screens always stage-key their runs, so this is a stale-client edge).
   return (
-    <LiveConsole
-      id={id}
-      liveSessionId={lens.live.liveSessionId as LiveSessionId}
-      name={lens.set?.name ?? "live session"}
-    />
+    <Shell>
+      <Notice setId={id}>
+        this run has no stage — reopen the show from a current /play tab.
+      </Notice>
+    </Shell>
   );
 }
