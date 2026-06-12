@@ -57,14 +57,9 @@ export const startStageActions = (opts: {
     if (!binding) {
       return null;
     }
-    // Stage-keyed bindings survive "new set" run swaps (the stage is the
-    // durable target); legacy bindings still resolve by run id.
-    let session: ControllableSession | undefined;
-    if (binding.stageId) {
-      session = registry.getByStageId(binding.stageId);
-    } else if (binding.liveSessionId) {
-      session = registry.getByLiveSessionId(binding.liveSessionId);
-    }
+    // Stage-keyed bindings survive "new set" run swaps — the stage is the
+    // durable target.
+    const session = registry.getByStageId(binding.stageId);
     if (!session) {
       return null;
     }

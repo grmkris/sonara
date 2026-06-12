@@ -325,7 +325,7 @@ export class Session implements ControllableSession {
     // room code (stage bindings outlive WS connections).
     const stage = this.stageId
       ? stageRooms.statusForStage(this.stageId)
-      : stageRooms.statusFor(this.liveSessionId);
+      : null;
     if (stage) {
       this.notifyStage(stage.room, stage.allowPrompts, stage.showQr);
     }

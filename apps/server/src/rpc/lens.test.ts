@@ -49,6 +49,7 @@ const registry: SessionRegistry = {
 // lens only reads userId + getControlSnapshot().
 const makeFakeSession = (opts: {
   liveSessionId: LiveSessionId;
+  stageId?: string | null;
   userId: string | null;
 }): ControllableSession => {
   const snapshot: ControlSnapshot = {
@@ -75,7 +76,7 @@ const makeFakeSession = (opts: {
     setCurrentSource: () => {},
     setImageAnchor: () => {},
     setSource: () => {},
-    stageId: null,
+    stageId: opts.stageId ?? null,
     startNewRun: () => opts.liveSessionId,
     userId: opts.userId,
   };
@@ -94,12 +95,16 @@ let anon: ControlClient;
 
 // Register a fake live session owned by `userId` (raw-UUID converted, the way
 // the WS ticket stores it on the real Session) and return its lse id.
-const goLiveAs = (userId: UserId | null): LiveSessionId => {
+const goLiveAs = (
+  userId: UserId | null,
+  stageId: string | null = null
+): LiveSessionId => {
   const liveSessionId = typeIdGenerator("liveSession") as LiveSessionId;
   sessions.set(
     liveSessionId,
     makeFakeSession({
       liveSessionId,
+      stageId,
       userId: userId ? typeIdToUuid(userId).uuid : null,
     })
   );
@@ -161,14 +166,16 @@ describe("live tense (registry hit)", () => {
   });
 
   test("open stage rides along; closed stage comes back null", async () => {
-    const liveSessionId = goLiveAs(userA);
+    const stageId = typeIdGenerator("stage");
+    const liveSessionId = goLiveAs(userA, stageId);
     const setId = await insertSet(db, {
       liveSessionId,
       origin: "recording",
       userId: userA,
     });
 
-    const room = stageRooms.open(liveSessionId, true);
+    const room = "QQQX2";
+    stageRooms.openForStage(room, stageId, true);
     try {
       const open = await anon.lens({ id: setId });
       expect(open).toMatchObject({

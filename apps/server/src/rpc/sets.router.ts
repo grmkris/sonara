@@ -635,7 +635,7 @@ export const setsRouter = {
           callerId !== null && session.userId === typeIdToUuid(callerId).uuid;
         const room = session.stageId
           ? stageRooms.roomForStage(session.stageId)
-          : stageRooms.roomFor(liveSessionId as string);
+          : undefined;
         const binding = room ? stageRooms.resolve(room) : undefined;
         const stageCode = await durableStageCode(context.db, session.stageId);
         return {
