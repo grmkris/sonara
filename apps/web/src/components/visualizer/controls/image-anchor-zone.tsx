@@ -19,6 +19,7 @@ const ALLOWED_MIME = new Set(["image/jpeg", "image/png", "image/webp"]);
 // next keyframe morphs out of the uploaded image (klein/9b/edit), then the
 // live chain continues from there. Costs the same one credit as any frame.
 export const ImageAnchorZone = ({ send }: ImageAnchorZoneProps) => {
+  const scene = useVisualizerStore((s) => s.scene);
   const anchorImageUrl = useVisualizerStore((s) => s.anchorImageUrl);
   const anchorLocalPreview = useVisualizerStore((s) => s.anchorLocalPreview);
   const uploadState = useVisualizerStore((s) => s.uploadState);
@@ -193,7 +194,15 @@ export const ImageAnchorZone = ({ send }: ImageAnchorZoneProps) => {
               uploadState === "uploading" && "opacity-60 animate-pulse"
             )}
           />
-          <div className="flex flex-col gap-1.5">
+          <div className="flex min-w-0 flex-col gap-1.5">
+            {/* The image is pinned but nothing will happen yet: generation
+                only fires on a prompt commit (the text is the edit
+                instruction) — say so, in the app's nudge voice. */}
+            {!scene.prompt.trim() && uploadState !== "uploading" && (
+              <span className="font-sans text-[10px] uppercase leading-relaxed tracking-[0.18em] text-[color:var(--signal)]">
+                ▷ add a few words + enter — the frame starts from your image
+              </span>
+            )}
             <button
               type="button"
               onClick={onClear}

@@ -100,9 +100,61 @@ const ComposerMic = ({
   );
 };
 
+// The fate of YOUR prompt, printed under the send button: queued (with
+// position) → on the wall. Derived entirely from the live feed — the cue is
+// the persistent answer to "did it work?", so no success toast is needed.
+// Distinct keys remount the line on each transition, replaying the
+// wire-print animation so the state change lands.
+const PromptFateCue = ({
+  who,
+  queuedPosition,
+  onWall,
+}: {
+  who: string;
+  queuedPosition: number | null;
+  onWall: boolean;
+}) => {
+  if (onWall) {
+    return (
+      <p
+        className="wire-print flex items-center gap-1.5 font-mono text-[9px] uppercase tracking-[0.22em] text-[color:var(--signal)]"
+        key="on-wall"
+      >
+        <span
+          aria-hidden
+          className="size-1.5 animate-pulse rounded-full bg-[color:var(--signal)]"
+        />
+        yours is on the wall
+      </p>
+    );
+  }
+  if (queuedPosition !== null) {
+    return (
+      <p
+        className="wire-print flex items-center gap-1.5 font-mono text-[9px] uppercase tracking-[0.22em] text-[color:var(--signal)]"
+        key={`queued-${queuedPosition}`}
+      >
+        <HandleGlyph className="shrink-0" size={10} who={who} />
+        yours is in — #{queuedPosition} in line
+      </p>
+    );
+  }
+  return null;
+};
+
 // The composer: free to use; one queued prompt per handle (a re-submit
 // replaces yours). The parent owns the actual RPC fire.
-const PromptComposer = ({ onSend }: { onSend: (text: string) => void }) => {
+const PromptComposer = ({
+  onSend,
+  who,
+  queuedPosition,
+  onWall,
+}: {
+  onSend: (text: string) => void;
+  who: string;
+  queuedPosition: number | null;
+  onWall: boolean;
+}) => {
   const [prompt, setPrompt] = useState("");
 
   // Voice dictation: the live transcript streams straight into `prompt`
@@ -180,6 +232,11 @@ const PromptComposer = ({ onSend }: { onSend: (text: string) => void }) => {
           put it on screen →
         </span>
       </button>
+      <PromptFateCue
+        who={who}
+        queuedPosition={queuedPosition}
+        onWall={onWall}
+      />
     </section>
   );
 };
@@ -249,13 +306,19 @@ export default function StagePage() {
         room,
         text,
       });
-      if (queued) {
-        toast.success("prompt queued");
-      } else {
+      // Success needs no toast — the composer's fate cue ("yours is in —
+      // #N in line") is the persistent answer; only the duplicate case
+      // still warrants a transient note.
+      if (!queued) {
         toast("that one's already in the queue");
       }
     });
   };
+
+  // YOUR prompt's place in the feed, for the composer's fate cue.
+  const queueIndex = feed.queue.upNext.findIndex((p) => p.who === handle);
+  const queuedPosition = queueIndex === -1 ? null : queueIndex + 1;
+  const onWall = feed.queue.nowPlaying?.who === handle;
 
   const tapCount = Math.max(localTaps, feed.tapCount);
 
@@ -326,7 +389,14 @@ export default function StagePage() {
 
       {/* Prompt FIRST — it's the headline act. The knobs live below so they
           can't steal focus. */}
-      {feed.allowPrompts && <PromptComposer onSend={sendPrompt} />}
+      {feed.allowPrompts && (
+        <PromptComposer
+          onSend={sendPrompt}
+          who={handle}
+          queuedPosition={queuedPosition}
+          onWall={onWall}
+        />
+      )}
 
       {/* Intensity — "how much image is generated". */}
       <section className="flex flex-col gap-2">
