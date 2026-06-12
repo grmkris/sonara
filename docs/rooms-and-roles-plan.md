@@ -4,9 +4,10 @@
 > (migration 0007), server-owned runs with the grace window + takeover, the
 > face routes (/stage/<code>/{screen,console} with /play + /control as
 > aliases), one StageConsole, "new set" segmentation, studio→stage activation,
-> permanent crowd codes, and the minimal stage manager are all live. Remaining:
-> the post-verification legacy cleanup (lse-keyed router arms, conn: keying),
-> then Phase 2 (Redis StageStore) onward.
+> permanent crowd codes, and the minimal stage manager are all live. The
+> post-verification legacy cleanup LANDED 2026-06-12 (lse-keyed router arms,
+> per-run stage rooms, liveSessions() all deleted — control addressing is
+> stage-keyed only). Remaining: Phase 2 (Redis StageStore) onward.
 >
 > Rev 1's transport and Redis decisions are **unchanged** (restated under
 > _Locked decisions_).

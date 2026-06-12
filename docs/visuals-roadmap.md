@@ -1,5 +1,9 @@
 # Sonara visuals roadmap — research-grounded improvement plan
 
+> **Status: historical roadmap (pre-chaining).** Generation now chains every
+> keyframe via klein/9b/edit (see the frame-chaining work, 2026-06-11); ultra/
+> anchor-tier mentions below predate that and are no longer accurate.
+
 Derived from a deep field study of the audiovisual-performance / VJ / realtime-AI-visuals
 industry, cross-referenced against sonara's actual code. This file is the plan of record
 for improving the visual engine. Items are grouped by horizon and tagged with current

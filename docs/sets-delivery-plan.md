@@ -1,5 +1,9 @@
 # Sets refactor — delivery ledger
 
+> **Status: DELIVERED (2026-06-11, U1–U7 + U8 cleanup).** Historical delivery
+> record — the demoMode shims this plan kept "one release" were deleted in the
+> post-show cleanup pass.
+
 > Plan-of-record for delivering `docs/sets-architecture.md` to `dev`.
 > **Parallel agents: check the file-claims table before editing these files.**
 > Protocol: claim WP here → edit → `bun run ci:local` → commit (explicit paths)

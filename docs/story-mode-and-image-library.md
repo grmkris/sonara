@@ -1,5 +1,9 @@
 # Story Mode + Session Image Library
 
+> **Note (2026-06):** anchor/ultra mentions below predate frame chaining —
+> the 8-credit flux-pro anchor tier is deleted; image uploads are now 1-credit
+> one-shot chain seeds (klein/9b/edit).
+
 > Status: **idea / future**. Captured for later. No code yet. Two related features:
 > (1) generate a small *set* of related keyframes per subject and play them as a "story";
 > (2) persist every image generated in a play session so users can reuse them.

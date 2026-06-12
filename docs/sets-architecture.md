@@ -1,5 +1,9 @@
 # Sets — the unified architecture (foundation spec)
 
+> **Status: SHIPPED through P5 + U8 (2026-06).** The demoMode/demoDeck shims
+> described as "one-release tolerance" below are now fully deleted; `source`
+> is the only vocabulary on the wire.
+
 > Outcome of the 2026-06-09 architecture round. Supersedes the "session id / reel /
 > deck" three-concept model. Status: **shipped through P5 (2026-06-11, U1–U7)** —
 > one source state (`Session.source` / the client source slice), one playback loop
