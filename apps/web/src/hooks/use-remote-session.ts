@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { AppRouterClient } from "server/rpc";
+import { toast } from "sonner";
 
 import { dispatchControlAction } from "@/lib/control-actions";
 import type { ControlTarget } from "@/lib/control-actions";
@@ -97,24 +98,22 @@ export const useRemoteSession = (
         const next = snap.source;
         const sameSource =
           cur.kind === next.kind &&
-          (next.kind !== "deck" ||
-            (cur.kind === "deck" && cur.deck === next.deck)) &&
           (next.kind !== "set" ||
-            (cur.kind === "set" && cur.setId === next.setId));
+            (cur.kind === "set" &&
+              cur.setId === next.setId &&
+              cur.deckKey === next.deckKey));
         if (!sameSource) {
           if (next.kind === "set") {
             // Display-only mapping for the console (it never mounts the
-            // playback loop): origin/look aren't in the snapshot.
+            // playback loop): look isn't in the snapshot.
             s.setSource({
-              deckKey: null,
+              deckKey: next.deckKey,
               kind: "set",
               look: null,
               name: next.label,
-              origin: "curated",
+              origin: next.deckKey ? "builtin" : "curated",
               setId: next.setId,
             });
-          } else if (next.kind === "deck") {
-            s.setSource({ deck: next.deck, kind: "deck" });
           } else {
             s.setSource({ kind: next.kind });
           }
@@ -162,7 +161,10 @@ export const useRemoteSession = (
     }
     // oxlint-disable-next-line prefer-await-to-then, prefer-await-to-callbacks -- REVIEW: send is a synchronous fire-and-forget SessionSend; awaiting here would change its contract
     dispatchControlAction(rpcClient, boundTarget, action).catch((error) => {
+      // Surface it — a silently dropped control action reads as "the app
+      // ignored me" (and once hid a never-sent source switch entirely).
       console.warn("[control] dispatch failed", error);
+      toast.error("the stage didn't get that — try again");
     });
   }, []);
 

@@ -1,12 +1,7 @@
 "use client";
 
-import {
-  DECKS,
-  canSeeUnlistedDecks,
-  deckLabel,
-  isDeckUnlisted,
-} from "@sonara/shared";
-import type { FrameSetSummary } from "@sonara/shared";
+import { DECK_LOOK, DECKS, canSeeUnlistedDecks, isDeckUnlisted } from "@sonara/shared";
+import type { DeckKey, FrameSetSummary } from "@sonara/shared";
 import { ChevronDown } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -16,8 +11,10 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import { usePickDeck } from "@/components/visualizer/controls/deck-picker";
-import { startSetReplayById } from "@/lib/apply-source";
+import {
+  applyBuiltinSetLocally,
+  startSetReplayById,
+} from "@/lib/apply-source";
 import { useSession } from "@/lib/auth-client";
 import { rpcClient } from "@/lib/orpc";
 import type { SessionSend } from "@/lib/session-actions";
@@ -26,61 +23,102 @@ import { useVisualizerStore } from "@/stores/visualizer";
 
 interface SourceSwitcherProps {
   send: SessionSend;
-  // "local": this device owns the canvas — set picks start the client replay
-  // loop here. "remote": a detached console driving another screen — picks
-  // travel as source.set commands the screen applies and confirms.
+  // "local": this device owns the canvas — picks start the client playback
+  // here. "remote": a detached console driving another screen — picks travel
+  // as source.set commands the screen applies and confirms.
   mode?: "local" | "remote";
   showSets?: boolean;
 }
 
 // The Now-Showing transport: one control naming what the canvas is showing
-// (live / a deck / a set replay / idle) with a stop and a picker over every
-// playable source. Replaces the bare DeckPicker slot in the controls panel —
-// decks, recordings and curated cuts are all Sets now, switched from here.
-//
-// Deck picks go through usePickDeck so this and the standalone DeckPicker
-// (still used on /control) stay behaviourally identical. Set picks mirror
-// the ?set= replay path (set-playback-consumer): fetch the ordered frames,
-// hand them to the set-playback slice, let useSetPlaybackLoop produce.
+// (live / a set / idle) with a stop and a picker over every playable source.
+// ONE concept — sets — in three groups: built-ins (origin builtin, the old
+// decks; manifest-backed, offline-capable), recordings, and my sets. Every
+// row is a set row; remote picks all travel the same control.setSource path.
 
 const GROUP_HEADER =
   "px-3 pt-2 pb-1 font-mono text-[9px] uppercase tracking-[0.26em] text-[color:var(--stone)]";
 
-// Unlisted (show-specific) decks render only for allowlisted operators.
-const visibleDecksFor = (sessionData: { user?: { email?: string } } | null) => {
+// A pickable row: a fetched summary, or a client-native built-in fallback
+// (anon / sets.list unavailable) that has no DB id — deckKey alone plays it
+// locally; remote picks need the id, so id-less rows disable there.
+interface SourceRow {
+  deckKey: string | null;
+  detail: string | null;
+  id: string | null;
+  look: FrameSetSummary["look"];
+  name: string;
+}
+
+const rowFromSummary = (s: FrameSetSummary): SourceRow => ({
+  deckKey: s.deckKey,
+  detail: String(s.frameCount),
+  id: s.id,
+  look: s.look,
+  name: s.name,
+});
+
+// Built-ins straight from the client-native DECKS registry — zero fetch, so
+// anon and offline screens can always switch built-ins. Unlisted
+// (show-specific) decks render only for allowlisted operators.
+const fallbackBuiltins = (
+  sessionData: { user?: { email?: string } } | null
+): SourceRow[] => {
   const showUnlisted = canSeeUnlistedDecks(sessionData?.user?.email);
-  return DECKS.filter((d) => showUnlisted || !isDeckUnlisted(d.key));
+  return DECKS.filter((d) => showUnlisted || !isDeckUnlisted(d.key)).map(
+    (d) => ({
+      deckKey: d.key,
+      detail: null,
+      id: null,
+      look: DECK_LOOK[d.key] ?? null,
+      name: d.label,
+    })
+  );
 };
 
 const SetRows = ({
-  active,
+  activeDeckKey,
+  activeSetId,
+  disabled,
   onPick,
-  sets,
+  rows,
 }: {
-  active: string | null;
-  onPick: (s: FrameSetSummary) => void;
-  sets: FrameSetSummary[];
+  activeDeckKey: string | null;
+  activeSetId: string | null;
+  disabled?: (row: SourceRow) => boolean;
+  onPick: (row: SourceRow) => void;
+  rows: SourceRow[];
 }) => (
   <ul>
-    {sets.map((s) => (
-      <li key={s.id}>
-        <button
-          type="button"
-          onClick={() => onPick(s)}
-          className={cn(
-            "focus-ring flex w-full items-center justify-between gap-2 px-3 py-1.5 text-left transition-colors hover:bg-[color:var(--paper)]/10",
-            active === s.id && "bg-[color:var(--paper)]/10"
-          )}
-        >
-          <span className="truncate font-sans text-[12px] text-[color:var(--paper)]/90">
-            {s.name}
-          </span>
-          <span className="shrink-0 font-mono text-[9px] uppercase tracking-[0.16em] text-[color:var(--stone)]">
-            {s.frameCount}
-          </span>
-        </button>
-      </li>
-    ))}
+    {rows.map((row) => {
+      const active =
+        (row.id !== null && activeSetId === row.id) ||
+        (row.deckKey !== null && activeDeckKey === row.deckKey);
+      const off = disabled?.(row) ?? false;
+      return (
+        <li key={row.id ?? row.deckKey ?? row.name}>
+          <button
+            type="button"
+            disabled={off}
+            onClick={() => onPick(row)}
+            className={cn(
+              "focus-ring flex w-full items-center justify-between gap-2 px-3 py-1.5 text-left transition-colors hover:bg-[color:var(--paper)]/10",
+              active && "bg-[color:var(--paper)]/10",
+              off && "opacity-40"
+            )}
+          >
+            <span className="truncate font-sans text-[12px] text-[color:var(--paper)]/90">
+              {row.name}
+            </span>
+            {row.detail && (
+              <span className="shrink-0 font-mono text-[9px] uppercase tracking-[0.16em] text-[color:var(--stone)]">
+                {row.detail}
+              </span>
+            )}
+          </button>
+        </li>
+      );
+    })}
   </ul>
 );
 
@@ -91,43 +129,44 @@ export const SourceSwitcher = ({
 }: SourceSwitcherProps) => {
   const { data: sessionData } = useSession();
   const isSignedIn = !!sessionData?.session;
-  const visibleDecks = visibleDecksFor(sessionData);
   const source = useVisualizerStore((s) => s.source);
   const stopToIdle = useVisualizerStore((s) => s.stopToIdle);
-  const pickDeck = usePickDeck(send);
 
   const [open, setOpen] = useState(false);
-  const [sets, setSets] = useState<FrameSetSummary[]>([]);
+  const [sets, setSets] = useState<FrameSetSummary[] | null>(null);
   const [loading, setLoading] = useState(false);
 
-  // One source, one label — the unified slice replaced the old precedence
-  // dance across three state fields.
   let label = "idle";
   if (source.kind === "set") {
     label = source.name ?? "set";
-  } else if (source.kind === "deck") {
-    label = deckLabel(source.deck);
   } else if (source.kind === "live") {
     label = "live";
   }
-  const stoppable = source.kind === "set" || source.kind === "deck";
+  const stoppable = source.kind === "set";
 
-  // ■ stop → idle canvas (holds the last frame). The source reporter tells
-  // the server.
+  // ■ stop → idle canvas (holds the last frame). Local: the source reporter
+  // tells the server. Remote: the command travels to the screen; the local
+  // stop is just the optimistic pill (the snapshot poll confirms).
   const onStop = () => {
+    if (mode === "remote") {
+      send({ source: { kind: "idle" }, type: "source.set" });
+    }
     stopToIdle();
   };
 
-  // Recordings + cuts load lazily on every open so a just-finished take shows
-  // up without a page reload. Builtins are dropped — the decks group renders
-  // from DECKS (client-native manifests, no fetch needed to play them).
+  // The full list loads lazily on every open so a just-finished take shows up
+  // without a page reload. Built-ins arrive with real set ids here; on
+  // failure (or anon) the DECKS fallback below keeps built-ins pickable.
   const loadSets = async () => {
     setLoading(true);
     try {
       const { sets: rows } = await rpcClient.sets.list({});
-      setSets(rows.filter((s) => s.origin !== "builtin"));
+      setSets(rows);
     } catch {
-      toast.error("couldn't load your sets");
+      setSets(null);
+      if (isSignedIn) {
+        toast.error("couldn't load your sets");
+      }
     } finally {
       setLoading(false);
     }
@@ -135,34 +174,59 @@ export const SourceSwitcher = ({
 
   const onOpenChange = (next: boolean) => {
     setOpen(next);
-    if (next && isSignedIn && showSets) {
+    if (next && isSignedIn) {
       void loadSets();
     }
   };
 
-  const onPickDeck = (deck: string) => {
-    setOpen(false);
-    // setSource is the single transition — leaving a replay for a deck is
-    // just the next source.
-    pickDeck(deck);
-  };
-
-  const onPickSet = async (summary: FrameSetSummary) => {
+  const onPick = (row: SourceRow) => {
     setOpen(false);
     if (mode === "remote") {
       // The screen applies it (source.set event) and confirms via
       // source.report — never start a local replay on the console device.
-      send({
-        source: { kind: "set", label: summary.name, setId: summary.id },
-        type: "source.set",
-      });
+      // SetRows disables id-less fallback rows in remote mode.
+      if (row.id) {
+        send({
+          source: { kind: "set", label: row.name, setId: row.id },
+          type: "source.set",
+        });
+      }
       return;
     }
-    await startSetReplayById(summary.id, send);
+    if (row.deckKey) {
+      // Built-in: manifest-direct, no fetch — the offline path.
+      applyBuiltinSetLocally(
+        {
+          deckKey: row.deckKey as DeckKey,
+          look: row.look,
+          name: row.name,
+          setId: row.id,
+        },
+        send
+      );
+      return;
+    }
+    if (row.id) {
+      void startSetReplayById(row.id, send);
+    }
   };
 
-  const recordings = sets.filter((s) => s.origin === "recording");
-  const cuts = sets.filter((s) => s.origin === "curated");
+  const fetched = sets ?? [];
+  const builtinRows =
+    sets === null
+      ? fallbackBuiltins(sessionData)
+      : fetched.filter((s) => s.origin === "builtin").map(rowFromSummary);
+  const recordings = fetched
+    .filter((s) => s.origin === "recording")
+    .map(rowFromSummary);
+  const cuts = fetched
+    .filter((s) => s.origin === "curated")
+    .map(rowFromSummary);
+
+  const activeSetId = source.kind === "set" ? source.setId : null;
+  const activeDeckKey = source.kind === "set" ? source.deckKey : null;
+  const remoteDisabled =
+    mode === "remote" ? (row: SourceRow) => row.id === null : undefined;
 
   return (
     <div className="flex flex-col gap-2">
@@ -201,29 +265,22 @@ export const SourceSwitcher = ({
           side="bottom"
           className="w-64 rounded-sm border-[color:var(--hairline)]/40 bg-[color:var(--ink)]/95 p-0 text-[color:var(--paper)] backdrop-blur-md"
         >
-          <div className={GROUP_HEADER}>decks</div>
-          <div className="flex flex-wrap gap-1.5 px-3 pb-2">
-            {visibleDecks.map((d) => (
-              <button
-                key={d.key}
-                type="button"
-                onClick={() => onPickDeck(d.key)}
-                className={cn(
-                  "focus-ring font-sans rounded-sm border border-[color:var(--hairline)]/30 px-1.5 py-0.5 text-[10px] uppercase tracking-[0.14em] text-[color:var(--stone)] transition-colors",
-                  "hover:border-[color:var(--paper)]/60 hover:text-[color:var(--paper)]",
-                  source.kind === "deck" &&
-                    source.deck === d.key &&
-                    "border-[color:var(--paper)] bg-[color:var(--paper)] text-[color:var(--ink)]"
-                )}
-              >
-                {d.label}
-              </button>
-            ))}
+          <div className="pb-1">
+            <div className={GROUP_HEADER}>built-ins</div>
+            <div className="max-h-[160px] overflow-y-auto">
+              <SetRows
+                activeDeckKey={activeDeckKey}
+                activeSetId={activeSetId}
+                disabled={remoteDisabled}
+                onPick={onPick}
+                rows={builtinRows}
+              />
+            </div>
           </div>
 
           {isSignedIn &&
             showSets &&
-            (loading && sets.length === 0 ? (
+            (loading && fetched.length === 0 ? (
               <div className="border-t border-[color:var(--hairline)]/30 px-3 py-3 font-sans text-[10px] uppercase tracking-[0.22em] text-[color:var(--stone)]">
                 loading…
               </div>
@@ -234,9 +291,10 @@ export const SourceSwitcher = ({
                     <div className={GROUP_HEADER}>recordings</div>
                     <div className="max-h-[160px] overflow-y-auto">
                       <SetRows
-                        active={source.kind === "set" ? source.setId : null}
-                        onPick={(s) => void onPickSet(s)}
-                        sets={recordings}
+                        activeDeckKey={activeDeckKey}
+                        activeSetId={activeSetId}
+                        onPick={onPick}
+                        rows={recordings}
                       />
                     </div>
                   </div>
@@ -246,9 +304,10 @@ export const SourceSwitcher = ({
                     <div className={GROUP_HEADER}>my sets</div>
                     <div className="max-h-[160px] overflow-y-auto">
                       <SetRows
-                        active={source.kind === "set" ? source.setId : null}
-                        onPick={(s) => void onPickSet(s)}
-                        sets={cuts}
+                        activeDeckKey={activeDeckKey}
+                        activeSetId={activeSetId}
+                        onPick={onPick}
+                        rows={cuts}
                       />
                     </div>
                   </div>

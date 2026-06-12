@@ -11,6 +11,7 @@ import {
   LISTED_DECK_KEYS,
   TEXT_MODELS,
   clampPrompt,
+  deckLabel,
   deckStyle,
   defaultScene,
   libraryCadenceMs,
@@ -292,15 +293,22 @@ export class Session implements ControllableSession {
     });
     this.scene = { ...defaultScene };
     this.lastGeneratedScene = { ...defaultScene };
-    // Anonymous sessions are pinned to deck playback; the connect snapshot
-    // relays the source to the client, whose playback loop drives the frames
-    // locally. A random deck is suggested; the picker swaps it. Listed decks
-    // only — unlisted (show-specific) decks never land on strangers.
+    // Anonymous sessions are pinned to builtin-set playback; the connect
+    // snapshot relays the source to the client, whose playback loop drives
+    // the frames locally off the deckKey manifest (no DB, no fetch — setId
+    // stays null, which no id-ful flow ever reads for anon). A random deck is
+    // suggested; the picker swaps it. Listed decks only — unlisted
+    // (show-specific) decks never land on strangers.
     if (opts.userId === null) {
       const deck =
         LISTED_DECK_KEYS[Math.floor(Math.random() * LISTED_DECK_KEYS.length)];
       if (deck) {
-        this.source = { deck, kind: "deck" };
+        this.source = {
+          deckKey: deck,
+          kind: "set",
+          label: deckLabel(deck),
+          setId: null,
+        };
       }
     }
     this.startPeriodic();
@@ -339,10 +347,11 @@ export class Session implements ControllableSession {
   }
 
   // Remote source switch relay (control.setSource). The screen applies it
-  // exactly like a local pick and confirms via source.report.
+  // exactly like a local pick and confirms via source.report. deckKey rides
+  // along for builtin sets — the screen plays them manifest-direct.
   notifySource(source: {
-    deck?: string;
-    kind: "set" | "deck" | "idle";
+    deckKey?: string;
+    kind: "set" | "idle";
     label?: string | null;
     setId?: string;
   }): void {
@@ -438,22 +447,21 @@ export class Session implements ControllableSession {
   setCurrentSource(source: SessionSource): void {
     this.currentSource = source;
     // Adopt producer truth into the authoritative source so a screen-local
-    // pick (deck chip on /play) and a control command converge on the same
-    // state. Guards: anon stays pinned to playback kinds; deck reports from
-    // stale clients may lack the key — leave intent alone then; set reports
-    // need a setId.
+    // pick and a control command converge on the same state. Guards: anon
+    // stays pinned to playback kinds; a set report needs setId or deckKey
+    // (deckKey-only = client-native builtin pick) — neither means a stale
+    // client, leave intent alone.
     if (
       (source.kind === "live" || source.kind === "idle") &&
       this.userId !== null
     ) {
       this.source = { kind: source.kind };
-    } else if (source.kind === "deck" && source.deck) {
-      this.source = { deck: source.deck, kind: "deck" };
-    } else if (source.kind === "set" && source.setId) {
+    } else if (source.kind === "set" && (source.setId || source.deckKey)) {
       this.source = {
+        deckKey: source.deckKey ?? null,
         kind: "set",
         label: source.label ?? null,
-        setId: source.setId,
+        setId: source.setId ?? null,
       };
     }
   }
@@ -479,10 +487,10 @@ export class Session implements ControllableSession {
     }
     // Anchor wins over playback. setSource doesn't touch anchor; if both are
     // attempted to be set simultaneously, the most recent mutation lands.
-    // Uploading an anchor from a deck is also "going live" — remember the deck
-    // so its style keeps nudging generation (deckStyle drift).
-    if (this.source.kind === "deck") {
-      this.lastDeck = this.source.deck;
+    // Uploading an anchor from a builtin set is also "going live" — remember
+    // its deckKey so the style keeps nudging generation (deckStyle drift).
+    if (this.source.kind === "set" && this.source.deckKey) {
+      this.lastDeck = this.source.deckKey;
     }
     this.source = { kind: "live" };
     this.scene = {
@@ -527,8 +535,8 @@ export class Session implements ControllableSession {
       });
       return;
     }
-    if (this.source.kind === "deck") {
-      this.lastDeck = this.source.deck;
+    if (this.source.kind === "set" && this.source.deckKey) {
+      this.lastDeck = this.source.deckKey;
     }
     this.source = { kind: "live" };
     this.scene = { ...this.scene, prompt: clampPrompt(prompt) };
@@ -828,9 +836,9 @@ export class Session implements ControllableSession {
       if (now - this.lastKeyframeAt < periodicMs) {
         return;
       }
-      // Deck/set playback is client-driven; the server only auto-triggers
+      // Set playback is client-driven; the server only auto-triggers
       // LIVE generation, never while a playback source is showing.
-      if (this.source.kind === "deck" || this.source.kind === "set") {
+      if (this.source.kind === "set") {
         return;
       }
       // No screen attached (reconnect grace window) → nobody is watching;
@@ -937,12 +945,12 @@ export class Session implements ControllableSession {
     // part of `job.status` / `generation.requested`.
     const reason = source;
 
-    // Deck/set playback is fully client-driven (the browser cycles static
+    // Set playback is fully client-driven (the browser cycles static
     // per-deck manifests or fetched set frames, so playback works on slow/no
     // internet and the server never generates during it). This path runs
     // only for live generation. Idle + the empty-prompt guard below keep
     // idle sessions from generating, while a typed prompt still flows.
-    if (this.source.kind === "deck" || this.source.kind === "set") {
+    if (this.source.kind === "set") {
       return;
     }
 

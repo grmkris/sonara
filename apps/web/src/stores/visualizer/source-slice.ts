@@ -1,4 +1,4 @@
-import { DECK_KEYS } from "@sonara/shared";
+import { DECK_KEYS, DECK_LOOK, deckLabel } from "@sonara/shared";
 import type {
   DeckKey,
   FrameSetOrigin,
@@ -15,16 +15,17 @@ export const SOURCE_KEY = "viz_source";
 // The client's playback source. ONE field decides what produces frames:
 //   idle  nothing plays (canvas holds its last frame)
 //   live  server generation produces (WS frame events)
-//   deck  the playback loop cycles the deck's static manifest
 //   set   the playback loop plays an ordered fetched frame list (or, for
-//         builtin sets, the deck manifest behind their deckKey)
+//         builtin sets, the static deck manifest behind their deckKey)
 export type PlaybackSource =
   | { kind: "idle" }
   | { kind: "live" }
-  | { kind: "deck"; deck: DeckKey }
   | {
       kind: "set";
-      setId: string;
+      // Null ONLY for client-native builtin picks (anon pin, offline rows,
+      // the marketing backplate) — those surfaces can't know DB ids
+      // (sets.list is protected) and play purely off deckKey.
+      setId: string | null;
       name: string | null;
       // Builtin sets: the static-manifest deck behind this set (playback
       // stays offline-capable). Null for recordings/cuts.
@@ -35,8 +36,8 @@ export type PlaybackSource =
 
 export interface SourceSlice {
   source: PlaybackSource;
-  // Ordered frames for set-kind playback (from sets.get). Deck-kind and
-  // builtin-set playback read static manifests instead. Transient.
+  // Ordered frames for set-kind playback (from sets.get). Builtin-set
+  // playback reads static deck manifests instead. Transient.
   playbackFrames: LibraryFrame[];
 
   setSource: (source: PlaybackSource, frames?: LibraryFrame[]) => void;
@@ -49,10 +50,21 @@ const persistSource = (source: PlaybackSource): void => {
   if (typeof window === "undefined") {
     return;
   }
-  // Only deck/idle survive a reload: live needs a server session and set
-  // replays are session-scoped (frames aren't persisted).
-  if (source.kind === "deck" || source.kind === "idle") {
+  // Only builtin sets / idle survive a reload: live needs a server session,
+  // and recording/cut replays are session-scoped (frames aren't persisted).
+  // Builtins persist by deckKey alone (the look re-derives at read).
+  if (source.kind === "idle") {
     window.localStorage.setItem(SOURCE_KEY, JSON.stringify(source));
+  } else if (source.kind === "set" && source.deckKey) {
+    window.localStorage.setItem(
+      SOURCE_KEY,
+      JSON.stringify({
+        deckKey: source.deckKey,
+        kind: "set",
+        name: source.name,
+        setId: source.setId,
+      })
+    );
   }
 };
 
@@ -82,16 +94,30 @@ export const readSourcePref = (): PlaybackSource | null => {
   const raw = window.localStorage.getItem(SOURCE_KEY);
   if (raw) {
     try {
-      const parsed = JSON.parse(raw) as Partial<PlaybackSource>;
+      const parsed = JSON.parse(raw) as {
+        kind?: string;
+        deck?: string;
+        deckKey?: string;
+        name?: string | null;
+        setId?: string | null;
+      };
       if (parsed.kind === "idle") {
         return { kind: "idle" };
       }
-      if (
-        parsed.kind === "deck" &&
-        "deck" in parsed &&
-        (DECK_KEYS as readonly string[]).includes(parsed.deck as string)
-      ) {
-        return { deck: parsed.deck as DeckKey, kind: "deck" };
+      // Pre-collapse prefs stored {kind:"deck", deck} — migrate them to the
+      // builtin-set shape (deckKey carries playback; look re-derives below).
+      const deckKey =
+        parsed.kind === "set" ? parsed.deckKey : (parsed.deck ?? undefined);
+      if (deckKey && (DECK_KEYS as readonly string[]).includes(deckKey)) {
+        const key = deckKey as DeckKey;
+        return {
+          deckKey: key,
+          kind: "set",
+          look: DECK_LOOK[key] ?? null,
+          name: parsed.name ?? deckLabel(key),
+          origin: "builtin",
+          setId: parsed.setId ?? null,
+        };
       }
     } catch {
       // corrupt value — treat as unset

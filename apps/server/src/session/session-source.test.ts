@@ -35,13 +35,20 @@ afterAll(() => {
 });
 
 describe("Session source state", () => {
-  test("anon sessions are pinned to a random LISTED deck", () => {
+  test("anon sessions are pinned to a random LISTED builtin set", () => {
     const s = makeSession(null);
     const source = s.getSource();
-    expect(source.kind).toBe("deck");
-    if (source.kind === "deck") {
-      expect(LISTED_DECK_KEYS).toContain(source.deck);
-      expect(UNLISTED_DECK_KEYS).not.toContain(source.deck);
+    expect(source.kind).toBe("set");
+    if (source.kind === "set") {
+      // Client-native pin: deckKey drives manifest playback, no DB id.
+      expect(source.setId).toBeNull();
+      const deckKey = source.deckKey ?? "";
+      expect((LISTED_DECK_KEYS as readonly string[]).includes(deckKey)).toBe(
+        true
+      );
+      expect((UNLISTED_DECK_KEYS as readonly string[]).includes(deckKey)).toBe(
+        false
+      );
     }
   });
 
@@ -49,26 +56,36 @@ describe("Session source state", () => {
     expect(signedIn().getSource()).toEqual({ kind: "idle" });
   });
 
-  test("anon setSource ignores live/idle but accepts deck and set", () => {
+  test("anon setSource ignores live/idle but accepts set", () => {
     const s = makeSession(null);
     s.setSource({ kind: "idle" });
-    expect(s.getSource().kind).toBe("deck");
-    s.setSource({ kind: "live" });
-    expect(s.getSource().kind).toBe("deck");
-
-    s.setSource({ deck: "noir", kind: "deck" });
-    expect(s.getSource()).toEqual({ deck: "noir", kind: "deck" });
-    s.setSource({ kind: "set", label: "a cut", setId: "set_x" });
     expect(s.getSource().kind).toBe("set");
+    s.setSource({ kind: "live" });
+    expect(s.getSource().kind).toBe("set");
+
+    s.setSource({ deckKey: "noir", kind: "set", label: "Noir", setId: null });
+    expect(s.getSource()).toEqual({
+      deckKey: "noir",
+      kind: "set",
+      label: "Noir",
+      setId: null,
+    });
   });
 
   test("producer reports adopt into the source", () => {
     const s = signedIn();
-    s.setCurrentSource({ deck: "cyborg", kind: "deck", label: "Cyborg" });
-    expect(s.getSource()).toEqual({ deck: "cyborg", kind: "deck" });
+    // Client-native builtin pick: deckKey-only, adopted with null setId.
+    s.setCurrentSource({ deckKey: "cyborg", kind: "set", label: "Cyborg" });
+    expect(s.getSource()).toEqual({
+      deckKey: "cyborg",
+      kind: "set",
+      label: "Cyborg",
+      setId: null,
+    });
 
     s.setCurrentSource({ kind: "set", label: "my set", setId: "set_y" });
     expect(s.getSource()).toEqual({
+      deckKey: null,
       kind: "set",
       label: "my set",
       setId: "set_y",
@@ -78,11 +95,16 @@ describe("Session source state", () => {
     expect(s.getSource()).toEqual({ kind: "live" });
   });
 
-  test("a deck report without a key leaves the intent alone (stale client)", () => {
+  test("a set report with neither id nor deckKey leaves the intent alone (stale client)", () => {
     const s = signedIn();
-    s.setSource({ deck: "noir", kind: "deck" });
-    s.setCurrentSource({ kind: "deck", label: "Some Deck" });
-    expect(s.getSource()).toEqual({ deck: "noir", kind: "deck" });
+    s.setSource({ deckKey: "noir", kind: "set", label: "Noir", setId: null });
+    s.setCurrentSource({ kind: "set", label: "Some Set" });
+    expect(s.getSource()).toEqual({
+      deckKey: "noir",
+      kind: "set",
+      label: "Noir",
+      setId: null,
+    });
   });
 
   test("anon ignores live/idle reports too", () => {
@@ -94,10 +116,12 @@ describe("Session source state", () => {
 
   test("snapshot carries the authoritative source", () => {
     const s = signedIn();
-    s.setSource({ deck: "wild", kind: "deck" });
+    s.setSource({ deckKey: "wild", kind: "set", label: "Wild", setId: null });
     expect(s.getControlSnapshot().source).toEqual({
-      deck: "wild",
-      kind: "deck",
+      deckKey: "wild",
+      kind: "set",
+      label: "Wild",
+      setId: null,
     });
 
     s.setSource({ kind: "idle" });

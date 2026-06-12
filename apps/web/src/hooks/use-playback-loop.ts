@@ -1,5 +1,5 @@
 import { cadenceBetweenMs, libraryCadenceMs } from "@sonara/shared";
-import type { LibraryManifest, SetLook } from "@sonara/shared";
+import type { DeckKey, LibraryManifest } from "@sonara/shared";
 import { useEffect } from "react";
 
 import { useVisualizerStore } from "@/stores/visualizer";
@@ -82,10 +82,8 @@ export const usePlaybackLoop = (): void => {
     }
 
     // Resolve the frame strategy from the source.
-    const manifestDeck =
-      source.kind === "deck" ? source.deck : (source.deckKey ?? null);
-    const look: SetLook | null = source.kind === "set" ? source.look : null;
-    const origin = source.kind === "set" ? source.origin : null;
+    const { look, origin } = source;
+    const manifestDeck = source.deckKey ?? null;
 
     const cadenceMs = (idx: number, frames: { tMs: number }[]): number => {
       const { intensity } = store.getState().scene;
@@ -98,8 +96,10 @@ export const usePlaybackLoop = (): void => {
       if (look) {
         return cadenceBetweenMs(intensity, look.cadence);
       }
-      if (source.kind === "deck") {
-        return libraryCadenceMs(intensity, source.deck);
+      if (manifestDeck) {
+        // Builtin set without an authored look — the deck's reactive
+        // cadence profile (pre-collapse parity).
+        return libraryCadenceMs(intensity, manifestDeck as DeckKey);
       }
       return FIXED_CADENCE_MS;
     };
