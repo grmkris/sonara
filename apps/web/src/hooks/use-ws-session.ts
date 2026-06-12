@@ -261,13 +261,14 @@ export const useWsSession = (target: { code: string | null }): WsSession => {
         // pinned to a random deck, signed-in sessions come up with whatever
         // they last set.
         sendRef.current({ type: "hello" });
-        // The A/B model + resolution are CLIENT-authoritative (persisted to
-        // localStorage, hydrated post-mount). The server Session starts on its
-        // defaults, so re-send the user's current picks on every (re)connect so
-        // a fresh Session adopts them instead of silently reverting.
-        const st = store.getState();
-        sendRef.current({ model: st.model, type: "model.set" });
-        sendRef.current({ resolution: st.resolution, type: "resolution.set" });
+        // The A/B resolution is CLIENT-authoritative (persisted to
+        // localStorage, hydrated post-mount). The server Session starts on
+        // its default, so re-send the user's current pick on every
+        // (re)connect so a fresh Session adopts it instead of reverting.
+        sendRef.current({
+          resolution: store.getState().resolution,
+          type: "resolution.set",
+        });
       });
       socket.addEventListener("close", (ev: { code?: number }) => {
         store.getState().setConnected(false);

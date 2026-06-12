@@ -9,12 +9,10 @@ import {
   SonaraSceneState,
   NowPlaying,
   ServerEvent,
-  TextModelKeySchema,
 } from "@sonara/shared";
 import type {
   ImageAnchor as ImageAnchorType,
   RenderResolution,
-  TextModelKey,
 } from "@sonara/shared";
 import { z } from "zod";
 
@@ -37,7 +35,6 @@ export interface SessionLike {
   setImageAnchor(
     input: { url: string } | { clear: true }
   ): void;
-  setModel(model: TextModelKey): void;
   setResolution(resolution: RenderResolution): void;
   setCurrentFrame(url: string): void;
   setCurrentSource(source: SessionSource): void;
@@ -85,10 +82,8 @@ const SetImageAnchorInput = z.union([
   z.object({ clear: z.literal(true) }),
 ]);
 
-// A/B model + resolution switches. Validated against the shared allowlist so a
-// client can never drive an arbitrary fal model id (cost/abuse) — only the
-// curated TEXT_MODEL_KEYS / RENDER_RESOLUTIONS flow through.
-const SetModelInput = z.object({ model: TextModelKeySchema });
+// Resolution A/B switch. Validated against the shared allowlist — only the
+// curated RENDER_RESOLUTIONS flow through.
 const SetResolutionInput = z.object({ resolution: RenderResolutionSchema });
 
 const RecognizeInput = z.object({
@@ -224,14 +219,9 @@ export const sessionRouter = {
       context.session.setImageAnchor(input);
     }),
 
-  // A/B-switch the text-mode image model (realtime lightning-sdxl, or the
-  // klein queue baseline). The session fires a frame immediately so the switch
-  // is visible at once. Client re-sends its choice on every (re)connect.
-  setModel: sessionOs.input(SetModelInput).handler(({ context, input }) => {
-    context.session.setModel(input.model);
-  }),
-
-  // A/B-switch the render resolution (512² / 768²).
+  // A/B-switch the render resolution (512² / 768²). The session fires a
+  // frame immediately so the switch is visible at once; the client re-sends
+  // its choice on every (re)connect.
   setResolution: sessionOs
     .input(SetResolutionInput)
     .handler(({ context, input }) => {

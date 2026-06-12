@@ -4,7 +4,6 @@ import type {
   ClientScenePatch,
   DeckKey,
   RenderResolution,
-  TextModelKey,
 } from "@sonara/shared";
 
 // Client-side convenience union for the session surface. Purely local — the
@@ -44,7 +43,6 @@ export type SessionAction =
   | { type: "session.goLive"; prompt: string; seedFrameUrl: string | null }
   | { type: "image.anchor.set"; url: string }
   | { type: "image.anchor.clear" }
-  | { type: "model.set"; model: TextModelKey }
   | { type: "resolution.set"; resolution: RenderResolution }
   | {
       type: "audio.recognize";
@@ -102,9 +100,6 @@ export const dispatchSessionAction = (
     }
     case "image.anchor.clear": {
       return client.setImageAnchor({ clear: true });
-    }
-    case "model.set": {
-      return client.setModel({ model: action.model });
     }
     case "resolution.set": {
       return client.setResolution({ resolution: action.resolution });

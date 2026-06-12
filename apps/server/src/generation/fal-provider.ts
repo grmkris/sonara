@@ -15,7 +15,7 @@ import type { Logger } from "../lib/logger";
 //            one credit.
 
 // Shared callback/lifecycle surface for both text-mode transports (this queue
-// path and the realtime-provider websocket path). A frame stream takes a
+// path). A frame stream takes a
 // cancel signal + logger and reports through three callbacks: onPreview (an
 // intermediate frame), onFinal (the settled frame), onError (failed OR
 // superseded — the session refunds the credit either way and uses the signal

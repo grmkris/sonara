@@ -11,7 +11,7 @@ import { StageSheet } from "@/components/stage-console/stage-sheet";
 import { StageHostPanel } from "@/components/stage/stage-host-panel";
 import { Button } from "@/components/ui/button";
 import { IntensityDial } from "@/components/visualizer/controls/intensity-dial";
-import { ModelPicker } from "@/components/visualizer/controls/model-picker";
+import { ResolutionPicker } from "@/components/visualizer/controls/resolution-picker";
 import { PromptInput } from "@/components/visualizer/controls/prompt-input";
 import { SliderRow } from "@/components/visualizer/controls/slider-row";
 import { SourceSwitcher } from "@/components/visualizer/controls/source-switcher";
@@ -33,8 +33,8 @@ import { useVisualizerStore } from "@/stores/visualizer";
 //                               and the left-rail prompt.
 //   SourceSwitcher, intensity,  both — fully transport-agnostic.
 //   feel sliders, host panel
-//   ModelPicker / PresetPicker  attached only — model/resolution are CLIENT-
-//                               authoritative localStorage prefs re-sent on
+//   ResolutionPicker /          attached only — the resolution is a CLIENT-
+//   PresetPicker                authoritative localStorage pref re-sent on
 //                               every WS connect (a remote change would be
 //                               clobbered on the next screen reconnect), and
 //                               the render preset is a client-local shader,
@@ -226,7 +226,7 @@ const AttachedConsole = ({
   onNewSet?: () => void;
   onReset?: () => void;
 }) => {
-  // ?lab=1 reveals the model/resolution A/B. Read post-mount from
+  // ?lab=1 reveals the resolution A/B. Read post-mount from
   // window.location so the page keeps prerendering (no useSearchParams
   // Suspense bailout for a dev flag).
   const [lab, setLab] = useState(false);
@@ -256,13 +256,13 @@ const AttachedConsole = ({
         <StageSheet target={hostTarget} />
       </div>
 
-      {/* Lab — A/B the fal model + render resolution. Dev instrumentation,
-          hidden behind ?lab=1 (client-authoritative localStorage prefs are
+      {/* Lab — A/B the render resolution. Dev instrumentation, hidden
+          behind ?lab=1 (the client-authoritative localStorage pref is
           untouched by the gate). */}
       {lab && (
         <>
           <Divider />
-          <ModelPicker send={send} />
+          <ResolutionPicker send={send} />
         </>
       )}
 
@@ -314,7 +314,7 @@ export const StageConsole = ({
   // The attached console is the INSTRUMENT: transport + intensity + feel,
   // and nothing else resident. Setup-time surfaces live one tap away —
   // presets in the look popover, the crowd stage in a sheet — and the
-  // engine/resolution A/B (dev instrumentation) only appears with ?lab=1.
+  // resolution A/B (dev instrumentation) only appears with ?lab=1.
   return <AttachedConsole {...{ hostTarget, onNewSet, onReset, send }} />;
 };
 

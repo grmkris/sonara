@@ -38,7 +38,6 @@ import { getPool } from "../db/pool";
 import { streamPreview } from "../generation/fal-provider";
 import { serializeResolvedScene } from "../generation/prompt-compiler";
 import { DriftTrajectory } from "../generation/prompt-drift";
-import { RealtimeImagePool } from "../generation/realtime-provider";
 import {
   resolveScene,
   resolveSceneAwaited,
@@ -171,8 +170,8 @@ export class Session implements ControllableSession {
   // Frame-chaining state: the last queue-path output URL (fresh or chained)
   // that the NEXT keyframe conditions on, and how many chained frames have
   // run since the last fresh t2i (drives the stability I-frame cadence).
-  // Deliberately separate from lastFrameUrl (a UI mirror fed by every
-  // transport, kept across reset for the control snapshot).
+  // Deliberately separate from lastFrameUrl (a UI mirror kept across reset
+  // for the control snapshot).
   private chainUrl: string | null = null;
   private framesSinceFresh = 0;
   private activeVersion = 0;
@@ -203,8 +202,8 @@ export class Session implements ControllableSession {
     } else if (event.type === "job.status") {
       this.lastJobStatus = event.status;
     } else if (event.type === "generation.completed") {
-      // Every generation path (text realtime/queue, anchor success/failure)
-      // emits this at the end — the single chokepoint that marks "no job in
+      // Every generation path (fresh or chained) emits this at the end —
+      // the single chokepoint that marks "no job in
       // flight" for the periodic no-cannibalize guard in trigger().
       this.activeJobStartedAt = 0;
     }
@@ -217,18 +216,11 @@ export class Session implements ControllableSession {
 
   private seed: number = rollSeed();
 
-  // Text-mode image model + render resolution, A/B-switchable from the studio
-  // (setModel / setResolution). The model key selects the fal endpoint AND the
-  // transport (realtime websocket vs queue) via TEXT_MODELS. Per-session, in
-  // memory; the client re-sends its choice on every (re)connect, so a fresh
-  // Session adopts it. Realtime models stream through `realtimePool`.
-  private model: TextModelKey = DEFAULT_TEXT_MODEL;
+  // Text-mode image model + render resolution. The model key selects the fal
+  // endpoint config via TEXT_MODELS; the resolution is A/B-switchable from
+  // the studio (setResolution) and re-sent by the client on (re)connect.
+  private readonly model: TextModelKey = DEFAULT_TEXT_MODEL;
   private resolution: RenderResolution = DEFAULT_RESOLUTION;
-  // Warm per-session websocket pool for realtime models. Lazily dials on first
-  // use; closed in close(). No-op cost if the session only ever uses the queue
-  // (klein) model. Assigned in the constructor (needs this.logger, which is set
-  // there) — a field initializer would run before this.logger exists.
-  private readonly realtimePool: RealtimeImagePool;
 
   private lastSectionEnergy = 0;
   private sectionDeltaStartedAt: number | null = null;
@@ -298,7 +290,6 @@ export class Session implements ControllableSession {
       sessionId: opts.id,
       userId: opts.userId,
     });
-    this.realtimePool = new RealtimeImagePool(this.logger);
     this.scene = { ...defaultScene };
     this.lastGeneratedScene = { ...defaultScene };
     // Anonymous sessions are pinned to deck playback; the connect snapshot
@@ -442,7 +433,7 @@ export class Session implements ControllableSession {
     this.currentFrameUrl = url;
   }
 
-  // Producer-reported source (WS source.report) — sent once per transport
+  // Producer-reported source (WS source.report) — sent once per source
   // switch, same producer-only contract as setCurrentFrame.
   setCurrentSource(source: SessionSource): void {
     this.currentSource = source;
@@ -505,28 +496,10 @@ export class Session implements ControllableSession {
     void this.trigger("semantic");
   }
 
-  // A/B-switch the text-mode image model. The key selects the fal endpoint +
-  // transport (realtime vs queue) via TEXT_MODELS. Fires a frame immediately
-  // (skips the semantic-diff gate) so the switch is visible at once; trigger()
-  // no-ops for demo/anon/empty-prompt sessions. Skipped when an image anchor
-  // is active — the model setting is text-path only.
-  setModel(model: TextModelKey): void {
-    if (this.model === model) {
-      return;
-    }
-    this.model = model;
-    // Don't resume a chain across a model switch — a return from a
-    // lightning stint would otherwise condition on a minutes-old frame.
-    this.chainUrl = null;
-    this.framesSinceFresh = 0;
-    this.logger.info({ model }, "text model set");
-    if (!this.scene.imageAnchor) {
-      void this.trigger("semantic");
-    }
-  }
-
   // A/B-switch the render resolution (512² / 768²). Lower = faster + smaller
-  // payload. Same immediate-frame + anchor-skip semantics as setModel.
+  // payload. Fires a frame immediately (skips the semantic-diff gate) so the
+  // switch is visible at once; trigger() no-ops for deck/anon/empty-prompt
+  // sessions. Skipped when an image anchor is active.
   setResolution(resolution: RenderResolution): void {
     if (this.resolution === resolution) {
       return;
@@ -832,8 +805,6 @@ export class Session implements ControllableSession {
     if (this.periodicTimer) {
       clearInterval(this.periodicTimer);
     }
-    // Tear down the warm realtime websocket(s) — nothing else closes them.
-    this.realtimePool.close();
   }
 
   private schedulePause(): void {
@@ -1143,12 +1114,10 @@ export class Session implements ControllableSession {
     const size = { height: this.resolution, width: this.resolution };
 
     const chainSource = this.chainSourceFor(modelCfg.editFalId, seeded);
-    const isQueue = modelCfg.transport !== "realtime";
 
-    // Transport-agnostic callbacks. The realtime websocket pool and the klein
-    // queue path share identical onPreview/onFinal/onError wiring — the version
-    // check + refund-on-error semantics don't care which transport delivered
-    // (or failed to deliver) the frame.
+    // Callbacks shared by the fresh and chained paths — the version check +
+    // refund-on-error semantics don't care which endpoint delivered (or
+    // failed to deliver) the frame.
     const frameCallbacks = {
       logger: this.logger,
       onError: (err: unknown) => {
@@ -1193,12 +1162,10 @@ export class Session implements ControllableSession {
         // from being followed by a periodic frame stacking right on top.
         this.lastKeyframeAt = Date.now();
         this.lastGeneratedScene = snapshot;
-        // Chain bookkeeping (queue path only — realtime frames never chain):
-        // this frame becomes the next frame's conditioning source.
-        if (isQueue) {
-          this.chainUrl = url;
-          this.framesSinceFresh = chainSource ? this.framesSinceFresh + 1 : 0;
-        }
+        // Chain bookkeeping: this frame becomes the next frame's
+        // conditioning source.
+        this.chainUrl = url;
+        this.framesSinceFresh = chainSource ? this.framesSinceFresh + 1 : 0;
         const tMs = Date.now() - this.sessionStartAt;
         const frameId = typeIdGenerator("imageLibrary");
         this.send({
@@ -1290,9 +1257,9 @@ export class Session implements ControllableSession {
     });
   }
 
-  // Fire the generation on the right transport. Fire-and-forget either way:
-  // awaiting would block trigger() on the live hot path; the callbacks are
-  // the contract.
+  // Fire the generation: fresh t2i, or a chained edit conditioning on
+  // chainSource. Fire-and-forget — awaiting would block trigger() on the
+  // live hot path; the callbacks are the contract.
   private dispatchGeneration(opts: {
     chainSource: string | null;
     controller: AbortController;
@@ -1301,18 +1268,6 @@ export class Session implements ControllableSession {
     size: { width: number; height: number };
   }): void {
     const { chainSource, controller, frameCallbacks, modelCfg, size } = opts;
-    if (modelCfg.transport === "realtime") {
-      // Warm websocket — bypasses the queue for the ~150-300ms warm floor.
-      this.realtimePool.stream({
-        ...frameCallbacks,
-        falModelId: modelCfg.falId,
-        guidanceScale: modelCfg.guidanceScale,
-        size,
-        steps: modelCfg.steps,
-      });
-      return;
-    }
-    // Queue path: fresh t2i, or a chained edit conditioning on chainSource.
     const queued = streamPreview({
       ...frameCallbacks,
       model: (chainSource && modelCfg.editFalId) || modelCfg.falId,

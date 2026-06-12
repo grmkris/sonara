@@ -107,8 +107,8 @@ export const hydrateModelPrefs = (): void => {
   if (typeof window === "undefined") {
     return;
   }
-  const { model, resolution } = readModelPrefs();
-  useVisualizerStore.setState({ model, resolution });
+  const { resolution } = readModelPrefs();
+  useVisualizerStore.setState({ resolution });
 };
 
 // Hydrates the clickwrap-acceptance flag from localStorage so the user
