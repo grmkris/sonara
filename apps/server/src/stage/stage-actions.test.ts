@@ -135,4 +135,23 @@ describe("stage actions", () => {
     // first prompt plays immediately (queue advance on enqueue)
     expect(openRoom.patches.at(-1)?.prompt).toBe("neon koi");
   });
+
+  test("room close clears the queue — last gig's prompts never replay", () => {
+    const h = make({ allowPrompts: true });
+    expect(
+      h.actions.enqueuePrompt(h.room, "last week's prompt", "K7QX")
+    ).toBe(true);
+    expect(h.patches.at(-1)?.prompt).toBe("last week's prompt");
+
+    // Close the gig, reopen the SAME permanent code for the next one.
+    stageRooms.close(h.room);
+    stageRooms.openForStage(h.room, h.stageId, true);
+
+    // A fresh queue plays its first prompt immediately; the stale queue
+    // would have held it behind last week's still-running dwell.
+    expect(
+      h.actions.enqueuePrompt(h.room, "tonight's prompt", "M3PL")
+    ).toBe(true);
+    expect(h.patches.at(-1)?.prompt).toBe("tonight's prompt");
+  });
 });

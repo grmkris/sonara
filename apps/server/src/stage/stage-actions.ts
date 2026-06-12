@@ -125,6 +125,15 @@ export const startStageActions = (opts: {
     }
   };
 
+  // A closed room's crowd state must not leak into the NEXT show on the same
+  // permanent code: drop its pending taps and its prompt queue, or queueFor()
+  // would hand last gig's queue — stale queued prompts included — to the next
+  // open. (Also stops tick() iterating dead rooms' queues forever.)
+  stageRooms.onClose((room) => {
+    accums.delete(room);
+    queues.delete(room);
+  });
+
   const timer = setInterval(flush, FLUSH_MS);
   logger.info({}, "stage actions started");
 

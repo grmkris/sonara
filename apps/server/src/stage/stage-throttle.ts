@@ -54,6 +54,11 @@ class StageThrottle {
     return true;
   }
 
+  // Call-driven, not timer-driven: entries idle past IDLE_EVICT_MS are only
+  // evicted on the next allow() from ANY caller. If the whole crowd subsystem
+  // goes quiet, the last crowd's buckets linger until the next call or
+  // restart — a bounded residue (one entry per room+caller of the final gig),
+  // accepted to keep the module timer-free for tests.
   private maybePrune(now: number): void {
     if (now - this.lastPrune < PRUNE_EVERY_MS) {
       return;

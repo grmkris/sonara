@@ -166,6 +166,40 @@ export class SessionManager implements SessionRegistry {
     }
   }
 
+  // Shutdown drain (SIGTERM = every Railway deploy): close every session
+  // (aborts in-flight jobs, clears timers) and finalize each signed-in run's
+  // recording, so a mid-show deploy lands the set as 'final' instead of
+  // stranding it in 'recording'. The boot-time finalizeStaleRecordingSets
+  // sweep is the crash-path backstop for whatever this never got to run on.
+  async closeAll(): Promise<void> {
+    const finalizes: Promise<void>[] = [];
+    for (const entry of this.entries.values()) {
+      if (entry.graceTimer) {
+        clearTimeout(entry.graceTimer);
+        entry.graceTimer = null;
+      }
+      const { session } = entry;
+      session.close();
+      if (session.userId !== null) {
+        const { liveSessionId } = session;
+        finalizes.push(
+          (async () => {
+            try {
+              await finalizeRecordingSet(getPool(), liveSessionId);
+            } catch (error) {
+              this.logger.warn(
+                { error, liveSessionId },
+                "recording-set finalize failed on shutdown"
+              );
+            }
+          })()
+        );
+      }
+    }
+    this.entries.clear();
+    await Promise.all(finalizes);
+  }
+
   getByKey(key: string): Session | undefined {
     return this.entries.get(key)?.session;
   }

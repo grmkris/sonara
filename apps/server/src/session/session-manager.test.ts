@@ -296,4 +296,29 @@ describe("SessionManager (stage-keyed)", () => {
     expect(await recordingStatus(first)).toBe("final");
     m.endRun(stageId);
   });
+
+  test("closeAll drains the registry and finalizes recordings (deploy shutdown)", async () => {
+    const m = new SessionManager(logger, { graceMs: GRACE_MS });
+    const ws = makeWs("conn-e");
+    const { session } = m.attach({
+      key: stageId,
+      stageId,
+      userId: userUuid,
+      ws,
+    });
+    const run = session.liveSessionId;
+    await ensureRecordingSet(pool, {
+      liveSessionId: run,
+      stageUuid: typeIdToUuid(stageId).uuid,
+      startedAt: new Date(),
+      userUuid,
+    });
+    expect(await recordingStatus(run)).toBe("recording");
+
+    await m.closeAll();
+
+    expect(m.count()).toBe(0);
+    expect(m.getByStageId(stageId)).toBeUndefined();
+    expect(await recordingStatus(run)).toBe("final");
+  });
 });

@@ -18,6 +18,8 @@ import { Hono } from "hono";
 import { getAuth } from "./auth/auth";
 import { migrateFrameSetsOnBoot } from "./db/frame-set-boot-migrate";
 import { seedLibraryOnBoot } from "./db/library-boot-seed";
+import { getPool } from "./db/pool";
+import { finalizeStaleRecordingSets } from "./library/recording-set";
 import { env } from "./env";
 import { uploadImage } from "./http/upload";
 import { logger } from "./lib/logger";
@@ -48,6 +50,14 @@ await seedLibraryOnBoot(logger);
 // tables (idempotent; see frame-set-boot-migrate.ts). Must run after the
 // library seed so builtin sets pick up the seed frames.
 await migrateFrameSetsOnBoot(logger);
+
+// Orphan sweep: any frame_set still 'recording' at boot belongs to a run
+// that died with the previous process — the registry is in-memory, so no
+// live owner can exist. See finalizeStaleRecordingSets for why this is safe.
+const sweptSets = await finalizeStaleRecordingSets(getPool());
+if (sweptSets > 0) {
+  logger.info({ sweptSets }, "finalized orphaned recording sets from previous process");
+}
 
 const port = env.PORT;
 
@@ -280,15 +290,22 @@ logger.info(
   "server listening"
 );
 
-process.on("SIGTERM", () => {
-  logger.info("SIGTERM received, shutting down");
+// Railway sends SIGTERM on every deploy: drain the live sessions (abort
+// in-flight jobs, finalize recordings) before exiting, so a mid-show promote
+// doesn't strand frame_sets in 'recording'. Hard 5s cap — a hung pool must
+// never block the deploy; whatever the drain misses, the boot sweep
+// (finalizeStaleRecordingSets) finalizes on the next process.
+const shutdown = (signal: string): void => {
+  logger.info({ signal }, "shutting down — draining sessions");
   stageActions.close();
-  server.stop();
-  process.exit(0);
-});
-process.on("SIGINT", () => {
-  logger.info("SIGINT received, shutting down");
-  stageActions.close();
-  server.stop();
-  process.exit(0);
-});
+  void (async () => {
+    await Promise.race([
+      manager.closeAll(),
+      Bun.sleep(5000),
+    ]);
+    server.stop();
+    process.exit(0);
+  })();
+};
+process.on("SIGTERM", () => shutdown("SIGTERM"));
+process.on("SIGINT", () => shutdown("SIGINT"));
