@@ -114,7 +114,7 @@ export const createStage = async (
 };
 
 // Owned lookup for routers. Unknown id → NOT_FOUND; someone else's stage →
-// FORBIDDEN (mirrors resolveOwnedSession's split).
+// FORBIDDEN (mirrors resolveOwnedStageRun's split).
 export const getOwnedStage = async (
   db: Database,
   userId: UserId,

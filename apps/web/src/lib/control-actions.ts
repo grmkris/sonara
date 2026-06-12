@@ -1,15 +1,12 @@
-import type { LiveSessionId } from "@sonara/shared/typeid";
 import type { AppRouterClient } from "server/rpc";
 
 import type { SessionAction } from "./session-actions";
 
-// What the control router addresses: the durable stage (new clients) or a
-// raw run id (legacy fallback — /s/[id]/control before its redirect kicks
-// in). The server's ByTarget union accepts either; the legacy arm dies in
-// the post-W2 cleanup.
-export type ControlTarget =
-  | { stageId: string }
-  | { liveSessionId: LiveSessionId };
+// What the control router addresses: the durable stage. Runs come and go
+// ("new set" swaps the run under the same stage); the stage id is stable.
+export interface ControlTarget {
+  stageId: string;
+}
 
 // Remote (operator) counterpart to dispatchSessionAction. Maps the same
 // client-side SessionAction union onto the authed HTTP `control` router, with
@@ -35,17 +32,10 @@ export const dispatchControlAction = (
       return c.reset(target);
     }
     case "set.new": {
-      // Stage-addressed only — a legacy run target has no stable identity to
-      // re-key under, and the old client never sends this action anyway.
-      return "stageId" in target
-        ? c.newSet({ stageId: target.stageId })
-        : Promise.resolve();
+      return c.newSet({ stageId: target.stageId });
     }
     case "source.set": {
-      // Stage-addressed only, same rationale as set.new.
-      return "stageId" in target
-        ? c.setSource({ source: action.source, stageId: target.stageId })
-        : Promise.resolve();
+      return c.setSource({ source: action.source, stageId: target.stageId });
     }
     case "session.goLive": {
       // The operator has no canvas, so there's no on-screen frame to seed

@@ -23,10 +23,10 @@ import { getTestDb } from "@sonara/test-utils/test-db";
 import { controlRouter } from "./control.router";
 import type { ServerHttpContext } from "./procedures";
 
-// resolveOwnedSession semantics, exercised through the router: unknown id →
-// NOT_FOUND, someone else's live session → FORBIDDEN, own session → the call
-// reaches the Session. No rows involved — the registry stub IS the world; the
-// ctx still carries the harness db because the context shape requires one.
+// Ownership semantics, exercised through the router's stage-keyed targeting:
+// unknown stage → NOT_FOUND, someone else's stage → FORBIDDEN, own stage →
+// the call reaches the Session. The registry stub IS the liveness world; the
+// ctx carries the harness db for the stage-row ownership lookups.
 
 let db: Database;
 
@@ -133,45 +133,15 @@ beforeEach(() => {
   sessions.clear();
 });
 
-describe("resolveOwnedSession via the control router", () => {
-  test("unknown liveSessionId → NOT_FOUND", async () => {
-    const code = await errorCodeOf(
-      a.snapshot({ liveSessionId: typeIdGenerator("liveSession") })
-    );
-    expect(code).toBe("NOT_FOUND");
-  });
-
-  test("someone else's live session → FORBIDDEN", async () => {
-    const { liveSessionId } = registerSession(userA);
-    const code = await errorCodeOf(
-      b.scenePatch({ liveSessionId, patch: { prompt: "mine now" } })
-    );
-    expect(code).toBe("FORBIDDEN");
-  });
-
+describe("stage-keyed targeting", () => {
   test("anonymous caller → UNAUTHORIZED before any lookup", async () => {
-    const { liveSessionId } = registerSession(userA);
-    const code = await errorCodeOf(makeClient(null).snapshot({ liveSessionId }));
+    registerSession(userA, stageA.id);
+    const code = await errorCodeOf(
+      makeClient(null).snapshot({ stageId: stageA.id })
+    );
     expect(code).toBe("UNAUTHORIZED");
   });
 
-  test("own session: scenePatch reaches the Session as a client patch", async () => {
-    const { calls, liveSessionId } = registerSession(userA);
-    await a.scenePatch({ liveSessionId, patch: { prompt: "neon koi" } });
-    expect(calls).toEqual([
-      { origin: "client", patch: { prompt: "neon koi" } },
-    ]);
-  });
-
-  test("own session: snapshot returns the Session's control snapshot", async () => {
-    const { liveSessionId } = registerSession(userA);
-    const snap = await a.snapshot({ liveSessionId });
-    expect(snap.liveSessionId).toBe(liveSessionId);
-    expect(snap.jobStatus).toBe("idle");
-  });
-});
-
-describe("stage-keyed targeting", () => {
   test("owned + live stage: scenePatch lands via { stageId }", async () => {
     const { calls } = registerSession(userA, stageA.id);
     await a.scenePatch({ patch: { prompt: "via stage" }, stageId: stageA.id });

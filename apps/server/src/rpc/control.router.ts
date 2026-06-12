@@ -2,12 +2,7 @@ import { ORPCError } from "@sonara/api/server";
 import type { ControllableSession } from "@sonara/api/server";
 import { SCHEMA } from "@sonara/db";
 import { ClientScenePatch, DeckKeySchema } from "@sonara/shared";
-import {
-  FrameSetIdSchema,
-  LiveSessionIdSchema,
-  StageIdSchema,
-  typeIdToUuid,
-} from "@sonara/shared/typeid";
+import { FrameSetIdSchema, StageIdSchema } from "@sonara/shared/typeid";
 import { eq } from "drizzle-orm";
 import { z } from "zod";
 
@@ -17,7 +12,6 @@ import {
   listStages,
   renameStage,
 } from "../stage/stage-service";
-import { resolveOwnedSession } from "./owned-session";
 import { resolveOwnedStageRun } from "./owned-stage";
 import type { ServerHttpContext } from "./procedures";
 import { protectedProcedure, publicProcedure } from "./procedures";
@@ -28,13 +22,10 @@ import { protectedProcedure, publicProcedure } from "./procedures";
 // session.router calls, so the screen's canvas + HUD update for free over its
 // existing socket.
 //
-// Targeting is dual-keyed during the stages rollout: new clients address the
-// durable { stageId } (DB-owned identity, registry-resolved liveness); the
-// shipped web still addresses { liveSessionId } (registry scan). The legacy
-// arm — and liveSessions() — are deleted in the post-W2 cleanup.
+// Targeting is stage-keyed: clients address the durable { stageId } (DB-owned
+// identity, registry-resolved liveness).
 
-const ByLiveSession = z.object({ liveSessionId: LiveSessionIdSchema });
-const ByTarget = z.union([z.object({ stageId: StageIdSchema }), ByLiveSession]);
+const ByTarget = z.object({ stageId: StageIdSchema });
 
 type Target = z.infer<typeof ByTarget>;
 type AuthedCtx = ServerHttpContext & {
@@ -44,20 +35,12 @@ type AuthedCtx = ServerHttpContext & {
 const resolveTarget = async (
   context: AuthedCtx,
   input: Target
-): Promise<ControllableSession> => {
-  if ("stageId" in input) {
-    return await resolveOwnedStageRun(
-      { db: context.db, registry: context.registry },
-      context.userId,
-      input.stageId
-    );
-  }
-  return resolveOwnedSession(
-    context.registry,
+): Promise<ControllableSession> =>
+  await resolveOwnedStageRun(
+    { db: context.db, registry: context.registry },
     context.userId,
-    input.liveSessionId
+    input.stageId
   );
-};
 
 const ScenePatchInput = ByTarget.and(z.object({ patch: ClientScenePatch }));
 const GoLiveInput = ByTarget.and(z.object({ prompt: z.string() }));
@@ -97,29 +80,6 @@ export const controlRouter = {
       const session = await resolveTarget(context, input);
       session.goLive(input.prompt, session.getControlSnapshot().lastFrameUrl);
     }),
-
-  // LEGACY discovery (pre-stages web) — deleted in the post-W2 cleanup.
-  liveSessions: protectedProcedure.handler(({ context }) => {
-    const rawUuid = typeIdToUuid(context.userId).uuid;
-    const sessions = context.registry
-      .listByUserId(rawUuid)
-      .map((s) => {
-        const snap = s.getControlSnapshot();
-        return {
-          currentFrameUrl: snap.currentFrameUrl,
-          jobStatus: snap.jobStatus,
-          lastFrameUrl: snap.lastFrameUrl,
-          liveSessionId: snap.liveSessionId,
-          nowPlaying: snap.nowPlaying,
-          prompt: snap.scene.prompt,
-          source: snap.source,
-          startedAt: snap.startedAt,
-        };
-      })
-      // Newest session first so the projector you just opened leads the list.
-      .toSorted((a, b) => b.startedAt - a.startedAt);
-    return { sessions };
-  }),
 
   // "New set": finalize the current recording segment, start the next one on
   // the same run — the screen learns the new id via `run.started`.
