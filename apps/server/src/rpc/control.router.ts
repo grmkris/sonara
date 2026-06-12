@@ -1,7 +1,8 @@
 import { ORPCError } from "@sonara/api/server";
 import type { ControllableSession } from "@sonara/api/server";
 import { SCHEMA } from "@sonara/db";
-import { ClientScenePatch, DeckKeySchema } from "@sonara/shared";
+import { ClientScenePatch } from "@sonara/shared";
+import type { DeckKey } from "@sonara/shared";
 import { FrameSetIdSchema, StageIdSchema } from "@sonara/shared/typeid";
 import { eq } from "drizzle-orm";
 import { z } from "zod";
@@ -50,7 +51,9 @@ const SetImageAnchorInput = z.union([
 ]);
 
 // Remote source switch: what the screen should show. "live" isn't a remote
-// pick — going live needs a prompt and flows through goLive instead.
+// pick — going live needs a prompt and flows through goLive instead. setId is
+// REQUIRED here: remote picks always originate from fetched sets.list rows
+// (client-native deckKey-only sources exist only on the producing device).
 const SetSourceInput = z.object({
   source: z.union([
     z.object({
@@ -58,7 +61,6 @@ const SetSourceInput = z.object({
       label: z.string().max(200).nullable().default(null),
       setId: FrameSetIdSchema,
     }),
-    z.object({ deck: DeckKeySchema, kind: z.literal("deck") }),
     z.object({ kind: z.literal("idle") }),
   ]),
   stageId: StageIdSchema,
@@ -167,6 +169,7 @@ export const controlRouter = {
       if (input.source.kind === "set") {
         const rows = await context.db
           .select({
+            deckKey: SCHEMA.frameSet.deckKey,
             name: SCHEMA.frameSet.name,
             userId: SCHEMA.frameSet.userId,
             visibility: SCHEMA.frameSet.visibility,
@@ -183,23 +186,24 @@ export const controlRouter = {
         }
         // Optimistic server state first (so trigger() stops generating at
         // once), then the relay; the screen's source.report confirms or
-        // corrects within one switch.
+        // corrects within one switch. deckKey rides along so the screen
+        // plays builtin sets manifest-direct (no fetch — the offline path).
         const label = input.source.label ?? set.name;
+        // The deck_key column is plain text; builtin rows only ever hold
+        // DeckKey values (boot converger writes them from DECKS).
+        const deckKey = (set.deckKey as DeckKey | null) ?? null;
         session.setSource({
+          deckKey,
           kind: "set",
           label,
           setId: input.source.setId,
         });
         session.notifySource({
+          deckKey: deckKey ?? undefined,
           kind: "set",
           label,
           setId: input.source.setId,
         });
-        return { ok: true };
-      }
-      if (input.source.kind === "deck") {
-        session.setSource({ deck: input.source.deck, kind: "deck" });
-        session.notifySource({ deck: input.source.deck, kind: "deck" });
         return { ok: true };
       }
       session.setSource({ kind: "idle" });

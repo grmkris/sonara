@@ -12,24 +12,32 @@ import type { LiveSessionId } from "@sonara/shared/typeid";
 export type JobStatus = "idle" | "running" | "cancelled" | "error";
 
 // What the producer's projector says it is showing right now — live
-// generation, a builtin deck, a set replay, or nothing. Reported over WS
-// (source.report) on every source change, same producer-truth rationale as
-// frame.report / currentFrameUrl.
+// generation, a set replay (builtin sets play via their deckKey manifest), or
+// nothing. Reported over WS (source.report) on every source change, same
+// producer-truth rationale as frame.report / currentFrameUrl. setId may be
+// absent for client-native builtin picks (anon pin, offline) — deckKey is the
+// self-sufficient manifest capability there.
 export interface SessionSource {
-  deck?: DeckKey;
-  kind: "live" | "deck" | "set" | "idle";
+  deckKey?: DeckKey;
+  kind: "live" | "set" | "idle";
   label: string | null;
   setId?: string;
 }
 
-// The server's authoritative playback-source state. Mutated by control commands (optimistically) and adopted from
-// producer reports; trigger() refuses fal generation while a client-driven
-// source (deck/set) is showing.
+// The server's authoritative playback-source state. Mutated by control
+// commands (optimistically) and adopted from producer reports; trigger()
+// refuses fal generation while a client-driven set source is showing.
+// Invariant on the set arm: setId or deckKey present — setId is null only
+// for client-native builtin playback, which no id-ful flow ever reads.
 export type SessionSourceState =
   | { kind: "live" }
   | { kind: "idle" }
-  | { kind: "deck"; deck: DeckKey }
-  | { kind: "set"; setId: string; label: string | null };
+  | {
+      kind: "set";
+      setId: string | null;
+      label: string | null;
+      deckKey: DeckKey | null;
+    };
 
 // Server-authoritative snapshot of a live Session, pulled over HTTP by the
 // operator remote (apps/web /control) instead of the WebSocket event stream.
@@ -85,10 +93,12 @@ export interface ControllableSession {
   // "New set": finalize the current recording segment and start the next run
   // in place (same Session, same publisher). Returns the new run id.
   startNewRun(): LiveSessionId;
-  // Relay a remote source switch (`source.set` event) to the screen.
+  // Relay a remote source switch (`source.set` event) to the screen. deckKey
+  // rides along for builtin sets so the screen plays manifest-direct (no
+  // fetch — the offline path).
   notifySource(source: {
-    deck?: string;
-    kind: "set" | "deck" | "idle";
+    deckKey?: string;
+    kind: "set" | "idle";
     label?: string | null;
     setId?: string;
   }): void;

@@ -20,22 +20,22 @@ export type SessionAction =
   | { type: "set.new" }
   // Remote source switch (detached console / studio): relayed server-side to
   // the screen as a `source.set` event. Local (attached) picks never dispatch
-  // this — they start playback directly (apply-source.ts).
+  // this — they start playback directly (apply-source.ts). setId is required:
+  // remote picks always originate from fetched sets.list rows.
   | {
       type: "source.set";
       source:
         | { kind: "set"; setId: string; label: string | null }
-        | { kind: "deck"; deck: DeckKey }
         | { kind: "idle" };
     }
   | { type: "frame.report"; url: string }
   | {
       type: "source.report";
       source: {
-        // The deck key rides along so the server can adopt deck reports into
-        // its authoritative source state.
-        deck?: DeckKey;
-        kind: "live" | "deck" | "set" | "idle";
+        // deckKey rides along so the server can adopt client-native builtin
+        // picks (no setId known) into its authoritative source state.
+        deckKey?: DeckKey;
+        kind: "live" | "set" | "idle";
         label: string | null;
         setId?: string;
       };

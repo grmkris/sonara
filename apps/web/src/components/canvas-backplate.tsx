@@ -4,6 +4,7 @@ import { useEffect } from "react";
 
 import { SonaraCanvas } from "@/components/visualizer/canvas/sonara-canvas";
 import { usePlaybackLoop } from "@/hooks/use-playback-loop";
+import { applyBuiltinSetLocally } from "@/lib/apply-source";
 import { useVisualizerStore } from "@/stores/visualizer";
 
 // Shared marketing backplate for the landing + about pages. The same
@@ -23,12 +24,13 @@ export const CanvasBackplate = () => {
   usePlaybackLoop();
 
   // Self-start playback regardless of auth/connectivity — without this the
-  // backplate would be black. Only fills gaps (won't override a deck a
-  // previous page already chose).
+  // backplate would be black. Only fills gaps (won't override a set a
+  // previous page already chose). Client-native builtin set: setId stays
+  // null (no session, no fetch), deckKey drives the manifest loop.
   useEffect(() => {
     const st = useVisualizerStore.getState();
     if (st.source.kind === "idle" || st.source.kind === "live") {
-      st.setSource({ deck: "liquid", kind: "deck" });
+      applyBuiltinSetLocally({ deckKey: "liquid" });
     }
   }, []);
 

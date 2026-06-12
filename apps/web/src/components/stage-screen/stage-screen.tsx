@@ -41,6 +41,7 @@ import { usePlaybackLoop } from "@/hooks/use-playback-loop";
 import { useSongRecognition } from "@/hooks/use-song-recognition";
 import { useSourceReporter } from "@/hooks/use-source-reporter";
 import { useWsSession } from "@/hooks/use-ws-session";
+import { applyBuiltinSetLocally } from "@/lib/apply-source";
 import { useSession } from "@/lib/auth-client";
 import { HOTKEYS } from "@/lib/hotkeys";
 import { cn } from "@/lib/utils";
@@ -202,9 +203,10 @@ export const StageScreen = ({ code }: { code: string | null }) => {
     hydrateModelPrefs();
   }, []);
 
-  // Anonymous visitors normally get a deck source from the server snapshot
-  // (constructor-pinned) — but offline there's no connect snapshot, so
-  // default them onto a deck locally to keep the client-native loop running.
+  // Anonymous visitors normally get a builtin-set source from the server
+  // snapshot (constructor-pinned) — but offline there's no connect snapshot,
+  // so default them onto a builtin locally to keep the client-native loop
+  // running.
   useEffect(() => {
     // session still resolving
     if (sessionData === undefined) {
@@ -215,7 +217,7 @@ export const StageScreen = ({ code }: { code: string | null }) => {
     }
     const st = useVisualizerStore.getState();
     if (st.source.kind === "idle" || st.source.kind === "live") {
-      st.setSource({ deck: "liquid", kind: "deck" });
+      applyBuiltinSetLocally({ deckKey: "liquid" });
     }
   }, [sessionData, isSignedIn]);
 

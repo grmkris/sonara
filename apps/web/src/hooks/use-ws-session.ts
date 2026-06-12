@@ -1,11 +1,13 @@
 "use client";
 
-import { DECK_LOOK } from "@sonara/shared";
 import type { DeckKey, ServerEvent } from "@sonara/shared";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
-import { startSetReplayById } from "@/lib/apply-source";
+import {
+  applyBuiltinSetLocally,
+  startSetReplayById,
+} from "@/lib/apply-source";
 import { createSessionConnection } from "@/lib/orpc-ws";
 import { isKnownPreset } from "@/lib/render/presets";
 import { dispatchSessionAction } from "@/lib/session-actions";
@@ -184,23 +186,24 @@ export const useWsSession = (target: { code: string | null }): WsSession => {
           break;
         }
         case "source.set": {
-          // Remote source switch (console set rows / studio "activate on
+          // Remote source switch (console picks / studio "activate on
           // <stage>"). Apply exactly like a local pick; source.report then
-          // confirms producer-truth back to the server.
+          // confirms producer-truth back to the server. Builtin sets carry
+          // deckKey → manifest-direct, no fetch (the offline path).
           const { source } = event;
-          if (source.kind === "set" && source.setId) {
+          if (source.kind === "set" && source.deckKey) {
+            applyBuiltinSetLocally(
+              {
+                deckKey: source.deckKey as DeckKey,
+                name: source.label ?? null,
+                setId: source.setId ?? null,
+              },
+              (a) => sendRef.current?.(a)
+            );
+          } else if (source.kind === "set" && source.setId) {
             // startSetReplayById sets the unified source + applies the set's
             // authored look. sendRef dodges the handler/send decl order.
             void startSetReplayById(source.setId, (a) => sendRef.current?.(a));
-          } else if (source.kind === "deck" && source.deck) {
-            // Deck-as-a-unit: a remote pick applies the deck's baked render
-            // preset here too, exactly like a local pick (usePickDeck).
-            // Intensity arrives separately via scene.state.
-            const look = DECK_LOOK[source.deck as DeckKey];
-            if (look && isKnownPreset(look.preset)) {
-              s.setPreset(look.preset);
-            }
-            s.setSource({ deck: source.deck as DeckKey, kind: "deck" });
           } else if (source.kind === "idle") {
             s.stopToIdle();
           }
@@ -301,17 +304,30 @@ export const useWsSession = (target: { code: string | null }): WsSession => {
                 const s = store.getState();
                 s.setScene(snap.scene);
                 // Hydrate the playback source from the server snapshot. For
-                // anon sessions the server pinned a random deck at
-                // construction; for signed-in this is the last
-                // command/report. A set source hydrates through
-                // startSetReplayById (it needs frames + the authored look).
+                // anon sessions the server pinned a random builtin set
+                // (deckKey-only) at construction; for signed-in this is the
+                // last command/report. Builtin sets hydrate manifest-direct
+                // (no fetch — anon can't call sets.get-dependent flows and
+                // offline must not need to); fetched sets hydrate through
+                // startSetReplayById (frames + authored look).
                 const src = snap.source;
-                if (src.kind === "set") {
+                if (src.kind === "set" && src.deckKey) {
+                  applyBuiltinSetLocally(
+                    {
+                      deckKey: src.deckKey,
+                      name: src.label,
+                      setId: src.setId,
+                    },
+                    (a) => sendRef.current?.(a)
+                  );
+                } else if (src.kind === "set" && src.setId) {
                   void startSetReplayById(src.setId, (a) =>
                     sendRef.current?.(a)
                   );
-                } else if (src.kind === "deck") {
-                  s.setSource({ deck: src.deck as DeckKey, kind: "deck" });
+                } else if (src.kind === "set") {
+                  // Degenerate set source (neither id nor deckKey) — treat
+                  // as idle rather than crash.
+                  s.setSource({ kind: "idle" });
                 } else {
                   s.setSource({ kind: src.kind });
                 }

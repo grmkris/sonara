@@ -224,10 +224,24 @@ describe("stage-keyed targeting", () => {
     );
     expect(code).toBe("NOT_FOUND");
 
+    // Builtin sets relay with their deckKey so the screen plays the static
+    // manifest directly (no fetch — the offline path).
+    const builtin = await insertSet(db, {
+      deckKey: "noir",
+      name: "Noir",
+      origin: "builtin",
+      userId: null,
+      visibility: "public",
+    });
     await a.setSource({
-      source: { deck: "noir", kind: "deck" },
+      source: { kind: "set", label: null, setId: builtin },
       stageId: stageA.id,
     });
-    expect(sourceCalls.at(-1)).toEqual({ deck: "noir", kind: "deck" });
+    expect(sourceCalls.at(-1)).toEqual({
+      deckKey: "noir",
+      kind: "set",
+      label: "Noir",
+      setId: builtin,
+    });
   });
 });

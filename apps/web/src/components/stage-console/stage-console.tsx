@@ -1,7 +1,6 @@
 "use client";
 
-import { deckLabel } from "@sonara/shared";
-import type { DeckKey, SonaraSceneState } from "@sonara/shared";
+import type { SonaraSceneState } from "@sonara/shared";
 import type { ControlSnapshot } from "@sonara/api/server";
 
 import { useEffect, useState } from "react";
@@ -71,14 +70,14 @@ const Divider = () => (
 
 const StatusPill = ({
   status,
-  deckMode,
+  playbackMode,
 }: {
   status: "idle" | "running" | "cancelled" | "error";
-  deckMode: boolean;
+  playbackMode: boolean;
 }) => {
   let label: string;
-  if (deckMode) {
-    label = "deck";
+  if (playbackMode) {
+    label = "set";
   } else if (status === "running") {
     label = "generating";
   } else if (status === "error") {
@@ -97,7 +96,7 @@ const StatusPill = ({
         tone
       )}
     >
-      {status === "running" && !deckMode ? "● " : ""}
+      {status === "running" && !playbackMode ? "● " : ""}
       {label}
     </span>
   );
@@ -107,20 +106,20 @@ const PreviewCard = ({
   lastFrameUrl,
   status,
   prompt,
-  deck,
+  playbackLabel,
   connected,
 }: {
   lastFrameUrl: string | null;
   status: "idle" | "running" | "cancelled" | "error";
   prompt: string;
-  // Deck key when the server's source is a deck — drives the pill + copy.
-  deck: DeckKey | null;
+  // Set name when the server's source is a set — drives the pill + copy.
+  playbackLabel: string | null;
   connected: boolean;
 }) => {
-  const deckMode = deck !== null;
+  const playbackMode = playbackLabel !== null;
   let placeholderLabel: string;
-  if (deckMode) {
-    placeholderLabel = `${deckLabel(deck)} · on projector`;
+  if (playbackMode) {
+    placeholderLabel = `${playbackLabel} · on projector`;
   } else if (connected) {
     placeholderLabel = "no frame yet";
   } else {
@@ -142,7 +141,7 @@ const PreviewCard = ({
           </div>
         )}
         <div className="absolute left-2 top-2 flex items-center gap-1.5">
-          <StatusPill status={status} deckMode={deckMode} />
+          <StatusPill status={status} playbackMode={playbackMode} />
         </div>
       </div>
       <div className="px-3 py-2">
@@ -150,7 +149,7 @@ const PreviewCard = ({
           on screen
         </span>
         <p className="mt-1 line-clamp-2 font-serif text-[13px] leading-snug text-[color:var(--paper)]/85">
-          {prompt.trim() || (deckMode ? "playing a deck" : "—")}
+          {prompt.trim() || (playbackMode ? "playing a set" : "—")}
         </p>
       </div>
     </div>
@@ -289,8 +288,10 @@ export const StageConsole = ({
           }
           status={snapshot?.jobStatus ?? "idle"}
           prompt={snapshot?.scene.prompt ?? ""}
-          deck={
-            snapshot?.source.kind === "deck" ? snapshot.source.deck : null
+          playbackLabel={
+            snapshot?.source.kind === "set"
+              ? (snapshot.source.label ?? "set")
+              : null
           }
           connected={connected}
         />

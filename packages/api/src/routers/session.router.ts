@@ -100,29 +100,33 @@ const ReportFrameInput = z.object({
   url: z.string().min(1).max(4096),
 });
 
-// Companion of frame.report: WHAT is showing (live / deck / set / idle), not
-// just which frame. label is the human name (deck label / set name); setId
-// rides along for set playback so viewers can link to the permalink; deck
-// carries the key so the server can adopt deck reports into its
-// authoritative source state.
+// Companion of frame.report: WHAT is showing (live / set / idle), not just
+// which frame. label is the human name (set name); setId rides along for set
+// playback so viewers can link to the permalink; deckKey carries the builtin
+// set's manifest pointer so the server can adopt client-native builtin picks
+// (anon/offline — no setId known) into its authoritative source state.
 const ReportSourceInput = z.object({
-  source: z.object({
-    deck: DeckKeySchema.optional(),
-    kind: z.enum(["live", "deck", "set", "idle"]),
-    label: z.string().max(200).nullable(),
-    setId: z.string().max(64).optional(),
-  }),
+  source: z
+    .object({
+      deckKey: DeckKeySchema.optional(),
+      kind: z.enum(["live", "set", "idle"]),
+      label: z.string().max(200).nullable(),
+      setId: z.string().max(64).optional(),
+    })
+    .refine((s) => s.kind !== "set" || !!(s.setId || s.deckKey), {
+      message: "a set report needs setId or deckKey",
+    }),
 });
 
 // The server's authoritative source state, carried in the connect snapshot.
 const SourceStateOutput = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("live") }),
   z.object({ kind: z.literal("idle") }),
-  z.object({ deck: DeckKeySchema, kind: z.literal("deck") }),
   z.object({
+    deckKey: DeckKeySchema.nullable(),
     kind: z.literal("set"),
     label: z.string().nullable(),
-    setId: z.string(),
+    setId: z.string().nullable(),
   }),
 ]);
 
@@ -132,9 +136,10 @@ const StateOutput = z.object({
   imageAnchor: ImageAnchor.nullable(),
   scene: SonaraSceneState,
   // Server-authoritative playback source. Anon sessions are pinned to a
-  // random deck source at Session construction; signed-in sessions reflect
-  // the last command/report. The client hydrates its source slice from this
-  // on every (re)connect — that's what starts the client playback loop.
+  // random builtin set (deckKey-only — manifest-direct, no DB) at Session
+  // construction; signed-in sessions reflect the last command/report. The
+  // client hydrates its source slice from this on every (re)connect — that's
+  // what starts the client playback loop.
   source: SourceStateOutput,
 });
 

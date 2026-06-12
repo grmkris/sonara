@@ -169,9 +169,9 @@ export const PromptInput = ({ send, variant = "framed" }: PromptInputProps) => {
       }
       // The dedupe guards only apply while already live — "same prompt" used
       // to mean "already showing it", but with switchable sources an
-      // identical prompt must still leave a playing deck/set and go live
+      // identical prompt must still leave a playing set and go live
       // (the server remembers scene.prompt across reconnects).
-      const leavingPlayback = source.kind === "deck" || source.kind === "set";
+      const leavingPlayback = source.kind === "set";
       if (!leavingPlayback && next === scene.prompt) {
         return;
       }
