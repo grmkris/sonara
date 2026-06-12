@@ -30,7 +30,6 @@ import { NowPlaying } from "@/components/visualizer/controls/now-playing";
 import { PromptInput } from "@/components/visualizer/controls/prompt-input";
 import { ShareLink } from "@/components/visualizer/controls/share-link";
 import { SetPlaybackConsumer } from "@/components/visualizer/set-playback-consumer";
-import { SetPlaybackHud } from "@/components/visualizer/set-playback-hud";
 import { StudioActionConsumer } from "@/components/visualizer/studio-action-consumer";
 import { useAudioFeatures } from "@/hooks/use-audio-features";
 import type { AudioSource } from "@/hooks/use-audio-features";
@@ -435,9 +434,6 @@ export const StageScreen = ({ code }: { code: string | null }) => {
       <Suspense fallback={null}>
         <SetPlaybackConsumer />
       </Suspense>
-
-      {/* Replay overlay (exit control); only renders while a replay is active. */}
-      <SetPlaybackHud />
 
       {/* Monad wire overlay; only renders while the crowd stage is open. */}
       <StageWire />
