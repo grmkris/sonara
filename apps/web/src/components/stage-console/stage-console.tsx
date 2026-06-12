@@ -71,13 +71,13 @@ const Divider = () => (
 
 const StatusPill = ({
   status,
-  demoMode,
+  deckMode,
 }: {
   status: "idle" | "running" | "cancelled" | "error";
-  demoMode: boolean;
+  deckMode: boolean;
 }) => {
   let label: string;
-  if (demoMode) {
+  if (deckMode) {
     label = "deck";
   } else if (status === "running") {
     label = "generating";
@@ -97,7 +97,7 @@ const StatusPill = ({
         tone
       )}
     >
-      {status === "running" && !demoMode ? "● " : ""}
+      {status === "running" && !deckMode ? "● " : ""}
       {label}
     </span>
   );
@@ -107,20 +107,20 @@ const PreviewCard = ({
   lastFrameUrl,
   status,
   prompt,
-  demoMode,
-  demoDeck,
+  deck,
   connected,
 }: {
   lastFrameUrl: string | null;
   status: "idle" | "running" | "cancelled" | "error";
   prompt: string;
-  demoMode: boolean;
-  demoDeck: DeckKey | null;
+  // Deck key when the server's source is a deck — drives the pill + copy.
+  deck: DeckKey | null;
   connected: boolean;
 }) => {
+  const deckMode = deck !== null;
   let placeholderLabel: string;
-  if (demoMode) {
-    placeholderLabel = `${demoDeck ? deckLabel(demoDeck) : "deck"} · on projector`;
+  if (deckMode) {
+    placeholderLabel = `${deckLabel(deck)} · on projector`;
   } else if (connected) {
     placeholderLabel = "no frame yet";
   } else {
@@ -142,7 +142,7 @@ const PreviewCard = ({
           </div>
         )}
         <div className="absolute left-2 top-2 flex items-center gap-1.5">
-          <StatusPill status={status} demoMode={demoMode} />
+          <StatusPill status={status} deckMode={deckMode} />
         </div>
       </div>
       <div className="px-3 py-2">
@@ -150,7 +150,7 @@ const PreviewCard = ({
           on screen
         </span>
         <p className="mt-1 line-clamp-2 font-serif text-[13px] leading-snug text-[color:var(--paper)]/85">
-          {prompt.trim() || (demoMode ? "playing a deck" : "—")}
+          {prompt.trim() || (deckMode ? "playing a deck" : "—")}
         </p>
       </div>
     </div>
@@ -289,8 +289,9 @@ export const StageConsole = ({
           }
           status={snapshot?.jobStatus ?? "idle"}
           prompt={snapshot?.scene.prompt ?? ""}
-          demoMode={snapshot?.demoMode ?? false}
-          demoDeck={snapshot?.demoDeck ?? null}
+          deck={
+            snapshot?.source.kind === "deck" ? snapshot.source.deck : null
+          }
           connected={connected}
         />
 

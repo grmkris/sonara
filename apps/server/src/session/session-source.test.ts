@@ -7,8 +7,7 @@ import type { LiveSessionId, UserId } from "@sonara/shared/typeid";
 
 import { freshCadenceFromStability, Session } from "./session";
 
-// Unit tests for the source state machine (the demoMode/demoDeck successor):
-// anon pinning, the anon playback guard, and producer-report adoption. The
+// Unit tests for the source state machine: anon pinning, the anon playback guard, and producer-report adoption. The
 // trigger() generation gate and goLive flows stay covered by the wider
 // integration suites — they pull credits/fal and don't belong here.
 const logger = createLogger({ level: "error", name: "test" });
@@ -93,18 +92,16 @@ describe("Session source state", () => {
     expect(s.getSource()).toEqual(pinned);
   });
 
-  test("snapshot carries source plus consistent derived shims", () => {
+  test("snapshot carries the authoritative source", () => {
     const s = signedIn();
     s.setSource({ deck: "wild", kind: "deck" });
-    const snap = s.getControlSnapshot();
-    expect(snap.source).toEqual({ deck: "wild", kind: "deck" });
-    expect(snap.demoMode).toBe(true);
-    expect(snap.demoDeck).toBe("wild");
+    expect(s.getControlSnapshot().source).toEqual({
+      deck: "wild",
+      kind: "deck",
+    });
 
     s.setSource({ kind: "idle" });
-    const idle = s.getControlSnapshot();
-    expect(idle.demoMode).toBe(false);
-    expect(idle.demoDeck).toBeNull();
+    expect(s.getControlSnapshot().source).toEqual({ kind: "idle" });
   });
 });
 

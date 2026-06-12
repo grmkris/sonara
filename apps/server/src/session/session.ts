@@ -266,7 +266,7 @@ export class Session implements ControllableSession {
   // watching for up to the whole grace window.
   private attached = true;
 
-  // The authoritative playback source (demoMode/demoDeck successor): what
+  // The authoritative playback source: what
   // this session should be showing. Frame-driving for deck/set sources is
   // client-side; the server tracks this for the connect snapshot, anon
   // pinning, and the trigger() generation gate. Mutated by control commands
@@ -424,9 +424,6 @@ export class Session implements ControllableSession {
     return {
       currentFrameUrl: this.currentFrameUrl ?? this.lastFrameUrl,
       currentSource: this.currentSource,
-      // Deprecated derived shims — see ControlSnapshot.
-      demoDeck: this.source.kind === "deck" ? this.source.deck : null,
-      demoMode: this.source.kind === "deck",
       imageAnchor: this.scene.imageAnchor ?? null,
       jobStatus: this.lastJobStatus,
       lastFrameUrl: this.lastFrameUrl,
@@ -470,13 +467,11 @@ export class Session implements ControllableSession {
     }
   }
 
-  // Set or clear the live session's image anchor. Setting clears demoMode
-  // (anchor and demo are mutually exclusive — anchor wins). Fires a trigger
-  // immediately so the first anchor frame lands without waiting for the
-  // semantic-diff gate.
-  setImageAnchor(
-    input: { url: string; strength: number } | { clear: true }
-  ): void {
+  // Set or clear the live session's image anchor (one-shot chain seed).
+  // Setting kicks the session back to live (anchor wins over a deck/set
+  // source) and fires a trigger immediately so the seeded frame lands
+  // without waiting for the semantic-diff gate.
+  setImageAnchor(input: { url: string } | { clear: true }): void {
     if ("clear" in input) {
       if (!this.scene.imageAnchor) {
         return;
@@ -486,11 +481,9 @@ export class Session implements ControllableSession {
       this.logger.info({}, "image anchor cleared");
       return;
     }
-    // No-op dedupe: re-pinning the exact same {url, strength} (reconnect
-    // re-hydration, or re-clicking the already-active preset) must not fire a
-    // fresh paid generation. A *different* strength still falls through.
-    const cur = this.scene.imageAnchor;
-    if (cur && cur.url === input.url && cur.strength === input.strength) {
+    // No-op dedupe: re-pinning the exact same url (reconnect re-hydration)
+    // must not fire a fresh paid generation.
+    if (this.scene.imageAnchor?.url === input.url) {
       return;
     }
     // Anchor wins over playback. setSource doesn't touch anchor; if both are
@@ -506,10 +499,7 @@ export class Session implements ControllableSession {
       imageAnchor: { url: input.url },
     };
     this.send({ state: this.scene, type: "scene.state" });
-    this.logger.info(
-      { strength: input.strength, url: input.url },
-      "image anchor set"
-    );
+    this.logger.info({ url: input.url }, "image anchor set");
     // Fire trigger immediately — bypasses semantic-diff gate so the first
     // anchor frame lands without waiting.
     void this.trigger("semantic");

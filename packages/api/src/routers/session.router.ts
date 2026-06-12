@@ -71,11 +71,6 @@ const VoicePatchInput = z.object({
   patch: ClientScenePatch,
 });
 
-const DemoModeInput = z.object({
-  deck: DeckKeySchema.nullable(),
-  on: z.boolean(),
-});
-
 const GoLiveInput = z.object({
   // The scene the user typed to leave the deck and start generating.
   prompt: z.string(),
@@ -86,11 +81,7 @@ const GoLiveInput = z.object({
 });
 
 const SetImageAnchorInput = z.union([
-  z.object({
-    // DEPRECATED (ultra-era) — tolerated so stale tabs don't 400; ignored.
-    strength: z.number().min(0).max(1).optional(),
-    url: z.string().url(),
-  }),
+  z.object({ url: z.string().url() }),
   z.object({ clear: z.literal(true) }),
 ]);
 
@@ -141,11 +132,6 @@ const SourceStateOutput = z.discriminatedUnion("kind", [
 ]);
 
 const StateOutput = z.object({
-  // DEPRECATED shims derived from `source` — kept one release so a stale tab
-  // (old web bundle) that still reads demoMode/demoDeck doesn't go black
-  // after a deploy. Delete with the setDemoMode shim below.
-  demoDeck: DeckKeySchema.nullable(),
-  demoMode: z.boolean(),
   // Server-authoritative image anchor. Set via setImageAnchor; survives a
   // tab refresh because the live Session keeps it in memory until disconnect.
   imageAnchor: ImageAnchor.nullable(),
@@ -227,17 +213,6 @@ export const sessionRouter = {
     context.session.applyPatch(input.patch, "client");
   }),
 
-  // DEPRECATED shim over setSource — kept one release for stale tabs that
-  // still send demo.set after a deploy. New clients report via reportSource;
-  // remote commands flow through control.setSource.
-  setDemoMode: sessionOs.input(DemoModeInput).handler(({ context, input }) => {
-    if (input.on && input.deck) {
-      context.session.setSource({ deck: input.deck, kind: "deck" });
-    } else if (!input.on) {
-      context.session.setSource({ kind: "idle" });
-    }
-  }),
-
   // Image-anchor switch. The browser uploaded an image via the web service's
   // /api/upload/image route and got back a fal-hosted URL; this mutation
   // pins that URL onto the live Session as a one-shot chain seed; fires an
@@ -267,16 +242,11 @@ export const sessionRouter = {
   // on every reconnect) to cover the race where session.init()'s initial
   // publishes land before the events() subscribe has attached. Also useful for
   // post-drift resync later.
-  state: sessionOs.output(StateOutput).handler(({ context }) => {
-    const source = context.session.getSource();
-    return {
-      demoDeck: source.kind === "deck" ? source.deck : null,
-      demoMode: source.kind === "deck",
-      imageAnchor: context.session.getImageAnchor(),
-      scene: context.session.getSnapshot(),
-      source,
-    };
-  }),
+  state: sessionOs.output(StateOutput).handler(({ context }) => ({
+    imageAnchor: context.session.getImageAnchor(),
+    scene: context.session.getSnapshot(),
+    source: context.session.getSource(),
+  })),
 
   // Direct field-keyed PTT patch. The client routes each push-to-talk
   // transcript to a specific scene field (subject/environment/mood/palette),

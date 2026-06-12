@@ -89,8 +89,8 @@ export const hydratePresetPrefs = (): void => {
 };
 
 // Same hydration pattern as preset prefs — apply the persisted playback
-// source (deck/idle only; migrates the legacy viz_demo_mode/viz_demo_deck
-// keys) post-mount so SSR + first client render stay consistent.
+// source (deck/idle only) post-mount so SSR + first client render stay
+// consistent.
 export const hydrateSourcePref = (): void => {
   if (typeof window === "undefined") {
     return;

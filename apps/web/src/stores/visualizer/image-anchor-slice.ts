@@ -8,8 +8,7 @@ import type { VisualizerState } from "./types";
 // upload-in-flight flag, and a localStorage-backed clickwrap consent. The
 // actual scene-state mutation goes through the oRPC `setImageAnchor`
 // mutation — this slice is just the UI mirror so the upload zone re-renders
-// correctly. (The ultra-era strength presets are gone: the edit model is
-// prompt-driven.)
+// correctly.
 
 export const ANCHOR_CLICKWRAP_KEY = "viz_anchor_clickwrap";
 

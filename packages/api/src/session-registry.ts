@@ -22,8 +22,7 @@ export interface SessionSource {
   setId?: string;
 }
 
-// The server's authoritative playback-source state — the demoMode/demoDeck
-// successor. Mutated by control commands (optimistically) and adopted from
+// The server's authoritative playback-source state. Mutated by control commands (optimistically) and adopted from
 // producer reports; trigger() refuses fal generation while a client-driven
 // source (deck/set) is showing.
 export type SessionSourceState =
@@ -43,10 +42,6 @@ export interface ControlSnapshot {
   // lives in currentSource; keep both (console pills read intent, viewers
   // read producer truth).
   source: SessionSourceState;
-  // DEPRECATED shims derived from `source` — kept one release for web code
-  // not yet migrated to `source`. Delete with the setDemoMode shims.
-  demoMode: boolean;
-  demoDeck: DeckKey | null;
   imageAnchor: ImageAnchor | null;
   nowPlaying: NowPlaying | null;
   jobStatus: JobStatus;

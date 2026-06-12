@@ -27,9 +27,8 @@ import { useVisualizerStore } from "@/stores/visualizer";
 interface SourceSwitcherProps {
   send: SessionSend;
   // "local": this device owns the canvas — set picks start the client replay
-  // loop here. "remote": a detached console driving another screen — set
-  // picks are hidden until the source.set bridge lands (W5); deck picks
-  // already travel via the unified send (demo.set → control.setDemoMode).
+  // loop here. "remote": a detached console driving another screen — picks
+  // travel as source.set commands the screen applies and confirms.
   mode?: "local" | "remote";
   showSets?: boolean;
 }

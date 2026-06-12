@@ -47,9 +47,6 @@ export const dispatchControlAction = (
         ? c.setSource({ source: action.source, stageId: target.stageId })
         : Promise.resolve();
     }
-    case "demo.set": {
-      return c.setDemoMode({ ...target, deck: action.deck, on: action.on });
-    }
     case "session.goLive": {
       // The operator has no canvas, so there's no on-screen frame to seed
       // from — control.goLive seeds from the server's last frame instead.

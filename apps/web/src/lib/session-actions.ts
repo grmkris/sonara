@@ -41,7 +41,6 @@ export type SessionAction =
         setId?: string;
       };
     }
-  | { type: "demo.set"; on: boolean; deck: DeckKey | null }
   | { type: "session.goLive"; prompt: string; seedFrameUrl: string | null }
   | { type: "image.anchor.set"; url: string }
   | { type: "image.anchor.clear" }
@@ -91,9 +90,6 @@ export const dispatchSessionAction = (
     }
     case "source.report": {
       return client.reportSource({ source: action.source });
-    }
-    case "demo.set": {
-      return client.setDemoMode({ deck: action.deck, on: action.on });
     }
     case "session.goLive": {
       return client.goLive({

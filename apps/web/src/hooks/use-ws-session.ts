@@ -256,11 +256,10 @@ export const useWsSession = (target: { code: string | null }): WsSession => {
         };
         store.getState().setConnected(true);
         // Fire hello on every (re)connect so the server can re-init its
-        // side idempotently. The state() pull below will hydrate demoMode
-        // and demoDeck from server-authoritative state — anon sessions
-        // come up demo-pinned with a random deck, signed-in sessions come
-        // up with whatever they last set. The client no longer pushes its
-        // localStorage demo prefs on connect.
+        // side idempotently. The state() pull below hydrates the playback
+        // source from server-authoritative state — anon sessions come up
+        // pinned to a random deck, signed-in sessions come up with whatever
+        // they last set.
         sendRef.current({ type: "hello" });
         // The A/B model + resolution are CLIENT-authoritative (persisted to
         // localStorage, hydrated post-mount). The server Session starts on its

@@ -65,8 +65,6 @@ const registerSession = (
   const snapshot: ControlSnapshot = {
     currentFrameUrl: null,
     currentSource: null,
-    demoDeck: null,
-    demoMode: false,
     imageAnchor: null,
     jobStatus: "idle",
     lastFrameUrl: null,

@@ -61,18 +61,8 @@ const resolveTarget = async (
 
 const ScenePatchInput = ByTarget.and(z.object({ patch: ClientScenePatch }));
 const GoLiveInput = ByTarget.and(z.object({ prompt: z.string() }));
-const SetDemoModeInput = ByTarget.and(
-  z.object({ deck: DeckKeySchema.nullable(), on: z.boolean() })
-);
 const SetImageAnchorInput = z.union([
-  ByTarget.and(
-    // `strength` is DEPRECATED (ultra-era) — tolerated so stale consoles
-    // don't 400; the session ignores it. Delete after soak.
-    z.object({
-      strength: z.number().min(0).max(1).optional(),
-      url: z.string().url(),
-    })
-  ),
+  ByTarget.and(z.object({ url: z.string().url() })),
   ByTarget.and(z.object({ clear: z.literal(true) })),
 ]);
 
@@ -117,9 +107,6 @@ export const controlRouter = {
         const snap = s.getControlSnapshot();
         return {
           currentFrameUrl: snap.currentFrameUrl,
-          // Deprecated shims alongside source — web migrates in U4.
-          demoDeck: snap.demoDeck,
-          demoMode: snap.demoMode,
           jobStatus: snap.jobStatus,
           lastFrameUrl: snap.lastFrameUrl,
           liveSessionId: snap.liveSessionId,
@@ -193,21 +180,6 @@ export const controlRouter = {
     .handler(async ({ context, input }) => {
       const session = await resolveTarget(context, input);
       session.applyPatch(input.patch, "client");
-    }),
-
-  // DEPRECATED shim over setSource — old console bundles still call this
-  // after a deploy. Delete together with the WS setDemoMode shim.
-  setDemoMode: protectedProcedure
-    .input(SetDemoModeInput)
-    .handler(async ({ context, input }) => {
-      const session = await resolveTarget(context, input);
-      if (input.on && input.deck) {
-        session.setSource({ deck: input.deck, kind: "deck" });
-        session.notifySource({ deck: input.deck, kind: "deck" });
-      } else if (!input.on) {
-        session.setSource({ kind: "idle" });
-        session.notifySource({ kind: "idle" });
-      }
     }),
 
   setImageAnchor: protectedProcedure
@@ -300,9 +272,6 @@ export const controlRouter = {
           run: snap
             ? {
                 currentFrameUrl: snap.currentFrameUrl,
-                // Deprecated shims alongside source — web migrates in U4.
-                demoDeck: snap.demoDeck,
-                demoMode: snap.demoMode,
                 jobStatus: snap.jobStatus,
                 liveSessionId: snap.liveSessionId,
                 nowPlaying: snap.nowPlaying,

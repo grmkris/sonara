@@ -5,7 +5,7 @@ import { env } from "../env";
 
 // Image-anchor upload. Multipart POST → Better Auth session check →
 // validate file → forward to fal.storage.upload() → return the fal-hosted
-// URL. The browser then calls oRPC `setImageAnchor({ url, strength })` to
+// URL. The browser then calls oRPC `setImageAnchor({ url })` to
 // pin it on the live Session.
 //
 // No DB row is written. The fal URL lives on the Session in memory and

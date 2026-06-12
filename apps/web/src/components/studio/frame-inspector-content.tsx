@@ -68,18 +68,18 @@ const formatStamp = (date: Date): string => {
 // Friendly name for the fal model. Falls back to whatever the row stores
 // if we don't recognise it.
 // Model isn't in LibraryFrame directly (we omit it from the wire shape
-// since it's mostly noise). The deck + anchorUrl presence are enough
-// hints for the inspector: if anchorUrl is set this was anchor-mode
-// (flux-pro/v1.1-ultra), else text-mode (klein/9b).
+// since it's mostly noise). anchorUrl presence is enough of a hint: set
+// means the frame was chained off the previous one (klein/9b/edit), unset
+// means a fresh text-to-image frame.
 const shortModelName = (
   _deck: string,
   _tMs: number,
   frame: LibraryFrame
-): string => (frame.anchorUrl ? "anchor · flux-pro" : "text · klein/9b");
+): string => (frame.anchorUrl ? "chained · klein/edit" : "fresh · klein/9b");
 
 // The inspector body. Reused by the desktop right-pane wrapper and the
 // mobile Sheet wrapper. All actions are URL-driven — clicking "use as
-// anchor" navigates to /play?anchor=...&strength=0.55, etc. /play's
+// anchor" navigates to /play?anchor=..., etc. /play's
 // useSearchParams consumer dispatches the WS action after the socket
 // opens, then router.replace clears the params (Phase 8e).
 export const FrameInspectorContent = ({
@@ -88,10 +88,7 @@ export const FrameInspectorContent = ({
   const router = useRouter();
 
   const onUseAsAnchor = useCallback(() => {
-    const qs = new URLSearchParams({
-      anchor: frame.url,
-      strength: "0.55",
-    });
+    const qs = new URLSearchParams({ anchor: frame.url });
     router.push(`/play?${qs.toString()}`);
   }, [frame.url, router]);
 

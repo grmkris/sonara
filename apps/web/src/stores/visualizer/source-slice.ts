@@ -11,11 +11,8 @@ import type { VisualizerState } from "./types";
 
 export const SOURCE_KEY = "viz_source";
 // Pre-unification keys, migrated by readSourcePref then removed.
-const LEGACY_DEMO_MODE_KEY = "viz_demo_mode";
-const LEGACY_DEMO_DECK_KEY = "viz_demo_deck";
 
-// The client's playback source — the demoMode/demoDeck + set-playback
-// successor. ONE field decides what produces frames:
+// The client's playback source. ONE field decides what produces frames:
 //   idle  nothing plays (canvas holds its last frame)
 //   live  server generation produces (WS frame events)
 //   deck  the playback loop cycles the deck's static manifest
@@ -77,8 +74,7 @@ export const createSourceSlice: StateCreator<
   },
 });
 
-// Post-mount hydration value (SSR renders idle). Migrates the pre-unification
-// viz_demo_mode/viz_demo_deck keys on first read, then removes them.
+// Post-mount hydration value (SSR renders idle).
 export const readSourcePref = (): PlaybackSource | null => {
   if (typeof window === "undefined") {
     return null;
@@ -98,17 +94,8 @@ export const readSourcePref = (): PlaybackSource | null => {
         return { deck: parsed.deck as DeckKey, kind: "deck" };
       }
     } catch {
-      // corrupt value — fall through to the legacy keys
+      // corrupt value — treat as unset
     }
-  }
-  const m = window.localStorage.getItem(LEGACY_DEMO_MODE_KEY);
-  const d = window.localStorage.getItem(LEGACY_DEMO_DECK_KEY);
-  window.localStorage.removeItem(LEGACY_DEMO_MODE_KEY);
-  window.localStorage.removeItem(LEGACY_DEMO_DECK_KEY);
-  if (m === "1" && d && (DECK_KEYS as readonly string[]).includes(d)) {
-    const migrated: PlaybackSource = { deck: d as DeckKey, kind: "deck" };
-    persistSource(migrated);
-    return migrated;
   }
   return null;
 };

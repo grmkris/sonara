@@ -54,8 +54,6 @@ const makeFakeSession = (opts: {
   const snapshot: ControlSnapshot = {
     currentFrameUrl: "https://signed.test/current.webp",
     currentSource: { kind: "live", label: "neon koi" },
-    demoDeck: null,
-    demoMode: false,
     imageAnchor: null,
     jobStatus: "running",
     lastFrameUrl: "https://signed.test/last.webp",
