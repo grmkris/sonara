@@ -731,6 +731,14 @@ export class AudioEngine {
       this.bpmEst > 0
         ? (this.bpmPhase + (dtMs / 1000) * (this.bpmEst / 60)) % 1
         : 0;
+    // PLL-lock the open-loop phase to real onsets: on a confident hit, nudge the
+    // phase a little toward the nearest grid line (0/1) so the free-running clock
+    // tracks the actual downbeats instead of drifting. Gentle gain keeps it from
+    // jittering on syncopation; only the new beat-pulse accent consumes bpmPhase.
+    if (onset && this.bpmEst > 0) {
+      const err = this.bpmPhase < 0.5 ? -this.bpmPhase : 1 - this.bpmPhase;
+      this.bpmPhase = (this.bpmPhase + err * 0.1 + 1) % 1;
+    }
 
     const payload: AudioFeatures = {
       arousal: Math.max(0, Math.min(1, this.arousalSmoothed)),

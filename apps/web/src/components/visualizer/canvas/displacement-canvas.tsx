@@ -296,6 +296,7 @@ export const DisplacementCanvas = () => {
       uKick: gl.getUniformLocation(program, "uKick"),
       uSnare: gl.getUniformLocation(program, "uSnare"),
       uVocal: gl.getUniformLocation(program, "uVocal"),
+      uBeatPulse: gl.getUniformLocation(program, "uBeatPulse"),
       uIntensity: gl.getUniformLocation(program, "uIntensity"),
       uHuePumpNorm: gl.getUniformLocation(program, "uHuePumpNorm"),
       uPaletteShift: gl.getUniformLocation(program, "uPaletteShift"),
@@ -861,6 +862,9 @@ export const DisplacementCanvas = () => {
       gl.uniform1f(uni.uWarp, targets.warp ?? 0);
       gl.uniform1f(uni.uMotionEnergy, targets.motionEnergy ?? 0);
       gl.uniform1f(uni.uVignette, targets.vignette ?? 0);
+      // Shaped + gated upstream (targetsFromAudio → beatPulse). Uploaded raw,
+      // NOT through the slow VU envelopes — those would blur the beat's snap.
+      gl.uniform1f(uni.uBeatPulse, targets.beatPulse ?? 0);
       gl.uniform4f(
         uni.uDabPosKS,
         dabs.kick[0],

@@ -66,6 +66,9 @@ uniform float uRmsPeak;
 uniform float uKick;
 uniform float uSnare;
 uniform float uVocal;
+// 0..1, peaks on the inferred beat (gated by tempo-lock + energy). Drives a
+// steady grid-locked "breath", distinct from the drum-reactive uKick punch.
+uniform float uBeatPulse;
 uniform float uIntensity;
 uniform float uHuePumpNorm;
 uniform float uPaletteShift;
@@ -262,6 +265,12 @@ vec2 computeDisplacement(vec2 uv) {
   vec2 toCenter = uv - vec2(0.5);
   float d = length(toCenter);
   disp += normalize(toCenter + 1e-5) * uKick * 0.022 * (1.0 - smoothstep(0.0, 0.8, d));
+
+  // Grid-locked beat "breath": a gentle whole-frame zoom toward center that
+  // resolves on the inferred beat. Smaller and broader than the sharp, outward
+  // uKick drum punch, so the two read as distinct gestures (steady grid vs.
+  // syncopated hits) and reinforce on four-on-the-floor.
+  disp += -toCenter * uBeatPulse * 0.018;
 
   disp += shockwave(uv, vec2(0.5),        uImpulseAges.x, 1.15, 0.14, 0.040);
   disp += shockwave(uv, vec2(0.5),        uImpulseAges.y, 0.85, 0.09, 0.022);
