@@ -6,6 +6,7 @@ import {
   intensityCoefficients,
   targetsFromAudio,
 } from "@/lib/render/map-audio-to-visuals";
+import { crossfadeMsToBeat } from "@/lib/render/beat-timing";
 import { resolveAudio } from "@/lib/render/preset-audio-routing";
 import {
   BASE,
@@ -515,6 +516,10 @@ export const DisplacementCanvas = () => {
     let toCfg: PresetConfig = { ...BASE };
     let fadeStartAt = 0;
     let fadeInFlight = false;
+    // Keyframe-reveal duration, snapped to the beat grid at crossfade start so
+    // the dissolve resolves on the bar (see beat-timing.crossfadeMsToBeat).
+    let crossfadeDurMs = BLEED_MS;
+    let lastCrossfadeStart: number | null = null;
     let currentPresetName: PresetName = useVisualizerStore.getState().preset;
     let currentDrift: PresetDrift = makeDriftForPreset(currentPresetName);
 
@@ -708,13 +713,22 @@ export const DisplacementCanvas = () => {
       const prevSlot = getPrev();
       const hasPrev = state.previousFrame !== null && prevSlot.loaded;
       const settledBleed = currSlot.loaded ? 1 : 0;
+      // On a new keyframe, snap the reveal duration to the beat grid using the
+      // tempo + phase at this moment — so the dissolve completes on the beat.
+      if (state.crossfadeStartedAt !== lastCrossfadeStart) {
+        lastCrossfadeStart = state.crossfadeStartedAt;
+        if (state.crossfadeStartedAt !== null) {
+          crossfadeDurMs = crossfadeMsToBeat(
+            state.audio.bpm,
+            state.audio.bpmPhase,
+            hasPrev ? BLEED_MS : FADE_MS
+          );
+        }
+      }
       const bleedT =
         state.crossfadeStartedAt === null
           ? settledBleed
-          : Math.min(
-              1,
-              (now - state.crossfadeStartedAt) / (hasPrev ? BLEED_MS : FADE_MS)
-            );
+          : Math.min(1, (now - state.crossfadeStartedAt) / crossfadeDurMs);
 
       resizeCanvasToDisplay(canvas, gl);
 
