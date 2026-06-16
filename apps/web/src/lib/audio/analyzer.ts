@@ -3,6 +3,8 @@
 import type { AudioFeatures, OnsetType } from "@sonara/shared";
 import Meyda from "meyda";
 
+import type { AutoGainState } from "./analyzer-dsp";
+import { autoGain, createAutoGainState, weightedRms } from "./analyzer-dsp";
 import { classifyOnset } from "./onset-classify";
 import { createClipRecorder } from "./recorder";
 import type { ClipRecorder } from "./recorder";
@@ -227,6 +229,11 @@ export class AudioEngine {
   private rmsHistory: number[] = [];
   // Longer flux buffer for tempo autocorrelation. Holds ~8s at ~60 Hz.
   private beatFluxHistory: number[] = [];
+  // Running-peak normalisers per band (see analyzer-dsp.autoGain) so a quiet
+  // band still reaches full range while silence stays silent.
+  private bassGain: AutoGainState = createAutoGainState();
+  private midsGain: AutoGainState = createAutoGainState();
+  private trebleGain: AutoGainState = createAutoGainState();
   private bpmEst = 0;
   private bpmPhase = 0;
   private lastBpmAnalysisAt = 0;
@@ -597,14 +604,10 @@ export class AudioEngine {
     this.analyser.getByteFrequencyData(freq);
     this.analyser.getByteTimeDomainData(time);
 
-    // RMS computed from time-domain samples (byte, centred on 128). Matches
-    // WaveformRibbon's formula; independent of Meyda so it never stalls at 0.
-    let sumSq = 0;
-    for (const sample of time) {
-      const d = (sample ?? 128) - 128;
-      sumSq += d * d;
-    }
-    const rms = Math.sqrt(sumSq / time.length) / 128;
+    // RMS from time-domain samples, high-passed to drop DC + sub-bass rumble so
+    // perceived loudness is fair (sub-bass no longer dominates bloom/motion).
+    // Independent of Meyda so it never stalls at 0.
+    const rms = weightedRms(time);
 
     // Spectral centroid from the frequency buffer — also free here, avoids
     // the Meyda dependency for this core feature.
@@ -654,9 +657,12 @@ export class AudioEngine {
     const midsEnd = Math.floor(2000 / binHz);
     const trebleEnd = Math.min(bins, Math.floor(10_000 / binHz));
 
-    const bass = mean(freq, 0, bassEnd) / 255;
-    const mids = mean(freq, bassEnd, midsEnd) / 255;
-    const treble = mean(freq, midsEnd, trebleEnd) / 255;
+    // Per-band running auto-gain: normalise each band against its own recent
+    // peak so a quiet band (e.g. treble under dominant bass) still reads, while
+    // silence stays silent (floored). Fixes "dead treble next to loud bass".
+    const bass = autoGain(mean(freq, 0, bassEnd) / 255, this.bassGain);
+    const mids = autoGain(mean(freq, bassEnd, midsEnd) / 255, this.midsGain);
+    const treble = autoGain(mean(freq, midsEnd, trebleEnd) / 255, this.trebleGain);
 
     // Spectral flux for onset detection (our own, not Meyda's — finer-grained).
     let flux = 0;
