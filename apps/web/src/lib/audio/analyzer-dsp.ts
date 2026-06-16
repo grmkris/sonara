@@ -50,3 +50,44 @@ export const autoGain = (
   state.peak = Math.max(value, state.peak * decay, floor);
   return Math.min(1, value / state.peak);
 };
+
+// Median of a number array (non-mutating). Used as the adaptive onset
+// threshold's centre: unlike the mean, the median isn't dragged upward by the
+// very transient peaks the detector is trying to find — the robust choice that
+// madmom/Böck-style spectral-flux detectors use.
+export const median = (arr: number[]): number => {
+  const n = arr.length;
+  if (n === 0) {
+    return 0;
+  }
+  const sorted = arr.toSorted((a, b) => a - b);
+  const mid = Math.floor(n / 2);
+  return n % 2 === 0
+    ? ((sorted[mid - 1] ?? 0) + (sorted[mid] ?? 0)) / 2
+    : (sorted[mid] ?? 0);
+};
+
+// Positive spectral flux over a single band [start, end) of the FFT bins.
+// `freq` is the raw byte spectrum (0..255); `prev` the previous frame's
+// normalised spectrum (0..1). Returns the per-bin average of rising energy, so
+// band fluxes are directly comparable regardless of band width. Computing
+// kick=low / snare=mid / hat=high flux lets onset typing key off *where the
+// transient rises*, not just where steady energy sits.
+export const spectralFluxBand = (
+  freq: Uint8Array<ArrayBufferLike>,
+  prev: Float32Array,
+  start: number,
+  end: number
+): number => {
+  if (end <= start) {
+    return 0;
+  }
+  let flux = 0;
+  for (let i = start; i < end; i += 1) {
+    const delta = (freq[i] ?? 0) / 255 - (prev[i] ?? 0);
+    if (delta > 0) {
+      flux += delta;
+    }
+  }
+  return flux / (end - start);
+};

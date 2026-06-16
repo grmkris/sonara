@@ -1,6 +1,12 @@
 import { describe, expect, test } from "bun:test";
 
-import { autoGain, createAutoGainState, weightedRms } from "./analyzer-dsp";
+import {
+  autoGain,
+  createAutoGainState,
+  median,
+  spectralFluxBand,
+  weightedRms,
+} from "./analyzer-dsp";
 
 // Build a byte time-domain buffer (centred on 128) from a -1..1 generator.
 const buf = (n: number, fn: (i: number) => number): Uint8Array =>
@@ -57,5 +63,51 @@ describe("autoGain", () => {
     const out = autoGain(0.9, state);
     expect(out).toBeLessThanOrEqual(1);
     expect(out).toBeGreaterThan(0.9);
+  });
+});
+
+describe("median", () => {
+  test("is 0 for an empty array", () => {
+    expect(median([])).toBe(0);
+  });
+
+  test("odd and even lengths", () => {
+    expect(median([3, 1, 2])).toBe(2);
+    expect(median([4, 1, 3, 2])).toBe(2.5);
+  });
+
+  test("is not dragged up by peaks the way the mean is", () => {
+    // One big transient among a quiet baseline: mean jumps, median holds.
+    const stream = [0.01, 0.01, 0.02, 0.01, 0.9];
+    const mean = stream.reduce((a, b) => a + b, 0) / stream.length;
+    expect(median(stream)).toBeLessThan(mean);
+    expect(median(stream)).toBeLessThan(0.1);
+  });
+});
+
+describe("spectralFluxBand", () => {
+  // an all-zeros previous spectrum
+  const prev = new Float32Array(8);
+
+  test("returns 0 for an empty band", () => {
+    const freq = new Uint8Array(8).fill(255);
+    expect(spectralFluxBand(freq, prev, 3, 3)).toBe(0);
+  });
+
+  test("isolates rising energy within a band", () => {
+    // Energy rises only in bins [4,6).
+    const freq = new Uint8Array(8);
+    freq[4] = 255;
+    freq[5] = 255;
+    // bass band sees no rise; the band containing [4,6) does.
+    expect(spectralFluxBand(freq, prev, 0, 4)).toBe(0);
+    expect(spectralFluxBand(freq, prev, 4, 6)).toBeGreaterThan(0.9);
+  });
+
+  test("counts only positive change (energy falling = 0 flux)", () => {
+    const hot = new Float32Array(8).fill(1);
+    // freq dropped to 0 → all deltas negative → 0 flux
+    const freq = new Uint8Array(8);
+    expect(spectralFluxBand(freq, hot, 0, 8)).toBe(0);
   });
 });
