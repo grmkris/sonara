@@ -54,6 +54,7 @@ import {
 } from "../library/recording-set";
 import { stageRooms } from "../stage/stage-rooms";
 import { recognizeClip } from "../recognition/recognition.service";
+import { shouldFireForBeat } from "./beat-clock";
 import { semanticDiff } from "./semantic-diff";
 
 export interface SessionOpts {
@@ -114,6 +115,10 @@ const SECTION_SUSTAIN_MS = 500;
 // re-stabilises. 12s matches the new keyframe base cadence so we never
 // stack two image generations on top of each other for energy reasons.
 const SECTION_REFRACTORY_MS = 12_000;
+
+// Estimated keyframe generation latency (FAL klein ~150–300ms). Beat-synced
+// firing leads the downbeat by this much so the frame reveals on the beat.
+const BEAT_GEN_LATENCY_MS = 250;
 
 // When audio has been effectively silent for this long we assume the song
 // ended / the tab changed and we clear nowPlaying so the next active segment
@@ -230,6 +235,10 @@ export class Session implements ControllableSession {
   private lastValence = 0.5;
   private lastArousal = 0;
   private lastBpm = 0;
+  // Latest beat-clock phase (0..1) + when it arrived, for beat-synced
+  // generation timing (see beat-clock.shouldFireForBeat).
+  private lastBpmPhase = 0;
+  private lastBpmPhaseAt = 0;
   // Last seen audio rms. Snapshotted into inspector_context at trigger
   // time so /studio can show audio mood when the frame landed.
   private lastRms = 0;
@@ -587,6 +596,8 @@ export class Session implements ControllableSession {
     this.lastValence = features.valence;
     this.lastArousal = features.arousal;
     this.lastBpm = features.bpm;
+    this.lastBpmPhase = features.bpmPhase;
+    this.lastBpmPhaseAt = now;
     this.lastRms = features.rms;
 
     // Silence-clear for nowPlaying. Kept independent of section detection
@@ -830,10 +841,25 @@ export class Session implements ControllableSession {
   }
 
   private startPeriodic(): void {
+    // 250ms tick (not 1s) so beat-synced firing can land near the actual
+    // downbeat; all the gates below still rate-limit real generation.
     this.periodicTimer = setInterval(() => {
       const now = Date.now();
       const { periodicMs } = cadenceFromIntensity(this.scene.intensity);
-      if (now - this.lastKeyframeAt < periodicMs) {
+      // Beat-synced cadence: respect the floor, then (when tempo-locked) hold
+      // until ~one generation-latency before the next downbeat so the frame
+      // reveals on the beat. Falls back to the plain wall-clock gate unlocked.
+      if (
+        !shouldFireForBeat({
+          bpm: this.lastBpm,
+          bpmPhase: this.lastBpmPhase,
+          bpmPhaseAt: this.lastBpmPhaseAt,
+          genLatencyMs: BEAT_GEN_LATENCY_MS,
+          lastKeyframeAt: this.lastKeyframeAt,
+          now,
+          periodicMs,
+        })
+      ) {
         return;
       }
       // Set playback is client-driven; the server only auto-triggers
@@ -852,7 +878,7 @@ export class Session implements ControllableSession {
         return;
       }
       this.trigger("periodic");
-    }, 1000);
+    }, 250);
   }
 
   // Append a just-persisted frame to this performance's recording set
