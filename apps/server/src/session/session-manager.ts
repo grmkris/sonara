@@ -27,7 +27,7 @@ const GRACE_MS = 120_000;
 // Minimal view of the producer socket the manager needs — satisfied by Bun's
 // ServerWebSocket and by plain fakes in tests.
 export interface AttachedWs {
-  close(code?: number, reason?: string): void;
+  close: (code?: number, reason?: string) => void;
   data: { sessionId: string };
 }
 

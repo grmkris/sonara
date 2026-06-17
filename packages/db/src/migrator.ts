@@ -1,4 +1,4 @@
-import { join } from "node:path";
+import path from "node:path";
 
 import { drizzle } from "drizzle-orm/node-postgres";
 import { migrate } from "drizzle-orm/node-postgres/migrator";
@@ -11,7 +11,7 @@ export const runMigrations = async (databaseUrl: string): Promise<void> => {
   const client = new Pool({ connectionString: databaseUrl, max: 1 });
   try {
     const db = drizzle(client);
-    const migrationsFolder = join(import.meta.dirname, "../drizzle");
+    const migrationsFolder = path.join(import.meta.dirname, "../drizzle");
     await migrate(db, { migrationsFolder });
   } finally {
     await client.end();

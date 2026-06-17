@@ -6,16 +6,19 @@ import next from "ultracite/oxlint/next";
 export default defineConfig({
   extends: [core, react, next],
   ignorePatterns: core.ignorePatterns,
-  // Rules newly *enforced* against the pre-existing codebase by the oxlint
-  // 1.70 / ultracite 7.8.3 bump (2026-06). Turned off here to keep the dep
-  // bump behavior-preserving and minimal — NOT adopted as part of it. In
-  // particular no-await-in-loop fires on intentionally-sequential migration /
-  // boot-seed loops where Promise.all would be semantically wrong. Adopting
-  // these (and fixing the code) is a deliberate follow-up, tracked separately.
-  rules: {
-    "no-await-in-loop": "off",
-    "prefer-named-capture-group": "off",
-    "typescript/method-signature-style": "off",
-    "unicorn/import-style": "off",
-  },
+  overrides: [
+    {
+      // Dev/seed/probe scripts get relaxed norms vs app/lib code:
+      // - no-await-in-loop: they legitimately do sequential, rate-limited I/O
+      //   (FAL calls, ordered DB seeding) where Promise.all would hammer APIs
+      //   or reorder output — sequential is the point, not a smell.
+      // - import-style: named node:path imports (`{ resolve }`) are fine for
+      //   one-off scripts; the rule still applies to app/lib code.
+      files: ["**/scripts/**"],
+      rules: {
+        "no-await-in-loop": "off",
+        "unicorn/import-style": "off",
+      },
+    },
+  ],
 });

@@ -31,10 +31,10 @@ export interface StageFeedWsData {
 // Structural slices of Bun.Server so this module doesn't depend on server.ts's
 // WsData union (and stays trivially testable with fakes).
 interface StageUpgrader {
-  upgrade(req: Request, opts: { data: StageFeedWsData }): boolean;
+  upgrade: (req: Request, opts: { data: StageFeedWsData }) => boolean;
 }
 interface StagePublisher {
-  publish(topic: string, data: string): number;
+  publish: (topic: string, data: string) => number;
 }
 
 const topicFor = (room: string): string => `stage:${room}`;

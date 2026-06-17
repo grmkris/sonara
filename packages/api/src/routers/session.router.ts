@@ -22,30 +22,28 @@ import type { SessionSource, SessionSourceState } from "../session-registry";
 // implements this; the router never imports from apps/server so the package
 // stays framework-agnostic and buildable on its own.
 export interface SessionLike {
-  init(): void;
-  applyPatch(patch: ClientScenePatch, origin?: "client" | "voice"): void;
-  applyAudio(features: AudioFeatures): void;
-  recognize(
+  init: () => void;
+  applyPatch: (patch: ClientScenePatch, origin?: "client" | "voice") => void;
+  applyAudio: (features: AudioFeatures) => void;
+  recognize: (
     clipBase64: string,
     mimeType: string,
     trigger: "auto" | "manual"
-  ): Promise<NowPlaying | null>;
-  setSource(source: SessionSourceState): void;
-  goLive(prompt: string, seedFrameUrl: string | null): void;
-  setImageAnchor(
-    input: { url: string } | { clear: true }
-  ): void;
-  setResolution(resolution: RenderResolution): void;
-  setCurrentFrame(url: string): void;
-  setCurrentSource(source: SessionSource): void;
+  ) => Promise<NowPlaying | null>;
+  setSource: (source: SessionSourceState) => void;
+  goLive: (prompt: string, seedFrameUrl: string | null) => void;
+  setImageAnchor: (input: { url: string } | { clear: true }) => void;
+  setResolution: (resolution: RenderResolution) => void;
+  setCurrentFrame: (url: string) => void;
+  setCurrentSource: (source: SessionSource) => void;
   // "New set": finalize the current recording segment, start the next run in
   // place. The new id reaches the client via the `run.started` event.
-  startNewRun(): string;
-  reset(): void;
-  subscribe(signal?: AbortSignal): AsyncGenerator<ServerEvent>;
-  getSnapshot(): SonaraSceneState;
-  getSource(): SessionSourceState;
-  getImageAnchor(): ImageAnchorType | null;
+  startNewRun: () => string;
+  reset: () => void;
+  subscribe: (signal?: AbortSignal) => AsyncGenerator<ServerEvent>;
+  getSnapshot: () => SonaraSceneState;
+  getSource: () => SessionSourceState;
+  getImageAnchor: () => ImageAnchorType | null;
 }
 
 export interface SessionContext {

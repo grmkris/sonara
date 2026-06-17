@@ -107,6 +107,7 @@ describe("free-tier fallback", () => {
     // Drain the hourly quota first
     await seedCredits(USER, 0);
     for (let i = 0; i < 3; i += 1) {
+      // oxlint-disable-next-line no-await-in-loop -- cumulative free-tier quota drain; debits must apply in order
       await tryDebitCredit({
         isUserInitiated: false,
         lastCreditDenialAt: 0,
@@ -139,6 +140,7 @@ describe("cooldown rule", () => {
   const drainFreeTier = async (): Promise<void> => {
     await seedCredits(USER, 0);
     for (let i = 0; i < 3; i += 1) {
+      // oxlint-disable-next-line no-await-in-loop -- cumulative free-tier quota drain; debits must apply in order
       await tryDebitCredit({
         isUserInitiated: false,
         lastCreditDenialAt: 0,

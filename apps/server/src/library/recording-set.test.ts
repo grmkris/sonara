@@ -37,7 +37,10 @@ beforeAll(async () => {
   await t.reset();
 
   await createTestUser(t.db, { id: userId });
+  // Sequential: the PGlite test DB is a single connection — parallel inserts
+  // would contend. Only 2 rows of setup, so order is moot.
   for (let i = 0; i < 2; i += 1) {
+    // oxlint-disable-next-line no-await-in-loop -- single-connection PGlite; see note above
     const frameId = await insertFrame(t.db, {
       deck: "live",
       sessionId: liveSessionId,

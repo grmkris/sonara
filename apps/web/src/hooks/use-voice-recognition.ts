@@ -11,12 +11,12 @@ interface SRAlternative {
 interface SRResult {
   readonly isFinal: boolean;
   readonly length: number;
-  item(index: number): SRAlternative;
+  item: (index: number) => SRAlternative;
   readonly [index: number]: SRAlternative;
 }
 interface SRResultList {
   readonly length: number;
-  item(index: number): SRResult;
+  item: (index: number) => SRResult;
   readonly [index: number]: SRResult;
 }
 interface SREvent {
@@ -32,9 +32,9 @@ interface SpeechRecognitionLike {
   onerror: ((ev: unknown) => void) | null;
   onend: (() => void) | null;
   onstart: (() => void) | null;
-  start(): void;
-  stop(): void;
-  abort(): void;
+  start: () => void;
+  stop: () => void;
+  abort: () => void;
 }
 type SRConstructor = new () => SpeechRecognitionLike;
 

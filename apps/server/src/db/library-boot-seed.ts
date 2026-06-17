@@ -57,8 +57,12 @@ export const seedLibraryOnBoot = async (logger: Logger): Promise<void> => {
   let imported = 0;
   let skipped = 0;
   try {
+    // Serial on purpose: this runs once at boot on a single pooled client;
+    // sequential inserts bound startup DB load and keep the imported/skipped
+    // tally straightforward. Each row is independent via ON CONFLICT.
     for (const row of seed) {
       const idUuid = typeIdToUuid(row.id as `img_${string}`).uuid;
+      // oxlint-disable-next-line no-await-in-loop -- see note above the loop
       const res = await client.query(
         `INSERT INTO image_library
            (id, deck, prompt, prompt_hash, model, seed, url, width, height, palette, status, created_at, updated_at)

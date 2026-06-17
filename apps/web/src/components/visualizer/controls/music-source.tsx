@@ -24,7 +24,7 @@ const isSafariLike = (): boolean => {
     return false;
   }
   const ua = navigator.userAgent;
-  return /^((?!chrome|android|edg|crios|fxios).)*safari/iu.test(ua);
+  return /^(?:(?!chrome|android|edg|crios|fxios).)*safari/iu.test(ua);
 };
 
 const displayMediaSupported = (): boolean => {

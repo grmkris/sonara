@@ -36,6 +36,11 @@ export const migrateFrameSetsOnBoot = async (
   // Unlisted decks (show-specific collections) get 'unlisted' visibility so
   // they stay out of public listings; the visibility UPDATE re-converges
   // existing rows if a deck's listing flag ever changes.
+  // Boot convergence is intentionally sequential: each deck/session does
+  // ordered, dependent queries (insert the set → update it → populate frames),
+  // and serial execution bounds DB load at startup. Parallelizing would race
+  // the position COALESCE subqueries and hammer the pool.
+  /* oxlint-disable no-await-in-loop */
   for (const deck of DECKS) {
     const visibility = isDeckUnlisted(deck.key) ? "unlisted" : "public";
     const res = await pool.query(
@@ -135,6 +140,7 @@ export const migrateFrameSetsOnBoot = async (
       [setUuid, row.session_id]
     );
   }
+  /* oxlint-enable no-await-in-loop */
 
   // 3) Reconverge the denormalized member counts (also self-heals any drift
   // from the live append path).

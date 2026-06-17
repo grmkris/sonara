@@ -55,7 +55,9 @@ beforeAll(async () => {
   await t.reset();
 
   await createTestUser(db, { id: userId });
-  // Built-in seed frames for one deck.
+  // Built-in seed frames for one deck. Sequential: single-connection PGlite
+  // test DB — parallel inserts would contend, and counts here are tiny.
+  /* oxlint-disable no-await-in-loop */
   for (let i = 0; i < 2; i += 1) {
     const id = await insertNoirFrame({ source: "seed" });
     seedFrames.push(typeIdToUuid(id).uuid);
@@ -65,6 +67,7 @@ beforeAll(async () => {
     const id = await insertNoirFrame({ source: "generated", tMs });
     liveFrames.push(typeIdToUuid(id).uuid);
   }
+  /* oxlint-enable no-await-in-loop */
 }, 30_000);
 
 describe("migrateFrameSetsOnBoot", () => {

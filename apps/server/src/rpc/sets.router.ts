@@ -894,6 +894,10 @@ export const setsRouter = {
       }
 
       await db.transaction(async (tx) => {
+        // Sequential by necessity: a drizzle tx runs on ONE pg connection (no
+        // safe parallel queries), and the offset pass must fully complete
+        // before the final pass to dodge the position unique-index collision.
+        /* oxlint-disable no-await-in-loop */
         for (const [i, frameId] of input.orderedFrameIds.entries()) {
           await tx
             .update(SCHEMA.frameSetFrame)
@@ -916,6 +920,7 @@ export const setsRouter = {
               )
             );
         }
+        /* oxlint-enable no-await-in-loop */
       });
       return { ok: true as const };
     }),
