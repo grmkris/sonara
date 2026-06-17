@@ -1,6 +1,8 @@
 import type { EnvironmentContext } from "evlog";
 import { createEvlog } from "evlog/next";
-import { createInstrumentation } from "evlog/next/instrumentation";
+// evlog 2.19 moved createInstrumentation to the /create subpath
+// (evlog/next/instrumentation now exports defineNodeInstrumentation + types).
+import { createInstrumentation } from "evlog/next/instrumentation/create";
 
 // Node-runtime web helpers. Only import this module from server-side code that
 // runs in Node (e.g. `lib/evlog.ts`, loaded via `defineNodeInstrumentation`) —
