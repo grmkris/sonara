@@ -4,7 +4,13 @@ import type { AudioFeatures, OnsetType } from "@sonara/shared";
 import Meyda from "meyda";
 
 import type { AutoGainState } from "./analyzer-dsp";
-import { autoGain, createAutoGainState, weightedRms } from "./analyzer-dsp";
+import {
+  autoGain,
+  createAutoGainState,
+  median,
+  spectralFluxBand,
+  weightedRms,
+} from "./analyzer-dsp";
 import { classifyOnset } from "./onset-classify";
 import { createClipRecorder } from "./recorder";
 import type { ClipRecorder } from "./recorder";
@@ -665,17 +671,18 @@ export class AudioEngine {
     const treble = autoGain(mean(freq, midsEnd, trebleEnd) / 255, this.trebleGain);
 
     // Spectral flux for onset detection (our own, not Meyda's — finer-grained).
+    // Total flux drives BPM + the onset threshold; per-band fluxes (bass/mids/
+    // treble) feed classifyOnset so drum-type keys off where the transient rises.
     let flux = 0;
+    let bassFlux = 0;
+    let midsFlux = 0;
+    let trebleFlux = 0;
     const prev = this.prevSpectrum;
     if (prev && prev.length === bins) {
-      for (let i = 0; i < bins; i += 1) {
-        const curr = (freq[i] ?? 0) / 255;
-        const delta = curr - (prev[i] ?? 0);
-        if (delta > 0) {
-          flux += delta;
-        }
-      }
-      flux /= bins;
+      flux = spectralFluxBand(freq, prev, 0, bins);
+      bassFlux = spectralFluxBand(freq, prev, 0, bassEnd);
+      midsFlux = spectralFluxBand(freq, prev, bassEnd, midsEnd);
+      trebleFlux = spectralFluxBand(freq, prev, midsEnd, trebleEnd);
     }
     if (!prev || prev.length !== bins) {
       this.prevSpectrum = new Float32Array(bins);
@@ -693,23 +700,28 @@ export class AudioEngine {
     if (this.fluxHistory.length > 60) {
       this.fluxHistory.shift();
     }
-    const fluxMean = avg(this.fluxHistory);
-    const fluxStd = stddev(this.fluxHistory, fluxMean);
+    // Median (not mean) centre: the mean is dragged up by the very peaks we're
+    // detecting, so a peaky stream raises its own threshold and misses hits.
+    const fluxMedian = median(this.fluxHistory);
+    const fluxStd = stddev(this.fluxHistory, avg(this.fluxHistory));
 
     const now = performance.now();
     const onset =
-      flux > fluxMean + fluxStd * 1.5 && now - this.lastOnsetAt > 100;
+      flux > fluxMedian + fluxStd * 1.5 && now - this.lastOnsetAt > 100;
 
     let onsetType: OnsetType | undefined;
     if (onset) {
       this.lastOnsetAt = now;
       onsetType = classifyOnset({
         bass,
+        bassFlux,
         centroid,
         flatness: this.flatnessFromMeyda,
         mids,
+        midsFlux,
         rms,
         treble,
+        trebleFlux,
       });
     }
 
