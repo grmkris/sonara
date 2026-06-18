@@ -39,10 +39,7 @@ import { getPool } from "../db/pool";
 import { streamPreview } from "../generation/fal-provider";
 import { serializeResolvedScene } from "../generation/prompt-compiler";
 import { DriftTrajectory } from "../generation/prompt-drift";
-import {
-  resolveScene,
-  resolveSceneAwaited,
-} from "../generation/scene-resolver";
+import { resolveScene } from "../generation/scene-resolver";
 import { synthesizeFromTrack } from "../generation/song-muse";
 import type { SongMusePatch } from "../generation/song-muse";
 import type { Logger } from "../lib/logger";
@@ -164,6 +161,30 @@ const cadenceFromIntensity = (
 export const freshCadenceFromStability = (stability: number): number =>
   Math.round(24 * Math.max(0, Math.min(1, stability)));
 
+// After a deliberate prompt-text change, briefly fire chained edits at this
+// fast cadence so the screen walks toward the new motive within a few seconds
+// instead of crawling there at the intensity-derived ambient cadence (which can
+// be ~9s/frame at low intensity → minutes to land). Generation latency
+// (~1.7s/edit) is the real floor; this just removes the idle wait between burst
+// frames. The chain still morphs (no hard cut) — a full pivot lands
+// progressively over the burst, then ambient cadence resumes.
+// Accelerated window length after a prompt change.
+const MORPH_BURST_MS = 8000;
+// Target inter-frame during the burst (generation latency is the real floor).
+const MORPH_BURST_CADENCE_MS = 900;
+
+// Effective periodic cadence: while inside the post-prompt-change burst window
+// drop to the fast burst floor (but never slower than the ambient cadence),
+// otherwise use the ambient cadence as-is.
+export const burstCadenceMs = (
+  baseCadenceMs: number,
+  now: number,
+  morphBurstUntilAt: number
+): number =>
+  now < morphBurstUntilAt
+    ? Math.min(baseCadenceMs, MORPH_BURST_CADENCE_MS)
+    : baseCadenceMs;
+
 export class Session implements ControllableSession {
   readonly id: string;
   readonly userId: string | null;
@@ -184,6 +205,9 @@ export class Session implements ControllableSession {
   private pauseTimer?: ReturnType<typeof setTimeout>;
   private periodicTimer?: ReturnType<typeof setInterval>;
   private lastKeyframeAt = 0;
+  // While Date.now() < this, the periodic timer fires at MORPH_BURST_CADENCE_MS
+  // so a just-changed prompt visibly morphs in fast. Armed in applyPatch.
+  private morphBurstUntilAt = 0;
   private readonly publisher = new EventPublisher<{ event: ServerEvent }>();
   private readonly logger: Logger;
 
@@ -576,9 +600,20 @@ export class Session implements ControllableSession {
       typeof patch.prompt === "string"
         ? { ...patch, prompt: clampPrompt(patch.prompt) }
         : patch;
+    // Detect a real prompt-TEXT change (vs slider-only) before we overwrite
+    // this.scene — it arms the fast morph burst below so the new motive shows
+    // up soon. Slider-only edits keep the calm ambient cadence.
+    const promptChanged =
+      typeof safePatch.prompt === "string" &&
+      safePatch.prompt.trim().toLowerCase() !==
+        this.scene.prompt.trim().toLowerCase();
     const next: SonaraSceneState = { ...this.scene, ...safePatch };
     this.scene = next;
     this.send({ state: next, type: "scene.state" });
+
+    if (promptChanged) {
+      this.morphBurstUntilAt = Date.now() + MORPH_BURST_MS;
+    }
 
     const threshold =
       origin === "voice" ? SEMANTIC_THRESHOLD_VOICE : SEMANTIC_THRESHOLD;
@@ -845,7 +880,12 @@ export class Session implements ControllableSession {
     // downbeat; all the gates below still rate-limit real generation.
     this.periodicTimer = setInterval(() => {
       const now = Date.now();
-      const { periodicMs } = cadenceFromIntensity(this.scene.intensity);
+      const { periodicMs: baseCadence } = cadenceFromIntensity(
+        this.scene.intensity
+      );
+      // Right after a prompt change, drop the cadence floor so chained edits
+      // fire as fast as generation allows and the morph lands in a few seconds.
+      const periodicMs = burstCadenceMs(baseCadence, now, this.morphBurstUntilAt);
       // Beat-synced cadence: respect the floor, then (when tempo-locked) hold
       // until ~one generation-latency before the next downbeat so the frame
       // reveals on the beat. Falls back to the plain wall-clock gate unlocked.
@@ -1062,12 +1102,11 @@ export class Session implements ControllableSession {
     // to the FLUX prompt. Single source of truth: the inspector HUD's
     // `promptString` and `resolvedScene` both come from this one build.
     //
-    // For USER-initiated triggers (voice / semantic / pause) we await the LLM
-    // expansion so the first frame after a prompt edit gets the rich
-    // expanded resolved scene instead of the bland deterministic fallback.
-    // ~1-2s extra latency vs the parallel-fire path; subjective quality jump
-    // is large. Auto-triggers (periodic / section) keep the sync path so
-    // they never block.
+    // Always resolve synchronously: the deterministic expansion returns
+    // instantly AND warms the LLM cache in the background. So the FIRST frame
+    // after a prompt edit lands without waiting (no ~1-2s LLM stall) and the
+    // NEXT frame — e.g. the next morph-burst frame — picks up the richer
+    // expansion once the cache fills. Snappy first frame > rich first frame.
     const resolveOpts = {
       audio: {
         energyDelta: 0,
@@ -1083,10 +1122,7 @@ export class Session implements ControllableSession {
       logger: this.logger,
       signal: controller.signal,
     };
-    const resolved =
-      kind === "user"
-        ? await resolveSceneAwaited(this.scene, resolveOpts)
-        : resolveScene(this.scene, resolveOpts);
+    const resolved = resolveScene(this.scene, resolveOpts);
     if (controller.signal.aborted) {
       return;
     }
