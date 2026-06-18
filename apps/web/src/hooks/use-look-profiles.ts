@@ -4,6 +4,7 @@ import type { LookConfig, LookProfile } from "@sonara/shared";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 
+import { resolveLook } from "@/lib/render/presets";
 import { rpcClient } from "@/lib/orpc";
 import { useVisualizerStore } from "@/stores/visualizer";
 
@@ -38,11 +39,10 @@ export const useLookProfiles = (): LookProfilesApi => {
 
   const save = useCallback(
     (name: string) => {
-      const cfg = useVisualizerStore.getState().lastEffective;
-      if (!cfg) {
-        toast.error("nothing to render yet — play something first");
-        return;
-      }
+      // Resolve the settled look (preset + Feel overrides, no drift) — works on
+      // the console too, which has no renderer/lastEffective.
+      const s = useVisualizerStore.getState();
+      const cfg = resolveLook(s.preset, s.customPreset, s.paramOverrides);
       void (async () => {
         try {
           const { look } = await rpcClient.looks.create({

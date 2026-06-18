@@ -21,6 +21,7 @@ import type {
   ClientScenePatch,
   DeckKey,
   ImageAnchor,
+  LookConfig,
   RenderResolution,
   SonaraSceneState,
   NowPlaying,
@@ -389,6 +390,12 @@ export class Session implements ControllableSession {
     setId?: string;
   }): void {
     this.send({ source, type: "source.set" });
+  }
+
+  // Relay a remote look switch to the screen (console → screen). The resolved
+  // render look; the screen applies it as the active custom look.
+  notifyLook(config: LookConfig): void {
+    this.send({ config, type: "look.set" });
   }
 
   // "New set": close out the current recording segment and start the next

@@ -209,6 +209,12 @@ export const useWsSession = (target: { code: string | null }): WsSession => {
           }
           break;
         }
+        case "look.set": {
+          // Remote look switch from the console — apply as the active custom
+          // look (BASE-backfilled in the store). Mirrors source.set.
+          s.applyLookConfig(event.config);
+          break;
+        }
         case "screen.takenOver": {
           // Rides the shared publisher, so the NEW screen sees it too — only
           // the kicked connection demotes itself. The authoritative signal is

@@ -539,3 +539,16 @@ export const lerpPreset = (
     wetEdge: lerpNumber(a.wetEdge, b.wetEdge, k),
   };
 };
+
+// Resolve the active render look from store fields (settled, no drift): the
+// base (a custom/saved profile, else the named preset, else BASE) with the live
+// Feel overrides applied. Used to relay the look to a remote screen and to
+// snapshot a saved profile — both want the settled look, not the drifting one.
+export const resolveLook = (
+  preset: PresetName,
+  customPreset: PresetConfig | null,
+  overrides: Partial<PresetConfig>
+): PresetConfig => ({
+  ...(customPreset ?? PRESETS[preset] ?? BASE),
+  ...overrides,
+});

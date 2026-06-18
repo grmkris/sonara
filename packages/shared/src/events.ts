@@ -3,6 +3,7 @@ import { z } from "zod";
 import { InspectorContextSchema } from "./inspector-context";
 import { NowPlaying } from "./now-playing";
 import { SonaraSceneState } from "./scene";
+import { LookConfig } from "./looks";
 import { ResolvedScene } from "./scene-resolved";
 import {
   FrameSetIdSchema,
@@ -228,6 +229,13 @@ export const ServerEvent = z.discriminatedUnion("type", [
       setId: z.string().optional(),
     }),
     type: z.literal("source.set"),
+  }),
+  // Remote look switch (console → screen): the resolved render look (preset +
+  // Feel params) to apply as the active custom look. Relayed by
+  // control.setLook; the screen applies it via applyLookConfig.
+  z.object({
+    config: LookConfig,
+    type: z.literal("look.set"),
   }),
 ]);
 

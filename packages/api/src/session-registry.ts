@@ -2,6 +2,7 @@ import type {
   ClientScenePatch,
   DeckKey,
   ImageAnchor,
+  LookConfig,
   NowPlaying,
   SonaraSceneState,
 } from "@sonara/shared";
@@ -104,6 +105,9 @@ export interface ControllableSession {
     label?: string | null;
     setId?: string;
   }) => void;
+  // Relay a remote look switch (`look.set`) to the screen — the resolved render
+  // look (preset + Feel params) to apply as the active custom look. Console-only.
+  notifyLook: (config: LookConfig) => void;
 }
 
 // Lookup surface over the live in-memory sessions. apps/server's
