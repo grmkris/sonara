@@ -230,6 +230,9 @@ export const DECK_LOOK: Partial<Record<DeckKey, DeckLook>> = {
     intensity: 0.2,
     preset: "noir",
   },
+  // The robo party: punchy, fast, bright. This was already the implicit app
+  // default — made explicit so it survives the Noir coupling below.
+  cyborg: { cadence: { ...DEFAULT_CADENCE }, intensity: 0.8, preset: "rave" },
   // DRAGON BOAT phases — bright jade/gold arc 20% → 90% → 40%. Same idea as the
   // ALTNEXT decks: picking the deck IS the world change (preset + reactivity +
   // cadence ramp together) along tranquil → celebration → myth → race → finale.
@@ -258,9 +261,6 @@ export const DECK_LOOK: Partial<Record<DeckKey, DeckLook>> = {
     intensity: 0.4,
     preset: "mandala",
   },
-  // The robo party: punchy, fast, bright. This was already the implicit app
-  // default — made explicit so it survives the Noir coupling below.
-  cyborg: { cadence: { ...DEFAULT_CADENCE }, intensity: 0.8, preset: "rave" },
   // The anti-rave: chill, dark, slow. Long holds, low reactivity, the `noir`
   // preset's no-strobe nocturne. Built for the movie room.
   noir: {
