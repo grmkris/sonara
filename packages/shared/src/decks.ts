@@ -112,6 +112,41 @@ export const DECKS = [
     style:
       "lone silhouette before a luminous horizon, near black, violet mist, unresolved",
   },
+  // ── DRAGON BOAT FESTIVAL show decks (unlisted) ──
+  // One deck per visual world of the Sonicite 50-min Dragon-Boat-Festival set
+  // (INS Land, Shanghai). Bright jade/gold palette — outdoor late afternoon, so
+  // NO dark/apocalyptic tones. Energy arc 20% → 90% → 40%: tranquil water →
+  // celebration → myth → peak race → meditative jade finale. "Oriental futurism."
+  {
+    key: "dbf01",
+    label: "Dragon 01 · River Awakening",
+    style:
+      "misty jade-green river at dawn, drifting bamboo leaves and lotus, ink diffusion, serene",
+  },
+  {
+    key: "dbf02",
+    label: "Dragon 02 · Gathering",
+    style:
+      "five-colored silk ribbons and glowing lanterns over a bamboo grove, dragonflies, joyful festival",
+  },
+  {
+    key: "dbf03",
+    label: "Dragon 03 · Dragon Spirit",
+    style:
+      "serpentine azure dragon of emerald particles and jade scales, sacred geometry, mythic",
+  },
+  {
+    key: "dbf04",
+    label: "Dragon 04 · Race",
+    style:
+      "kinetic jade light trails and racing water streaks, synchronized wave pulses, dynamic",
+  },
+  {
+    key: "dbf05",
+    label: "Dragon 05 · Jade Future",
+    style:
+      "futuristic jade temples and neural lattices, golden sunrise, bioluminescent lotus, transcendent",
+  },
 ] as const;
 
 export type DeckKey = (typeof DECKS)[number]["key"];
@@ -144,8 +179,10 @@ export interface DeckLook {
   cadence: { calm: number; loud: number };
 }
 
-// App-default cadence (used by decks without a DECK_LOOK entry): calm 6s → loud 2s.
-export const DEFAULT_CADENCE = { calm: 6000, loud: 2000 } as const;
+// App-default cadence (used by decks without a DECK_LOOK entry): calm 10s →
+// loud 2s. The calm (low-intensity) end is long so images can really linger;
+// the INTENSITY knob slides toward the fast end when the user wants it.
+export const DEFAULT_CADENCE = { calm: 10_000, loud: 2000 } as const;
 
 // Per-deck look overrides. Decks NOT listed here keep the app defaults
 // (global `rave` preset + DEFAULT_CADENCE) — so adding an entry is opt-in and
@@ -196,6 +233,34 @@ export const DECK_LOOK: Partial<Record<DeckKey, DeckLook>> = {
   // The robo party: punchy, fast, bright. This was already the implicit app
   // default — made explicit so it survives the Noir coupling below.
   cyborg: { cadence: { ...DEFAULT_CADENCE }, intensity: 0.8, preset: "rave" },
+  // DRAGON BOAT phases — bright jade/gold arc 20% → 90% → 40%. Same idea as the
+  // ALTNEXT decks: picking the deck IS the world change (preset + reactivity +
+  // cadence ramp together) along tranquil → celebration → myth → race → finale.
+  dbf01: {
+    cadence: { calm: 12_000, loud: 6000 },
+    intensity: 0.2,
+    preset: "tide_pool",
+  },
+  dbf02: {
+    cadence: { calm: 8000, loud: 4000 },
+    intensity: 0.5,
+    preset: "long_exposure",
+  },
+  dbf03: {
+    cadence: { calm: 6000, loud: 3000 },
+    intensity: 0.7,
+    preset: "cut_crystal",
+  },
+  dbf04: {
+    cadence: { calm: 4000, loud: 2000 },
+    intensity: 0.9,
+    preset: "storm",
+  },
+  dbf05: {
+    cadence: { calm: 10_000, loud: 6000 },
+    intensity: 0.4,
+    preset: "mandala",
+  },
   // The anti-rave: chill, dark, slow. Long holds, low reactivity, the `noir`
   // preset's no-strobe nocturne. Built for the movie room.
   noir: {
@@ -220,6 +285,11 @@ export const UNLISTED_DECK_KEYS: readonly DeckKey[] = [
   "alt06",
   "alt07",
   "alt08",
+  "dbf01",
+  "dbf02",
+  "dbf03",
+  "dbf04",
+  "dbf05",
 ];
 
 export const isDeckUnlisted = (key: DeckKey): boolean =>

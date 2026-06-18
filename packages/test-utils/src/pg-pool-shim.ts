@@ -11,17 +11,17 @@ import type { PGlite } from "@electric-sql/pglite";
 // debit-race tests that explicitly want this. Production behavior is what the
 // tests assert against.
 export interface PoolShim {
-  connect(): Promise<{
-    query<T = unknown>(
+  connect: () => Promise<{
+    query: <T = unknown>(
       sql: string,
       params?: readonly unknown[]
-    ): Promise<{ rows: T[]; rowCount: number | null }>;
-    release(): void;
+    ) => Promise<{ rows: T[]; rowCount: number | null }>;
+    release: () => void;
   }>;
-  query<T = unknown>(
+  query: <T = unknown>(
     sql: string,
     params?: readonly unknown[]
-  ): Promise<{ rows: T[]; rowCount: number | null }>;
+  ) => Promise<{ rows: T[]; rowCount: number | null }>;
 }
 
 export const pgliteAsPool = (db: PGlite): PoolShim => {

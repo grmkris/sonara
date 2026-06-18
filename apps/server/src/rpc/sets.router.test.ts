@@ -69,10 +69,15 @@ beforeEach(async () => {
   await createTestUser(db, { email: "a@test.dev", id: userA, name: "A" });
   await createTestUser(db, { email: "b@test.dev", id: userB, name: "B" });
   A.length = 0;
+  // Sequential: single-connection PGlite test DB; tMs encodes order, not insert timing.
   for (let i = 0; i < 4; i += 1) {
-    A.push(
-      await insertFrame(db, { sessionId, tMs: i * 1000, userId: userA })
-    );
+    // oxlint-disable-next-line no-await-in-loop -- single-connection PGlite test setup
+    const frame = await insertFrame(db, {
+      sessionId,
+      tMs: i * 1000,
+      userId: userA,
+    });
+    A.push(frame);
   }
   seedFrameId = await insertFrame(db, {
     source: "seed",

@@ -92,6 +92,13 @@ export interface PresetConfig {
   rd: number;
   rdFeed: number;
   rdKill: number;
+  // Feel controls (user-tunable; ride the save/profile system).
+  // Keyframe crossfade duration in ms (the prev→curr dissolve).
+  transitionMs: number;
+  // Drum-ripple amplitude multiplier (1 = baseline).
+  rippleAmount: number;
+  // Ripple origin spread: 0 = all from centre, 1 = each drum's landing spot.
+  rippleSpread: number;
 }
 
 export const BASE: PresetConfig = {
@@ -125,9 +132,12 @@ export const BASE: PresetConfig = {
   // Default to "spots" zone per Pearson. Active when rd > 0.
   rdFeed: 0.037,
   rdKill: 0.06,
+  rippleAmount: 1,
+  rippleSpread: 0.7,
   salt: 0,
   seal: 0,
   splatter: 0,
+  transitionMs: 2400,
   washi: 0,
   wetEdge: 0,
 };
@@ -519,10 +529,26 @@ export const lerpPreset = (
     rd: lerpNumber(a.rd, b.rd, k),
     rdFeed: lerpNumber(a.rdFeed, b.rdFeed, k),
     rdKill: lerpNumber(a.rdKill, b.rdKill, k),
+    rippleAmount: lerpNumber(a.rippleAmount, b.rippleAmount, k),
+    rippleSpread: lerpNumber(a.rippleSpread, b.rippleSpread, k),
     salt: lerpNumber(a.salt, b.salt, k),
     seal: lerpNumber(a.seal, b.seal, k),
     splatter: lerpNumber(a.splatter, b.splatter, k),
+    transitionMs: lerpNumber(a.transitionMs, b.transitionMs, k),
     washi: lerpNumber(a.washi, b.washi, k),
     wetEdge: lerpNumber(a.wetEdge, b.wetEdge, k),
   };
 };
+
+// Resolve the active render look from store fields (settled, no drift): the
+// base (a custom/saved profile, else the named preset, else BASE) with the live
+// Feel overrides applied. Used to relay the look to a remote screen and to
+// snapshot a saved profile — both want the settled look, not the drifting one.
+export const resolveLook = (
+  preset: PresetName,
+  customPreset: PresetConfig | null,
+  overrides: Partial<PresetConfig>
+): PresetConfig => ({
+  ...(customPreset ?? PRESETS[preset] ?? BASE),
+  ...overrides,
+});

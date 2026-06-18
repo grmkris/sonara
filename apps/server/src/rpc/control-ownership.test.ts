@@ -81,6 +81,7 @@ const registerSession = (
     getControlSnapshot: () => snapshot,
     goLive: () => {},
     liveSessionId,
+    notifyLook: () => {},
     notifySource: (source) => {
       sourceCalls.push(source);
     },

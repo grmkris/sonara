@@ -37,6 +37,9 @@ export const dispatchControlAction = (
     case "source.set": {
       return c.setSource({ source: action.source, stageId: target.stageId });
     }
+    case "look.set": {
+      return c.setLook({ config: action.config, stageId: target.stageId });
+    }
     case "session.goLive": {
       // The operator has no canvas, so there's no on-screen frame to seed
       // from — control.goLive seeds from the server's last frame instead.

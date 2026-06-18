@@ -87,9 +87,9 @@ const extractOutput = (data: unknown): string | null => {
 
 const stripFences = (text: string): string => {
   let out = text.trim();
-  const m = out.match(/^```(?:json)?\s*\n?([\s\S]*?)\n?```$/u);
-  if (m?.[1]) {
-    out = m[1].trim();
+  const m = out.match(/^```(?:json)?\s*\n?(?<body>[\s\S]*?)\n?```$/u);
+  if (m?.groups?.body) {
+    out = m.groups.body.trim();
   }
   return out;
 };

@@ -16,8 +16,8 @@ export interface TestDb {
   db: Database;
   pg: PGlite;
   pool: PoolShim;
-  close(): Promise<void>;
-  reset(): Promise<void>;
+  close: () => Promise<void>;
+  reset: () => Promise<void>;
 }
 
 export const createTestDb = async (): Promise<TestDb> => {

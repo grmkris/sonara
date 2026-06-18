@@ -43,7 +43,25 @@ export interface VisualTargets {
   grainSwell: number;
   // 0..1, 0 = open, 1 = heavy
   vignette: number;
+  // 0..1, peaks on the inferred beat, gated by tempo-lock + energy. Distinct
+  // from the drum-reactive kick/snare impulses: this follows the steady grid.
+  beatPulse: number;
 }
+
+// Grid-locked beat accent. Unlike the onset-driven impulses (which fire on
+// actual drum hits and can be syncopated), this rides the analyzer's inferred
+// tempo phase, so it stays steady on the beat even when the drums don't.
+//   - bpm === 0  → no tempo lock yet → silent (and avoids the bpmPhase===0
+//     constant pinning the pulse to its peak).
+//   - sawtooth shaped so it snaps to 1 on the beat and decays before the next.
+//   - energy-gated so quiet passages and silence don't throb.
+export const beatPulse = (audio: AudioFeatures): number => {
+  if (audio.bpm <= 0) {
+    return 0;
+  }
+  const gate = Math.min(1, audio.rms * 1.5);
+  return (1 - audio.bpmPhase) ** 2.5 * gate;
+};
 
 export const targetsFromAudio = (
   audio: AudioFeatures,
@@ -54,6 +72,7 @@ export const targetsFromAudio = (
   const huePumpNorm = coef.huePumpRange / 18;
 
   return {
+    beatPulse: beatPulse(audio),
     bloom: 0.15 + audio.rms * 0.9,
     // New baseline: fully sharp by default. Only grows during loud-bass,
     // treble-light passages (a "muffled dream" gesture). Most of playback —

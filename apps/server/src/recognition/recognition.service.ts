@@ -70,11 +70,11 @@ const extractYear = (s?: string): number | undefined => {
   if (!s) {
     return undefined;
   }
-  const m = s.match(/^(\d{4})/u);
+  const m = s.match(/^(?<year>\d{4})/u);
   if (!m) {
     return undefined;
   }
-  const n = Number(m[1]);
+  const n = Number(m.groups?.year);
   return Number.isFinite(n) ? n : undefined;
 };
 

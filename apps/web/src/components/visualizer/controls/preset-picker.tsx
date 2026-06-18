@@ -2,6 +2,7 @@
 
 import { useEffect } from "react";
 
+import { useLookProfiles } from "@/hooks/use-look-profiles";
 import { PRESET_DESCRIPTIONS, PRESET_NAMES } from "@/lib/render/presets";
 import type { PresetName } from "@/lib/render/presets";
 import { cn } from "@/lib/utils";
@@ -37,24 +38,9 @@ export const PresetPicker = () => {
   const setPreset = useVisualizerStore((s) => s.setPreset);
   const setMode = useVisualizerStore((s) => s.setPresetMode);
   const setCycleMs = useVisualizerStore((s) => s.setPresetCycleMs);
-  const savedPresets = useVisualizerStore((s) => s.savedPresets);
   const customPreset = useVisualizerStore((s) => s.customPreset);
-  const snapshotCurrentPreset = useVisualizerStore(
-    (s) => s.snapshotCurrentPreset
-  );
-  const selectSavedPreset = useVisualizerStore((s) => s.selectSavedPreset);
-  const deleteSavedPreset = useVisualizerStore((s) => s.deleteSavedPreset);
-  const savedNames = Object.keys(savedPresets);
-  // A saved preset "appears active" when customPreset is set AND it matches
-  // one of the saved entries by value-reference. We compare the JSON since
-  // the stored snapshot is a deep copy.
-  const activeSavedName =
-    customPreset === null
-      ? null
-      : (savedNames.find(
-          (n) =>
-            JSON.stringify(savedPresets[n]) === JSON.stringify(customPreset)
-        ) ?? null);
+  // DB-backed saved profiles (per-account), replacing the old localStorage set.
+  const looks = useLookProfiles();
 
   // ===== Cycle mode: swap presets on a timer =====
   useEffect(() => {
@@ -143,21 +129,21 @@ export const PresetPicker = () => {
             </button>
           );
         })}
-        {savedNames.map((name) => {
-          const active = name === activeSavedName;
+        {looks.profiles.map((profile) => {
+          const active = customPreset !== null && profile.id === looks.activeId;
           return (
             <button
-              key={`saved:${name}`}
+              key={profile.id}
               type="button"
-              onClick={() => selectSavedPreset(name)}
+              onClick={() => looks.apply(profile)}
               onContextMenu={(ev) => {
                 ev.preventDefault();
                 // oxlint-disable-next-line no-alert -- REVIEW: native confirm is the intended lightweight delete guard
-                if (window.confirm(`Delete saved preset "${name}"?`)) {
-                  deleteSavedPreset(name);
+                if (window.confirm(`Delete saved look "${profile.name}"?`)) {
+                  looks.remove(profile.id);
                 }
               }}
-              title={`saved snapshot (right-click to delete): ${name}`}
+              title={`saved look (right-click to delete): ${profile.name}`}
               className={cn(
                 "group font-serif text-[11px] italic tracking-normal transition-colors",
                 "border-b px-1 pb-0.5",
@@ -167,7 +153,7 @@ export const PresetPicker = () => {
                   : "border-transparent text-[color:var(--stone)] hover:text-[color:var(--paper)]/90 hover:border-[color:var(--hairline)]/40"
               )}
             >
-              {name}
+              {profile.name}
             </button>
           );
         })}
@@ -175,12 +161,12 @@ export const PresetPicker = () => {
           type="button"
           onClick={() => {
             // oxlint-disable-next-line no-alert -- REVIEW: native prompt is the intended lightweight name capture
-            const name = window.prompt("name this mid-state")?.trim();
+            const name = window.prompt("name this look")?.trim();
             if (name) {
-              snapshotCurrentPreset(name);
+              looks.save(name);
             }
           }}
-          title="Capture the current effective preset (including any in-progress crossfade and drift) as a saved snapshot."
+          title="Save the current effective look (preset + Feel tweaks) as a profile in your account."
           className="font-mono text-[9px] uppercase tracking-[0.22em] text-[color:var(--stone)] hover:text-[color:var(--paper)] border-b border-dashed border-[color:var(--hairline)]/40 px-1 pb-0.5"
         >
           + save

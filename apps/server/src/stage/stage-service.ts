@@ -36,6 +36,9 @@ const tryInsertStage = async (
   db: Database,
   values: { isDefault: boolean; name: string; userId: UserId }
 ): Promise<StageRow | null> => {
+  // Collision-retry loop: each attempt re-mints the code only after the prior
+  // insert lost a unique-index race, so iterations are necessarily sequential.
+  /* oxlint-disable no-await-in-loop */
   for (let attempt = 0; attempt < 3; attempt += 1) {
     const inserted = await db
       .insert(SCHEMA.stage)
@@ -63,6 +66,7 @@ const tryInsertStage = async (
       }
     }
   }
+  /* oxlint-enable no-await-in-loop */
   return null;
 };
 

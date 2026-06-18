@@ -6,6 +6,7 @@ import {
   intensityCoefficients,
   targetsFromAudio,
 } from "@/lib/render/map-audio-to-visuals";
+import { crossfadeMsToBeat } from "@/lib/render/beat-timing";
 import { resolveAudio } from "@/lib/render/preset-audio-routing";
 import {
   BASE,
@@ -42,8 +43,10 @@ import {
   VERTEX_SHADER,
 } from "./displacement-shaders";
 
-const BLEED_MS = 1300;
-const FADE_MS = 1000;
+// Default keyframe crossfade (prev→curr). Overridden per-preset/profile by the
+// tunable `transitionMs` field; this is just the fallback + no-prev fade base.
+const BLEED_MS = 2400;
+const FADE_MS = 1800;
 const PRESET_CROSSFADE_MS = 1400;
 // Client-side session arc length. sessionProgress = min(1, (now-mountedAt)/ARC).
 // Drives glitch-peek cadence, feedback trail depth, and a subtle palette temp
@@ -296,6 +299,7 @@ export const DisplacementCanvas = () => {
       uKick: gl.getUniformLocation(program, "uKick"),
       uSnare: gl.getUniformLocation(program, "uSnare"),
       uVocal: gl.getUniformLocation(program, "uVocal"),
+      uBeatPulse: gl.getUniformLocation(program, "uBeatPulse"),
       uIntensity: gl.getUniformLocation(program, "uIntensity"),
       uHuePumpNorm: gl.getUniformLocation(program, "uHuePumpNorm"),
       uPaletteShift: gl.getUniformLocation(program, "uPaletteShift"),
@@ -329,6 +333,8 @@ export const DisplacementCanvas = () => {
       uFeedbackAmount: gl.getUniformLocation(program, "uFeedbackAmount"),
       uBloomMult: gl.getUniformLocation(program, "uBloomMult"),
       uNoiseMult: gl.getUniformLocation(program, "uNoiseMult"),
+      uRippleAmount: gl.getUniformLocation(program, "uRippleAmount"),
+      uRippleSpread: gl.getUniformLocation(program, "uRippleSpread"),
       uWashi: gl.getUniformLocation(program, "uWashi"),
       uDeckle: gl.getUniformLocation(program, "uDeckle"),
       uBokashi: gl.getUniformLocation(program, "uBokashi"),
@@ -514,6 +520,13 @@ export const DisplacementCanvas = () => {
     let toCfg: PresetConfig = { ...BASE };
     let fadeStartAt = 0;
     let fadeInFlight = false;
+    // Keyframe-reveal duration, snapped to the beat grid at crossfade start so
+    // the dissolve resolves on the bar (see beat-timing.crossfadeMsToBeat).
+    let crossfadeDurMs = BLEED_MS;
+    let lastCrossfadeStart: number | null = null;
+    // Live transition length, fed by the tunable preset `transitionMs` field
+    // (updated from `effective` each frame). Used as the crossfade base.
+    let currentTransitionMs = BLEED_MS;
     let currentPresetName: PresetName = useVisualizerStore.getState().preset;
     let currentDrift: PresetDrift = makeDriftForPreset(currentPresetName);
 
@@ -707,13 +720,25 @@ export const DisplacementCanvas = () => {
       const prevSlot = getPrev();
       const hasPrev = state.previousFrame !== null && prevSlot.loaded;
       const settledBleed = currSlot.loaded ? 1 : 0;
-      const bleedT =
+      // On a new keyframe, snap the reveal duration to the beat grid using the
+      // tempo + phase at this moment — so the dissolve completes on the beat.
+      if (state.crossfadeStartedAt !== lastCrossfadeStart) {
+        lastCrossfadeStart = state.crossfadeStartedAt;
+        if (state.crossfadeStartedAt !== null) {
+          crossfadeDurMs = crossfadeMsToBeat(
+            state.audio.bpm,
+            state.audio.bpmPhase,
+            hasPrev ? currentTransitionMs : FADE_MS
+          );
+        }
+      }
+      const bleedRaw =
         state.crossfadeStartedAt === null
           ? settledBleed
-          : Math.min(
-              1,
-              (now - state.crossfadeStartedAt) / (hasPrev ? BLEED_MS : FADE_MS)
-            );
+          : Math.min(1, (now - state.crossfadeStartedAt) / crossfadeDurMs);
+      // smoothstep ease-in-out so the dissolve eases gently in and out instead
+      // of ramping linearly (which reads as an abrupt cut at the ends).
+      const bleedT = bleedRaw * bleedRaw * (3 - 2 * bleedRaw);
 
       resizeCanvasToDisplay(canvas, gl);
 
@@ -782,6 +807,10 @@ export const DisplacementCanvas = () => {
           effective = lerpPreset(effective, peekCfg, peekT);
         }
       }
+
+      // Live "Feel" overrides win over the preset/drift result (instant, no
+      // crossfade). Captured into lastEffective so a saved profile bakes them in.
+      effective = { ...effective, ...state.paramOverrides };
 
       lastEffective = effective;
       useVisualizerStore.getState().setLastEffective(effective);
@@ -861,6 +890,9 @@ export const DisplacementCanvas = () => {
       gl.uniform1f(uni.uWarp, targets.warp ?? 0);
       gl.uniform1f(uni.uMotionEnergy, targets.motionEnergy ?? 0);
       gl.uniform1f(uni.uVignette, targets.vignette ?? 0);
+      // Shaped + gated upstream (targetsFromAudio → beatPulse). Uploaded raw,
+      // NOT through the slow VU envelopes — those would blur the beat's snap.
+      gl.uniform1f(uni.uBeatPulse, targets.beatPulse ?? 0);
       gl.uniform4f(
         uni.uDabPosKS,
         dabs.kick[0],
@@ -927,6 +959,11 @@ export const DisplacementCanvas = () => {
       gl.uniform1f(uni.uFeedbackAmount, effective.feedbackAmount);
       gl.uniform1f(uni.uBloomMult, effective.bloomMult);
       gl.uniform1f(uni.uNoiseMult, effective.noiseMult);
+      gl.uniform1f(uni.uRippleAmount, effective.rippleAmount);
+      gl.uniform1f(uni.uRippleSpread, effective.rippleSpread);
+      // Feed the tunable transition length back to the crossfade base (used in
+      // JS for bleed timing, not a shader uniform).
+      currentTransitionMs = effective.transitionMs;
       gl.uniform1f(uni.uWashi, effective.washi);
       gl.uniform1f(uni.uDeckle, effective.deckle);
       gl.uniform1f(uni.uBokashi, effective.bokashi);

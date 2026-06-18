@@ -3,6 +3,7 @@ import type {
   AudioFeatures,
   ClientScenePatch,
   DeckKey,
+  LookConfig,
   RenderResolution,
 } from "@sonara/shared";
 
@@ -41,6 +42,10 @@ export type SessionAction =
       };
     }
   | { type: "session.goLive"; prompt: string; seedFrameUrl: string | null }
+  // Remote look switch (console → screen): the resolved render look (preset +
+  // Feel params). Local/attached look changes write the store directly and
+  // never dispatch this; only the remote relay (control.setLook) uses it.
+  | { type: "look.set"; config: LookConfig }
   | { type: "image.anchor.set"; url: string }
   | { type: "image.anchor.clear" }
   | { type: "resolution.set"; resolution: RenderResolution }
@@ -78,9 +83,10 @@ export const dispatchSessionAction = (
     case "set.new": {
       return client.newSet();
     }
-    case "source.set": {
-      // Producer-side: never sent over the WS (the attached console applies
-      // sources locally); only the control-router dispatcher maps this.
+    case "source.set":
+    case "look.set": {
+      // Producer-side no-ops: the attached screen applies source + look
+      // locally; only the control-router dispatcher relays these remotely.
       return Promise.resolve();
     }
     case "frame.report": {

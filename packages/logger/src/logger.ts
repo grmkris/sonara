@@ -22,16 +22,24 @@ export type LogLevel =
  * working unchanged.
  */
 export interface Logger {
-  info(obj: Record<string, unknown>, msg?: string): void;
-  info(msg: string): void;
-  warn(obj: Record<string, unknown>, msg?: string): void;
-  warn(msg: string): void;
-  debug(obj: Record<string, unknown>, msg?: string): void;
-  debug(msg: string): void;
-  error(obj: unknown, msg?: string): void;
-  error(msg: string): void;
+  info: {
+    (obj: Record<string, unknown>, msg?: string): void;
+    (msg: string): void;
+  };
+  warn: {
+    (obj: Record<string, unknown>, msg?: string): void;
+    (msg: string): void;
+  };
+  debug: {
+    (obj: Record<string, unknown>, msg?: string): void;
+    (msg: string): void;
+  };
+  error: {
+    (obj: unknown, msg?: string): void;
+    (msg: string): void;
+  };
   /** Returns a logger that merges `bindings` into every event it emits. */
-  child(bindings: Record<string, unknown>): Logger;
+  child: (bindings: Record<string, unknown>) => Logger;
 }
 
 export interface CreateLoggerConfig {

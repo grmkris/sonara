@@ -5,7 +5,7 @@ import { LISTED_DECK_KEYS, UNLISTED_DECK_KEYS } from "@sonara/shared";
 import { typeIdGenerator, typeIdToUuid } from "@sonara/shared/typeid";
 import type { LiveSessionId, UserId } from "@sonara/shared/typeid";
 
-import { freshCadenceFromStability, Session } from "./session";
+import { burstCadenceMs, freshCadenceFromStability, Session } from "./session";
 
 // Unit tests for the source state machine: anon pinning, the anon playback guard, and producer-report adoption. The
 // trigger() generation gate and goLive flows stay covered by the wider
@@ -142,5 +142,30 @@ describe("freshCadenceFromStability", () => {
     expect(freshCadenceFromStability(0.5)).toBe(12);
     expect(freshCadenceFromStability(-1)).toBe(0);
     expect(freshCadenceFromStability(2)).toBe(24);
+  });
+});
+
+describe("burstCadenceMs", () => {
+  // Ambient cadence at low intensity is slow (~9s). The burst should override
+  // it right after a prompt change, then fall back once the window passes.
+  const SLOW = 9000;
+
+  test("inside the burst window → fast burst cadence", () => {
+    // now (1000) < morphBurstUntilAt (5000) → 900, not 9000
+    expect(burstCadenceMs(SLOW, 1000, 5000)).toBe(900);
+  });
+
+  test("after the burst window → ambient cadence", () => {
+    // now (6000) >= morphBurstUntilAt (5000) → back to the slow cadence
+    expect(burstCadenceMs(SLOW, 6000, 5000)).toBe(SLOW);
+  });
+
+  test("never slows an already-fast ambient cadence", () => {
+    // High-intensity ambient (500ms) is already quicker than the burst floor.
+    expect(burstCadenceMs(500, 1000, 5000)).toBe(500);
+  });
+
+  test("unarmed (morphBurstUntilAt 0) → ambient cadence", () => {
+    expect(burstCadenceMs(SLOW, 1000, 0)).toBe(SLOW);
   });
 });

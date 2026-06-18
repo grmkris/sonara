@@ -24,14 +24,14 @@ interface KnobAccum {
 export interface StageActions {
   // Relative knob tap; delta is a normalized signed step in [-1, 1].
   // Returns false when the room isn't live.
-  applyTap(room: string, knob: StageKnobName, delta: number): boolean;
+  applyTap: (room: string, knob: StageKnobName, delta: number) => boolean;
   // Absolute knob write; level in [0, 1]. Supersedes pending taps.
-  applySet(room: string, knob: StageKnobName, level: number): boolean;
+  applySet: (room: string, knob: StageKnobName, level: number) => boolean;
   // Queue a crowd prompt (dwell-rotated; generation debits the stage owner's
   // credits when it plays). Returns false when rejected (room not live,
   // empty/duplicate text).
-  enqueuePrompt(room: string, text: string, from: string): boolean;
-  close(): void;
+  enqueuePrompt: (room: string, text: string, from: string) => boolean;
+  close: () => void;
 }
 
 // Folds crowd intent (stage.tap / stage.setKnob / stage.submitPrompt RPCs)

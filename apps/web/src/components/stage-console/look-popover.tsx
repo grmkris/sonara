@@ -8,6 +8,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import { FeelSliders } from "@/components/visualizer/controls/feel-sliders";
 import { PresetPicker } from "@/components/visualizer/controls/preset-picker";
 import { useVisualizerStore } from "@/stores/visualizer";
 
@@ -40,6 +41,16 @@ export const LookPopover = () => {
         className="w-72 rounded-sm border-[color:var(--hairline)]/40 bg-[color:var(--ink)]/95 p-4 text-[color:var(--paper)] backdrop-blur-md"
       >
         <PresetPicker />
+        <div
+          aria-hidden
+          className="my-3 h-px w-full bg-[color:var(--hairline)]/20"
+        />
+        <span className="font-sans text-[9px] uppercase tracking-[0.26em] text-[color:var(--stone)]">
+          feel
+        </span>
+        <div className="mt-2">
+          <FeelSliders />
+        </div>
       </PopoverContent>
     </Popover>
   );

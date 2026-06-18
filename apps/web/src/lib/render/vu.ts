@@ -33,7 +33,7 @@ export interface VuOptions {
 }
 
 export interface VuEnvelope {
-  update(raw: number, dtMs: number): void;
+  update: (raw: number, dtMs: number) => void;
   // the slow VU "needle" level
   value: number;
   // the fast peak-hold plateau

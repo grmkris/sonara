@@ -57,7 +57,7 @@ export const SwRegister = () => {
         if (conn?.saveData) {
           return;
         }
-        if (conn?.effectiveType && /(^|-)(2g|slow)/u.test(conn.effectiveType)) {
+        if (conn?.effectiveType && /(?:^|-)(?:2g|slow)/u.test(conn.effectiveType)) {
           return;
         }
         // Give the live demo a head start, then prefetch the rest.

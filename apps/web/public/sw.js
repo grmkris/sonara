@@ -145,6 +145,7 @@ async function prefetchUrls(urls) {
       return;
     }
     const batch = urls.slice(i, i + BATCH);
+    // oxlint-disable-next-line no-await-in-loop -- deliberate bounded concurrency: prefetch 6 at a time to cap memory/network during install
     await Promise.all(
       batch.map(async (u) => {
         try {

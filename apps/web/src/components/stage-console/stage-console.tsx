@@ -5,6 +5,7 @@ import type { ControlSnapshot } from "@sonara/api/server";
 
 import { useEffect, useState } from "react";
 
+import { useLookRelay } from "@/hooks/use-look-relay";
 import { LookPopover } from "@/components/stage-console/look-popover";
 import { StageSheet } from "@/components/stage-console/stage-sheet";
 import { StageHostPanel } from "@/components/stage/stage-host-panel";
@@ -270,6 +271,60 @@ const AttachedConsole = ({
   );
 };
 
+const DetachedConsole = ({
+  send,
+  snapshot,
+  connected,
+  hostTarget,
+  onNewSet,
+  onReset,
+}: {
+  send: SessionSend;
+  snapshot: ControlSnapshot | null;
+  connected: boolean;
+  hostTarget: ControlTarget | null;
+  onNewSet?: () => void;
+  onReset?: () => void;
+}) => {
+  // Relay this console's look edits (preset / Feel sliders / applied profile)
+  // to the screen — the console has no canvas, so the relay is how they land.
+  useLookRelay(send);
+  return (
+    <div className="flex flex-col gap-6">
+      <PreviewCard
+        lastFrameUrl={
+          snapshot?.currentFrameUrl ?? snapshot?.lastFrameUrl ?? null
+        }
+        status={snapshot?.jobStatus ?? "idle"}
+        prompt={snapshot?.scene.prompt ?? ""}
+        playbackLabel={
+          snapshot?.source.kind === "set"
+            ? (snapshot.source.label ?? "set")
+            : null
+        }
+        connected={connected}
+      />
+
+      <StageHostPanel target={hostTarget} />
+
+      <div className="flex flex-col gap-5">
+        <PromptInput send={send} />
+        <Divider />
+        <SourceSwitcher send={send} mode="remote" showSets />
+        <Divider />
+        <IntensityDial send={send} />
+        <Divider />
+        <FeelControls send={send} />
+        <Divider />
+        {/* Same look controls as the screen — preset picker + Feel sliders +
+            saveable profiles — relayed to the screen via useLookRelay. */}
+        <LookPopover />
+        <Footer onNewSet={onNewSet} onReset={onReset} />
+      </div>
+    </div>
+  );
+};
+
 export const StageConsole = ({
   send,
   variant,
@@ -281,34 +336,14 @@ export const StageConsole = ({
 }: StageConsoleProps) => {
   if (variant === "detached") {
     return (
-      <div className="flex flex-col gap-6">
-        <PreviewCard
-          lastFrameUrl={
-            snapshot?.currentFrameUrl ?? snapshot?.lastFrameUrl ?? null
-          }
-          status={snapshot?.jobStatus ?? "idle"}
-          prompt={snapshot?.scene.prompt ?? ""}
-          playbackLabel={
-            snapshot?.source.kind === "set"
-              ? (snapshot.source.label ?? "set")
-              : null
-          }
-          connected={connected}
-        />
-
-        <StageHostPanel target={hostTarget} />
-
-        <div className="flex flex-col gap-5">
-          <PromptInput send={send} />
-          <Divider />
-          <SourceSwitcher send={send} mode="remote" showSets />
-          <Divider />
-          <IntensityDial send={send} />
-          <Divider />
-          <FeelControls send={send} />
-          <Footer onNewSet={onNewSet} onReset={onReset} />
-        </div>
-      </div>
+      <DetachedConsole
+        connected={connected}
+        hostTarget={hostTarget}
+        onNewSet={onNewSet}
+        onReset={onReset}
+        send={send}
+        snapshot={snapshot}
+      />
     );
   }
 

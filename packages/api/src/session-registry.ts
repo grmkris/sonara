@@ -2,6 +2,7 @@ import type {
   ClientScenePatch,
   DeckKey,
   ImageAnchor,
+  LookConfig,
   NowPlaying,
   SonaraSceneState,
 } from "@sonara/shared";
@@ -76,32 +77,37 @@ export interface ControllableSession {
   readonly liveSessionId: LiveSessionId;
   // Durable stage (stg_ typeid) this run plays on; null for anon/legacy runs.
   readonly stageId: string | null;
-  applyPatch(patch: ClientScenePatch, origin?: "client" | "voice"): void;
-  goLive(prompt: string, seedFrameUrl: string | null): void;
-  setSource(source: SessionSourceState): void;
-  setImageAnchor(
-    input: { url: string } | { clear: true }
-  ): void;
-  setCurrentFrame(url: string): void;
-  setCurrentSource(source: SessionSource): void;
-  reset(): void;
-  getControlSnapshot(): ControlSnapshot;
+  applyPatch: (patch: ClientScenePatch, origin?: "client" | "voice") => void;
+  goLive: (prompt: string, seedFrameUrl: string | null) => void;
+  setSource: (source: SessionSourceState) => void;
+  setImageAnchor: (input: { url: string } | { clear: true }) => void;
+  setCurrentFrame: (url: string) => void;
+  setCurrentSource: (source: SessionSource) => void;
+  reset: () => void;
+  getControlSnapshot: () => ControlSnapshot;
   // Push a `stage.status` event to this session's projector — emitted by the
   // control router when the owner opens/closes the Monad crowd stage or
   // toggles the projector's join-QR overlay.
-  notifyStage(room: string | null, allowPrompts?: boolean, showQr?: boolean): void;
+  notifyStage: (
+    room: string | null,
+    allowPrompts?: boolean,
+    showQr?: boolean
+  ) => void;
   // "New set": finalize the current recording segment and start the next run
   // in place (same Session, same publisher). Returns the new run id.
-  startNewRun(): LiveSessionId;
+  startNewRun: () => LiveSessionId;
   // Relay a remote source switch (`source.set` event) to the screen. deckKey
   // rides along for builtin sets so the screen plays manifest-direct (no
   // fetch — the offline path).
-  notifySource(source: {
+  notifySource: (source: {
     deckKey?: string;
     kind: "set" | "idle";
     label?: string | null;
     setId?: string;
-  }): void;
+  }) => void;
+  // Relay a remote look switch (`look.set`) to the screen — the resolved render
+  // look (preset + Feel params) to apply as the active custom look. Console-only.
+  notifyLook: (config: LookConfig) => void;
 }
 
 // Lookup surface over the live in-memory sessions. apps/server's
@@ -109,12 +115,14 @@ export interface ControllableSession {
 // authed `control` router can find the caller's own live session(s).
 export interface SessionRegistry {
   // rawUserId is the raw UUID (matching Session.userId), NOT the typeid.
-  listByUserId(rawUserId: string): ControllableSession[];
-  getByLiveSessionId(liveSessionId: string): ControllableSession | undefined;
+  listByUserId: (rawUserId: string) => ControllableSession[];
+  getByLiveSessionId: (
+    liveSessionId: string
+  ) => ControllableSession | undefined;
   // Stage-keyed lookups (stage-keyed runs only; legacy conn-keyed runs are
   // reachable via the two methods above).
-  getByStageId(stageId: string): ControllableSession | undefined;
+  getByStageId: (stageId: string) => ControllableSession | undefined;
   // A graced run still exists (lens reads it live) but has no screen — the
   // console's "no screen connected" copy keys off this.
-  screenAttached(stageId: string): boolean;
+  screenAttached: (stageId: string) => boolean;
 }

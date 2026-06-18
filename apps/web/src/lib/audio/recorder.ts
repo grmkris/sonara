@@ -32,8 +32,8 @@ const pickMimeType = (): string | undefined => {
 
 export interface ClipRecorder {
   /** Returns a Blob containing roughly the last `windowMs` of audio. */
-  grabClip(): Promise<{ blob: Blob; mimeType: string } | null>;
-  stop(): void;
+  grabClip: () => Promise<{ blob: Blob; mimeType: string } | null>;
+  stop: () => void;
   /** Mime type chosen at construction. */
   readonly mimeType: string;
 }

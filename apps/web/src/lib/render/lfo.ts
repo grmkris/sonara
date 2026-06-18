@@ -3,7 +3,7 @@
 // to the driver kind; callers scale by amplitude where appropriate.
 
 export interface LfoDriver {
-  sample(tSec: number): number;
+  sample: (tSec: number) => number;
 }
 
 // Sine LFO in range [-1, 1]. Phase randomised per-instance so two of the

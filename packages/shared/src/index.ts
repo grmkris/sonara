@@ -10,6 +10,7 @@ export * from "./visual-presets";
 export * from "./demo";
 export * from "./decks";
 export * from "./library";
+export * from "./looks";
 export * from "./models";
 export * from "./pricing";
 export * from "./prompt-safety";

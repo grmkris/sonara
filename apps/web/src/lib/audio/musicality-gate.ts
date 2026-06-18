@@ -12,8 +12,8 @@ const FLATNESS_THRESHOLD = 0.6;
 const ONSET_RATE_THRESHOLD = 0.5;
 
 export interface MusicalityGate {
-  update(now: number, flatness: number, onset: boolean): boolean;
-  isMusic(): boolean;
+  update: (now: number, flatness: number, onset: boolean) => boolean;
+  isMusic: () => boolean;
 }
 
 export const createMusicalityGate = (): MusicalityGate => {

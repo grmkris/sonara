@@ -20,7 +20,7 @@
     "fix": "oxlint --fix"
   },
   "dependencies": {
-    "@electric-sql/pglite": "^0.5.1",
+    "@electric-sql/pglite": "^0.5.3",
     "@sonara/db": "workspace:*",
     "@sonara/shared": "workspace:*",
     "drizzle-orm": "^0.45.2"

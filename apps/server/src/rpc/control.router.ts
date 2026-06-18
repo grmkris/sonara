@@ -1,7 +1,7 @@
 import { ORPCError } from "@sonara/api/server";
 import type { ControllableSession } from "@sonara/api/server";
 import { SCHEMA } from "@sonara/db";
-import { ClientScenePatch } from "@sonara/shared";
+import { ClientScenePatch, LookConfig } from "@sonara/shared";
 import type { DeckKey } from "@sonara/shared";
 import { FrameSetIdSchema, StageIdSchema } from "@sonara/shared/typeid";
 import { eq } from "drizzle-orm";
@@ -153,6 +153,17 @@ export const controlRouter = {
           ? { clear: true }
           : { url: input.url }
       );
+    }),
+
+  // Relay a render-look change from the console to the screen. The console
+  // computes the resolved look (preset + Feel params) and ships it; the screen
+  // applies it as the active custom look (look.set → applyLookConfig).
+  setLook: protectedProcedure
+    .input(z.object({ config: LookConfig, stageId: StageIdSchema }))
+    .handler(async ({ context, input }) => {
+      const session = await resolveTarget(context, input);
+      session.notifyLook(input.config);
+      return { ok: true };
     }),
 
   // Push a source switch to the screen (e.g. /studio "activate on <stage>").

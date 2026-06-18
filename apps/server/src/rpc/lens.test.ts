@@ -69,6 +69,7 @@ const makeFakeSession = (opts: {
     getControlSnapshot: () => snapshot,
     goLive: () => {},
     liveSessionId: opts.liveSessionId,
+    notifyLook: () => {},
     notifySource: () => {},
     notifyStage: () => {},
     reset: () => {},

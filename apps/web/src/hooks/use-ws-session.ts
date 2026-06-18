@@ -209,6 +209,12 @@ export const useWsSession = (target: { code: string | null }): WsSession => {
           }
           break;
         }
+        case "look.set": {
+          // Remote look switch from the console — apply as the active custom
+          // look (BASE-backfilled in the store). Mirrors source.set.
+          s.applyLookConfig(event.config);
+          break;
+        }
         case "screen.takenOver": {
           // Rides the shared publisher, so the NEW screen sees it too — only
           // the kicked connection demotes itself. The authoritative signal is
@@ -294,6 +300,11 @@ export const useWsSession = (target: { code: string | null }): WsSession => {
       // init()'s initial publishes land before our subscribe attached — and to
       // re-hydrate scene after reconnect.
       const runEvents = async (): Promise<void> => {
+        // Reconnect/event-stream loop: each iteration is ONE full reconnect
+        // cycle (open iterator → hydrate snapshot → consume the stream →
+        // backoff). Inherently sequential — you can't parallelize reconnect
+        // attempts — so no-await-in-loop is disabled for the whole loop body.
+        /* oxlint-disable no-await-in-loop */
         // oxlint-disable-next-line no-unmodified-loop-condition -- REVIEW: `cancelled` is flipped by the effect cleanup closure
         while (!cancelled) {
           try {
@@ -377,6 +388,7 @@ export const useWsSession = (target: { code: string | null }): WsSession => {
             setTimeout(resolve, 500);
           });
         }
+        /* oxlint-enable no-await-in-loop */
       };
       void runEvents();
     };

@@ -50,7 +50,9 @@ export type SonaraSceneStatePatch = z.infer<typeof SonaraSceneStatePatch>;
 
 export const defaultScene: SonaraSceneState = {
   abstraction: 0.6,
-  intensity: 0.5,
+  // Calmer out-of-the-box pace (images linger longer); users raise INTENSITY
+  // for faster changes + stronger reactivity.
+  intensity: 0.4,
   prompt: "",
   softness: 0.8,
   stability: 0.5,

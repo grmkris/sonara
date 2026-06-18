@@ -19,6 +19,9 @@ export const idTypesMapNameToPrefix = {
   // Distinct from `session` (Better Auth's browser session). Used to group
   // image_library rows by live-play session for the timeline view.
   liveSession: "lse",
+  // A saved visual "look profile" — a named PresetConfig (the render look +
+  // Feel params) persisted per-account, applied to a screen like a set.
+  lookProfile: "look",
   // NOTE: the retired reel ("rel_") / reel-frame ("rlf_") prefixes live on in
   // old links only — migration 0006 copied reels into frame_set with the
   // same uuid, so legacy ids remap to set ids by a literal prefix swap.
@@ -87,6 +90,7 @@ export type LiveSessionId = TypeIdString<"liveSession">;
 export type FrameSetId = TypeIdString<"frameSet">;
 export type FrameSetFrameId = TypeIdString<"frameSetFrame">;
 export type StageId = TypeIdString<"stage">;
+export type LookProfileId = TypeIdString<"lookProfile">;
 
 export const UserIdSchema = typeIdValidator("user");
 export const SessionIdSchema = typeIdValidator("session");
@@ -100,3 +104,4 @@ export const LiveSessionIdSchema = typeIdValidator("liveSession");
 export const FrameSetIdSchema = typeIdValidator("frameSet");
 export const FrameSetFrameIdSchema = typeIdValidator("frameSetFrame");
 export const StageIdSchema = typeIdValidator("stage");
+export const LookProfileIdSchema = typeIdValidator("lookProfile");

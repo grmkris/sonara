@@ -7,18 +7,18 @@ import { env } from "../env";
 // each consumer writes plain SQL against the tables it owns.
 
 export interface PoolLike {
-  connect(): Promise<{
-    query<T = unknown>(
+  connect: () => Promise<{
+    query: <T = unknown>(
       sql: string,
       params?: readonly unknown[]
-    ): Promise<{ rows: T[]; rowCount: number | null }>;
-    release(): void;
+    ) => Promise<{ rows: T[]; rowCount: number | null }>;
+    release: () => void;
   }>;
-  query<T = unknown>(
+  query: <T = unknown>(
     sql: string,
     params?: readonly unknown[]
-  ): Promise<{ rows: T[]; rowCount: number | null }>;
-  end?(): Promise<void>;
+  ) => Promise<{ rows: T[]; rowCount: number | null }>;
+  end?: () => Promise<void>;
 }
 
 let pool: PoolLike | null = null;
