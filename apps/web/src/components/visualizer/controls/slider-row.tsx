@@ -10,13 +10,29 @@ import {
 } from "@/components/ui/tooltip";
 import { debounce } from "@/lib/debounce";
 
+// Module-level so the default prop keeps a stable reference across renders.
+const TWO_DECIMALS = (v: number) => v.toFixed(2);
+
 interface SliderRowProps {
   label: string;
   value: number;
   onChange: (v: number) => void;
+  // Range + readout overrides. Default to the 0..1 / 2-decimal knob style.
+  min?: number;
+  max?: number;
+  step?: number;
+  format?: (v: number) => string;
 }
 
-export const SliderRow = ({ label, value, onChange }: SliderRowProps) => {
+export const SliderRow = ({
+  label,
+  value,
+  onChange,
+  min = 0,
+  max = 1,
+  step = 0.01,
+  format = TWO_DECIMALS,
+}: SliderRowProps) => {
   const [dragging, setDragging] = useState(false);
   // Optimistic local value drives the thumb at pointer speed. Without it the
   // thumb is bound to `value` (round-tripped store state behind a 60ms debounce
@@ -43,9 +59,9 @@ export const SliderRow = ({ label, value, onChange }: SliderRowProps) => {
   const node = (
     <Slider
       value={[local]}
-      min={0}
-      max={1}
-      step={0.01}
+      min={min}
+      max={max}
+      step={step}
       aria-label={label}
       onValueChange={(v) => {
         const next = Array.isArray(v) ? v[0] : v;
@@ -79,12 +95,12 @@ export const SliderRow = ({ label, value, onChange }: SliderRowProps) => {
             sideOffset={6}
             className="font-mono nums bg-[color:var(--ink)] text-[color:var(--paper)] border border-[color:var(--hairline)]/40 px-2 py-0.5 text-[10px] tracking-[0.14em]"
           >
-            {local.toFixed(2)}
+            {format(local)}
           </TooltipContent>
         </Tooltip>
       </div>
       <span className="font-mono nums w-10 text-right text-[10px] text-[color:var(--stone)]">
-        {local.toFixed(2)}
+        {format(local)}
       </span>
     </div>
   );

@@ -1,6 +1,6 @@
 import type { StateCreator } from "zustand";
 
-import { PRESET_NAMES } from "@/lib/render/presets";
+import { BASE, PRESET_NAMES } from "@/lib/render/presets";
 import type { PresetConfig, PresetName } from "@/lib/render/presets";
 
 import type { VisualizerState } from "./types";
@@ -10,6 +10,20 @@ export const PRESET_MODE_KEY = "sonara.presetMode";
 export const SAVED_PRESETS_KEY = "sonara.savedPresets";
 
 export type PresetMode = "manual" | "cycle" | "section" | "llm";
+
+// The user-tunable subset of PresetConfig exposed as live "Feel" sliders. A
+// thin override layer on top of the active preset/profile; baked into a profile
+// on save (snapshotCurrentPreset) and cleared whenever a preset/profile is
+// chosen so the sliders reflect that look's values.
+export type FeelParam =
+  | "transitionMs"
+  | "rippleAmount"
+  | "rippleSpread"
+  | "bloomMult"
+  | "feedbackAmount"
+  | "noiseMult"
+  | "halation"
+  | "grain";
 
 export const PRESET_NAMES_RUNTIME = PRESET_NAMES;
 
@@ -31,6 +45,9 @@ export interface PresetSlice {
   customPreset: PresetConfig | null;
   // Renderer writes here each tick so snapshotCurrentPreset can capture it.
   lastEffective: PresetConfig | null;
+  // Live "Feel" overrides applied on top of the active preset (no crossfade).
+  // Baked into a profile on save; cleared when a preset/profile is selected.
+  paramOverrides: Partial<Record<FeelParam, number>>;
   // Ring buffer of recent final frame URLs, newest-first. Used by the ghost
   // callback overlay to resurface earlier scenes at low opacity.
   heroBank: string[];
@@ -39,6 +56,7 @@ export interface PresetSlice {
   setPresetMode: (m: PresetMode) => void;
   setPresetCycleMs: (ms: number) => void;
   setLastEffective: (cfg: PresetConfig) => void;
+  setParamOverride: (field: FeelParam, value: number) => void;
   snapshotCurrentPreset: (name: string) => void;
   selectSavedPreset: (name: string) => void;
   deleteSavedPreset: (name: string) => void;
@@ -67,6 +85,7 @@ export const createPresetSlice: StateCreator<
     }),
   heroBank: [],
   lastEffective: null,
+  paramOverrides: {},
   preset: "rave",
   presetCycleMs: 90_000,
   presetMode: "manual",
@@ -89,11 +108,16 @@ export const createPresetSlice: StateCreator<
         return {};
       }
       return {
-        customPreset: { ...cfg },
+        // BASE backfills any field a profile saved before that field existed,
+        // so lerpPreset never sees undefined (→ NaN) for the newer feel params.
+        customPreset: { ...BASE, ...cfg },
+        paramOverrides: {},
         presetTick: s.presetTick + 1,
       };
     }),
   setLastEffective: (cfg) => set({ lastEffective: cfg }),
+  setParamOverride: (field, value) =>
+    set((s) => ({ paramOverrides: { ...s.paramOverrides, [field]: value } })),
   setPreset: (name) =>
     set((s) => {
       // Selecting a built-in always clears any active custom (saved) preset
@@ -106,6 +130,7 @@ export const createPresetSlice: StateCreator<
       }
       return {
         customPreset: null,
+        paramOverrides: {},
         preset: name,
         presetTick: s.presetTick + 1,
       };
@@ -132,6 +157,7 @@ export const createPresetSlice: StateCreator<
       }
       return {
         customPreset: { ...s.lastEffective },
+        paramOverrides: {},
         presetTick: s.presetTick + 1,
         savedPresets: next,
       };

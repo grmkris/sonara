@@ -808,6 +808,10 @@ export const DisplacementCanvas = () => {
         }
       }
 
+      // Live "Feel" overrides win over the preset/drift result (instant, no
+      // crossfade). Captured into lastEffective so a saved profile bakes them in.
+      effective = { ...effective, ...state.paramOverrides };
+
       lastEffective = effective;
       useVisualizerStore.getState().setLastEffective(effective);
 
