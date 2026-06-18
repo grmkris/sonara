@@ -43,8 +43,10 @@ import {
   VERTEX_SHADER,
 } from "./displacement-shaders";
 
-const BLEED_MS = 1300;
-const FADE_MS = 1000;
+// Default keyframe crossfade (prev→curr). Overridden per-preset/profile by the
+// tunable `transitionMs` field; this is just the fallback + no-prev fade base.
+const BLEED_MS = 2400;
+const FADE_MS = 1800;
 const PRESET_CROSSFADE_MS = 1400;
 // Client-side session arc length. sessionProgress = min(1, (now-mountedAt)/ARC).
 // Drives glitch-peek cadence, feedback trail depth, and a subtle palette temp
@@ -331,6 +333,8 @@ export const DisplacementCanvas = () => {
       uFeedbackAmount: gl.getUniformLocation(program, "uFeedbackAmount"),
       uBloomMult: gl.getUniformLocation(program, "uBloomMult"),
       uNoiseMult: gl.getUniformLocation(program, "uNoiseMult"),
+      uRippleAmount: gl.getUniformLocation(program, "uRippleAmount"),
+      uRippleSpread: gl.getUniformLocation(program, "uRippleSpread"),
       uWashi: gl.getUniformLocation(program, "uWashi"),
       uDeckle: gl.getUniformLocation(program, "uDeckle"),
       uBokashi: gl.getUniformLocation(program, "uBokashi"),
@@ -520,6 +524,9 @@ export const DisplacementCanvas = () => {
     // the dissolve resolves on the bar (see beat-timing.crossfadeMsToBeat).
     let crossfadeDurMs = BLEED_MS;
     let lastCrossfadeStart: number | null = null;
+    // Live transition length, fed by the tunable preset `transitionMs` field
+    // (updated from `effective` each frame). Used as the crossfade base.
+    let currentTransitionMs = BLEED_MS;
     let currentPresetName: PresetName = useVisualizerStore.getState().preset;
     let currentDrift: PresetDrift = makeDriftForPreset(currentPresetName);
 
@@ -721,14 +728,17 @@ export const DisplacementCanvas = () => {
           crossfadeDurMs = crossfadeMsToBeat(
             state.audio.bpm,
             state.audio.bpmPhase,
-            hasPrev ? BLEED_MS : FADE_MS
+            hasPrev ? currentTransitionMs : FADE_MS
           );
         }
       }
-      const bleedT =
+      const bleedRaw =
         state.crossfadeStartedAt === null
           ? settledBleed
           : Math.min(1, (now - state.crossfadeStartedAt) / crossfadeDurMs);
+      // smoothstep ease-in-out so the dissolve eases gently in and out instead
+      // of ramping linearly (which reads as an abrupt cut at the ends).
+      const bleedT = bleedRaw * bleedRaw * (3 - 2 * bleedRaw);
 
       resizeCanvasToDisplay(canvas, gl);
 
@@ -945,6 +955,11 @@ export const DisplacementCanvas = () => {
       gl.uniform1f(uni.uFeedbackAmount, effective.feedbackAmount);
       gl.uniform1f(uni.uBloomMult, effective.bloomMult);
       gl.uniform1f(uni.uNoiseMult, effective.noiseMult);
+      gl.uniform1f(uni.uRippleAmount, effective.rippleAmount);
+      gl.uniform1f(uni.uRippleSpread, effective.rippleSpread);
+      // Feed the tunable transition length back to the crossfade base (used in
+      // JS for bleed timing, not a shader uniform).
+      currentTransitionMs = effective.transitionMs;
       gl.uniform1f(uni.uWashi, effective.washi);
       gl.uniform1f(uni.uDeckle, effective.deckle);
       gl.uniform1f(uni.uBokashi, effective.bokashi);

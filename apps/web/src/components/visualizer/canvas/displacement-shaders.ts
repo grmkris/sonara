@@ -69,6 +69,12 @@ uniform float uVocal;
 // 0..1, peaks on the inferred beat (gated by tempo-lock + energy). Drives a
 // steady grid-locked "breath", distinct from the drum-reactive uKick punch.
 uniform float uBeatPulse;
+// Drum ripples. uRippleAmount scales the kick-punch + shockwave amplitudes;
+// uRippleSpread blends each ripple's origin from screen-centre (0) to the
+// drum's actual on-screen landing spot (1) — so waves emanate from different
+// parts of the frame per hit instead of all from the middle.
+uniform float uRippleAmount;
+uniform float uRippleSpread;
 uniform float uIntensity;
 uniform float uHuePumpNorm;
 uniform float uPaletteShift;
@@ -263,8 +269,19 @@ vec2 computeDisplacement(vec2 uv) {
   disp.y += sin(uv.x * 14.0 + uTime * 3.2) * uVocal * 0.012;
 
   vec2 toCenter = uv - vec2(0.5);
-  float d = length(toCenter);
-  disp += normalize(toCenter + 1e-5) * uKick * 0.022 * (1.0 - smoothstep(0.0, 0.8, d));
+
+  // Per-drum ripple origins: blend screen-centre → the drum's landing spot by
+  // uRippleSpread. uDabPosKS = (kick.xy, snare.zw); uDabPosHV = (hat.xy, vocal.zw).
+  vec2 kickP  = mix(vec2(0.5), uDabPosKS.xy, uRippleSpread);
+  vec2 snareP = mix(vec2(0.5), uDabPosKS.zw, uRippleSpread);
+  vec2 hatP   = mix(vec2(0.5), uDabPosHV.xy, uRippleSpread);
+  vec2 vocalP = mix(vec2(0.5), uDabPosHV.zw, uRippleSpread);
+
+  // Kick radial punch, now emanating from the kick's landing spot.
+  vec2 toKick = uv - kickP;
+  float dk = length(toKick);
+  disp += normalize(toKick + 1e-5) * uKick * 0.022 * uRippleAmount
+        * (1.0 - smoothstep(0.0, 0.8, dk));
 
   // Grid-locked beat "breath": a gentle whole-frame zoom toward center that
   // resolves on the inferred beat. Smaller and broader than the sharp, outward
@@ -272,10 +289,10 @@ vec2 computeDisplacement(vec2 uv) {
   // syncopated hits) and reinforce on four-on-the-floor.
   disp += -toCenter * uBeatPulse * 0.018;
 
-  disp += shockwave(uv, vec2(0.5),        uImpulseAges.x, 1.15, 0.14, 0.040);
-  disp += shockwave(uv, vec2(0.5),        uImpulseAges.y, 0.85, 0.09, 0.022);
-  disp += shockwave(uv, vec2(0.5, 0.22),  uImpulseAges.z, 1.50, 0.05, 0.012);
-  disp += shockwave(uv, vec2(0.5, 0.55),  uImpulseAges.w, 0.95, 0.11, 0.020);
+  disp += shockwave(uv, kickP,  uImpulseAges.x, 1.15, 0.14, 0.040 * uRippleAmount);
+  disp += shockwave(uv, snareP, uImpulseAges.y, 0.85, 0.09, 0.022 * uRippleAmount);
+  disp += shockwave(uv, hatP,   uImpulseAges.z, 1.50, 0.05, 0.012 * uRippleAmount);
+  disp += shockwave(uv, vocalP, uImpulseAges.w, 0.95, 0.11, 0.020 * uRippleAmount);
 
   return disp;
 }

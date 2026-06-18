@@ -144,8 +144,10 @@ export interface DeckLook {
   cadence: { calm: number; loud: number };
 }
 
-// App-default cadence (used by decks without a DECK_LOOK entry): calm 6s → loud 2s.
-export const DEFAULT_CADENCE = { calm: 6000, loud: 2000 } as const;
+// App-default cadence (used by decks without a DECK_LOOK entry): calm 10s →
+// loud 2s. The calm (low-intensity) end is long so images can really linger;
+// the INTENSITY knob slides toward the fast end when the user wants it.
+export const DEFAULT_CADENCE = { calm: 10_000, loud: 2000 } as const;
 
 // Per-deck look overrides. Decks NOT listed here keep the app defaults
 // (global `rave` preset + DEFAULT_CADENCE) — so adding an entry is opt-in and
