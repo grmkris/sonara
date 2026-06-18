@@ -1,6 +1,6 @@
 import { create } from "zustand";
 
-import type { PresetConfig, PresetName } from "@/lib/render/presets";
+import type { PresetName } from "@/lib/render/presets";
 
 import {
   createImageAnchorSlice,
@@ -14,7 +14,6 @@ import {
   PRESET_KEY,
   PRESET_MODE_KEY,
   PRESET_NAMES_RUNTIME,
-  SAVED_PRESETS_KEY,
   createPresetSlice,
 } from "./preset-slice";
 import { createSceneSlice } from "./scene-slice";
@@ -65,23 +64,12 @@ export const hydratePresetPrefs = (): void => {
   }
   const p = window.localStorage.getItem(PRESET_KEY);
   const m = window.localStorage.getItem(PRESET_MODE_KEY);
-  const saved = window.localStorage.getItem(SAVED_PRESETS_KEY);
   const update: Partial<VisualizerState> = {};
   if (p && (PRESET_NAMES_RUNTIME as readonly string[]).includes(p)) {
     update.preset = p as PresetName;
   }
   if (m === "manual" || m === "cycle" || m === "section" || m === "llm") {
     update.presetMode = m;
-  }
-  if (saved) {
-    try {
-      const parsed = JSON.parse(saved);
-      if (parsed && typeof parsed === "object") {
-        update.savedPresets = parsed as Record<string, PresetConfig>;
-      }
-    } catch {
-      // ignore corrupt value
-    }
   }
   if (Object.keys(update).length > 0) {
     useVisualizerStore.setState(update);

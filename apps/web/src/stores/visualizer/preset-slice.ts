@@ -7,7 +7,6 @@ import type { VisualizerState } from "./types";
 
 export const PRESET_KEY = "sonara.preset";
 export const PRESET_MODE_KEY = "sonara.presetMode";
-export const SAVED_PRESETS_KEY = "sonara.savedPresets";
 
 export type PresetMode = "manual" | "cycle" | "section" | "llm";
 
@@ -37,16 +36,14 @@ export interface PresetSlice {
   // Monotonic counter — bumped whenever a new preset is SELECTED (from any
   // source). DisplacementCanvas subscribes to this to start a cross-fade.
   presetTick: number;
-  // Ad-hoc saved presets captured from mid-crossfade effective state.
-  // Keys are user-supplied names; values are full PresetConfig snapshots.
-  savedPresets: Record<string, PresetConfig>;
-  // When set, takes precedence over `preset` as the crossfade target. Used
-  // for saved snapshots since their configs don't live in the PRESETS map.
+  // When set, takes precedence over `preset` as the crossfade target. Holds a
+  // DB-loaded look profile's config (or a built-in's, after applyLookConfig).
   customPreset: PresetConfig | null;
-  // Renderer writes here each tick so snapshotCurrentPreset can capture it.
+  // Renderer writes here each tick so a save can capture it (looks.create).
   lastEffective: PresetConfig | null;
   // Live "Feel" overrides applied on top of the active preset (no crossfade).
-  // Baked into a profile on save; cleared when a preset/profile is selected.
+  // Captured into a saved profile on save; cleared when a preset/profile is
+  // chosen so the sliders reflect that look's values.
   paramOverrides: Partial<Record<FeelParam, number>>;
   // Ring buffer of recent final frame URLs, newest-first. Used by the ghost
   // callback overlay to resurface earlier scenes at low opacity.
@@ -57,9 +54,10 @@ export interface PresetSlice {
   setPresetCycleMs: (ms: number) => void;
   setLastEffective: (cfg: PresetConfig) => void;
   setParamOverride: (field: FeelParam, value: number) => void;
-  snapshotCurrentPreset: (name: string) => void;
-  selectSavedPreset: (name: string) => void;
-  deleteSavedPreset: (name: string) => void;
+  // Apply a DB look profile's config as the active custom look (BASE-backfilled
+  // so older/partial configs never NaN the renderer). Network (list/save/
+  // delete) lives in use-look-profiles; the store just renders what it's given.
+  applyLookConfig: (config: Record<string, number | number[]>) => void;
   pushHero: (url: string) => void;
 }
 
@@ -69,20 +67,15 @@ export const createPresetSlice: StateCreator<
   [],
   PresetSlice
 > = (set) => ({
+  applyLookConfig: (config) =>
+    set((s) => ({
+      // BASE backfills any field a profile predates so lerpPreset never sees
+      // undefined (→ NaN) for newer feel params.
+      customPreset: { ...BASE, ...(config as Partial<PresetConfig>) },
+      paramOverrides: {},
+      presetTick: s.presetTick + 1,
+    })),
   customPreset: null,
-  deleteSavedPreset: (name) =>
-    set((s) => {
-      if (!(name in s.savedPresets)) {
-        return {};
-      }
-      const next = { ...s.savedPresets };
-      // oxlint-disable-next-line no-dynamic-delete -- REVIEW: savedPresets is a JSON-serialized record keyed by arbitrary user preset names; a Map would break persistence shape
-      delete next[name];
-      if (typeof window !== "undefined") {
-        window.localStorage.setItem(SAVED_PRESETS_KEY, JSON.stringify(next));
-      }
-      return { savedPresets: next };
-    }),
   heroBank: [],
   lastEffective: null,
   paramOverrides: {},
@@ -99,21 +92,6 @@ export const createPresetSlice: StateCreator<
       }
       const next = [url, ...s.heroBank.filter((u) => u !== url)].slice(0, 6);
       return { heroBank: next };
-    }),
-  savedPresets: {},
-  selectSavedPreset: (name) =>
-    set((s) => {
-      const cfg = s.savedPresets[name];
-      if (!cfg) {
-        return {};
-      }
-      return {
-        // BASE backfills any field a profile saved before that field existed,
-        // so lerpPreset never sees undefined (→ NaN) for the newer feel params.
-        customPreset: { ...BASE, ...cfg },
-        paramOverrides: {},
-        presetTick: s.presetTick + 1,
-      };
     }),
   setLastEffective: (cfg) => set({ lastEffective: cfg }),
   setParamOverride: (field, value) =>
@@ -142,24 +120,4 @@ export const createPresetSlice: StateCreator<
     }
     set({ presetMode: m });
   },
-  snapshotCurrentPreset: (name) =>
-    set((s) => {
-      if (!s.lastEffective) {
-        return {};
-      }
-      const trimmed = name.trim();
-      if (!trimmed) {
-        return {};
-      }
-      const next = { ...s.savedPresets, [trimmed]: { ...s.lastEffective } };
-      if (typeof window !== "undefined") {
-        window.localStorage.setItem(SAVED_PRESETS_KEY, JSON.stringify(next));
-      }
-      return {
-        customPreset: { ...s.lastEffective },
-        paramOverrides: {},
-        presetTick: s.presetTick + 1,
-        savedPresets: next,
-      };
-    }),
 });
