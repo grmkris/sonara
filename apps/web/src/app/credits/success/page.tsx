@@ -50,7 +50,7 @@ export default function CheckoutSuccessPage() {
         }
         return;
       }
-      setTimeout(poll, POLL_INTERVAL_MS);
+      setTimeout(() => void poll(), POLL_INTERVAL_MS);
     };
 
     void poll();

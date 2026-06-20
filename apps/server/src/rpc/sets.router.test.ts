@@ -25,7 +25,7 @@ import type { setsRouter as SetsRouterValue } from "./sets.router";
 
 // presignReadUrl needs S3 env we don't have in tests — mock the bucket before
 // sets.router (and its frame-mapping import) loads.
-mock.module("../storage/bucket", () => ({
+void mock.module("../storage/bucket", () => ({
   bucketKeyFromUrl: () => null,
   isConfigured: () => true,
   presignReadUrl: (key: string) => `https://signed.test/${key}`,

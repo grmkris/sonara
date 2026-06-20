@@ -39,7 +39,7 @@ async function cacheFirst(req, cacheName) {
   }
   const res = await fetch(req);
   if (res.ok) {
-    cache.put(req, res.clone());
+    void cache.put(req, res.clone());
   }
   return res;
 }
@@ -52,7 +52,7 @@ async function staleWhileRevalidate(req, cacheName) {
     try {
       const res = await fetch(req);
       if (res.ok) {
-        cache.put(req, res.clone());
+        void cache.put(req, res.clone());
       }
       return res;
     } catch {
@@ -71,7 +71,7 @@ async function networkFirst(req, cacheName) {
   try {
     const res = await fetch(req);
     if (res.ok) {
-      cache.put(req, res.clone());
+      void cache.put(req, res.clone());
     }
     return res;
   } catch (error) {

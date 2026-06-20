@@ -103,7 +103,7 @@ const LoginForm = () => {
           </p>
         </header>
 
-        <form onSubmit={onSubmit} className="space-y-4">
+        <form onSubmit={(e) => void onSubmit(e)} className="space-y-4">
           {isSignup && (
             <label className="block">
               <span className="text-xs uppercase tracking-wider opacity-60">

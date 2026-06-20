@@ -11,7 +11,7 @@ import type {
 
 // presignReadUrl needs S3 env we don't have in tests — mock the bucket before
 // frame-mapping loads.
-mock.module("../storage/bucket", () => ({
+void mock.module("../storage/bucket", () => ({
   bucketKeyFromUrl: () => null,
   isConfigured: () => true,
   presignReadUrl: (key: string) => `https://signed.test/${key}`,

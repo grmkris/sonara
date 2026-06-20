@@ -34,7 +34,7 @@ export const useLiveStages = (enabled = true): LiveStage[] => {
         // transient / auth hiccup — keep the last state, retry next tick.
       } finally {
         if (!cancelled) {
-          timer = setTimeout(poll, POLL_MS);
+          timer = setTimeout(() => void poll(), POLL_MS);
         }
       }
     };

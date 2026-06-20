@@ -140,7 +140,7 @@ const useLensPoll = (id: string): Lens | null => {
         // Transient — keep the last lens on screen and retry next tick.
       }
       if (!cancelled) {
-        timer = setTimeout(poll, wait);
+        timer = setTimeout(() => void poll(), wait);
       }
     };
     void poll();

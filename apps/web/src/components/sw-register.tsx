@@ -61,7 +61,7 @@ export const SwRegister = () => {
           return;
         }
         // Give the live demo a head start, then prefetch the rest.
-        setTimeout(prefetchDeck, 8000);
+        setTimeout(() => void prefetchDeck(), 8000);
       } catch {
         /* registration failures are non-fatal */
       }

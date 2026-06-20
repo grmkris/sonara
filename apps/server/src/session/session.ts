@@ -626,7 +626,7 @@ export class Session implements ControllableSession {
       origin === "voice" ? SEMANTIC_THRESHOLD_VOICE : SEMANTIC_THRESHOLD;
     const diff = semanticDiff(this.lastGeneratedScene, next);
     if (diff > threshold) {
-      this.trigger(origin === "voice" ? "voice" : "semantic");
+      void this.trigger(origin === "voice" ? "voice" : "semantic");
       return;
     }
     this.schedulePause();
@@ -678,7 +678,7 @@ export class Session implements ControllableSession {
         this.lastSectionEnergy = features.sectionEnergy;
         if (now - this.lastSectionTriggerAt >= SECTION_REFRACTORY_MS) {
           this.lastSectionTriggerAt = now;
-          this.trigger("section");
+          void this.trigger("section");
         }
       }
     } else {
@@ -798,7 +798,7 @@ export class Session implements ControllableSession {
 
     // Fire a regeneration so the new prompt lands immediately. "section" is
     // the closest semantic match ("the song changed").
-    this.trigger("section");
+    void this.trigger("section");
     return track;
   }
 
@@ -877,7 +877,7 @@ export class Session implements ControllableSession {
       this.pauseTimer = undefined;
       const diff = semanticDiff(this.lastGeneratedScene, this.scene);
       if (diff > 0.05) {
-        this.trigger("pause");
+        void this.trigger("pause");
       }
     }, pauseMs);
   }
@@ -924,7 +924,7 @@ export class Session implements ControllableSession {
       if (!hasAudio && !hasScene) {
         return;
       }
-      this.trigger("periodic");
+      void this.trigger("periodic");
     }, 250);
   }
 

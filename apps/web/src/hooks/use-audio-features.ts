@@ -100,7 +100,7 @@ export const useAudioFeatures = (
       }
     };
 
-    attach();
+    void attach();
 
     return () => {
       cancelled = true;

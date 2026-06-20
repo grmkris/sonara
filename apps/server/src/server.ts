@@ -303,7 +303,7 @@ const shutdown = (signal: string): void => {
       manager.closeAll(),
       Bun.sleep(5000),
     ]);
-    server.stop();
+    await server.stop();
     process.exit(0);
   })();
 };

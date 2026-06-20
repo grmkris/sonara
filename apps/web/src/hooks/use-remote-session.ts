@@ -131,7 +131,7 @@ export const useRemoteSession = (
         }
       } finally {
         if (!cancelled) {
-          timer = setTimeout(poll, POLL_MS);
+          timer = setTimeout(() => void poll(), POLL_MS);
         }
       }
     };
