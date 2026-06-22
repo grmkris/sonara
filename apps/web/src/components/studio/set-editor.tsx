@@ -15,8 +15,8 @@ import { SetEmptyDraft } from "./set-empty-draft";
 import { SetLookEditor } from "./set-look-editor";
 import { SetShareControls } from "./set-share-controls";
 import { SetTimelineTrack } from "./set-timeline-track";
-import { Tip } from "./tip";
 import { TimelinePreview } from "./timeline-preview";
+import { Tip } from "./tip";
 
 // Display width for un-pinned frames when the set has no authored look — their
 // real replay cadence is reactive, so the timeline shows a representative hold.
@@ -319,29 +319,29 @@ export const SetEditor = ({
             setPlaying={setPreviewPlaying}
           />
           <SetTimelineTrack
-          frames={frameSet.frames}
-          setId={frameSet.id}
-          nominalMs={nominalMs}
-          coverFrameId={coverFrameId ?? null}
-          selectedFrameId={selectedFrameId}
-          onFrameClick={onFrameClick}
-          onFrameOpen={onFrameOpen}
-          onFrameCheck={onFrameCheck}
-          isSelected={isSelected}
-          isSelecting={isSelecting}
-          onMarquee={onMarquee}
-          onWhitespaceClick={onWhitespaceClick}
-          marqueeEnabled={marqueeEnabled}
-          selectionApi={selectionApi}
-          getDragPayload={getDragPayload}
-          onRemoveFrame={onRemoveFrame}
-          onRemoveFrames={onRemoveFrames}
-          onSetCover={onSetCover}
-          onMoveFrame={onMoveFrame}
-          onSetFrameDuration={onSetFrameDuration}
-          playheadMs={playback.playheadMs}
-          onSeek={playback.seekTo}
-          currentFrameId={playback.currentFrameId}
+            frames={frameSet.frames}
+            setId={frameSet.id}
+            nominalMs={nominalMs}
+            coverFrameId={coverFrameId ?? null}
+            selectedFrameId={selectedFrameId}
+            onFrameClick={onFrameClick}
+            onFrameOpen={onFrameOpen}
+            onFrameCheck={onFrameCheck}
+            isSelected={isSelected}
+            isSelecting={isSelecting}
+            onMarquee={onMarquee}
+            onWhitespaceClick={onWhitespaceClick}
+            marqueeEnabled={marqueeEnabled}
+            selectionApi={selectionApi}
+            getDragPayload={getDragPayload}
+            onRemoveFrame={onRemoveFrame}
+            onRemoveFrames={onRemoveFrames}
+            onSetCover={onSetCover}
+            onMoveFrame={onMoveFrame}
+            onSetFrameDuration={onSetFrameDuration}
+            playheadMs={playback.playheadMs}
+            onSeek={playback.seekTo}
+            currentFrameId={playback.currentFrameId}
           />
         </>
       )}

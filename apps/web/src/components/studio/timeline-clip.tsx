@@ -306,7 +306,8 @@ export const TimelineClip = ({
     stateClass =
       "border-[color:var(--signal)] ring-2 ring-[color:var(--signal)]";
   } else if (selected) {
-    stateClass = "border-[color:var(--paper)] ring-2 ring-[color:var(--paper)]/40";
+    stateClass =
+      "border-[color:var(--paper)] ring-2 ring-[color:var(--paper)]/40";
   }
 
   return (
@@ -381,7 +382,11 @@ export const TimelineClip = ({
 
       {editable && (
         <>
-          <TrimHandle side="left" onResize={onResize} onResizeEnd={onResizeEnd} />
+          <TrimHandle
+            side="left"
+            onResize={onResize}
+            onResizeEnd={onResizeEnd}
+          />
           <TrimHandle
             side="right"
             onResize={onResize}

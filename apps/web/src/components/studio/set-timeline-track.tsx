@@ -6,13 +6,7 @@ import { dropTargetForElements } from "@atlaskit/pragmatic-drag-and-drop/element
 import type { LibraryFrame } from "@sonara/shared";
 import type { ImageLibraryId } from "@sonara/shared/typeid";
 import { Magnet, Maximize2, Minus, Plus } from "lucide-react";
-import {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { PointerEvent as ReactPointerEvent } from "react";
 
 import { useGridCursor } from "@/hooks/use-grid-cursor";
@@ -274,7 +268,11 @@ export const SetTimelineTrack = ({
       target.tagName === "INPUT" ||
       target.tagName === "TEXTAREA" ||
       target.isContentEditable;
-    if (!typing && (e.key === "n" || e.key === "N") && !(e.metaKey || e.ctrlKey)) {
+    if (
+      !typing &&
+      (e.key === "n" || e.key === "N") &&
+      !(e.metaKey || e.ctrlKey)
+    ) {
       e.preventDefault();
       setSnap((s) => !s);
       return;
@@ -403,7 +401,8 @@ export const SetTimelineTrack = ({
                 onSetCover={onSetCover}
                 onTrimPreview={
                   editable
-                    ? (id, durationMs) => setTrimPreview({ durationMs, frameId: id })
+                    ? (id, durationMs) =>
+                        setTrimPreview({ durationMs, frameId: id })
                     : undefined
                 }
                 onTrimCommit={

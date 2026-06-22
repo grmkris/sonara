@@ -163,7 +163,8 @@ export const useSetDraft = (deps: {
       return true;
     }
     return a.some(
-      (f, i) => f.id !== b[i]?.id || durationOf(f) !== durationOf(b[i] as LibraryFrame)
+      (f, i) =>
+        f.id !== b[i]?.id || durationOf(f) !== durationOf(b[i] as LibraryFrame)
     );
   }, [source]);
 

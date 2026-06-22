@@ -56,7 +56,10 @@ export const VisualizerStage = ({
       // NotAllowedError = the user cancelled the picker / denied mic — a silent
       // reset is friendlier than a toast (same as the /s viewer).
       if (reason !== "NotAllowedError") {
-        toast.error("audio unavailable", { description: reason, duration: 3200 });
+        toast.error("audio unavailable", {
+          description: reason,
+          duration: 3200,
+        });
       }
       setAudioSource({ type: "none" });
     },
