@@ -3,6 +3,8 @@ import { SCHEMA } from "@sonara/db";
 import type { Database } from "@sonara/db";
 import {
   FrameSetVisibilitySchema,
+  MAX_FRAME_DURATION_MS,
+  MIN_FRAME_DURATION_MS,
   VISUAL_PRESET_NAMES,
   canSeeUnlistedDecks,
 } from "@sonara/shared";
@@ -521,7 +523,11 @@ export const setsRouter = {
       }
 
       const rows = await db
-        .select({ ...FRAME_COLUMNS, memberTMs: SCHEMA.frameSetFrame.tMs })
+        .select({
+          ...FRAME_COLUMNS,
+          memberDurationMs: SCHEMA.frameSetFrame.durationMs,
+          memberTMs: SCHEMA.frameSetFrame.tMs,
+        })
         .from(SCHEMA.frameSetFrame)
         .innerJoin(
           SCHEMA.imageLibrary,
@@ -532,6 +538,7 @@ export const setsRouter = {
 
       const frames = rows.map((r) => ({
         ...rowToFrame(r),
+        durationMs: r.memberDurationMs,
         tMs: r.memberTMs ?? 0,
       }));
       let coverUrl: string | null = frames[0]?.url ?? null;
@@ -951,6 +958,48 @@ export const setsRouter = {
         .update(SCHEMA.frameSet)
         .set({ coverFrameId: input.frameId })
         .where(eq(SCHEMA.frameSet.id, input.setId));
+      return { ok: true as const };
+    }),
+
+  /**
+   * Pin (or clear) a member frame's authored hold duration — the curated-set
+   * timeline's per-clip trim. Curated-only (a recording's frame list is frozen;
+   * builtins are system-owned). `durationMs: null` clears the pin, reverting the
+   * frame to the set's reactive look-cadence on replay. The frame must be a
+   * member of the set.
+   */
+  setFrameDuration: protectedProcedure
+    .input(
+      z.object({
+        durationMs: z
+          .number()
+          .int()
+          .min(MIN_FRAME_DURATION_MS)
+          .max(MAX_FRAME_DURATION_MS)
+          .nullable(),
+        frameId: ImageLibraryIdSchema,
+        setId: FrameSetIdSchema,
+      })
+    )
+    .handler(async ({ context, input }) => {
+      const { db, userId } = context;
+      const set = await requireOwnedSet(db, userId, input.setId);
+      requireEditableFrameList(set);
+      const updated = await db
+        .update(SCHEMA.frameSetFrame)
+        .set({ durationMs: input.durationMs })
+        .where(
+          and(
+            eq(SCHEMA.frameSetFrame.setId, input.setId),
+            eq(SCHEMA.frameSetFrame.frameId, input.frameId)
+          )
+        )
+        .returning();
+      if (updated.length === 0) {
+        throw new ORPCError("BAD_REQUEST", {
+          message: "That frame is not in this set.",
+        });
+      }
       return { ok: true as const };
     }),
 

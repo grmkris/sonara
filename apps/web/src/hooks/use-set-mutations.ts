@@ -63,6 +63,10 @@ export interface SetMutations {
   // Remove one or many frames from the open set. Undoable (restores the
   // exact previous order).
   removeFrames: (frameIds: string[]) => void;
+  // Pin (durationMs) or clear (null) a member frame's authored hold — the
+  // timeline trim. Optimistic + rollback; serialized with reorder; silent on
+  // success (trims are frequent), loud rollback on failure.
+  setFrameDuration: (frameId: string, durationMs: number | null) => void;
 }
 
 // Undo actions must fire at most once (toast buttons can be mashed).
@@ -503,6 +507,57 @@ export const useSetMutations = (deps: SetMutationDeps): SetMutations => {
     [enqueue, undoToast]
   );
 
+  const setFrameDuration = useCallback(
+    (frameId: string, durationMs: number | null) => {
+      const { setDetail, selectedSetId, setSetDetail } = d.current;
+      if (!(setDetail && selectedSetId)) {
+        return;
+      }
+      const setId = selectedSetId as FrameSetId;
+      const prevFrame = setDetail.frames.find((f) => f.id === frameId);
+      if (!prevFrame) {
+        return;
+      }
+      const prev = prevFrame.durationMs ?? null;
+      if (prev === durationMs) {
+        return;
+      }
+      setSetDetail((s) =>
+        s
+          ? {
+              ...s,
+              frames: s.frames.map((f) =>
+                f.id === frameId ? { ...f, durationMs } : f
+              ),
+            }
+          : s
+      );
+      void enqueue(async () => {
+        try {
+          await rpcClient.sets.setFrameDuration({
+            durationMs,
+            frameId: frameId as ImageLibraryId,
+            setId,
+          });
+          d.current.refreshSets();
+        } catch {
+          setSetDetail((s) =>
+            s
+              ? {
+                  ...s,
+                  frames: s.frames.map((f) =>
+                    f.id === frameId ? { ...f, durationMs: prev } : f
+                  ),
+                }
+              : s
+          );
+          toast.error("couldn't set duration");
+        }
+      });
+    },
+    [enqueue]
+  );
+
   return useMemo(
     () => ({
       addToSet,
@@ -517,6 +572,7 @@ export const useSetMutations = (deps: SetMutationDeps): SetMutations => {
       renameSet,
       reorderTo,
       setCover,
+      setFrameDuration,
       setLook,
       setVisibility,
     }),
@@ -533,6 +589,7 @@ export const useSetMutations = (deps: SetMutationDeps): SetMutations => {
       renameSet,
       reorderTo,
       setCover,
+      setFrameDuration,
       setLook,
       setVisibility,
     ]

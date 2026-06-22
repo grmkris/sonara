@@ -127,10 +127,14 @@ export const frameSet = pgTable(
 // Ordered membership: one row per (set, frame). `position` is the play order.
 // `t_ms` is the frame's offset from the performance start — present on
 // recording members (preserves original replay timing), null on
-// builtin/curated members (fixed-cadence loop).
+// builtin/curated members (fixed-cadence loop). `duration_ms` is the authored
+// per-frame hold for a curated-set timeline — when set it pins the frame's
+// replay hold time (overriding the set's reactive look-cadence); null falls
+// back to that cadence. Curated-only (set via sets.setFrameDuration).
 export const frameSetFrame = pgTable(
   "frame_set_frame",
   {
+    durationMs: integer("duration_ms"),
     frameId: typeId("imageLibrary", "frame_id")
       .notNull()
       .references(() => imageLibrary.id, { onDelete: "cascade" })

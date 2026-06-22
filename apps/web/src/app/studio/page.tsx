@@ -702,6 +702,7 @@ const StudioInner = () => {
         onSetCover={onSetCover}
         onVisibilityChange={onSetVisibility}
         onLookChange={mutations.setLook}
+        onSetFrameDuration={mutations.setFrameDuration}
         onFrameClick={onFrameClick}
         onFrameOpen={onFrameOpen}
         onFrameCheck={onFrameCheck}

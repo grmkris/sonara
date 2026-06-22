@@ -1,4 +1,8 @@
-import { cadenceBetweenMs, libraryCadenceMs } from "@sonara/shared";
+import {
+  cadenceBetweenMs,
+  clampFrameDurationMs,
+  libraryCadenceMs,
+} from "@sonara/shared";
 import type { DeckKey, LibraryManifest } from "@sonara/shared";
 import { useEffect } from "react";
 
@@ -85,8 +89,18 @@ export const usePlaybackLoop = (): void => {
     const { look, origin } = source;
     const manifestDeck = source.deckKey ?? null;
 
-    const cadenceMs = (idx: number, frames: { tMs: number }[]): number => {
+    const cadenceMs = (
+      idx: number,
+      frames: { tMs: number; durationMs?: number | null }[]
+    ): number => {
       const { intensity } = store.getState().scene;
+      // Authored per-frame hold (curated-set timeline trim) wins — WYSIWYG: the
+      // clip's width on the timeline is exactly how long it shows. Frames
+      // without a pinned duration fall back to the reactive cadence below.
+      const pinned = frames[idx]?.durationMs;
+      if (typeof pinned === "number") {
+        return clampFrameDurationMs(pinned);
+      }
       if (origin === "recording") {
         return originalCadenceMs(
           frames[idx],

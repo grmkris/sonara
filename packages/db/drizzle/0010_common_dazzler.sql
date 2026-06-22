@@ -1,0 +1,1 @@
+ALTER TABLE "frame_set_frame" ADD COLUMN "duration_ms" integer;

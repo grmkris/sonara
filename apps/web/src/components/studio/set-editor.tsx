@@ -1,29 +1,25 @@
 "use client";
 
-import { autoScrollForElements } from "@atlaskit/pragmatic-drag-and-drop-auto-scroll/element";
-import { combine } from "@atlaskit/pragmatic-drag-and-drop/combine";
-import { dropTargetForElements } from "@atlaskit/pragmatic-drag-and-drop/element/adapter";
 import type { FrameSet, FrameSetVisibility, SetLook } from "@sonara/shared";
 import type { ImageLibraryId } from "@sonara/shared/typeid";
 import { Pencil, Play, Trash2 } from "lucide-react";
 import Link from "next/link";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 
-import { useGridCursor } from "@/hooks/use-grid-cursor";
-import { useMarqueeSelection } from "@/hooks/use-marquee-selection";
-import { useTileRegistry } from "@/hooks/use-tile-registry";
-import { isFramePayload } from "@/lib/curation-dnd";
 import type { FrameDragPayload } from "@/lib/curation-dnd";
-import { cn } from "@/lib/utils";
 
 import { ActivateOnStage } from "./activate-on-stage";
 import { ErrorState } from "./error-state";
 import { SelectModeToggle } from "./select-mode-toggle";
 import { SetEmptyDraft } from "./set-empty-draft";
 import type { TileClickMods } from "./set-frame-tile";
-import { SetFrameTile } from "./set-frame-tile";
 import { SetLookEditor } from "./set-look-editor";
 import { SetShareControls } from "./set-share-controls";
+import { SetTimelineTrack } from "./set-timeline-track";
+
+// Display width for un-pinned frames when the set has no authored look — their
+// real replay cadence is reactive, so the timeline shows a representative hold.
+const DEFAULT_NOMINAL_MS = 2500;
 
 interface SetEditorProps {
   frameSet: FrameSet | null;
@@ -40,6 +36,8 @@ interface SetEditorProps {
   onSetCover?: (frameId: string) => void;
   onVisibilityChange?: (visibility: FrameSetVisibility) => void;
   onLookChange?: (look: SetLook | null) => void;
+  // Pin/clear a member frame's authored hold duration (timeline trim).
+  onSetFrameDuration?: (frameId: string, durationMs: number | null) => void;
   // Selection v2 (page-owned): the page resolves the click matrix; the editor
   // just threads gestures + visual state.
   onFrameClick: (frameId: string, mods: TileClickMods) => void;
@@ -49,7 +47,7 @@ interface SetEditorProps {
   isSelecting: boolean;
   pinned: boolean;
   onTogglePinned: () => void;
-  // Marquee sweep over the grid (desktop): live hit ids while dragging.
+  // Marquee sweep over the track (desktop): live hit ids while dragging.
   onMarquee: (ids: string[], additive: boolean) => void;
   // Sub-threshold click on whitespace clears the selection.
   onWhitespaceClick: () => void;
@@ -127,9 +125,10 @@ const Hint = ({ children }: { children: string }) => (
   </div>
 );
 
-// Center pane for the sets tab: the selected curated set's frames in authored
-// order, plus header actions (play, share, rename, delete) when edit handlers
-// are supplied.
+// Center pane for the sets tab: the selected curated set rendered as an
+// editable, non-destructive timeline (frames as clips on a time axis; width =
+// hold duration), plus header actions (play, share, rename, delete) when edit
+// handlers are supplied.
 export const SetEditor = ({
   frameSet,
   loading,
@@ -144,6 +143,7 @@ export const SetEditor = ({
   onSetCover,
   onVisibilityChange,
   onLookChange,
+  onSetFrameDuration,
   onFrameClick,
   onFrameOpen,
   onFrameCheck,
@@ -160,61 +160,6 @@ export const SetEditor = ({
 }: SetEditorProps) => {
   const [renaming, setRenaming] = useState(false);
   const [draftName, setDraftName] = useState("");
-  const containerRef = useRef<HTMLDivElement>(null);
-  const { measure, registerTile } = useTileRegistry();
-  const { marqueeProps, marqueeRect } = useMarqueeSelection({
-    containerRef,
-    enabled: marqueeEnabled,
-    measureItems: () =>
-      containerRef.current ? measure(containerRef.current) : [],
-    onChange: onMarquee,
-    onWhitespaceClick,
-  });
-
-  const cursor = useGridCursor({
-    displayOrder: (frameSet?.frames ?? []).map((f) => f.id as string),
-    focusTile: (id) => {
-      const el = containerRef.current?.querySelector(
-        `[data-frame-tile="${id}"] button`
-      );
-      (el as HTMLElement | null)?.focus();
-    },
-    measure: () => (containerRef.current ? measure(containerRef.current) : []),
-    onMove: onMoveFrame ? (id, dir) => onMoveFrame(id, dir) : undefined,
-    onOpen: onFrameOpen,
-    onRemove: onRemoveFrames,
-    selection: selectionApi,
-  });
-
-  // DnD targets owned by the editor: the grid itself (append / empty-set
-  // drop) and edge auto-scroll on the scroll container while a frame drag is
-  // in flight (native auto-scroll is unreliable outside Chrome).
-  const gridRef = useRef<HTMLDivElement | null>(null);
-  const setId = frameSet?.id ?? null;
-  const droppable = !!getDragPayload;
-  useEffect(() => {
-    const container = containerRef.current;
-    const grid = gridRef.current;
-    if (!(container && setId && droppable)) {
-      return;
-    }
-    const cleanups = [
-      autoScrollForElements({
-        canScroll: ({ source }) => isFramePayload(source.data),
-        element: container,
-      }),
-    ];
-    if (grid) {
-      cleanups.push(
-        dropTargetForElements({
-          canDrop: ({ source }) => isFramePayload(source.data),
-          element: grid,
-          getData: () => ({ kind: "set-grid", setId }),
-        })
-      );
-    }
-    return combine(...cleanups);
-  }, [setId, droppable]);
 
   // Reset the rename draft whenever the selected set changes.
   useEffect(() => {
@@ -241,24 +186,7 @@ export const SetEditor = ({
   };
 
   return (
-    <div
-      ref={containerRef}
-      {...marqueeProps}
-      onKeyDown={cursor.onKeyDown}
-      className="relative flex h-full flex-col gap-6 overflow-y-auto px-6 py-8 md:px-10"
-    >
-      {marqueeRect && (
-        <div
-          aria-hidden
-          className="pointer-events-none absolute z-20 border border-[color:var(--paper)]/50 bg-[color:var(--paper)]/8"
-          style={{
-            height: marqueeRect.h,
-            left: marqueeRect.x,
-            top: marqueeRect.y,
-            width: marqueeRect.w,
-          }}
-        />
-      )}
+    <div className="flex h-full flex-col gap-4 px-6 py-8 md:px-10">
       <header className="flex flex-wrap items-start justify-between gap-4">
         <div className="flex min-w-0 flex-col gap-1">
           <span className="font-mono text-[10px] uppercase tracking-[0.26em] text-[color:var(--stone)]">
@@ -320,49 +248,28 @@ export const SetEditor = ({
       {frameSet.frames.length === 0 ? (
         <SetEmptyDraft />
       ) : (
-        <div
-          ref={gridRef}
-          className={cn(
-            "grid gap-2",
-            "grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6"
-          )}
-        >
-          {frameSet.frames.map((frame, i) => (
-            <SetFrameTile
-              key={frame.id}
-              frame={frame}
-              index={i}
-              selected={frame.id === selectedFrameId}
-              isCover={coverFrameId ? frame.id === coverFrameId : false}
-              onClick={onFrameClick}
-              onOpen={onFrameOpen}
-              onCheck={onFrameCheck}
-              checked={isSelected(frame.id)}
-              selecting={isSelecting}
-              registerRef={registerTile(frame.id)}
-              tabIndex={cursor.tileTabIndex(frame.id)}
-              onFocusTile={cursor.onTileFocus}
-              dnd={
-                getDragPayload && frameSet
-                  ? {
-                      getPayload: () => getDragPayload(frame.id),
-                      setId: frameSet.id,
-                    }
-                  : undefined
-              }
-              onMovePrev={
-                onMoveFrame ? (id) => onMoveFrame(id, "prev") : undefined
-              }
-              onMoveNext={
-                onMoveFrame ? (id) => onMoveFrame(id, "next") : undefined
-              }
-              onRemove={onRemoveFrame}
-              onSetCover={onSetCover}
-              canMovePrev={i > 0}
-              canMoveNext={i < frameSet.frames.length - 1}
-            />
-          ))}
-        </div>
+        <SetTimelineTrack
+          frames={frameSet.frames}
+          setId={frameSet.id}
+          nominalMs={frameSet.look?.cadence.calm ?? DEFAULT_NOMINAL_MS}
+          coverFrameId={coverFrameId ?? null}
+          selectedFrameId={selectedFrameId}
+          onFrameClick={onFrameClick}
+          onFrameOpen={onFrameOpen}
+          onFrameCheck={onFrameCheck}
+          isSelected={isSelected}
+          isSelecting={isSelecting}
+          onMarquee={onMarquee}
+          onWhitespaceClick={onWhitespaceClick}
+          marqueeEnabled={marqueeEnabled}
+          selectionApi={selectionApi}
+          getDragPayload={getDragPayload}
+          onRemoveFrame={onRemoveFrame}
+          onRemoveFrames={onRemoveFrames}
+          onSetCover={onSetCover}
+          onMoveFrame={onMoveFrame}
+          onSetFrameDuration={onSetFrameDuration}
+        />
       )}
     </div>
   );

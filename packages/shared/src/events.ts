@@ -25,6 +25,11 @@ export const LibraryFrameSchema = z.object({
   anchorUrl: z.string().nullable().optional(),
   createdAt: z.coerce.date(),
   deck: z.string(),
+  // Per-member authored hold duration (frame_set_frame.duration_ms). Only
+  // populated when this frame is read as a member of a curated set (sets.get);
+  // null/absent everywhere else. When set, it pins the frame's replay hold
+  // time, overriding the set's reactive look-cadence. See clampFrameDurationMs.
+  durationMs: z.number().int().positive().nullable().optional(),
   height: z.number().int().positive(),
   id: ImageLibraryIdSchema,
   inspectorContext: InspectorContextSchema.nullable().optional(),

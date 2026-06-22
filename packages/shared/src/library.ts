@@ -29,6 +29,21 @@ export const cadenceBetweenMs = (
   return Math.round(bounds.calm + (bounds.loud - bounds.calm) * i);
 };
 
+// Per-frame authored hold duration bounds (frame_set_frame.duration_ms). A
+// curated set's timeline can pin how long an individual frame holds on replay,
+// overriding the set's reactive look-cadence (WYSIWYG: a clip's width on the
+// timeline IS its hold time). Bounds keep one frame from strobing or stalling
+// the playback loop. Shared by the server validation (sets.setFrameDuration),
+// the client playback loop, and the timeline trim handles so all three agree.
+export const MIN_FRAME_DURATION_MS = 200;
+export const MAX_FRAME_DURATION_MS = 30_000;
+
+export const clampFrameDurationMs = (ms: number): number =>
+  Math.max(
+    MIN_FRAME_DURATION_MS,
+    Math.min(MAX_FRAME_DURATION_MS, Math.round(ms))
+  );
+
 // Demo frame cadence: how long a library frame is held before the next one.
 // Shared by the server session (its periodic trigger) and the client playback
 // loop so both pace identically from one definition. A frame is held longer

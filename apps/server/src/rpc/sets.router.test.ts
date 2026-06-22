@@ -459,6 +459,67 @@ describe("reorder", () => {
   });
 });
 
+describe("setFrameDuration", () => {
+  test("pins a member's hold; null clears it back to reactive", async () => {
+    const setId = await newCut("trim target");
+    await a.addFrame({ frameId: A[0] as ImageLibraryId, setId });
+
+    await a.setFrameDuration({
+      durationMs: 4200,
+      frameId: A[0] as ImageLibraryId,
+      setId,
+    });
+    let set = await a.get({ setId });
+    expect(set.frames[0]?.durationMs).toBe(4200);
+
+    await a.setFrameDuration({
+      durationMs: null,
+      frameId: A[0] as ImageLibraryId,
+      setId,
+    });
+    set = await a.get({ setId });
+    expect(set.frames[0]?.durationMs ?? null).toBeNull();
+  });
+
+  test("rejects a frame that is not a member", async () => {
+    const setId = await newCut("trim empty");
+    expect(
+      a.setFrameDuration({
+        durationMs: 1000,
+        frameId: A[1] as ImageLibraryId,
+        setId,
+      })
+    ).rejects.toThrow("not in this set");
+  });
+
+  test("recording frame durations are frozen", async () => {
+    const recId = await insertSet({
+      frames: [{ id: A[0] as ImageLibraryId, tMs: 0 }],
+      origin: "recording",
+      userId: userA,
+    });
+    expect(
+      a.setFrameDuration({
+        durationMs: 1000,
+        frameId: A[0] as ImageLibraryId,
+        setId: recId,
+      })
+    ).rejects.toThrow("frozen");
+  });
+
+  test("rejects out-of-range durations (validation)", async () => {
+    const setId = await newCut("trim bounds");
+    await a.addFrame({ frameId: A[0] as ImageLibraryId, setId });
+    expect(
+      a.setFrameDuration({
+        durationMs: 1,
+        frameId: A[0] as ImageLibraryId,
+        setId,
+      })
+    ).rejects.toThrow();
+  });
+});
+
 describe("ownership", () => {
   test("B cannot mutate or delete A's set", async () => {
     const setId = await newCut();
