@@ -6,13 +6,12 @@ import { Pencil, Play, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 
-import type { FrameDragPayload } from "@/lib/curation-dnd";
+import type { FrameDragPayload, TileClickMods } from "@/lib/curation-dnd";
 
 import { ActivateOnStage } from "./activate-on-stage";
 import { ErrorState } from "./error-state";
 import { SelectModeToggle } from "./select-mode-toggle";
 import { SetEmptyDraft } from "./set-empty-draft";
-import type { TileClickMods } from "./set-frame-tile";
 import { SetLookEditor } from "./set-look-editor";
 import { SetShareControls } from "./set-share-controls";
 import { SetTimelineTrack } from "./set-timeline-track";

@@ -9,11 +9,10 @@ import type { MouseEvent } from "react";
 import { createRoot } from "react-dom/client";
 
 import { FrameDragPreview } from "@/components/studio/drag-preview";
-import type { TileClickMods } from "@/components/studio/set-frame-tile";
 import { TileCheck } from "@/components/studio/tile-check";
 import { useLongPress } from "@/hooks/use-long-press";
 import { isFramePayload } from "@/lib/curation-dnd";
-import type { FrameDragPayload } from "@/lib/curation-dnd";
+import type { FrameDragPayload, TileClickMods } from "@/lib/curation-dnd";
 import { formatMmSs } from "@/lib/format-time";
 import { cn } from "@/lib/utils";
 

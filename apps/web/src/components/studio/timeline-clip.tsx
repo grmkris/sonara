@@ -24,10 +24,8 @@ import { DropEdgeIndicator } from "@/components/studio/drop-indicator";
 import { TileCheck } from "@/components/studio/tile-check";
 import { useLongPress } from "@/hooks/use-long-press";
 import { isFramePayload } from "@/lib/curation-dnd";
-import type { FrameDragPayload } from "@/lib/curation-dnd";
+import type { FrameDragPayload, TileClickMods } from "@/lib/curation-dnd";
 import { cn } from "@/lib/utils";
-
-import type { TileClickMods } from "./set-frame-tile";
 
 // Trim snaps to this grid (ms) unless snapping is off — a clean, honest
 // equivalent of neighbour-edge snapping on a ripple single-track (where each

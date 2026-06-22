@@ -2,6 +2,15 @@
 // The payload travels between pragmatic adapters as a plain record; the
 // `kind` discriminator keeps foreign drags (text, files) out.
 
+// Modifier-key flags a tile reports on click so the page can resolve the
+// selection matrix (plain / range / toggle). Lives here with the other pure
+// studio interaction types so the timeline + recording tiles share one
+// definition.
+export interface TileClickMods {
+  shiftKey: boolean;
+  metaOrCtrl: boolean;
+}
+
 export interface FrameDragPayload {
   kind: "sonara/frames";
   // Ordered by the SOURCE surface's display order (not click order) — what

@@ -19,11 +19,10 @@ import { useGridCursor } from "@/hooks/use-grid-cursor";
 import { useMarqueeSelection } from "@/hooks/use-marquee-selection";
 import { useTileRegistry } from "@/hooks/use-tile-registry";
 import { isFramePayload } from "@/lib/curation-dnd";
-import type { FrameDragPayload } from "@/lib/curation-dnd";
+import type { FrameDragPayload, TileClickMods } from "@/lib/curation-dnd";
 import { formatMmSs } from "@/lib/format-time";
 import { cn } from "@/lib/utils";
 
-import type { TileClickMods } from "./set-frame-tile";
 import { TimelineClip } from "./timeline-clip";
 
 const TRACK_HEIGHT = 72;
