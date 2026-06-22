@@ -2,8 +2,7 @@
 
 import type { FrameSet, FrameSetVisibility, SetLook } from "@sonara/shared";
 import type { ImageLibraryId } from "@sonara/shared/typeid";
-import { Pencil, Play, RotateCcw, Save, Trash2 } from "lucide-react";
-import Link from "next/link";
+import { Pencil, RotateCcw, Save, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
 
 import type { FrameDragPayload, TileClickMods } from "@/lib/curation-dnd";
@@ -15,6 +14,7 @@ import { SetEmptyDraft } from "./set-empty-draft";
 import { SetLookEditor } from "./set-look-editor";
 import { SetShareControls } from "./set-share-controls";
 import { SetTimelineTrack } from "./set-timeline-track";
+import { TimelinePreview } from "./timeline-preview";
 
 // Display width for un-pinned frames when the set has no authored look — their
 // real replay cadence is reactive, so the timeline shows a representative hold.
@@ -111,15 +111,6 @@ const SetHeaderActions = ({
       <SelectModeToggle active={pinned} onToggle={onTogglePinned} />
     )}
     {frameSet.frames.length > 0 && <ActivateOnStage setId={frameSet.id} />}
-    {frameSet.frames.length > 0 && (
-      <Link
-        href={`/play?set=${encodeURIComponent(frameSet.id)}`}
-        className="focus-ring font-sans inline-flex items-center gap-1.5 border border-[color:var(--hairline)]/40 px-3 py-1.5 text-[10px] uppercase tracking-[0.22em] text-[color:var(--paper)]/85 transition-colors hover:border-[color:var(--paper)]/70 hover:text-[color:var(--paper)]"
-      >
-        <Play className="size-3" strokeWidth={1.5} />
-        preview
-      </Link>
-    )}
     {draft?.dirty && (
       <button
         type="button"
@@ -295,7 +286,14 @@ export const SetEditor = ({
       {frameSet.frames.length === 0 ? (
         <SetEmptyDraft />
       ) : (
-        <SetTimelineTrack
+        <>
+          <TimelinePreview
+            frames={frameSet.frames}
+            look={frameSet.look}
+            name={frameSet.name}
+            setId={frameSet.id}
+          />
+          <SetTimelineTrack
           frames={frameSet.frames}
           setId={frameSet.id}
           nominalMs={frameSet.look?.cadence.calm ?? DEFAULT_NOMINAL_MS}
@@ -316,7 +314,8 @@ export const SetEditor = ({
           onSetCover={onSetCover}
           onMoveFrame={onMoveFrame}
           onSetFrameDuration={onSetFrameDuration}
-        />
+          />
+        </>
       )}
     </div>
   );
