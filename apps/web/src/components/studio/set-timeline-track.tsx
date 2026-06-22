@@ -21,6 +21,7 @@ import { useTileRegistry } from "@/hooks/use-tile-registry";
 import { isFramePayload } from "@/lib/curation-dnd";
 import type { FrameDragPayload, TileClickMods } from "@/lib/curation-dnd";
 import { formatMmSs } from "@/lib/format-time";
+import { computeTimelineLayout } from "@/lib/timeline-layout";
 import { cn } from "@/lib/utils";
 
 import { TimelineClip } from "./timeline-clip";
@@ -65,6 +66,12 @@ interface SetTimelineTrackProps {
   onMoveFrame?: (frameId: string, dir: "prev" | "next") => void;
   // Pin/clear a frame's authored hold duration (null clears → reactive).
   onSetFrameDuration?: (frameId: string, durationMs: number | null) => void;
+  // Shared playback: the timeline is the clock (see use-timeline-playback).
+  // The playhead position + the seek are owned by the editor so the preview
+  // and the playhead move together.
+  playheadMs: number;
+  onSeek: (ms: number) => void;
+  currentFrameId: string | null;
 }
 
 const ZoomButton = ({
@@ -119,6 +126,9 @@ export const SetTimelineTrack = ({
   onSetCover,
   onMoveFrame,
   onSetFrameDuration,
+  playheadMs,
+  onSeek,
+  currentFrameId,
 }: SetTimelineTrackProps) => {
   const editable = !!onSetFrameDuration;
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -127,7 +137,6 @@ export const SetTimelineTrack = ({
 
   const [pps, setPps] = useState(DEFAULT_PPS);
   const [snap, setSnap] = useState(true);
-  const [playheadMs, setPlayheadMs] = useState(0);
   // Live trim preview — reflows the whole track while a handle is dragged;
   // cleared on commit (the RPC result re-reads from the source of truth).
   const [trimPreview, setTrimPreview] = useState<{
@@ -158,18 +167,20 @@ export const SetTimelineTrack = ({
     selection: selectionApi,
   });
 
-  // Effective display duration per frame (live preview wins, then the pin,
-  // then the nominal), with running start offsets for ruler/playhead math.
+  // Shared base layout (clip widths = holds); overlay the live trim preview on
+  // the dragged clip so the strip reflows under the handle.
   const layout = useMemo(() => {
+    const base = computeTimelineLayout(frames, nominalMs);
+    if (!trimPreview) {
+      return base;
+    }
     let acc = 0;
-    const entries = frames.map((frame) => {
+    const entries = base.entries.map((e) => {
       const ms =
-        trimPreview?.frameId === frame.id
-          ? trimPreview.durationMs
-          : (frame.durationMs ?? nominalMs);
+        e.frame.id === trimPreview.frameId ? trimPreview.durationMs : e.ms;
       const startMs = acc;
       acc += ms;
-      return { frame, ms, startMs };
+      return { frame: e.frame, ms, startMs };
     });
     return { entries, totalMs: acc };
   }, [frames, nominalMs, trimPreview]);
@@ -241,7 +252,7 @@ export const SetTimelineTrack = ({
   };
   const onPlayheadMove = (e: ReactPointerEvent) => {
     if (playheadDragRef.current) {
-      setPlayheadMs(msAtClientX(e.clientX));
+      onSeek(msAtClientX(e.clientX));
     }
   };
   const onPlayheadUp = (e: ReactPointerEvent) => {
@@ -324,7 +335,7 @@ export const SetTimelineTrack = ({
           <button
             type="button"
             aria-label="seek"
-            onClick={(e) => setPlayheadMs(msAtClientX(e.clientX))}
+            onClick={(e) => onSeek(msAtClientX(e.clientX))}
             className="relative block w-full cursor-text"
             style={{ height: RULER_HEIGHT }}
           >
@@ -359,6 +370,7 @@ export const SetTimelineTrack = ({
                 durationMs={ms}
                 pinned={typeof frame.durationMs === "number"}
                 pps={pps}
+                playing={frame.id === currentFrameId}
                 selected={frame.id === selectedFrameId}
                 isCover={coverFrameId ? frame.id === coverFrameId : false}
                 checked={isSelected(frame.id)}

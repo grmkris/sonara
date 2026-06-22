@@ -1,38 +1,30 @@
 "use client";
 
-import type { LibraryFrame, SetLook } from "@sonara/shared";
+import type { SetLook } from "@sonara/shared";
 import { useCallback, useEffect } from "react";
 import { toast } from "sonner";
 
 import { SonaraCanvas } from "@/components/visualizer/canvas/sonara-canvas";
 import { useAudioFeatures } from "@/hooks/use-audio-features";
 import type { AudioSource } from "@/hooks/use-audio-features";
-import { usePlaybackLoop } from "@/hooks/use-playback-loop";
 import { isKnownPreset } from "@/lib/render/presets";
 import { useVisualizerStore } from "@/stores/visualizer";
 
 // The real WebGL visualizer, embeddable in a sized container (the canvas is
-// already parent-sized — only each page's <main> pins it fullscreen). Drives
-// the global visualizer store from a set's frames exactly like the /s/[id]
-// replay path, plus viewer-local audio (same engine as /play, features never
-// go upstream). Mount it ONLY while visible — collapsing the host unmounts it,
-// which tears the WebGL context down and idles the GPU.
+// already parent-sized — only each page's <main> pins it fullscreen). Mount it
+// ONLY while visible; unmounting tears the WebGL context down and idles the
+// GPU.
 //
-// Always plays the frames ORDERED with their durations (deckKey null, origin
-// "curated"): the preview reflects the edited arrangement — i.e. exactly what
-// "save as set" will produce — never a built-in's shuffle or a recording's
-// original scatter.
+// It only RENDERS: it applies the set's look (preset + intensity) and runs
+// viewer-local audio (same engine as /play; features never go upstream). The
+// FRAMES are pushed straight into the store by the timeline clock
+// (use-timeline-playback), so the timeline IS the playback source of truth and
+// nothing here issues setSource — no source can bleed into /play.
 
 interface VisualizerStageProps {
-  frames: LibraryFrame[];
   look: SetLook | null;
-  name: string;
-  setId: string;
   audioSource: AudioSource;
   setAudioSource: (s: AudioSource) => void;
-  // Play vs. paused. While false the store idles (the canvas holds its last
-  // frame); while true the playback loop drives frames.
-  active: boolean;
 }
 
 const noopSend = (): void => {
@@ -40,40 +32,22 @@ const noopSend = (): void => {
 };
 
 export const VisualizerStage = ({
-  frames,
   look,
-  name,
-  setId,
   audioSource,
   setAudioSource,
-  active,
 }: VisualizerStageProps) => {
-  // Drive the global store from the set while active; idle (freeze) when paused
-  // or unmounted, so a leftover source never bleeds into /play.
   useEffect(() => {
-    const s = useVisualizerStore.getState();
-    if (!active) {
-      s.stopToIdle();
+    if (!look) {
       return;
     }
-    if (look) {
-      if (isKnownPreset(look.preset)) {
-        s.setPreset(look.preset);
-      }
-      useVisualizerStore.setState((st) => ({
-        scene: { ...st.scene, intensity: look.intensity },
-      }));
+    const s = useVisualizerStore.getState();
+    if (isKnownPreset(look.preset)) {
+      s.setPreset(look.preset);
     }
-    s.setSource(
-      { deckKey: null, kind: "set", look, name, origin: "curated", setId },
-      frames
-    );
-    return () => {
-      useVisualizerStore.getState().stopToIdle();
-    };
-  }, [active, frames, look, name, setId]);
-
-  usePlaybackLoop();
+    useVisualizerStore.setState((st) => ({
+      scene: { ...st.scene, intensity: look.intensity },
+    }));
+  }, [look]);
 
   const onAudioError = useCallback(
     (err: unknown) => {

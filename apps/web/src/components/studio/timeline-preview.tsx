@@ -1,6 +1,6 @@
 "use client";
 
-import type { LibraryFrame, SetLook } from "@sonara/shared";
+import type { SetLook } from "@sonara/shared";
 import { ChevronUp, Pause, Play } from "lucide-react";
 import { useState } from "react";
 
@@ -9,25 +9,28 @@ import { VisualizerStage } from "@/components/visualizer/visualizer-stage";
 import type { AudioSource } from "@/hooks/use-audio-features";
 
 interface TimelinePreviewProps {
-  frames: LibraryFrame[];
   look: SetLook | null;
-  name: string;
-  setId: string;
+  // Controlled by the editor so the preview and the timeline playhead share one
+  // playback state (see use-timeline-playback).
+  expanded: boolean;
+  setExpanded: (v: boolean) => void;
+  playing: boolean;
+  setPlaying: (v: boolean) => void;
 }
 
 // The studio preview window: the REAL audio-reactive visualizer, embedded above
 // the timeline, playing the set you're editing (ordered, with your trims) — so
 // you can see and hear it before "save as set". Collapsed by default; the WebGL
-// canvas only mounts while expanded (GPU cost is opt-in), and the MusicSource
-// control feeds it room audio so the look reacts.
+// canvas only mounts while expanded (GPU cost is opt-in). The MusicSource
+// control feeds it room audio so the look reacts. Play/pause + scrubbing are
+// connected to the timeline playhead by the editor.
 export const TimelinePreview = ({
-  frames,
   look,
-  name,
-  setId,
+  expanded,
+  setExpanded,
+  playing,
+  setPlaying,
 }: TimelinePreviewProps) => {
-  const [expanded, setExpanded] = useState(false);
-  const [playing, setPlaying] = useState(true);
   const [audioSource, setAudioSource] = useState<AudioSource>({ type: "none" });
 
   if (!expanded) {
@@ -48,7 +51,7 @@ export const TimelinePreview = ({
       <div className="flex items-center gap-2">
         <button
           type="button"
-          onClick={() => setPlaying((p) => !p)}
+          onClick={() => setPlaying(!playing)}
           aria-label={playing ? "pause" : "play"}
           className="focus-ring inline-flex items-center justify-center border border-[color:var(--hairline)]/40 p-1.5 text-[color:var(--paper)]/85 transition-colors hover:border-[color:var(--paper)]/70 hover:text-[color:var(--paper)]"
         >
@@ -74,13 +77,9 @@ export const TimelinePreview = ({
       </div>
       <div className="relative h-[clamp(180px,32vh,440px)] w-full overflow-hidden rounded-sm border border-[color:var(--hairline)]/40 bg-[color:var(--ink)]">
         <VisualizerStage
-          frames={frames}
           look={look}
-          name={name}
-          setId={setId}
           audioSource={audioSource}
           setAudioSource={setAudioSource}
-          active={playing}
         />
       </div>
     </div>

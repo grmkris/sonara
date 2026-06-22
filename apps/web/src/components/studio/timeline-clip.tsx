@@ -51,6 +51,8 @@ interface TimelineClipProps {
   // Pixels per second — converts a trim's px delta into a duration delta.
   pps: number;
   selected: boolean;
+  // The clip currently showing in the preview (the playhead's frame).
+  playing: boolean;
   isCover: boolean;
   checked: boolean;
   selecting: boolean;
@@ -145,6 +147,7 @@ export const TimelineClip = ({
   pinned,
   pps,
   selected,
+  playing,
   isCover,
   checked,
   selecting,
@@ -307,7 +310,11 @@ export const TimelineClip = ({
 
   return (
     <div
-      className={cn("group relative shrink-0", dragging && "opacity-40")}
+      className={cn(
+        "group relative shrink-0",
+        dragging && "opacity-40",
+        playing && "rounded-sm ring-2 ring-[color:var(--signal)]"
+      )}
       data-frame-tile={frame.id}
       ref={setRefs}
       style={{ width: widthPx }}

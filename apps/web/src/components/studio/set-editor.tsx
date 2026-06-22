@@ -5,6 +5,7 @@ import type { ImageLibraryId } from "@sonara/shared/typeid";
 import { Pencil, RotateCcw, Save, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
 
+import { useTimelinePlayback } from "@/hooks/use-timeline-playback";
 import type { FrameDragPayload, TileClickMods } from "@/lib/curation-dnd";
 
 import { ActivateOnStage } from "./activate-on-stage";
@@ -19,6 +20,7 @@ import { TimelinePreview } from "./timeline-preview";
 // Display width for un-pinned frames when the set has no authored look — their
 // real replay cadence is reactive, so the timeline shows a representative hold.
 const DEFAULT_NOMINAL_MS = 2500;
+const EMPTY_FRAMES: FrameSet["frames"] = [];
 
 interface SetEditorProps {
   frameSet: FrameSet | null;
@@ -190,6 +192,19 @@ export const SetEditor = ({
 }: SetEditorProps) => {
   const [renaming, setRenaming] = useState(false);
   const [draftName, setDraftName] = useState("");
+  const [previewExpanded, setPreviewExpanded] = useState(false);
+  const [previewPlaying, setPreviewPlaying] = useState(true);
+
+  // Display/playback fallback for un-pinned frames (the set's calm cadence).
+  const nominalMs = frameSet?.look?.cadence.calm ?? DEFAULT_NOMINAL_MS;
+  // The timeline is the playback clock: this drives the preview's frames AND
+  // the playhead, so play sweeps both and scrub/ruler seeks the preview.
+  const playback = useTimelinePlayback({
+    active: previewExpanded,
+    frames: frameSet?.frames ?? EMPTY_FRAMES,
+    nominalMs,
+    playing: previewPlaying,
+  });
 
   // Reset the rename draft whenever the selected set changes.
   useEffect(() => {
@@ -288,15 +303,16 @@ export const SetEditor = ({
       ) : (
         <>
           <TimelinePreview
-            frames={frameSet.frames}
             look={frameSet.look}
-            name={frameSet.name}
-            setId={frameSet.id}
+            expanded={previewExpanded}
+            setExpanded={setPreviewExpanded}
+            playing={previewPlaying}
+            setPlaying={setPreviewPlaying}
           />
           <SetTimelineTrack
           frames={frameSet.frames}
           setId={frameSet.id}
-          nominalMs={frameSet.look?.cadence.calm ?? DEFAULT_NOMINAL_MS}
+          nominalMs={nominalMs}
           coverFrameId={coverFrameId ?? null}
           selectedFrameId={selectedFrameId}
           onFrameClick={onFrameClick}
@@ -314,6 +330,9 @@ export const SetEditor = ({
           onSetCover={onSetCover}
           onMoveFrame={onMoveFrame}
           onSetFrameDuration={onSetFrameDuration}
+          playheadMs={playback.playheadMs}
+          onSeek={playback.seekTo}
+          currentFrameId={playback.currentFrameId}
           />
         </>
       )}
