@@ -34,7 +34,10 @@ export interface SetMutations {
   createSet: (name: string) => void;
   // Seed a set from explicit frames (selection bar / drop on "new set").
   // Undoable (removes the created set).
-  createSetFrom: (frameIds: string[], name: string) => Promise<FrameSetSummary | null>;
+  createSetFrom: (
+    frameIds: string[],
+    name: string
+  ) => Promise<FrameSetSummary | null>;
   makeCut: () => void;
   renameSet: (name: string) => void;
   deleteSet: () => void;
@@ -83,7 +86,7 @@ export const useSetMutations = (deps: SetMutationDeps): SetMutations => {
   // in flight must wait, or the full-list payloads race and the multiset
   // validation rejects one of them confusingly.
   const queueRef = useRef<Promise<unknown>>(Promise.resolve());
-  const enqueue = useCallback(<T,>(op: () => Promise<T>): Promise<T> => {
+  const enqueue = useCallback(<T>(op: () => Promise<T>): Promise<T> => {
     const run = async (): Promise<T> => {
       try {
         await queueRef.current;
@@ -120,21 +123,18 @@ export const useSetMutations = (deps: SetMutationDeps): SetMutations => {
     []
   );
 
-  const createSet = useCallback(
-    (name: string) => {
-      void (async () => {
-        try {
-          const { set: created } = await rpcClient.sets.create({ name });
-          d.current.refreshSets();
-          d.current.router.push(setsHref(created.id));
-          toast(`created “${created.name}”`, { duration: 1600 });
-        } catch {
-          toast.error("couldn't create set");
-        }
-      })();
-    },
-    []
-  );
+  const createSet = useCallback((name: string) => {
+    void (async () => {
+      try {
+        const { set: created } = await rpcClient.sets.create({ name });
+        d.current.refreshSets();
+        d.current.router.push(setsHref(created.id));
+        toast(`created “${created.name}”`, { duration: 1600 });
+      } catch {
+        toast.error("couldn't create set");
+      }
+    })();
+  }, []);
 
   const createSetFrom = useCallback(
     async (
@@ -255,9 +255,7 @@ export const useSetMutations = (deps: SetMutationDeps): SetMutations => {
     void (async () => {
       try {
         await rpcClient.sets.setLook({
-          look: look as Parameters<
-            typeof rpcClient.sets.setLook
-          >[0]["look"],
+          look: look as Parameters<typeof rpcClient.sets.setLook>[0]["look"],
           setId,
         });
         toast(look ? "look saved" : "look cleared");
@@ -463,9 +461,7 @@ export const useSetMutations = (deps: SetMutationDeps): SetMutations => {
       const removedIds = prevOrderedIds.filter((id) => removeSet.has(id));
 
       setSetDetail((s) =>
-        s
-          ? { ...s, frames: s.frames.filter((f) => !removeSet.has(f.id)) }
-          : s
+        s ? { ...s, frames: s.frames.filter((f) => !removeSet.has(f.id)) } : s
       );
       if (selectedFrameId && removeSet.has(selectedFrameId)) {
         router.replace(setsHref(selectedSetId));

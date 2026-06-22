@@ -1,5 +1,10 @@
 "use client";
 
+import {
+  attachClosestEdge,
+  extractClosestEdge,
+} from "@atlaskit/pragmatic-drag-and-drop-hitbox/closest-edge";
+import type { Edge } from "@atlaskit/pragmatic-drag-and-drop-hitbox/types";
 import { combine } from "@atlaskit/pragmatic-drag-and-drop/combine";
 import {
   draggable,
@@ -7,19 +12,14 @@ import {
 } from "@atlaskit/pragmatic-drag-and-drop/element/adapter";
 import { pointerOutsideOfPreview } from "@atlaskit/pragmatic-drag-and-drop/element/pointer-outside-of-preview";
 import { setCustomNativeDragPreview } from "@atlaskit/pragmatic-drag-and-drop/element/set-custom-native-drag-preview";
-import {
-  attachClosestEdge,
-  extractClosestEdge,
-} from "@atlaskit/pragmatic-drag-and-drop-hitbox/closest-edge";
-import type { Edge } from "@atlaskit/pragmatic-drag-and-drop-hitbox/types";
 import type { LibraryFrame } from "@sonara/shared";
 import { ChevronLeft, ChevronRight, ImageIcon, X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { MouseEvent } from "react";
 import { createRoot } from "react-dom/client";
 
-import { DropEdgeIndicator } from "@/components/studio/drop-indicator";
 import { FrameDragPreview } from "@/components/studio/drag-preview";
+import { DropEdgeIndicator } from "@/components/studio/drop-indicator";
 import { TileCheck } from "@/components/studio/tile-check";
 import { useLongPress } from "@/hooks/use-long-press";
 import { isFramePayload } from "@/lib/curation-dnd";
@@ -246,15 +246,20 @@ export const SetFrameTile = ({
     if (longPress.consumeFired()) {
       return;
     }
-    onClick(frame.id, { metaOrCtrl: e.metaKey || e.ctrlKey, shiftKey: e.shiftKey });
+    onClick(frame.id, {
+      metaOrCtrl: e.metaKey || e.ctrlKey,
+      shiftKey: e.shiftKey,
+    });
   };
 
   let stateClass =
     "border-[color:var(--hairline)]/40 hover:border-[color:var(--paper)]/70";
   if (checked) {
-    stateClass = "border-[color:var(--signal)] ring-2 ring-[color:var(--signal)]";
+    stateClass =
+      "border-[color:var(--signal)] ring-2 ring-[color:var(--signal)]";
   } else if (selected) {
-    stateClass = "border-[color:var(--paper)] ring-2 ring-[color:var(--paper)]/40";
+    stateClass =
+      "border-[color:var(--paper)] ring-2 ring-[color:var(--paper)]/40";
   }
   return (
     <div

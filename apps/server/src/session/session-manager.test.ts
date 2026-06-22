@@ -188,14 +188,17 @@ describe("SessionManager (stage-keyed)", () => {
     })();
 
     const fresh = makeWs("same-tab");
-    const again = m.attach({ key: stageId, stageId, userId: userUuid, ws: fresh });
+    const again = m.attach({
+      key: stageId,
+      stageId,
+      userId: userUuid,
+      ws: fresh,
+    });
     expect(again.resumed).toBe(true);
     expect(again.session).toBe(session);
     // The stale socket is closed NORMALLY (not 4409 — the client must not
     // treat its own reconnect as a kick)…
-    expect(stale.closed).toEqual([
-      { code: 1000 },
-    ]);
+    expect(stale.closed).toEqual([{ code: 1000 }]);
     // …and NO screen.takenOver event reaches the shared publisher.
     await sleep(30);
     ac.abort();

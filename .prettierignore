@@ -1,0 +1,18 @@
+# oxfmt honors .prettierignore. Keep generated / non-source files out of the
+# repo-wide format pass (and the CI format-check).
+
+# Generated DB migrations + drizzle snapshots — owned by drizzle-kit.
+packages/db/drizzle/
+
+# Lockfile.
+bun.lock
+
+# Brand assets sub-project — excluded from lint too (not a workspace).
+brand/
+
+# Prose + hand-authored HTML are authored by hand, not the formatter. oxfmt's
+# markdown pass churns emphasis style + blank lines, and it triples the
+# hand-tuned architecture.html — noise that buries real diffs. Keep the
+# formatter (and CI format-check) scoped to code (TS/JS/JSON/CSS).
+**/*.md
+**/*.html

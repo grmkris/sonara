@@ -149,9 +149,7 @@ export const controlRouter = {
     .handler(async ({ context, input }) => {
       const session = await resolveTarget(context, input);
       session.setImageAnchor(
-        "clear" in input
-          ? { clear: true }
-          : { url: input.url }
+        "clear" in input ? { clear: true } : { url: input.url }
       );
     }),
 

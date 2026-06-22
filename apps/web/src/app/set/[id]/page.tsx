@@ -337,10 +337,7 @@ const lensViewModel = (lens: FoundLens, replaySet: ReplaySet | null) => {
     isOwnerLive: lens.isOwner && live !== null,
     name: lens.set?.name ?? "live session",
     nowPlaying: live?.nowPlaying ?? null,
-    stageRoom:
-      stage?.open
-        ? stage.room
-        : null,
+    stageRoom: stage?.open ? stage.room : null,
   };
 };
 

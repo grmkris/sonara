@@ -1,9 +1,9 @@
 import { z } from "zod";
 
 import { InspectorContextSchema } from "./inspector-context";
+import { LookConfig } from "./looks";
 import { NowPlaying } from "./now-playing";
 import { SonaraSceneState } from "./scene";
-import { LookConfig } from "./looks";
 import { ResolvedScene } from "./scene-resolved";
 import {
   FrameSetIdSchema,
@@ -43,11 +43,7 @@ export type LibraryFrame = z.infer<typeof LibraryFrameSchema>;
 // built-in decks (origin=builtin), session recordings (origin=recording) and
 // curated reels (origin=curated). See packages/db/src/schema/frame-set.db.ts.
 
-export const FrameSetOriginSchema = z.enum([
-  "builtin",
-  "recording",
-  "curated",
-]);
+export const FrameSetOriginSchema = z.enum(["builtin", "recording", "curated"]);
 export type FrameSetOrigin = z.infer<typeof FrameSetOriginSchema>;
 
 export const FrameSetVisibilitySchema = z.enum([

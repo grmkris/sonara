@@ -7,6 +7,8 @@ import { toast } from "sonner";
 
 import { AppNavLinks } from "@/components/app-nav";
 import { Mark } from "@/components/brand/mark";
+import { StageConsole } from "@/components/stage-console/stage-console";
+import { StageChip } from "@/components/stage-screen/stage-chip";
 import { StageWire } from "@/components/stage/stage-wire";
 import { Button } from "@/components/ui/button";
 import {
@@ -20,8 +22,6 @@ import { AudioRibbon } from "@/components/visualizer/audio/audio-ribbon";
 import { GhostOverlay } from "@/components/visualizer/canvas/ghost-overlay";
 import { ScanSweep } from "@/components/visualizer/canvas/scan-sweep";
 import { SonaraCanvas } from "@/components/visualizer/canvas/sonara-canvas";
-import { StageChip } from "@/components/stage-screen/stage-chip";
-import { StageConsole } from "@/components/stage-console/stage-console";
 import { DemoRecorder } from "@/components/visualizer/controls/demo-recorder";
 import { FullscreenToggle } from "@/components/visualizer/controls/fullscreen-toggle";
 import { HideToggle } from "@/components/visualizer/controls/hide-toggle";

@@ -1,0 +1,18 @@
+{
+  // The dev/seed/probe scripts live OUTSIDE apps/server's tsconfig include
+  // (which is `src/**/*`), so the type-aware lint (`ultracite --type-check`,
+  // tsgolint) would otherwise check them under a degraded fallback config —
+  // wrong lib (no `Array#toSorted`), flaky control-flow. This scoped project
+  // gives them the real base config (ESNext lib, Bun types, `@/*` → src) so
+  // `bun run check` type-checks them faithfully. `tsc --noEmit` (typecheck)
+  // targets ../tsconfig.json and never picks this up; it's type-info only.
+  "extends": "../tsconfig.json",
+  "compilerOptions": {
+    "rootDir": "..",
+    "noEmit": true,
+    "paths": {
+      "@/*": ["../src/*"]
+    }
+  },
+  "include": ["**/*.ts"]
+}

@@ -9,7 +9,6 @@ import { createDb } from "@sonara/db";
 import { runMigrations } from "@sonara/db/migrator";
 import { SERVICE_URLS, verifyTicket } from "@sonara/shared";
 import type { WsRole } from "@sonara/shared";
-import type { AttachedWs } from "./session/session-manager";
 import { LiveSessionIdSchema } from "@sonara/shared/typeid";
 import type { LiveSessionId, UserId } from "@sonara/shared/typeid";
 import type { ServerWebSocket } from "bun";
@@ -19,10 +18,13 @@ import { getAuth } from "./auth/auth";
 import { migrateFrameSetsOnBoot } from "./db/frame-set-boot-migrate";
 import { seedLibraryOnBoot } from "./db/library-boot-seed";
 import { getPool } from "./db/pool";
-import { finalizeStaleRecordingSets } from "./library/recording-set";
 import { env } from "./env";
 import { uploadImage } from "./http/upload";
 import { logger } from "./lib/logger";
+import { finalizeStaleRecordingSets } from "./library/recording-set";
+import { appRouter } from "./rpc/app.router";
+import type { AttachedWs } from "./session/session-manager";
+import { SessionManager } from "./session/session-manager";
 import { bindStageActions, startStageActions } from "./stage/stage-actions";
 import {
   bindStagePublisher,
@@ -30,8 +32,6 @@ import {
   tryUpgradeStageFeed,
 } from "./stage/stage-feed";
 import type { StageFeedWsData } from "./stage/stage-feed";
-import { appRouter } from "./rpc/app.router";
-import { SessionManager } from "./session/session-manager";
 
 // Apply pending schema migrations before binding the HTTP port. Matches
 // ai-stilist / zednabi-v2 / invok admin-api — Railway re-runs this on every
@@ -56,7 +56,10 @@ await migrateFrameSetsOnBoot(logger);
 // live owner can exist. See finalizeStaleRecordingSets for why this is safe.
 const sweptSets = await finalizeStaleRecordingSets(getPool());
 if (sweptSets > 0) {
-  logger.info({ sweptSets }, "finalized orphaned recording sets from previous process");
+  logger.info(
+    { sweptSets },
+    "finalized orphaned recording sets from previous process"
+  );
 }
 
 const port = env.PORT;
@@ -103,8 +106,7 @@ app.post("/api/upload/image", (c) => uploadImage(c.req.raw));
 // crowd-stage throttles; null without a proxy (local dev).
 app.all("/rpc/*", async (c) => {
   const session = await auth.api.getSession({ headers: c.req.raw.headers });
-  const ip =
-    c.req.header("x-forwarded-for")?.split(",")[0]?.trim() ?? null;
+  const ip = c.req.header("x-forwarded-for")?.split(",")[0]?.trim() ?? null;
   const context = {
     ...buildContext({
       db,
@@ -299,10 +301,7 @@ const shutdown = (signal: string): void => {
   logger.info({ signal }, "shutting down — draining sessions");
   stageActions.close();
   void (async () => {
-    await Promise.race([
-      manager.closeAll(),
-      Bun.sleep(5000),
-    ]);
+    await Promise.race([manager.closeAll(), Bun.sleep(5000)]);
     await server.stop();
     process.exit(0);
   })();

@@ -1,16 +1,16 @@
 "use client";
 
-import { monitorForElements } from "@atlaskit/pragmatic-drag-and-drop/element/adapter";
 import { extractClosestEdge } from "@atlaskit/pragmatic-drag-and-drop-hitbox/closest-edge";
+import { monitorForElements } from "@atlaskit/pragmatic-drag-and-drop/element/adapter";
 import { useEffect, useRef, useState } from "react";
 
+import type { SetMutations } from "@/hooks/use-set-mutations";
 import {
   indexFromEdge,
   isDropTargetData,
   isFramePayload,
   spliceReorder,
 } from "@/lib/curation-dnd";
-import type { SetMutations } from "@/hooks/use-set-mutations";
 
 // ONE monitor dispatches every frame drop in studio; the components only
 // attach adapters and render their own hover state. Mutations stay
@@ -74,9 +74,7 @@ export const useCurationDnd = (opts: {
                 payload.frameIds,
                 index
               );
-              const changed = next.some(
-                (id, i) => id !== currentOrderedIds[i]
-              );
+              const changed = next.some((id, i) => id !== currentOrderedIds[i]);
               if (changed) {
                 mutations.reorderTo(next);
               }

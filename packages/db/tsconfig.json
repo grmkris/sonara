@@ -1,9 +1,12 @@
 {
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
-    "rootDir": "src",
-    "outDir": "dist",
     "lib": ["ESNext"]
   },
-  "include": ["src/**/*"]
+  // `rootDir` dropped — `@sonara/db` is consumed as raw TS source
+  // (`main: ./src/index.ts`, no `tsc` emit), so it was vestigial and only
+  // blocked including the drizzle-kit config at the package root. Including it
+  // gives `drizzle.config.ts` project membership (node/bun types → `process`
+  // resolves) under the type-aware `check`.
+  "include": ["src/**/*", "drizzle.config.ts"]
 }

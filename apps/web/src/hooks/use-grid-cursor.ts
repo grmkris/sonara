@@ -30,8 +30,15 @@ export const useGridCursor = (opts: {
   onRemove?: (ids: string[]) => void;
   onMove?: (id: string, dir: "prev" | "next") => void;
 }) => {
-  const { displayOrder, measure, focusTile, selection, onOpen, onRemove, onMove } =
-    opts;
+  const {
+    displayOrder,
+    measure,
+    focusTile,
+    selection,
+    onOpen,
+    onRemove,
+    onMove,
+  } = opts;
   const [focusedId, setFocusedId] = useState<string | null>(null);
 
   // Cursor follows real DOM focus (click, tab) via onTileFocus; stale ids

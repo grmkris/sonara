@@ -1,14 +1,14 @@
 import { defineConfig } from "oxlint";
 import core from "ultracite/oxlint/core";
-import react from "ultracite/oxlint/react";
 import next from "ultracite/oxlint/next";
+import react from "ultracite/oxlint/react";
 
 export default defineConfig({
   extends: [core, react, next],
   // brand/ is a separate assets sub-project, not a workspace and not part of
   // the per-package CI lint — exclude it so the root type-aware / format checks
   // match the CI scope (workspaces only).
-  ignorePatterns: [...core.ignorePatterns, "brand/**"],
+  ignorePatterns: [...(core.ignorePatterns ?? []), "brand/**"],
   overrides: [
     {
       // Dev/seed/probe scripts get relaxed norms vs app/lib code:

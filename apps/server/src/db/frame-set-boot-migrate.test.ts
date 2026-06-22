@@ -180,7 +180,10 @@ describe("migrateFrameSetsOnBoot", () => {
     const extra = typeIdToUuid(await insertNoirFrame({ source: "seed" })).uuid;
     await migrateFrameSetsOnBoot(noopLogger, pool);
 
-    const noirMembers = await pool.query<{ frame_id: string; position: number }>(
+    const noirMembers = await pool.query<{
+      frame_id: string;
+      position: number;
+    }>(
       `SELECT f.frame_id, f.position FROM frame_set_frame f
        JOIN frame_set s ON s.id = f.set_id
        WHERE s.origin = 'builtin' AND s.deck_key = 'noir'

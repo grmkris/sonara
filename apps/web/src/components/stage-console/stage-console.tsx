@@ -1,20 +1,19 @@
 "use client";
 
-import type { SonaraSceneState } from "@sonara/shared";
 import type { ControlSnapshot } from "@sonara/api/server";
-
+import type { SonaraSceneState } from "@sonara/shared";
 import { useEffect, useState } from "react";
 
-import { useLookRelay } from "@/hooks/use-look-relay";
 import { LookPopover } from "@/components/stage-console/look-popover";
 import { StageSheet } from "@/components/stage-console/stage-sheet";
 import { StageHostPanel } from "@/components/stage/stage-host-panel";
 import { Button } from "@/components/ui/button";
 import { IntensityDial } from "@/components/visualizer/controls/intensity-dial";
-import { ResolutionPicker } from "@/components/visualizer/controls/resolution-picker";
 import { PromptInput } from "@/components/visualizer/controls/prompt-input";
+import { ResolutionPicker } from "@/components/visualizer/controls/resolution-picker";
 import { SliderRow } from "@/components/visualizer/controls/slider-row";
 import { SourceSwitcher } from "@/components/visualizer/controls/source-switcher";
+import { useLookRelay } from "@/hooks/use-look-relay";
 import type { ControlTarget } from "@/lib/control-actions";
 import type { SessionSend } from "@/lib/session-actions";
 import { cn } from "@/lib/utils";
@@ -353,4 +352,3 @@ export const StageConsole = ({
   // resolution A/B (dev instrumentation) only appears with ?lab=1.
   return <AttachedConsole {...{ hostTarget, onNewSet, onReset, send }} />;
 };
-

@@ -154,10 +154,7 @@ export const frameSetFrame = pgTable(
     ),
     // A frame appears at most once per set — makes add/remove idempotent and
     // keyed by frameId rather than the junction id.
-    uniqueIndex("frame_set_frame_set_frame_idx").on(
-      table.setId,
-      table.frameId
-    ),
+    uniqueIndex("frame_set_frame_set_frame_idx").on(table.setId, table.frameId),
     index("frame_set_frame_set_idx").on(table.setId),
   ]
 );

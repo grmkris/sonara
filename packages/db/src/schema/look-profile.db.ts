@@ -1,6 +1,6 @@
+import type { LookConfig } from "@sonara/shared";
 import { typeIdGenerator } from "@sonara/shared/typeid";
 import type { LookProfileId, UserId } from "@sonara/shared/typeid";
-import type { LookConfig } from "@sonara/shared";
 import { index, jsonb, pgTable, text } from "drizzle-orm/pg-core";
 
 import { baseEntityFields, typeId } from "../utils";

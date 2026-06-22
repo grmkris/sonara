@@ -337,7 +337,10 @@ export const setsRouter = {
               }))
             )
             .onConflictDoNothing({
-              target: [SCHEMA.frameSetFrame.setId, SCHEMA.frameSetFrame.frameId],
+              target: [
+                SCHEMA.frameSetFrame.setId,
+                SCHEMA.frameSetFrame.frameId,
+              ],
             })
             .returning();
           if (inserted.length > 0) {
@@ -704,9 +707,7 @@ export const setsRouter = {
             eq(SCHEMA.frameSet.origin, "builtin"),
             ne(SCHEMA.frameSet.visibility, "unlisted")
           );
-      const conditions = [
-        or(eq(SCHEMA.frameSet.userId, userId), builtinArm),
-      ];
+      const conditions = [or(eq(SCHEMA.frameSet.userId, userId), builtinArm)];
       if (input.origin) {
         conditions.push(eq(SCHEMA.frameSet.origin, input.origin));
       }

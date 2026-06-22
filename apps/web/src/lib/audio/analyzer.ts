@@ -668,7 +668,10 @@ export class AudioEngine {
     // silence stays silent (floored). Fixes "dead treble next to loud bass".
     const bass = autoGain(mean(freq, 0, bassEnd) / 255, this.bassGain);
     const mids = autoGain(mean(freq, bassEnd, midsEnd) / 255, this.midsGain);
-    const treble = autoGain(mean(freq, midsEnd, trebleEnd) / 255, this.trebleGain);
+    const treble = autoGain(
+      mean(freq, midsEnd, trebleEnd) / 255,
+      this.trebleGain
+    );
 
     // Spectral flux for onset detection (our own, not Meyda's — finer-grained).
     // Total flux drives BPM + the onset threshold; per-band fluxes (bass/mids/

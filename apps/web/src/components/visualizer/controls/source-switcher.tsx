@@ -1,6 +1,11 @@
 "use client";
 
-import { DECK_LOOK, DECKS, canSeeUnlistedDecks, isDeckUnlisted } from "@sonara/shared";
+import {
+  DECK_LOOK,
+  DECKS,
+  canSeeUnlistedDecks,
+  isDeckUnlisted,
+} from "@sonara/shared";
 import type { DeckKey, FrameSetSummary } from "@sonara/shared";
 import { ChevronDown } from "lucide-react";
 import { useState } from "react";
@@ -11,10 +16,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import {
-  applyBuiltinSetLocally,
-  startSetReplayById,
-} from "@/lib/apply-source";
+import { applyBuiltinSetLocally, startSetReplayById } from "@/lib/apply-source";
 import { useSession } from "@/lib/auth-client";
 import { rpcClient } from "@/lib/orpc";
 import type { SessionSend } from "@/lib/session-actions";

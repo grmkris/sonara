@@ -125,7 +125,11 @@ describe("create / list / get", () => {
 
   test("origin filter narrows the list", async () => {
     await a.create({ name: "a cut" });
-    await insertSet({ deckKey: "wild", origin: "builtin", visibility: "public" });
+    await insertSet({
+      deckKey: "wild",
+      origin: "builtin",
+      visibility: "public",
+    });
     const { sets } = await a.list({ origin: "curated" });
     expect(sets.every((s) => s.origin === "curated")).toBe(true);
     expect(sets.length).toBe(1);
@@ -412,9 +416,9 @@ describe("make a cut (create from a source set)", () => {
       origin: "recording",
       userId: userA,
     });
-    expect(
-      b.create({ fromSetId: privateId, name: "steal" })
-    ).rejects.toThrow("not found");
+    expect(b.create({ fromSetId: privateId, name: "steal" })).rejects.toThrow(
+      "not found"
+    );
 
     const builtinId = await insertSet({
       deckKey: "wild",
@@ -460,9 +464,9 @@ describe("ownership", () => {
     const setId = await newCut();
     expect(b.rename({ name: "nope", setId })).rejects.toThrow(ORPCError);
     expect(b.remove({ setId })).rejects.toThrow(ORPCError);
-    expect(
-      b.setVisibility({ setId, visibility: "public" })
-    ).rejects.toThrow(ORPCError);
+    expect(b.setVisibility({ setId, visibility: "public" })).rejects.toThrow(
+      ORPCError
+    );
   });
 
   test("remove deletes the set but never the frames", async () => {

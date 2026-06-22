@@ -1,10 +1,10 @@
 "use client";
 
-import type { FrameSet, FrameSetVisibility, SetLook } from "@sonara/shared";
-import type { ImageLibraryId } from "@sonara/shared/typeid";
+import { autoScrollForElements } from "@atlaskit/pragmatic-drag-and-drop-auto-scroll/element";
 import { combine } from "@atlaskit/pragmatic-drag-and-drop/combine";
 import { dropTargetForElements } from "@atlaskit/pragmatic-drag-and-drop/element/adapter";
-import { autoScrollForElements } from "@atlaskit/pragmatic-drag-and-drop-auto-scroll/element";
+import type { FrameSet, FrameSetVisibility, SetLook } from "@sonara/shared";
+import type { ImageLibraryId } from "@sonara/shared/typeid";
 import { Pencil, Play, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
@@ -16,11 +16,11 @@ import { isFramePayload } from "@/lib/curation-dnd";
 import type { FrameDragPayload } from "@/lib/curation-dnd";
 import { cn } from "@/lib/utils";
 
-import type { TileClickMods } from "./set-frame-tile";
 import { ActivateOnStage } from "./activate-on-stage";
 import { ErrorState } from "./error-state";
 import { SelectModeToggle } from "./select-mode-toggle";
 import { SetEmptyDraft } from "./set-empty-draft";
+import type { TileClickMods } from "./set-frame-tile";
 import { SetFrameTile } from "./set-frame-tile";
 import { SetLookEditor } from "./set-look-editor";
 import { SetShareControls } from "./set-share-controls";
@@ -179,11 +179,8 @@ export const SetEditor = ({
       );
       (el as HTMLElement | null)?.focus();
     },
-    measure: () =>
-      containerRef.current ? measure(containerRef.current) : [],
-    onMove: onMoveFrame
-      ? (id, dir) => onMoveFrame(id, dir)
-      : undefined,
+    measure: () => (containerRef.current ? measure(containerRef.current) : []),
+    onMove: onMoveFrame ? (id, dir) => onMoveFrame(id, dir) : undefined,
     onOpen: onFrameOpen,
     onRemove: onRemoveFrames,
     selection: selectionApi,

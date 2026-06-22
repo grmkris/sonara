@@ -50,8 +50,8 @@ import {
   ensureRecordingSet,
   finalizeRecordingSet,
 } from "../library/recording-set";
-import { stageRooms } from "../stage/stage-rooms";
 import { recognizeClip } from "../recognition/recognition.service";
+import { stageRooms } from "../stage/stage-rooms";
 import { shouldFireForBeat } from "./beat-clock";
 import { semanticDiff } from "./semantic-diff";
 
@@ -356,9 +356,7 @@ export class Session implements ControllableSession {
     this.send({ liveSessionId: this.liveSessionId, type: "run.started" });
     // A projector reconnecting while its crowd stage is open must relearn the
     // room code (stage bindings outlive WS connections).
-    const stage = this.stageId
-      ? stageRooms.statusForStage(this.stageId)
-      : null;
+    const stage = this.stageId ? stageRooms.statusForStage(this.stageId) : null;
     if (stage) {
       this.notifyStage(stage.room, stage.allowPrompts, stage.showQr);
     }
@@ -434,7 +432,11 @@ export class Session implements ControllableSession {
   // `stage.status` push — the control router calls this when the owner opens
   // or closes the Monad crowd stage (or toggles the join QR), so the projector
   // can mount/unmount its wire overlay + QR and dial the public /ws/stage feed.
-  notifyStage(room: string | null, allowPrompts?: boolean, showQr?: boolean): void {
+  notifyStage(
+    room: string | null,
+    allowPrompts?: boolean,
+    showQr?: boolean
+  ): void {
     this.send({ allowPrompts, room, showQr, type: "stage.status" });
   }
 
@@ -892,7 +894,11 @@ export class Session implements ControllableSession {
       );
       // Right after a prompt change, drop the cadence floor so chained edits
       // fire as fast as generation allows and the morph lands in a few seconds.
-      const periodicMs = burstCadenceMs(baseCadence, now, this.morphBurstUntilAt);
+      const periodicMs = burstCadenceMs(
+        baseCadence,
+        now,
+        this.morphBurstUntilAt
+      );
       // Beat-synced cadence: respect the floor, then (when tempo-locked) hold
       // until ~one generation-latency before the next downbeat so the frame
       // reveals on the beat. Falls back to the plain wall-clock gate unlocked.
@@ -1358,5 +1364,4 @@ export class Session implements ControllableSession {
       }
     });
   }
-
 }

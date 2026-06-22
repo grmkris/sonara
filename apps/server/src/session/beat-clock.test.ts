@@ -26,9 +26,9 @@ describe("shouldFireForBeat", () => {
 
   test("falls back when the phase sample is stale", () => {
     // Floor passed, but the last phase sample is 3s old (> 1.5s default).
-    expect(
-      shouldFireForBeat({ ...base, bpmPhaseAt: 1000, now: 4000 })
-    ).toBe(true);
+    expect(shouldFireForBeat({ ...base, bpmPhaseAt: 1000, now: 4000 })).toBe(
+      true
+    );
   });
 
   test("holds past the floor until just before the next downbeat", () => {

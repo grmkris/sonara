@@ -45,7 +45,11 @@ const setIdFromRun = (liveRun: string | null): string | null => {
 // stageCode (when the screen knows its stage) makes the PERMANENT crowd URL
 // the headline share — printable once, survives every set — with this set's
 // replay permalink as the secondary copy row.
-export const ShareLink = ({ stageCode = null }: { stageCode?: string | null }) => {
+export const ShareLink = ({
+  stageCode = null,
+}: {
+  stageCode?: string | null;
+}) => {
   const liveRun = useVisualizerStore((s) => s.liveRun);
   const setId = setIdFromRun(liveRun);
   const [url, setUrl] = useState("");

@@ -9,29 +9,29 @@ import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 
 import { AppNavLinks } from "@/components/app-nav";
 import { AnonCta } from "@/components/studio/anon-cta";
+import { BuiltinSetDetail } from "@/components/studio/builtin-set-detail";
 import { EmptyState } from "@/components/studio/empty-state";
 import { ErrorState } from "@/components/studio/error-state";
 import { FrameInspector } from "@/components/studio/frame-inspector";
 import { FrameInspectorContent } from "@/components/studio/frame-inspector-content";
 import { LiveNowCard } from "@/components/studio/live-now-card";
-import { SelectionBar } from "@/components/studio/selection-bar";
-import { BuiltinSetDetail } from "@/components/studio/builtin-set-detail";
-import { SetEditor } from "@/components/studio/set-editor";
-import { SetsList } from "@/components/studio/sets-list";
 import { RecordingTimeline } from "@/components/studio/recording-timeline";
 import { RecordingsList } from "@/components/studio/recordings-list";
+import { SelectionBar } from "@/components/studio/selection-bar";
+import { SetEditor } from "@/components/studio/set-editor";
 import { SetsDropShelf } from "@/components/studio/sets-drop-shelf";
+import { SetsList } from "@/components/studio/sets-list";
 import { StudioSidebarTabs } from "@/components/studio/studio-sidebar-tabs";
 import type { StudioTab } from "@/components/studio/studio-sidebar-tabs";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
+import { useCurationDnd } from "@/hooks/use-curation-dnd";
 import { useFrameSelection } from "@/hooks/use-frame-selection";
 import { useIsMobile } from "@/hooks/use-is-mobile";
-import { useCurationDnd } from "@/hooks/use-curation-dnd";
 import { useSetMutations } from "@/hooks/use-set-mutations";
 import { useSession } from "@/lib/auth-client";
-import { rpcClient } from "@/lib/orpc";
 import { makeFramePayload } from "@/lib/curation-dnd";
 import type { FrameDragPayload } from "@/lib/curation-dnd";
+import { rpcClient } from "@/lib/orpc";
 import { recordingsHref, setsHref } from "@/lib/studio-hrefs";
 import { cn } from "@/lib/utils";
 
@@ -42,7 +42,6 @@ const parseTab = (raw: string | null): StudioTab => {
   }
   return "recordings";
 };
-
 
 // /studio — the user's set library. Two tabs: "recordings" (auto-captured
 // live performances; frame list frozen, replayable on original timing) and
@@ -58,8 +57,6 @@ const StudioFallback = () => (
     </span>
   </main>
 );
-
-
 
 // Right-side header tally for the recordings tab. Extracted so its
 // conditionals don't inflate StudioInner's complexity.
@@ -228,7 +225,11 @@ const StudioInner = () => {
 
   // Auto-select most recent recording when on the recordings tab with none chosen.
   useEffect(() => {
-    if (tab !== "recordings" || !recordingsBootstrapped || selectedRecordingId) {
+    if (
+      tab !== "recordings" ||
+      !recordingsBootstrapped ||
+      selectedRecordingId
+    ) {
       return;
     }
     const [newest] = recordings;
@@ -342,7 +343,9 @@ const StudioInner = () => {
 
   const selectedFrame = useMemo(() => {
     const pool =
-      tab === "sets" ? (setDetail?.frames ?? []) : (recordingDetail?.frames ?? []);
+      tab === "sets"
+        ? (setDetail?.frames ?? [])
+        : (recordingDetail?.frames ?? []);
     return pool.find((f) => f.id === selectedFrameId) ?? null;
   }, [tab, recordingDetail, setDetail, selectedFrameId]);
 
@@ -350,7 +353,9 @@ const StudioInner = () => {
   const displayOrder = useMemo(() => {
     const openSet = setDetail?.origin === "builtin" ? null : setDetail;
     const pool =
-      tab === "sets" ? (openSet?.frames ?? []) : (recordingDetail?.frames ?? []);
+      tab === "sets"
+        ? (openSet?.frames ?? [])
+        : (recordingDetail?.frames ?? []);
     return pool.map((f) => f.id as string);
   }, [tab, recordingDetail, setDetail]);
 
@@ -361,11 +366,7 @@ const StudioInner = () => {
     displayOrder,
     resetKey: `${tab}|${selectedRecordingId}|${selectedSetId}`,
   });
-  const {
-    clear: clearSelection,
-    isSelecting,
-    selectedFrameIds,
-  } = selection;
+  const { clear: clearSelection, isSelecting, selectedFrameIds } = selection;
 
   // A batch landed in `target`: keep select mode (next recording, same set),
   // drop the selection, and refresh whatever shows the target's frame count.
@@ -477,7 +478,9 @@ const StudioInner = () => {
 
   const onCloseInspector = useCallback(() => {
     if (tab === "sets") {
-      router.replace(selectedSetId ? setsHref(selectedSetId) : "/studio?tab=sets");
+      router.replace(
+        selectedSetId ? setsHref(selectedSetId) : "/studio?tab=sets"
+      );
       return;
     }
     router.replace(recordingsHref(selectedRecordingId ?? undefined));
@@ -600,7 +603,9 @@ const StudioInner = () => {
     (frameId: string): FrameDragPayload => {
       const frames = setDetail?.frames ?? [];
       const carried = selection.isSelected(frameId)
-        ? frames.filter((f) => selection.isSelected(f.id)).map((f) => f.id as string)
+        ? frames
+            .filter((f) => selection.isSelected(f.id))
+            .map((f) => f.id as string)
         : [frameId];
       const carriedSet = new Set(carried);
       return makeFramePayload({
@@ -674,7 +679,6 @@ const StudioInner = () => {
       />
     );
   };
-
 
   // Center pane, sets tab: built-ins render read-only; everything else gets
   // the full editor. Extracted (like renderRecordingsCenter) so the branches

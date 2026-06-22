@@ -9,8 +9,8 @@ import type { MouseEvent } from "react";
 import { createRoot } from "react-dom/client";
 
 import { FrameDragPreview } from "@/components/studio/drag-preview";
-import { TileCheck } from "@/components/studio/tile-check";
 import type { TileClickMods } from "@/components/studio/set-frame-tile";
+import { TileCheck } from "@/components/studio/tile-check";
 import { useLongPress } from "@/hooks/use-long-press";
 import { isFramePayload } from "@/lib/curation-dnd";
 import type { FrameDragPayload } from "@/lib/curation-dnd";
@@ -124,9 +124,11 @@ export const FrameCard = ({
   let stateClass =
     "border-[color:var(--hairline)]/40 hover:border-[color:var(--paper)]/80";
   if (checked) {
-    stateClass = "z-10 border-[color:var(--signal)] ring-2 ring-[color:var(--signal)]";
+    stateClass =
+      "z-10 border-[color:var(--signal)] ring-2 ring-[color:var(--signal)]";
   } else if (selected) {
-    stateClass = "z-10 border-[color:var(--paper)] ring-2 ring-[color:var(--paper)]/40";
+    stateClass =
+      "z-10 border-[color:var(--paper)] ring-2 ring-[color:var(--paper)]/40";
   }
 
   return (

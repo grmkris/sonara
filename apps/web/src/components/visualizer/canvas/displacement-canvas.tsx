@@ -2,11 +2,11 @@
 
 import { useEffect, useRef } from "react";
 
+import { crossfadeMsToBeat } from "@/lib/render/beat-timing";
 import {
   intensityCoefficients,
   targetsFromAudio,
 } from "@/lib/render/map-audio-to-visuals";
-import { crossfadeMsToBeat } from "@/lib/render/beat-timing";
 import { resolveAudio } from "@/lib/render/preset-audio-routing";
 import {
   BASE,

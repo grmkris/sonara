@@ -1,6 +1,10 @@
 "use client";
 
-import type { FrameSet, FrameSetVisibility, LibraryFrame } from "@sonara/shared";
+import type {
+  FrameSet,
+  FrameSetVisibility,
+  LibraryFrame,
+} from "@sonara/shared";
 import { Play, Scissors } from "lucide-react";
 import Link from "next/link";
 import { useMemo, useRef } from "react";
@@ -8,9 +12,8 @@ import { useMemo, useRef } from "react";
 import { useGridCursor } from "@/hooks/use-grid-cursor";
 import { useMarqueeSelection } from "@/hooks/use-marquee-selection";
 import { useTileRegistry } from "@/hooks/use-tile-registry";
-import { formatDuration, formatMmSs } from "@/lib/format-time";
-
 import type { FrameDragPayload } from "@/lib/curation-dnd";
+import { formatDuration, formatMmSs } from "@/lib/format-time";
 
 import { FrameCard } from "./frame-card";
 import { SelectModeToggle } from "./select-mode-toggle";
@@ -161,8 +164,7 @@ export const RecordingTimeline = ({
       );
       (el as HTMLElement | null)?.focus();
     },
-    measure: () =>
-      containerRef.current ? measure(containerRef.current) : [],
+    measure: () => (containerRef.current ? measure(containerRef.current) : []),
     onOpen: onFrameOpen,
     selection: selectionApi,
   });

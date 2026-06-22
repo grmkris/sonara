@@ -168,7 +168,9 @@ export default function SetConsolePage() {
   if (!lens.isOwner) {
     return (
       <Shell>
-        <Notice setId={id}>this isn&apos;t your show — but you can watch.</Notice>
+        <Notice setId={id}>
+          this isn&apos;t your show — but you can watch.
+        </Notice>
       </Shell>
     );
   }

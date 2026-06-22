@@ -51,7 +51,9 @@ export const SetDropRow = ({
       aria-current={selected ? "true" : undefined}
       className={cn(
         "focus-ring flex w-full items-center gap-3 border-b border-[color:var(--hairline)]/20 px-4 py-2 text-left transition-colors",
-        selected ? "bg-[color:var(--paper)]/10" : "hover:bg-[color:var(--paper)]/5",
+        selected
+          ? "bg-[color:var(--paper)]/10"
+          : "hover:bg-[color:var(--paper)]/5",
         isOver &&
           "bg-[color:var(--paper)]/10 ring-1 ring-inset ring-[color:var(--signal)]"
       )}
@@ -71,7 +73,9 @@ export const SetDropRow = ({
         <span
           className={cn(
             "truncate font-sans text-[11px] uppercase tracking-[0.16em]",
-            selected ? "text-[color:var(--paper)]" : "text-[color:var(--paper)]/80"
+            selected
+              ? "text-[color:var(--paper)]"
+              : "text-[color:var(--paper)]/80"
           )}
         >
           {set.name}
