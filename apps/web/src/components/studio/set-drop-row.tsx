@@ -50,9 +50,9 @@ export const SetDropRow = ({
       onClick={onSelect ? () => onSelect(set.id) : undefined}
       aria-current={selected ? "true" : undefined}
       className={cn(
-        "focus-ring flex w-full items-center gap-3 border-b border-[color:var(--hairline)]/20 px-4 py-2 text-left transition-colors",
+        "focus-ring flex w-full items-center gap-3 border-b border-l-2 border-l-transparent border-[color:var(--hairline)]/20 px-4 py-2 text-left transition-colors",
         selected
-          ? "bg-[color:var(--paper)]/10"
+          ? "border-l-[color:var(--paper)] bg-[color:var(--paper)]/10"
           : "hover:bg-[color:var(--paper)]/5",
         isOver &&
           "bg-[color:var(--paper)]/10 ring-1 ring-inset ring-[color:var(--signal)]"

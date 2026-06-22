@@ -22,6 +22,7 @@ import { createRoot } from "react-dom/client";
 import { FrameDragPreview } from "@/components/studio/drag-preview";
 import { DropEdgeIndicator } from "@/components/studio/drop-indicator";
 import { TileCheck } from "@/components/studio/tile-check";
+import { Tip } from "@/components/studio/tip";
 import { useLongPress } from "@/hooks/use-long-press";
 import { isFramePayload } from "@/lib/curation-dnd";
 import type { FrameDragPayload, TileClickMods } from "@/lib/curation-dnd";
@@ -388,36 +389,40 @@ export const TimelineClip = ({
           />
           <div className="pointer-events-none absolute right-0 top-0 z-10 flex items-center gap-0.5 p-1 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
             {pinned && onResetDuration && (
-              <button
-                type="button"
-                onClick={() => onResetDuration(frame.id)}
-                aria-label="reset to reactive cadence"
-                title="reset to reactive cadence"
-                className="focus-ring pointer-events-auto rounded-sm bg-[color:var(--ink)]/80 p-0.5 text-[color:var(--paper)]/85 hover:text-[color:var(--paper)]"
-              >
-                <RotateCcw className="size-3" strokeWidth={1.5} />
-              </button>
+              <Tip text="Reset to the set's reactive timing">
+                <button
+                  type="button"
+                  onClick={() => onResetDuration(frame.id)}
+                  aria-label="reset to reactive cadence"
+                  className="focus-ring pointer-events-auto rounded-sm bg-[color:var(--ink)]/80 p-0.5 text-[color:var(--paper)]/85 hover:text-[color:var(--paper)]"
+                >
+                  <RotateCcw className="size-3" strokeWidth={1.5} />
+                </button>
+              </Tip>
             )}
             {onSetCover && !isCover && (
-              <button
-                type="button"
-                onClick={() => onSetCover(frame.id)}
-                aria-label="set as cover"
-                title="set as cover"
-                className="focus-ring pointer-events-auto rounded-sm bg-[color:var(--ink)]/80 p-0.5 text-[color:var(--paper)]/85 hover:text-[color:var(--paper)]"
-              >
-                <ImageIcon className="size-3" strokeWidth={1.5} />
-              </button>
+              <Tip text="Use as the set's cover image">
+                <button
+                  type="button"
+                  onClick={() => onSetCover(frame.id)}
+                  aria-label="set as cover"
+                  className="focus-ring pointer-events-auto rounded-sm bg-[color:var(--ink)]/80 p-0.5 text-[color:var(--paper)]/85 hover:text-[color:var(--paper)]"
+                >
+                  <ImageIcon className="size-3" strokeWidth={1.5} />
+                </button>
+              </Tip>
             )}
             {onRemove && (
-              <button
-                type="button"
-                onClick={() => onRemove(frame.id)}
-                aria-label="remove from set"
-                className="focus-ring pointer-events-auto rounded-sm bg-[color:var(--ink)]/80 p-0.5 text-[color:var(--paper)]/85 hover:text-[color:var(--signal)]"
-              >
-                <X className="size-3" strokeWidth={1.5} />
-              </button>
+              <Tip text="Remove this frame from the set">
+                <button
+                  type="button"
+                  onClick={() => onRemove(frame.id)}
+                  aria-label="remove from set"
+                  className="focus-ring pointer-events-auto rounded-sm bg-[color:var(--ink)]/80 p-0.5 text-[color:var(--paper)]/85 hover:text-[color:var(--signal)]"
+                >
+                  <X className="size-3" strokeWidth={1.5} />
+                </button>
+              </Tip>
             )}
           </div>
         </>

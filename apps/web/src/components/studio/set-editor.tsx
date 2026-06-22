@@ -15,6 +15,7 @@ import { SetEmptyDraft } from "./set-empty-draft";
 import { SetLookEditor } from "./set-look-editor";
 import { SetShareControls } from "./set-share-controls";
 import { SetTimelineTrack } from "./set-timeline-track";
+import { Tip } from "./tip";
 import { TimelinePreview } from "./timeline-preview";
 
 // Display width for un-pinned frames when the set has no authored look — their
@@ -114,37 +115,43 @@ const SetHeaderActions = ({
     )}
     {frameSet.frames.length > 0 && <ActivateOnStage setId={frameSet.id} />}
     {draft?.dirty && (
-      <button
-        type="button"
-        onClick={draft.onReset}
-        aria-label="discard edits"
-        className="focus-ring inline-flex items-center gap-1.5 border border-[color:var(--hairline)]/40 px-3 py-1.5 font-sans text-[10px] uppercase tracking-[0.22em] text-[color:var(--stone)] transition-colors hover:border-[color:var(--paper)]/70 hover:text-[color:var(--paper)]"
-      >
-        <RotateCcw className="size-3" strokeWidth={1.5} />
-        reset
-      </button>
+      <Tip text="Discard your unsaved edits">
+        <button
+          type="button"
+          onClick={draft.onReset}
+          aria-label="discard edits"
+          className="focus-ring inline-flex items-center gap-1.5 border border-[color:var(--hairline)]/40 px-3 py-1.5 font-sans text-[10px] uppercase tracking-[0.22em] text-[color:var(--stone)] transition-colors hover:border-[color:var(--paper)]/70 hover:text-[color:var(--paper)]"
+        >
+          <RotateCcw className="size-3" strokeWidth={1.5} />
+          reset
+        </button>
+      </Tip>
     )}
     {draft && (
-      <button
-        type="button"
-        onClick={draft.onSave}
-        disabled={draft.saving}
-        className="focus-ring inline-flex items-center gap-1.5 border border-[color:var(--paper)]/70 px-3 py-1.5 font-sans text-[10px] uppercase tracking-[0.22em] text-[color:var(--paper)] transition-colors hover:bg-[color:var(--paper)]/10 disabled:opacity-50"
-      >
-        <Save className="size-3" strokeWidth={1.5} />
-        {draft.saving ? "saving…" : "save as set"}
-      </button>
+      <Tip text="Save this arrangement as a new set in your library">
+        <button
+          type="button"
+          onClick={draft.onSave}
+          disabled={draft.saving}
+          className="focus-ring inline-flex items-center gap-1.5 border border-[color:var(--paper)]/70 px-3 py-1.5 font-sans text-[10px] uppercase tracking-[0.22em] text-[color:var(--paper)] transition-colors hover:bg-[color:var(--paper)]/10 disabled:opacity-50"
+        >
+          <Save className="size-3" strokeWidth={1.5} />
+          {draft.saving ? "saving…" : "save as set"}
+        </button>
+      </Tip>
     )}
     {onDelete && (
-      <button
-        type="button"
-        onClick={onDelete}
-        aria-label="delete set"
-        className="focus-ring inline-flex items-center gap-1.5 border border-[color:var(--hairline)]/40 px-3 py-1.5 font-sans text-[10px] uppercase tracking-[0.22em] text-[color:var(--stone)] transition-colors hover:border-[color:var(--signal)] hover:text-[color:var(--signal)]"
-      >
-        <Trash2 className="size-3" strokeWidth={1.5} />
-        delete
-      </button>
+      <Tip text="Delete this set (the frames themselves are kept)">
+        <button
+          type="button"
+          onClick={onDelete}
+          aria-label="delete set"
+          className="focus-ring inline-flex items-center gap-1.5 border border-[color:var(--hairline)]/40 px-3 py-1.5 font-sans text-[10px] uppercase tracking-[0.22em] text-[color:var(--stone)] transition-colors hover:border-[color:var(--signal)] hover:text-[color:var(--signal)]"
+        >
+          <Trash2 className="size-3" strokeWidth={1.5} />
+          delete
+        </button>
+      </Tip>
     )}
   </div>
 );
@@ -260,17 +267,19 @@ export const SetEditor = ({
             <h2 className="flex items-center gap-2 font-sans text-[14px] uppercase tracking-[0.18em] text-[color:var(--paper)]/90">
               <span className="truncate">{frameSet.name}</span>
               {onRename && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setDraftName(frameSet.name);
-                    setRenaming(true);
-                  }}
-                  aria-label="rename set"
-                  className="focus-ring shrink-0 text-[color:var(--stone)] transition-colors hover:text-[color:var(--paper)]"
-                >
-                  <Pencil className="size-3" strokeWidth={1.5} />
-                </button>
+                <Tip text="Rename this set">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setDraftName(frameSet.name);
+                      setRenaming(true);
+                    }}
+                    aria-label="rename set"
+                    className="focus-ring shrink-0 text-[color:var(--stone)] transition-colors hover:text-[color:var(--paper)]"
+                  >
+                    <Pencil className="size-3" strokeWidth={1.5} />
+                  </button>
+                </Tip>
               )}
             </h2>
           )}

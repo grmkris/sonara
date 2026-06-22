@@ -25,6 +25,7 @@ import { computeTimelineLayout } from "@/lib/timeline-layout";
 import { cn } from "@/lib/utils";
 
 import { TimelineClip } from "./timeline-clip";
+import { Tip } from "./tip";
 
 const TRACK_HEIGHT = 72;
 const RULER_HEIGHT = 22;
@@ -76,28 +77,31 @@ interface SetTimelineTrackProps {
 
 const ZoomButton = ({
   label,
+  tip,
   onClick,
   active,
   children,
 }: {
   label: string;
+  tip: string;
   onClick: () => void;
   active?: boolean;
   children: React.ReactNode;
 }) => (
-  <button
-    type="button"
-    onClick={onClick}
-    aria-label={label}
-    aria-pressed={active}
-    title={label}
-    className={cn(
-      "focus-ring inline-flex items-center justify-center border border-[color:var(--hairline)]/40 p-1.5 text-[color:var(--paper)]/85 transition-colors hover:border-[color:var(--paper)]/70 hover:text-[color:var(--paper)]",
-      active && "border-[color:var(--paper)]/70 text-[color:var(--paper)]"
-    )}
-  >
-    {children}
-  </button>
+  <Tip text={tip}>
+    <button
+      type="button"
+      onClick={onClick}
+      aria-label={label}
+      aria-pressed={active}
+      className={cn(
+        "focus-ring inline-flex items-center justify-center border border-[color:var(--hairline)]/40 p-1.5 text-[color:var(--paper)]/85 transition-colors hover:border-[color:var(--paper)]/70 hover:text-[color:var(--paper)]",
+        active && "border-[color:var(--paper)]/70 text-[color:var(--paper)]"
+      )}
+    >
+      {children}
+    </button>
+  </Tip>
 );
 
 // The editable timeline surface for a curated set: a horizontal filmstrip where
@@ -284,18 +288,27 @@ export const SetTimelineTrack = ({
     <div className="flex min-h-0 flex-1 flex-col">
       {/* Zoom + snap toolbar */}
       <div className="flex shrink-0 items-center gap-2 pb-3">
-        <ZoomButton label="zoom out" onClick={() => zoomBy(1 / 1.4)}>
+        <ZoomButton
+          label="zoom out"
+          tip="Zoom out"
+          onClick={() => zoomBy(1 / 1.4)}
+        >
           <Minus className="size-3.5" strokeWidth={1.5} />
         </ZoomButton>
-        <ZoomButton label="zoom in" onClick={() => zoomBy(1.4)}>
+        <ZoomButton label="zoom in" tip="Zoom in" onClick={() => zoomBy(1.4)}>
           <Plus className="size-3.5" strokeWidth={1.5} />
         </ZoomButton>
-        <ZoomButton label="fit to window" onClick={fitToWindow}>
+        <ZoomButton
+          label="fit to window"
+          tip="Fit the whole set in view"
+          onClick={fitToWindow}
+        >
           <Maximize2 className="size-3.5" strokeWidth={1.5} />
         </ZoomButton>
         {editable && (
           <ZoomButton
             label="toggle snapping (n)"
+            tip="Snap edits to the grid · N"
             onClick={() => setSnap((s) => !s)}
             active={snap}
           >
