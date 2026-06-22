@@ -162,6 +162,39 @@ const cadenceFromIntensity = (
 export const freshCadenceFromStability = (stability: number): number =>
   Math.round(24 * Math.max(0, Math.min(1, stability)));
 
+// Chain-or-fresh decision (pure, exported for unit tests like the cadence
+// helpers above). Returns the previous frame's URL to edit-from (chain), or
+// null for a fresh text-to-image. Order matters:
+//   1. forceFresh — a user-typed prompt change hard-cuts to one fresh frame so
+//      it lands decisively instead of crawling in over a chain (set in
+//      trigger() for user-initiated triggers; see Session.chainSourceFor).
+//   2. no edit endpoint / no prior frame → fresh.
+//   3. a just-consumed seed (goLive/upload anchor) always chains so the seed
+//      image visibly takes, even at stability 0; otherwise chain only while
+//      within the stability I-frame budget.
+export const chooseChainSource = (opts: {
+  editFalId: string | undefined;
+  chainUrl: string | null;
+  seeded: boolean;
+  forceFresh: boolean;
+  framesSinceFresh: number;
+  stability: number;
+}): string | null => {
+  if (opts.forceFresh) {
+    return null;
+  }
+  if (!(opts.editFalId && opts.chainUrl)) {
+    return null;
+  }
+  if (
+    opts.seeded ||
+    opts.framesSinceFresh < freshCadenceFromStability(opts.stability)
+  ) {
+    return opts.chainUrl;
+  }
+  return null;
+};
+
 // After a deliberate prompt-text change, briefly fire chained edits at this
 // fast cadence so the screen walks toward the new motive within a few seconds
 // instead of crawling there at the intensity-derived ambient cadence (which can
@@ -202,6 +235,11 @@ export class Session implements ControllableSession {
   // for the control snapshot).
   private chainUrl: string | null = null;
   private framesSinceFresh = 0;
+  // One-shot: when set, the next generation skips chaining and runs a fresh
+  // t2i. Armed in trigger() on a user-typed prompt change so the new prompt
+  // lands decisively in one step (see chainSourceFor); consumed at the chain
+  // decision.
+  private forceFreshNext = false;
   private activeVersion = 0;
   private pauseTimer?: ReturnType<typeof setTimeout>;
   private periodicTimer?: ReturnType<typeof setInterval>;
@@ -1006,16 +1044,19 @@ export class Session implements ControllableSession {
     editFalId: string | undefined,
     seeded: boolean
   ): string | null {
-    if (!(editFalId && this.chainUrl)) {
-      return null;
-    }
-    if (
-      seeded ||
-      this.framesSinceFresh < freshCadenceFromStability(this.scene.stability)
-    ) {
-      return this.chainUrl;
-    }
-    return null;
+    // A user-typed prompt change forces one fresh t2i — consume the flag here
+    // (at the decision) so a single fresh frame breaks the chain, then ambient
+    // chaining resumes. Read-then-clear so the consume happens on every call.
+    const forceFresh = this.forceFreshNext;
+    this.forceFreshNext = false;
+    return chooseChainSource({
+      chainUrl: this.chainUrl,
+      editFalId,
+      forceFresh,
+      framesSinceFresh: this.framesSinceFresh,
+      seeded,
+      stability: this.scene.stability,
+    });
   }
 
   private async trigger(source: TriggerSource): Promise<void> {
@@ -1038,6 +1079,19 @@ export class Session implements ControllableSession {
     }
 
     const seeded = this.consumeChainSeed();
+
+    // A deliberate, user-typed prompt change should land in ONE step, not crawl
+    // in over a chain of near-identical edits. Whether it currently snaps or
+    // oozes is pure luck of the chain position (framesSinceFresh vs the
+    // stability cadence), which reads as random. Force the next frame fresh
+    // (chainSourceFor → null) and re-roll the seed so it's a genuinely new
+    // composition. Gated on !seeded: an explicit goLive/upload anchor must keep
+    // chaining so the seed image visibly takes. Ambient (periodic/section/auto)
+    // triggers are untouched — they still morph gently.
+    if (kind === "user" && !seeded) {
+      this.forceFreshNext = true;
+      this.seed = rollSeed();
+    }
 
     // Defence in depth. The constructor pins anon sessions to a deck source,
     // so the short-circuit above always catches them. If that invariant ever
