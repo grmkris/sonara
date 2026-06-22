@@ -2,7 +2,7 @@
 
 // Custom native drag preview: up to three stacked thumbnails with a count
 // badge — replaces the browser's raw <img> snapshot. Mounted into
-// pragmatic's preview container via createRoot (see timeline-clip / frame-card).
+// pragmatic's preview container via createRoot (see timeline-clip).
 export const FrameDragPreview = ({
   urls,
   count,

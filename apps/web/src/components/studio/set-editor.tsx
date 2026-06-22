@@ -2,7 +2,7 @@
 
 import type { FrameSet, FrameSetVisibility, SetLook } from "@sonara/shared";
 import type { ImageLibraryId } from "@sonara/shared/typeid";
-import { Pencil, Play, Trash2 } from "lucide-react";
+import { Pencil, Play, RotateCcw, Save, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 
@@ -37,6 +37,18 @@ interface SetEditorProps {
   onLookChange?: (look: SetLook | null) => void;
   // Pin/clear a member frame's authored hold duration (timeline trim).
   onSetFrameDuration?: (frameId: string, durationMs: number | null) => void;
+  // Draft mode: this set is a frozen source (built-in / recording) edited
+  // client-side. Presence swaps the header to a Save-as-set / reset cluster;
+  // nothing persists until onSave clones it into the library.
+  draft?: {
+    dirty: boolean;
+    saving: boolean;
+    onSave: () => void;
+    onReset: () => void;
+  };
+  // Whether multi-select is offered (off for built-in drafts — their seed
+  // frames aren't user-owned, so the selection bar's add-to-set would reject).
+  selectable?: boolean;
   // Selection v2 (page-owned): the page resolves the click matrix; the editor
   // just threads gestures + visual state.
   onFrameClick: (frameId: string, mods: TileClickMods) => void;
@@ -72,6 +84,8 @@ const SetHeaderActions = ({
   onVisibilityChange,
   onLookChange,
   onDelete,
+  draft,
+  selectable = true,
 }: {
   frameSet: FrameSet;
   pinned: boolean;
@@ -79,6 +93,8 @@ const SetHeaderActions = ({
   onVisibilityChange?: (visibility: FrameSetVisibility) => void;
   onLookChange?: (look: SetLook | null) => void;
   onDelete?: () => void;
+  draft?: SetEditorProps["draft"];
+  selectable?: boolean;
 }) => (
   <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
     {onLookChange && (
@@ -91,7 +107,7 @@ const SetHeaderActions = ({
         onVisibilityChange={onVisibilityChange}
       />
     )}
-    {frameSet.frames.length > 0 && (
+    {selectable && frameSet.frames.length > 0 && (
       <SelectModeToggle active={pinned} onToggle={onTogglePinned} />
     )}
     {frameSet.frames.length > 0 && <ActivateOnStage setId={frameSet.id} />}
@@ -103,6 +119,28 @@ const SetHeaderActions = ({
         <Play className="size-3" strokeWidth={1.5} />
         preview
       </Link>
+    )}
+    {draft?.dirty && (
+      <button
+        type="button"
+        onClick={draft.onReset}
+        aria-label="discard edits"
+        className="focus-ring inline-flex items-center gap-1.5 border border-[color:var(--hairline)]/40 px-3 py-1.5 font-sans text-[10px] uppercase tracking-[0.22em] text-[color:var(--stone)] transition-colors hover:border-[color:var(--paper)]/70 hover:text-[color:var(--paper)]"
+      >
+        <RotateCcw className="size-3" strokeWidth={1.5} />
+        reset
+      </button>
+    )}
+    {draft && (
+      <button
+        type="button"
+        onClick={draft.onSave}
+        disabled={draft.saving}
+        className="focus-ring inline-flex items-center gap-1.5 border border-[color:var(--paper)]/70 px-3 py-1.5 font-sans text-[10px] uppercase tracking-[0.22em] text-[color:var(--paper)] transition-colors hover:bg-[color:var(--paper)]/10 disabled:opacity-50"
+      >
+        <Save className="size-3" strokeWidth={1.5} />
+        {draft.saving ? "saving…" : "save as set"}
+      </button>
     )}
     {onDelete && (
       <button
@@ -143,6 +181,8 @@ export const SetEditor = ({
   onVisibilityChange,
   onLookChange,
   onSetFrameDuration,
+  draft,
+  selectable = true,
   onFrameClick,
   onFrameOpen,
   onFrameCheck,
@@ -241,8 +281,16 @@ export const SetEditor = ({
           onVisibilityChange={onVisibilityChange}
           onLookChange={onLookChange}
           onDelete={onDelete}
+          draft={draft}
+          selectable={selectable}
         />
       </header>
+
+      {draft && (
+        <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-[color:var(--stone)]">
+          editing a copy · changes aren&apos;t saved until you “save as set”
+        </p>
+      )}
 
       {frameSet.frames.length === 0 ? (
         <SetEmptyDraft />

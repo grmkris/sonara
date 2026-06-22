@@ -57,9 +57,10 @@ export const useCurationDnd = (opts: {
           const { data } = target;
 
           if (data.kind === "set-tile" || data.kind === "set-grid") {
-            const sameSet =
-              payload.source.type === "set" &&
-              payload.source.setId === data.setId;
+            // Same-set drop = reorder, regardless of source kind — a recording
+            // (or built-in) draft reorders its own clips just like a curated
+            // set. Cross-set (different setId) falls through to insert.
+            const sameSet = payload.source.setId === data.setId;
             let index = currentOrderedIds.length;
             if (data.kind === "set-tile") {
               const edge = extractClosestEdge(target.data);
