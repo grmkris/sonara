@@ -2,11 +2,14 @@
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
     "types": ["bun"],
-    "rootDir": "src",
-    "outDir": "dist",
     "paths": {
       "@/*": ["./src/*"]
     }
   },
-  "include": ["src/**/*"]
+  // `rootDir` dropped: the server runs straight off source via Bun (`bun run
+  // src/server.ts`) — there's no `tsc` emit, so `rootDir` was vestigial and its
+  // only effect was to forbid sibling roots like the test preload. Including
+  // `test-setup.ts` gives it project membership (Bun types → `bun:test`
+  // resolves) so the type-aware `check` sees it as it really runs.
+  "include": ["src/**/*", "test-setup.ts"]
 }

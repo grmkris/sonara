@@ -160,9 +160,7 @@ describe("stage-keyed targeting", () => {
   });
 
   test("owned stage with no live run → NOT_FOUND", async () => {
-    const code = await errorCodeOf(
-      a.snapshot({ stageId: stageA.id })
-    );
+    const code = await errorCodeOf(a.snapshot({ stageId: stageA.id }));
     expect(code).toBe("NOT_FOUND");
   });
 

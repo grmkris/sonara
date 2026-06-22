@@ -59,7 +59,12 @@ export const useMarqueeSelection = (opts: {
     raf: number | null;
   } | null>(null);
 
-  const stateRef = useRef({ enabled, measureItems, onChange, onWhitespaceClick });
+  const stateRef = useRef({
+    enabled,
+    measureItems,
+    onChange,
+    onWhitespaceClick,
+  });
   stateRef.current = { enabled, measureItems, onChange, onWhitespaceClick };
 
   const contentPoint = useCallback(

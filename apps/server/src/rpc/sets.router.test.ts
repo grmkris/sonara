@@ -25,7 +25,7 @@ import type { setsRouter as SetsRouterValue } from "./sets.router";
 
 // presignReadUrl needs S3 env we don't have in tests — mock the bucket before
 // sets.router (and its frame-mapping import) loads.
-mock.module("../storage/bucket", () => ({
+void mock.module("../storage/bucket", () => ({
   bucketKeyFromUrl: () => null,
   isConfigured: () => true,
   presignReadUrl: (key: string) => `https://signed.test/${key}`,
@@ -125,7 +125,11 @@ describe("create / list / get", () => {
 
   test("origin filter narrows the list", async () => {
     await a.create({ name: "a cut" });
-    await insertSet({ deckKey: "wild", origin: "builtin", visibility: "public" });
+    await insertSet({
+      deckKey: "wild",
+      origin: "builtin",
+      visibility: "public",
+    });
     const { sets } = await a.list({ origin: "curated" });
     expect(sets.every((s) => s.origin === "curated")).toBe(true);
     expect(sets.length).toBe(1);
@@ -412,9 +416,9 @@ describe("make a cut (create from a source set)", () => {
       origin: "recording",
       userId: userA,
     });
-    expect(
-      b.create({ fromSetId: privateId, name: "steal" })
-    ).rejects.toThrow("not found");
+    expect(b.create({ fromSetId: privateId, name: "steal" })).rejects.toThrow(
+      "not found"
+    );
 
     const builtinId = await insertSet({
       deckKey: "wild",
@@ -455,14 +459,75 @@ describe("reorder", () => {
   });
 });
 
+describe("setFrameDuration", () => {
+  test("pins a member's hold; null clears it back to reactive", async () => {
+    const setId = await newCut("trim target");
+    await a.addFrame({ frameId: A[0] as ImageLibraryId, setId });
+
+    await a.setFrameDuration({
+      durationMs: 4200,
+      frameId: A[0] as ImageLibraryId,
+      setId,
+    });
+    let set = await a.get({ setId });
+    expect(set.frames[0]?.durationMs).toBe(4200);
+
+    await a.setFrameDuration({
+      durationMs: null,
+      frameId: A[0] as ImageLibraryId,
+      setId,
+    });
+    set = await a.get({ setId });
+    expect(set.frames[0]?.durationMs ?? null).toBeNull();
+  });
+
+  test("rejects a frame that is not a member", async () => {
+    const setId = await newCut("trim empty");
+    expect(
+      a.setFrameDuration({
+        durationMs: 1000,
+        frameId: A[1] as ImageLibraryId,
+        setId,
+      })
+    ).rejects.toThrow("not in this set");
+  });
+
+  test("recording frame durations are frozen", async () => {
+    const recId = await insertSet({
+      frames: [{ id: A[0] as ImageLibraryId, tMs: 0 }],
+      origin: "recording",
+      userId: userA,
+    });
+    expect(
+      a.setFrameDuration({
+        durationMs: 1000,
+        frameId: A[0] as ImageLibraryId,
+        setId: recId,
+      })
+    ).rejects.toThrow("frozen");
+  });
+
+  test("rejects out-of-range durations (validation)", async () => {
+    const setId = await newCut("trim bounds");
+    await a.addFrame({ frameId: A[0] as ImageLibraryId, setId });
+    expect(
+      a.setFrameDuration({
+        durationMs: 1,
+        frameId: A[0] as ImageLibraryId,
+        setId,
+      })
+    ).rejects.toThrow();
+  });
+});
+
 describe("ownership", () => {
   test("B cannot mutate or delete A's set", async () => {
     const setId = await newCut();
     expect(b.rename({ name: "nope", setId })).rejects.toThrow(ORPCError);
     expect(b.remove({ setId })).rejects.toThrow(ORPCError);
-    expect(
-      b.setVisibility({ setId, visibility: "public" })
-    ).rejects.toThrow(ORPCError);
+    expect(b.setVisibility({ setId, visibility: "public" })).rejects.toThrow(
+      ORPCError
+    );
   });
 
   test("remove deletes the set but never the frames", async () => {

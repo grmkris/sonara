@@ -2,11 +2,11 @@
   "name": "sonara",
   "private": true,
   "license": "PolyForm-Noncommercial-1.0.0",
-  "type": "module",
   "workspaces": [
     "apps/*",
     "packages/*"
   ],
+  "type": "module",
   "scripts": {
     "dev": "turbo run dev",
     "dev:web": "turbo run dev --filter=web",

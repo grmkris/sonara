@@ -66,7 +66,9 @@ const ComposerFooter = ({
             : "text-[color:var(--stone)] border-[color:var(--hairline)]/30 hover:text-[color:var(--paper)] hover:border-[color:var(--paper)]/60"
         )}
         aria-label={
-          showAnchorZone ? "hide the anchor image zone" : "attach an anchor image"
+          showAnchorZone
+            ? "hide the anchor image zone"
+            : "attach an anchor image"
         }
         aria-expanded={showAnchorZone}
       >

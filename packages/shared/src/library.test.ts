@@ -1,7 +1,13 @@
 import { describe, expect, test } from "bun:test";
 
 import { DECK_LOOK, DEFAULT_CADENCE } from "./decks";
-import { cadenceBetweenMs, libraryCadenceMs } from "./library";
+import {
+  MAX_FRAME_DURATION_MS,
+  MIN_FRAME_DURATION_MS,
+  cadenceBetweenMs,
+  clampFrameDurationMs,
+  libraryCadenceMs,
+} from "./library";
 
 describe("cadenceBetweenMs", () => {
   const bounds = { calm: 8000, loud: 2000 };
@@ -15,6 +21,23 @@ describe("cadenceBetweenMs", () => {
   test("clamps intensity outside 0..1", () => {
     expect(cadenceBetweenMs(-3, bounds)).toBe(8000);
     expect(cadenceBetweenMs(7, bounds)).toBe(2000);
+  });
+});
+
+describe("clampFrameDurationMs", () => {
+  test("keeps an in-range duration (rounded to whole ms)", () => {
+    expect(clampFrameDurationMs(2500)).toBe(2500);
+    expect(clampFrameDurationMs(2500.4)).toBe(2500);
+  });
+
+  test("clamps below the floor and above the ceiling", () => {
+    expect(clampFrameDurationMs(0)).toBe(MIN_FRAME_DURATION_MS);
+    expect(clampFrameDurationMs(-1000)).toBe(MIN_FRAME_DURATION_MS);
+    expect(clampFrameDurationMs(999_999)).toBe(MAX_FRAME_DURATION_MS);
+  });
+
+  test("the bounds are usable (floor < ceiling)", () => {
+    expect(MIN_FRAME_DURATION_MS).toBeLessThan(MAX_FRAME_DURATION_MS);
   });
 });
 

@@ -79,13 +79,7 @@ const FACE_ROWS = [
   { label: "screen", path: (code: string) => `/stage/${code}/screen` },
 ] as const;
 
-const FaceLinkRow = ({
-  label,
-  path,
-}: {
-  label: string;
-  path: string;
-}) => {
+const FaceLinkRow = ({ label, path }: { label: string; path: string }) => {
   const origin = typeof window === "undefined" ? "" : window.location.origin;
   return (
     <li className="flex items-center justify-between gap-2">

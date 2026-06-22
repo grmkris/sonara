@@ -70,7 +70,10 @@ export class PromptQueue {
     const entry: QueuedPrompt = { ...raw, text };
 
     // Dedup against what's already showing or queued (verbatim).
-    if (this.playing?.text === text || this.queue.some((q) => q.text === text)) {
+    if (
+      this.playing?.text === text ||
+      this.queue.some((q) => q.text === text)
+    ) {
       return false;
     }
 

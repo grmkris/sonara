@@ -4,10 +4,7 @@ import type { DeckKey, ServerEvent } from "@sonara/shared";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
-import {
-  applyBuiltinSetLocally,
-  startSetReplayById,
-} from "@/lib/apply-source";
+import { applyBuiltinSetLocally, startSetReplayById } from "@/lib/apply-source";
 import { createSessionConnection } from "@/lib/orpc-ws";
 import { isKnownPreset } from "@/lib/render/presets";
 import { dispatchSessionAction } from "@/lib/session-actions";

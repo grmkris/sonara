@@ -80,7 +80,9 @@ export const resolveDefaultStage = async (
   const existing = await db
     .select()
     .from(SCHEMA.stage)
-    .where(and(eq(SCHEMA.stage.userId, userId), eq(SCHEMA.stage.isDefault, true)))
+    .where(
+      and(eq(SCHEMA.stage.userId, userId), eq(SCHEMA.stage.isDefault, true))
+    )
     .limit(1);
   if (existing[0]) {
     return toRow(existing[0]);

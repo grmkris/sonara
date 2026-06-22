@@ -3,7 +3,12 @@
 import { Radio } from "lucide-react";
 
 import { StageHostPanel } from "@/components/stage/stage-host-panel";
-import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
+import {
+  Sheet,
+  SheetContent,
+  SheetTitle,
+  SheetTrigger,
+} from "@/components/ui/sheet";
 import type { ControlTarget } from "@/lib/control-actions";
 import { cn } from "@/lib/utils";
 import { useVisualizerStore } from "@/stores/visualizer";

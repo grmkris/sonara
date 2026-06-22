@@ -20,10 +20,9 @@ const fail = (msg: string): never => {
 };
 
 const main = async () => {
-  const databaseUrl = process.env.DATABASE_URL;
-  if (!databaseUrl) {
+  const databaseUrl =
+    process.env.DATABASE_URL ??
     fail("DATABASE_URL not set — run from apps/server with .env in place");
-  }
   const db = createDb(databaseUrl);
 
   // SIWE accounts (defence in depth — cascade from user.delete handles

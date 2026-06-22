@@ -14,26 +14,35 @@ import { ErrorState } from "@/components/studio/error-state";
 import { FrameInspector } from "@/components/studio/frame-inspector";
 import { FrameInspectorContent } from "@/components/studio/frame-inspector-content";
 import { LiveNowCard } from "@/components/studio/live-now-card";
-import { SelectionBar } from "@/components/studio/selection-bar";
-import { BuiltinSetDetail } from "@/components/studio/builtin-set-detail";
-import { SetEditor } from "@/components/studio/set-editor";
-import { SetsList } from "@/components/studio/sets-list";
-import { RecordingTimeline } from "@/components/studio/recording-timeline";
 import { RecordingsList } from "@/components/studio/recordings-list";
+import { SelectionBar } from "@/components/studio/selection-bar";
+import { SetEditor } from "@/components/studio/set-editor";
 import { SetsDropShelf } from "@/components/studio/sets-drop-shelf";
+import { SetsList } from "@/components/studio/sets-list";
 import { StudioSidebarTabs } from "@/components/studio/studio-sidebar-tabs";
 import type { StudioTab } from "@/components/studio/studio-sidebar-tabs";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
+import { useCurationDnd } from "@/hooks/use-curation-dnd";
 import { useFrameSelection } from "@/hooks/use-frame-selection";
 import { useIsMobile } from "@/hooks/use-is-mobile";
-import { useCurationDnd } from "@/hooks/use-curation-dnd";
+import { useFrozenDraft } from "@/hooks/use-set-draft";
 import { useSetMutations } from "@/hooks/use-set-mutations";
 import { useSession } from "@/lib/auth-client";
-import { rpcClient } from "@/lib/orpc";
 import { makeFramePayload } from "@/lib/curation-dnd";
 import type { FrameDragPayload } from "@/lib/curation-dnd";
+import { rpcClient } from "@/lib/orpc";
 import { recordingsHref, setsHref } from "@/lib/studio-hrefs";
 import { cn } from "@/lib/utils";
+
+// Neutral stand-ins for the built-in draft editor, which offers no multi-select
+// (seed frames aren't user-owned, so the selection bar's add-to-set rejects).
+const noop = (): void => undefined;
+const noopFalse = (): boolean => false;
+const NEUTRAL_SELECTION = {
+  rangeTo: noop,
+  selectedFrameIds: [] as string[],
+  toggle: noop,
+};
 
 const parseTab = (raw: string | null): StudioTab => {
   if (raw === "sets" || raw === "decks") {
@@ -42,7 +51,6 @@ const parseTab = (raw: string | null): StudioTab => {
   }
   return "recordings";
 };
-
 
 // /studio — the user's set library. Two tabs: "recordings" (auto-captured
 // live performances; frame list frozen, replayable on original timing) and
@@ -58,8 +66,6 @@ const StudioFallback = () => (
     </span>
   </main>
 );
-
-
 
 // Right-side header tally for the recordings tab. Extracted so its
 // conditionals don't inflate StudioInner's complexity.
@@ -228,7 +234,11 @@ const StudioInner = () => {
 
   // Auto-select most recent recording when on the recordings tab with none chosen.
   useEffect(() => {
-    if (tab !== "recordings" || !recordingsBootstrapped || selectedRecordingId) {
+    if (
+      tab !== "recordings" ||
+      !recordingsBootstrapped ||
+      selectedRecordingId
+    ) {
       return;
     }
     const [newest] = recordings;
@@ -342,7 +352,9 @@ const StudioInner = () => {
 
   const selectedFrame = useMemo(() => {
     const pool =
-      tab === "sets" ? (setDetail?.frames ?? []) : (recordingDetail?.frames ?? []);
+      tab === "sets"
+        ? (setDetail?.frames ?? [])
+        : (recordingDetail?.frames ?? []);
     return pool.find((f) => f.id === selectedFrameId) ?? null;
   }, [tab, recordingDetail, setDetail, selectedFrameId]);
 
@@ -350,7 +362,9 @@ const StudioInner = () => {
   const displayOrder = useMemo(() => {
     const openSet = setDetail?.origin === "builtin" ? null : setDetail;
     const pool =
-      tab === "sets" ? (openSet?.frames ?? []) : (recordingDetail?.frames ?? []);
+      tab === "sets"
+        ? (openSet?.frames ?? [])
+        : (recordingDetail?.frames ?? []);
     return pool.map((f) => f.id as string);
   }, [tab, recordingDetail, setDetail]);
 
@@ -361,11 +375,7 @@ const StudioInner = () => {
     displayOrder,
     resetKey: `${tab}|${selectedRecordingId}|${selectedSetId}`,
   });
-  const {
-    clear: clearSelection,
-    isSelecting,
-    selectedFrameIds,
-  } = selection;
+  const { clear: clearSelection, isSelecting, selectedFrameIds } = selection;
 
   // A batch landed in `target`: keep select mode (next recording, same set),
   // drop the selection, and refresh whatever shows the target's frame count.
@@ -477,7 +487,9 @@ const StudioInner = () => {
 
   const onCloseInspector = useCallback(() => {
     if (tab === "sets") {
-      router.replace(selectedSetId ? setsHref(selectedSetId) : "/studio?tab=sets");
+      router.replace(
+        selectedSetId ? setsHref(selectedSetId) : "/studio?tab=sets"
+      );
       return;
     }
     router.replace(recordingsHref(selectedRecordingId ?? undefined));
@@ -548,7 +560,6 @@ const StudioInner = () => {
     setSetDetail,
   });
   const onCreateSet = mutations.createSet;
-  const onMakeCut = mutations.makeCut;
   const onRenameSet = mutations.renameSet;
   const onDeleteSet = mutations.deleteSet;
   const onMoveFrame = mutations.moveFrame;
@@ -565,10 +576,27 @@ const StudioInner = () => {
     () => (setDetail?.frames ?? []).map((f) => f.id as string),
     [setDetail]
   );
-  const { dragActive, dragCount } = useCurationDnd({
-    currentOrderedIds: setOrderedIds,
-    currentSetId: selectedSetId,
+
+  // Built-in decks and recordings are frozen, so they're edited as a CLIENT
+  // draft (reorder/trim/remove in memory; persisted via "save as set"). The
+  // draft patches the open source's frames in place, so the timeline, the
+  // selection, and the drop monitor read it with no special casing.
+  const { draft, dndMutations, dndOrderedIds, dndSetId } = useFrozenDraft({
     mutations,
+    recordingDetail,
+    refreshSets,
+    router,
+    selectedSetId,
+    setDetail,
+    setOrderedIds,
+    setRecordingDetail,
+    setSetDetail,
+    tab,
+  });
+  const { dragActive, dragCount } = useCurationDnd({
+    currentOrderedIds: dndOrderedIds,
+    currentSetId: dndSetId,
+    mutations: dndMutations,
   });
 
   // Same Finder rule for recordings: a selected frame drags the whole
@@ -600,7 +628,9 @@ const StudioInner = () => {
     (frameId: string): FrameDragPayload => {
       const frames = setDetail?.frames ?? [];
       const carried = selection.isSelected(frameId)
-        ? frames.filter((f) => selection.isSelected(f.id)).map((f) => f.id as string)
+        ? frames
+            .filter((f) => selection.isSelected(f.id))
+            .map((f) => f.id as string)
         : [frameId];
       const carriedSet = new Set(carried);
       return makeFramePayload({
@@ -653,11 +683,16 @@ const StudioInner = () => {
       return <ErrorState onRetry={retry} />;
     }
     return (
-      <RecordingTimeline
-        recording={recordingDetail}
+      <SetEditor
+        frameSet={recordingDetail}
         loading={recordingLoading}
+        error={recordingError}
+        onRetry={retry}
         selectedFrameId={selectedFrameId}
-        onMakeCut={onMakeCut}
+        onMoveFrame={draft.moveFrame}
+        onRemoveFrame={draft.removeFrame}
+        onRemoveFrames={draft.removeFrames}
+        onSetFrameDuration={draft.setFrameDuration}
         onVisibilityChange={onRecordingVisibility}
         onFrameClick={onFrameClick}
         onFrameOpen={onFrameOpen}
@@ -671,17 +706,55 @@ const StudioInner = () => {
         marqueeEnabled={!dragActive}
         getDragPayload={getRecordingDragPayload}
         selectionApi={selection}
+        draft={{
+          dirty: draft.dirty,
+          onReset: draft.reset,
+          onSave: draft.save,
+          saving: draft.saving,
+        }}
       />
     );
   };
-
 
   // Center pane, sets tab: built-ins render read-only; everything else gets
   // the full editor. Extracted (like renderRecordingsCenter) so the branches
   // don't inflate StudioInner's complexity.
   const renderSetsCenter = () => {
     if (setDetail?.origin === "builtin") {
-      return <BuiltinSetDetail frameSet={setDetail} />;
+      // Built-in decks are edited as a client draft too — but multi-select is
+      // off (seed frames aren't user-owned) and clicks only inspect.
+      return (
+        <SetEditor
+          frameSet={setDetail}
+          loading={setDetailLoading}
+          error={setDetailError}
+          onRetry={retrySetDetail}
+          selectedFrameId={selectedFrameId}
+          onMoveFrame={draft.moveFrame}
+          onRemoveFrame={draft.removeFrame}
+          onRemoveFrames={draft.removeFrames}
+          onSetFrameDuration={draft.setFrameDuration}
+          onFrameClick={(frameId) => onFrameOpen(frameId)}
+          onFrameOpen={onFrameOpen}
+          onFrameCheck={noop}
+          isSelected={noopFalse}
+          isSelecting={false}
+          pinned={false}
+          onTogglePinned={noop}
+          onMarquee={noop}
+          onWhitespaceClick={onWhitespaceClick}
+          marqueeEnabled={false}
+          getDragPayload={getSetDragPayload}
+          selectionApi={NEUTRAL_SELECTION}
+          selectable={false}
+          draft={{
+            dirty: draft.dirty,
+            onReset: draft.reset,
+            onSave: draft.save,
+            saving: draft.saving,
+          }}
+        />
+      );
     }
     return (
       <SetEditor
@@ -698,6 +771,7 @@ const StudioInner = () => {
         onSetCover={onSetCover}
         onVisibilityChange={onSetVisibility}
         onLookChange={mutations.setLook}
+        onSetFrameDuration={mutations.setFrameDuration}
         onFrameClick={onFrameClick}
         onFrameOpen={onFrameOpen}
         onFrameCheck={onFrameCheck}

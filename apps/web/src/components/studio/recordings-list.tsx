@@ -101,9 +101,9 @@ export const RecordingsList = ({
                     onClick={() => onSelect(r.id)}
                     className={cn(
                       "focus-ring flex w-full items-center gap-3 px-4 py-2 text-left",
-                      "border-b border-[color:var(--hairline)]/20 transition-colors",
+                      "border-b border-l-2 border-l-transparent border-[color:var(--hairline)]/20 transition-colors",
                       selected
-                        ? "bg-[color:var(--paper)]/10"
+                        ? "border-l-[color:var(--paper)] bg-[color:var(--paper)]/10"
                         : "hover:bg-[color:var(--paper)]/5"
                     )}
                     aria-current={selected ? "true" : undefined}

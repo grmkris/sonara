@@ -29,7 +29,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        task: [lint, typecheck]
+        # check = ultracite check --type-aware --type-check (oxfmt format-check
+        # + type-aware oxlint + full tsgo type-check) — the invok CI pattern.
+        task: [lint, typecheck, check]
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/setup

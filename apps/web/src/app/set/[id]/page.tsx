@@ -140,7 +140,7 @@ const useLensPoll = (id: string): Lens | null => {
         // Transient — keep the last lens on screen and retry next tick.
       }
       if (!cancelled) {
-        timer = setTimeout(poll, wait);
+        timer = setTimeout(() => void poll(), wait);
       }
     };
     void poll();
@@ -337,10 +337,7 @@ const lensViewModel = (lens: FoundLens, replaySet: ReplaySet | null) => {
     isOwnerLive: lens.isOwner && live !== null,
     name: lens.set?.name ?? "live session",
     nowPlaying: live?.nowPlaying ?? null,
-    stageRoom:
-      stage?.open
-        ? stage.room
-        : null,
+    stageRoom: stage?.open ? stage.room : null,
   };
 };
 

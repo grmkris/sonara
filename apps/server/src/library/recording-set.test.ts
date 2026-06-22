@@ -1,8 +1,8 @@
 import { beforeAll, describe, expect, test } from "bun:test";
 
+import type { Database } from "@sonara/db";
 import { typeIdGenerator, typeIdToUuid } from "@sonara/shared/typeid";
 import type { LiveSessionId, UserId } from "@sonara/shared/typeid";
-import type { Database } from "@sonara/db";
 import type { PoolShim } from "@sonara/test-utils";
 import {
   createTestStage,
@@ -62,7 +62,9 @@ describe("recording-set", () => {
       origin: string;
       status: string;
       visibility: string;
-    }>("SELECT id, live_session_id, name, origin, status, visibility FROM frame_set");
+    }>(
+      "SELECT id, live_session_id, name, origin, status, visibility FROM frame_set"
+    );
     expect(created.rows.length).toBe(1);
     // Set id derives from the lse_ uuid — the SAME scheme as the boot
     // converger, so live recording and backfill converge on one row.

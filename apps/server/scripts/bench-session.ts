@@ -35,8 +35,7 @@ const sleep = (ms: number): Promise<void> =>
     setTimeout(resolve, ms);
   });
 
-const USER =
-  process.env.BENCH_USER ?? "019ead3b-4aaf-7ff8-a9bf-ff1182c14b8c";
+const USER = process.env.BENCH_USER ?? "019ead3b-4aaf-7ff8-a9bf-ff1182c14b8c";
 
 const session = new Session({
   id: "bench-session",
@@ -52,7 +51,10 @@ interface Marks {
   error?: string;
 }
 let marks: Marks = {};
-let resolveCurrent: (() => void) | null = null;
+// Non-null (vs `(() => void) | null`, reusing the `noop` sink) sidesteps a
+// tsgo native-preview quirk that reads a closure-reassigned nullable callback
+// as non-callable. A measure swaps in its real promise resolver.
+let resolveCurrent: () => void = noop;
 
 // Background event consumer — routes the session's events to the active measure.
 void (async () => {
@@ -64,10 +66,10 @@ void (async () => {
       marks.preview = now;
     } else if (ev.type === "frame.final") {
       marks.final = now;
-      resolveCurrent?.();
+      resolveCurrent();
     } else if (ev.type === "job.status" && ev.status === "error") {
       marks.error = ev.message ?? "error";
-      resolveCurrent?.();
+      resolveCurrent();
     }
   }
 })();
@@ -85,7 +87,7 @@ const measure = async (label: string, action: () => void): Promise<void> => {
     // safety timeout so a stuck frame doesn't hang the run
     setTimeout(resolve, 30_000);
   });
-  resolveCurrent = null;
+  resolveCurrent = noop;
   if (marks.error !== undefined) {
     process.stdout.write(`  ${label.padEnd(24)} ERROR: ${marks.error}\n`);
     return;

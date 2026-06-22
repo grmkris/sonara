@@ -6,9 +6,9 @@ import { z } from "zod";
 import { stageActions } from "../stage/stage-actions";
 import { publishActivity } from "../stage/stage-feed";
 import { stageRooms } from "../stage/stage-rooms";
+import { getOwnedStage } from "../stage/stage-service";
 import { stageState } from "../stage/stage-state";
 import { stageThrottle } from "../stage/stage-throttle";
-import { getOwnedStage } from "../stage/stage-service";
 import { resolveOwnedStageRun } from "./owned-stage";
 import { protectedProcedure, publicProcedure } from "./procedures";
 
@@ -99,7 +99,11 @@ export const stageRouter = {
       );
       stageRooms.openForStage(stage.code, stage.id, input.allowPrompts);
       session.notifyStage(stage.code, input.allowPrompts, true);
-      return { allowPrompts: input.allowPrompts, room: stage.code, showQr: true };
+      return {
+        allowPrompts: input.allowPrompts,
+        room: stage.code,
+        showQr: true,
+      };
     }),
 
   // Public crowd write: an absolute knob level (slider release). Supersedes

@@ -4,8 +4,8 @@ import type { LookConfig, LookProfile } from "@sonara/shared";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 
-import { resolveLook } from "@/lib/render/presets";
 import { rpcClient } from "@/lib/orpc";
+import { resolveLook } from "@/lib/render/presets";
 import { useVisualizerStore } from "@/stores/visualizer";
 
 export interface LookProfilesApi {

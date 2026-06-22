@@ -41,12 +41,10 @@ const parseUserId = (raw: string): string => {
 };
 
 const main = async () => {
-  const [userIdRaw, framesRaw] = process.argv.slice(2);
-  if (!userIdRaw || !framesRaw) {
-    fail(
-      "usage: bun run apps/server/scripts/seed-credits.ts <userId> <frames>"
-    );
-  }
+  const usage =
+    "usage: bun run apps/server/scripts/seed-credits.ts <userId> <frames>";
+  const userIdRaw = process.argv[2] ?? fail(usage);
+  const framesRaw = process.argv[3] ?? fail(usage);
   const frames = Number(framesRaw);
   if (!Number.isInteger(frames) || frames < 0) {
     fail("frames must be a non-negative integer");
@@ -55,10 +53,9 @@ const main = async () => {
     fail("nothing to grant — frames is 0");
   }
 
-  const databaseUrl = process.env.DATABASE_URL;
-  if (!databaseUrl) {
+  const databaseUrl =
+    process.env.DATABASE_URL ??
     fail("DATABASE_URL not set — run from apps/server with .env in place");
-  }
 
   if (process.env.APP_ENV === "prod" && process.env.ALLOW_PROD_SEED !== "1") {
     fail("refusing to seed in production — set ALLOW_PROD_SEED=1 to override");

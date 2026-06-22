@@ -31,7 +31,10 @@ export const LookPopover = () => {
           aria-label="edit the look"
           className="focus-ring flex items-center gap-1.5 rounded-sm border border-[color:var(--hairline)]/30 px-2 py-1.5 font-sans text-[10px] uppercase tracking-[0.18em] text-[color:var(--paper)]/85 transition-colors hover:border-[color:var(--paper)]/60"
         >
-          <Palette className="size-3 text-[color:var(--stone)]" strokeWidth={1.5} />
+          <Palette
+            className="size-3 text-[color:var(--stone)]"
+            strokeWidth={1.5}
+          />
           <span className="truncate">{label}</span>
         </button>
       </PopoverTrigger>

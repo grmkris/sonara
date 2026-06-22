@@ -102,13 +102,7 @@ export const ImageAnchorZone = ({ send }: ImageAnchorZoneProps) => {
         toast.error(`Couldn't upload image — ${message}`);
       }
     },
-    [
-      send,
-      setAnchorImageUrl,
-      setAnchorLocalPreview,
-      setUploadState,
-      setSource,
-    ]
+    [send, setAnchorImageUrl, setAnchorLocalPreview, setUploadState, setSource]
   );
 
   const handleFile = useCallback(

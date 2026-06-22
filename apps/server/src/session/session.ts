@@ -50,8 +50,8 @@ import {
   ensureRecordingSet,
   finalizeRecordingSet,
 } from "../library/recording-set";
-import { stageRooms } from "../stage/stage-rooms";
 import { recognizeClip } from "../recognition/recognition.service";
+import { stageRooms } from "../stage/stage-rooms";
 import { shouldFireForBeat } from "./beat-clock";
 import { semanticDiff } from "./semantic-diff";
 
@@ -162,6 +162,39 @@ const cadenceFromIntensity = (
 export const freshCadenceFromStability = (stability: number): number =>
   Math.round(24 * Math.max(0, Math.min(1, stability)));
 
+// Chain-or-fresh decision (pure, exported for unit tests like the cadence
+// helpers above). Returns the previous frame's URL to edit-from (chain), or
+// null for a fresh text-to-image. Order matters:
+//   1. forceFresh — a user-typed prompt change hard-cuts to one fresh frame so
+//      it lands decisively instead of crawling in over a chain (set in
+//      trigger() for user-initiated triggers; see Session.chainSourceFor).
+//   2. no edit endpoint / no prior frame → fresh.
+//   3. a just-consumed seed (goLive/upload anchor) always chains so the seed
+//      image visibly takes, even at stability 0; otherwise chain only while
+//      within the stability I-frame budget.
+export const chooseChainSource = (opts: {
+  editFalId: string | undefined;
+  chainUrl: string | null;
+  seeded: boolean;
+  forceFresh: boolean;
+  framesSinceFresh: number;
+  stability: number;
+}): string | null => {
+  if (opts.forceFresh) {
+    return null;
+  }
+  if (!(opts.editFalId && opts.chainUrl)) {
+    return null;
+  }
+  if (
+    opts.seeded ||
+    opts.framesSinceFresh < freshCadenceFromStability(opts.stability)
+  ) {
+    return opts.chainUrl;
+  }
+  return null;
+};
+
 // After a deliberate prompt-text change, briefly fire chained edits at this
 // fast cadence so the screen walks toward the new motive within a few seconds
 // instead of crawling there at the intensity-derived ambient cadence (which can
@@ -202,6 +235,11 @@ export class Session implements ControllableSession {
   // for the control snapshot).
   private chainUrl: string | null = null;
   private framesSinceFresh = 0;
+  // One-shot: when set, the next generation skips chaining and runs a fresh
+  // t2i. Armed in trigger() on a user-typed prompt change so the new prompt
+  // lands decisively in one step (see chainSourceFor); consumed at the chain
+  // decision.
+  private forceFreshNext = false;
   private activeVersion = 0;
   private pauseTimer?: ReturnType<typeof setTimeout>;
   private periodicTimer?: ReturnType<typeof setInterval>;
@@ -356,9 +394,7 @@ export class Session implements ControllableSession {
     this.send({ liveSessionId: this.liveSessionId, type: "run.started" });
     // A projector reconnecting while its crowd stage is open must relearn the
     // room code (stage bindings outlive WS connections).
-    const stage = this.stageId
-      ? stageRooms.statusForStage(this.stageId)
-      : null;
+    const stage = this.stageId ? stageRooms.statusForStage(this.stageId) : null;
     if (stage) {
       this.notifyStage(stage.room, stage.allowPrompts, stage.showQr);
     }
@@ -434,7 +470,11 @@ export class Session implements ControllableSession {
   // `stage.status` push — the control router calls this when the owner opens
   // or closes the Monad crowd stage (or toggles the join QR), so the projector
   // can mount/unmount its wire overlay + QR and dial the public /ws/stage feed.
-  notifyStage(room: string | null, allowPrompts?: boolean, showQr?: boolean): void {
+  notifyStage(
+    room: string | null,
+    allowPrompts?: boolean,
+    showQr?: boolean
+  ): void {
     this.send({ allowPrompts, room, showQr, type: "stage.status" });
   }
 
@@ -626,7 +666,7 @@ export class Session implements ControllableSession {
       origin === "voice" ? SEMANTIC_THRESHOLD_VOICE : SEMANTIC_THRESHOLD;
     const diff = semanticDiff(this.lastGeneratedScene, next);
     if (diff > threshold) {
-      this.trigger(origin === "voice" ? "voice" : "semantic");
+      void this.trigger(origin === "voice" ? "voice" : "semantic");
       return;
     }
     this.schedulePause();
@@ -678,7 +718,7 @@ export class Session implements ControllableSession {
         this.lastSectionEnergy = features.sectionEnergy;
         if (now - this.lastSectionTriggerAt >= SECTION_REFRACTORY_MS) {
           this.lastSectionTriggerAt = now;
-          this.trigger("section");
+          void this.trigger("section");
         }
       }
     } else {
@@ -798,7 +838,7 @@ export class Session implements ControllableSession {
 
     // Fire a regeneration so the new prompt lands immediately. "section" is
     // the closest semantic match ("the song changed").
-    this.trigger("section");
+    void this.trigger("section");
     return track;
   }
 
@@ -877,7 +917,7 @@ export class Session implements ControllableSession {
       this.pauseTimer = undefined;
       const diff = semanticDiff(this.lastGeneratedScene, this.scene);
       if (diff > 0.05) {
-        this.trigger("pause");
+        void this.trigger("pause");
       }
     }, pauseMs);
   }
@@ -892,7 +932,11 @@ export class Session implements ControllableSession {
       );
       // Right after a prompt change, drop the cadence floor so chained edits
       // fire as fast as generation allows and the morph lands in a few seconds.
-      const periodicMs = burstCadenceMs(baseCadence, now, this.morphBurstUntilAt);
+      const periodicMs = burstCadenceMs(
+        baseCadence,
+        now,
+        this.morphBurstUntilAt
+      );
       // Beat-synced cadence: respect the floor, then (when tempo-locked) hold
       // until ~one generation-latency before the next downbeat so the frame
       // reveals on the beat. Falls back to the plain wall-clock gate unlocked.
@@ -924,7 +968,7 @@ export class Session implements ControllableSession {
       if (!hasAudio && !hasScene) {
         return;
       }
-      this.trigger("periodic");
+      void this.trigger("periodic");
     }, 250);
   }
 
@@ -1000,16 +1044,19 @@ export class Session implements ControllableSession {
     editFalId: string | undefined,
     seeded: boolean
   ): string | null {
-    if (!(editFalId && this.chainUrl)) {
-      return null;
-    }
-    if (
-      seeded ||
-      this.framesSinceFresh < freshCadenceFromStability(this.scene.stability)
-    ) {
-      return this.chainUrl;
-    }
-    return null;
+    // A user-typed prompt change forces one fresh t2i — consume the flag here
+    // (at the decision) so a single fresh frame breaks the chain, then ambient
+    // chaining resumes. Read-then-clear so the consume happens on every call.
+    const forceFresh = this.forceFreshNext;
+    this.forceFreshNext = false;
+    return chooseChainSource({
+      chainUrl: this.chainUrl,
+      editFalId,
+      forceFresh,
+      framesSinceFresh: this.framesSinceFresh,
+      seeded,
+      stability: this.scene.stability,
+    });
   }
 
   private async trigger(source: TriggerSource): Promise<void> {
@@ -1032,6 +1079,19 @@ export class Session implements ControllableSession {
     }
 
     const seeded = this.consumeChainSeed();
+
+    // A deliberate, user-typed prompt change should land in ONE step, not crawl
+    // in over a chain of near-identical edits. Whether it currently snaps or
+    // oozes is pure luck of the chain position (framesSinceFresh vs the
+    // stability cadence), which reads as random. Force the next frame fresh
+    // (chainSourceFor → null) and re-roll the seed so it's a genuinely new
+    // composition. Gated on !seeded: an explicit goLive/upload anchor must keep
+    // chaining so the seed image visibly takes. Ambient (periodic/section/auto)
+    // triggers are untouched — they still morph gently.
+    if (kind === "user" && !seeded) {
+      this.forceFreshNext = true;
+      this.seed = rollSeed();
+    }
 
     // Defence in depth. The constructor pins anon sessions to a deck source,
     // so the short-circuit above always catches them. If that invariant ever
@@ -1358,5 +1418,4 @@ export class Session implements ControllableSession {
       }
     });
   }
-
 }

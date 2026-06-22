@@ -4,7 +4,6 @@ import { useEffect, useRef } from "react";
 import type { RefObject } from "react";
 
 import type { StageFeedRing } from "@/lib/stage/use-stage-feed";
-
 import { cn } from "@/lib/utils";
 
 // On-chain activity per second as a hairline ink trace — the room's pulse.
@@ -74,7 +73,10 @@ export const Seismograph = ({
         if (sec > state.lastSec) {
           return 0;
         }
-        return state.counts[((sec % RING_SECONDS) + RING_SECONDS) % RING_SECONDS] ?? 0;
+        return (
+          state.counts[((sec % RING_SECONDS) + RING_SECONDS) % RING_SECONDS] ??
+          0
+        );
       };
 
       const yFor = (count: number): number =>

@@ -1,9 +1,9 @@
 import { z } from "zod";
 
 import { InspectorContextSchema } from "./inspector-context";
+import { LookConfig } from "./looks";
 import { NowPlaying } from "./now-playing";
 import { SonaraSceneState } from "./scene";
-import { LookConfig } from "./looks";
 import { ResolvedScene } from "./scene-resolved";
 import {
   FrameSetIdSchema,
@@ -25,6 +25,11 @@ export const LibraryFrameSchema = z.object({
   anchorUrl: z.string().nullable().optional(),
   createdAt: z.coerce.date(),
   deck: z.string(),
+  // Per-member authored hold duration (frame_set_frame.duration_ms). Only
+  // populated when this frame is read as a member of a curated set (sets.get);
+  // null/absent everywhere else. When set, it pins the frame's replay hold
+  // time, overriding the set's reactive look-cadence. See clampFrameDurationMs.
+  durationMs: z.number().int().positive().nullable().optional(),
   height: z.number().int().positive(),
   id: ImageLibraryIdSchema,
   inspectorContext: InspectorContextSchema.nullable().optional(),
@@ -43,11 +48,7 @@ export type LibraryFrame = z.infer<typeof LibraryFrameSchema>;
 // built-in decks (origin=builtin), session recordings (origin=recording) and
 // curated reels (origin=curated). See packages/db/src/schema/frame-set.db.ts.
 
-export const FrameSetOriginSchema = z.enum([
-  "builtin",
-  "recording",
-  "curated",
-]);
+export const FrameSetOriginSchema = z.enum(["builtin", "recording", "curated"]);
 export type FrameSetOrigin = z.infer<typeof FrameSetOriginSchema>;
 
 export const FrameSetVisibilitySchema = z.enum([

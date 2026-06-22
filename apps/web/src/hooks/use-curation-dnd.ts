@@ -1,16 +1,16 @@
 "use client";
 
-import { monitorForElements } from "@atlaskit/pragmatic-drag-and-drop/element/adapter";
 import { extractClosestEdge } from "@atlaskit/pragmatic-drag-and-drop-hitbox/closest-edge";
+import { monitorForElements } from "@atlaskit/pragmatic-drag-and-drop/element/adapter";
 import { useEffect, useRef, useState } from "react";
 
+import type { SetMutations } from "@/hooks/use-set-mutations";
 import {
   indexFromEdge,
   isDropTargetData,
   isFramePayload,
   spliceReorder,
 } from "@/lib/curation-dnd";
-import type { SetMutations } from "@/hooks/use-set-mutations";
 
 // ONE monitor dispatches every frame drop in studio; the components only
 // attach adapters and render their own hover state. Mutations stay
@@ -57,9 +57,10 @@ export const useCurationDnd = (opts: {
           const { data } = target;
 
           if (data.kind === "set-tile" || data.kind === "set-grid") {
-            const sameSet =
-              payload.source.type === "set" &&
-              payload.source.setId === data.setId;
+            // Same-set drop = reorder, regardless of source kind — a recording
+            // (or built-in) draft reorders its own clips just like a curated
+            // set. Cross-set (different setId) falls through to insert.
+            const sameSet = payload.source.setId === data.setId;
             let index = currentOrderedIds.length;
             if (data.kind === "set-tile") {
               const edge = extractClosestEdge(target.data);
@@ -74,9 +75,7 @@ export const useCurationDnd = (opts: {
                 payload.frameIds,
                 index
               );
-              const changed = next.some(
-                (id, i) => id !== currentOrderedIds[i]
-              );
+              const changed = next.some((id, i) => id !== currentOrderedIds[i]);
               if (changed) {
                 mutations.reorderTo(next);
               }

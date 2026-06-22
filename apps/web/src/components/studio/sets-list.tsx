@@ -6,6 +6,7 @@ import type { ReactNode } from "react";
 import { useState } from "react";
 
 import { NewSetDropRow, SetDropRow } from "@/components/studio/set-drop-row";
+import { cn } from "@/lib/utils";
 
 interface SetsListProps {
   sets: FrameSetSummary[];
@@ -35,11 +36,12 @@ const BuiltinRow = ({
     type="button"
     onClick={() => onSelect(set.id)}
     aria-current={selected ? "true" : undefined}
-    className={
+    className={cn(
+      "focus-ring flex w-full items-center gap-3 border-b border-l-2 border-l-transparent border-[color:var(--hairline)]/20 px-4 py-2 text-left transition-colors",
       selected
-        ? "focus-ring flex w-full items-center gap-3 border-b border-[color:var(--hairline)]/20 bg-[color:var(--paper)]/10 px-4 py-2 text-left"
-        : "focus-ring flex w-full items-center gap-3 border-b border-[color:var(--hairline)]/20 px-4 py-2 text-left transition-colors hover:bg-[color:var(--paper)]/5"
-    }
+        ? "border-l-[color:var(--paper)] bg-[color:var(--paper)]/10"
+        : "hover:bg-[color:var(--paper)]/5"
+    )}
   >
     {set.coverUrl ? (
       // eslint-disable-next-line @next/next/no-img-element
@@ -53,7 +55,14 @@ const BuiltinRow = ({
       <div className="size-10 shrink-0 rounded-sm border border-[color:var(--hairline)]/40 bg-[color:var(--ink)]/40" />
     )}
     <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-      <span className="truncate font-sans text-[11px] uppercase tracking-[0.16em] text-[color:var(--paper)]/80">
+      <span
+        className={cn(
+          "truncate font-sans text-[11px] uppercase tracking-[0.16em]",
+          selected
+            ? "text-[color:var(--paper)]"
+            : "text-[color:var(--paper)]/80"
+        )}
+      >
         {set.name}
       </span>
       <span className="font-mono text-[9px] uppercase tracking-[0.18em] text-[color:var(--stone)]">

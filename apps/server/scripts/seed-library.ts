@@ -91,11 +91,7 @@ const parseArgs = (): Args => {
       limit = v;
     } else if (a === "--model") {
       i += 1;
-      const v = argv[i];
-      if (!v) {
-        fail("--model requires a value");
-      }
-      model = v;
+      model = argv[i] ?? fail("--model requires a value");
     } else if (a === "--dry-run") {
       dryRun = true;
     } else if (a === "--from-export") {

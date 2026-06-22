@@ -82,9 +82,9 @@ describe("stage-service", () => {
     const after = await getOwnedStage(db, owner, s.id);
     expect(after.name).toBe("New name");
     expect(after.code).toBe(s.code);
-    await expect(
-      renameStage(db, other, s.id, "hijack")
-    ).rejects.toMatchObject({ code: "FORBIDDEN" });
+    await expect(renameStage(db, other, s.id, "hijack")).rejects.toMatchObject({
+      code: "FORBIDDEN",
+    });
   });
 
   test("code collision retries with a fresh code", async () => {

@@ -176,10 +176,7 @@ interface SelectionBarProps {
   onClear: () => void;
   // The page owns the RPCs (use-set-mutations) so adds get the undo toast;
   // resolves with the added count (null = failed).
-  onAddTo: (
-    target: TargetSet,
-    frameIds: string[]
-  ) => Promise<number | null>;
+  onAddTo: (target: TargetSet, frameIds: string[]) => Promise<number | null>;
   // "New set from selection" — resolves with the created summary (the page
   // navigates + toasts-with-undo); null = failed.
   onCreateFrom: (
@@ -202,7 +199,9 @@ export const SelectionBar = ({
   onCreatedFromSelection,
 }: SelectionBarProps) => {
   const { createSet, loading, refresh, sets } = useCuratedSetsPicker();
-  const [lastTarget, setLastTarget] = useState<TargetSet | null>(readLastTarget);
+  const [lastTarget, setLastTarget] = useState<TargetSet | null>(
+    readLastTarget
+  );
   const [pickerOpen, setPickerOpen] = useState(false);
   const [namingFromSelection, setNamingFromSelection] = useState(false);
 

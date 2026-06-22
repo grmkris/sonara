@@ -139,7 +139,7 @@ export default function StageConsolePage() {
         // transient — keep the last state
       } finally {
         if (!cancelled) {
-          timer = setTimeout(poll, STAGES_POLL_MS);
+          timer = setTimeout(() => void poll(), STAGES_POLL_MS);
         }
       }
     };

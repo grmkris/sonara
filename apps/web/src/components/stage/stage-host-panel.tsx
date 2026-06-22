@@ -5,13 +5,12 @@ import { useEffect, useState } from "react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
+import type { ControlTarget } from "@/lib/control-actions";
 import { rpcClient } from "@/lib/orpc";
 import { useStageFeed } from "@/lib/stage/use-stage-feed";
 
 import { Seismograph } from "./seismograph";
 import { TapTicker } from "./tap-ticker";
-
-import type { ControlTarget } from "@/lib/control-actions";
 
 // Owner-side stage control on the console: open this stage to the crowd
 // (stage-keyed targets use the stage's PERMANENT code — printable QR; legacy
@@ -82,7 +81,9 @@ export const StageHostPanel = ({
       setRoom(minted);
       setDisplayQr(true);
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "couldn't open stage");
+      toast.error(
+        error instanceof Error ? error.message : "couldn't open stage"
+      );
     } finally {
       setBusy(false);
     }
@@ -121,13 +122,18 @@ export const StageHostPanel = ({
           crowd stage
         </span>
         {room ? (
-          <Button onClick={close} size="sm" variant="ghost" disabled={busy}>
+          <Button
+            onClick={() => void close()}
+            size="sm"
+            variant="ghost"
+            disabled={busy}
+          >
             <span className="font-sans text-[10px] uppercase tracking-[0.2em]">
               close
             </span>
           </Button>
         ) : (
-          <Button onClick={open} size="sm" disabled={busy}>
+          <Button onClick={() => void open()} size="sm" disabled={busy}>
             <span className="font-sans text-[10px] uppercase tracking-[0.2em]">
               open to crowd
             </span>
@@ -178,7 +184,7 @@ export const StageHostPanel = ({
               canvas once everyone is in. */}
           <button
             className="focus-ring flex items-center justify-between gap-3 rounded-sm border border-[color:var(--hairline)]/30 px-3 py-2 text-left transition-colors hover:border-[color:var(--paper)]/40"
-            onClick={toggleDisplayQr}
+            onClick={() => void toggleDisplayQr()}
             type="button"
           >
             <span className="font-sans text-[10px] uppercase tracking-[0.2em] text-[color:var(--paper)]/85">
@@ -199,7 +205,7 @@ export const StageHostPanel = ({
           {stageUrl && (
             <button
               className="focus-ring flex items-center justify-between gap-3 rounded-sm border border-[color:var(--hairline)]/30 px-3 py-2 text-left transition-colors hover:border-[color:var(--paper)]/40"
-              onClick={copyLink}
+              onClick={() => void copyLink()}
               type="button"
             >
               <span className="break-all font-mono text-[11px] text-[color:var(--paper)]/80">

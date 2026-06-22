@@ -19,7 +19,14 @@ const CONTROLS: {
   step: number;
   format?: (v: number) => string;
 }[] = [
-  { field: "transitionMs", format: secs, label: "fade", max: 6000, min: 400, step: 50 },
+  {
+    field: "transitionMs",
+    format: secs,
+    label: "fade",
+    max: 6000,
+    min: 400,
+    step: 50,
+  },
   { field: "rippleAmount", label: "ripple", max: 3, min: 0, step: 0.05 },
   { field: "rippleSpread", label: "spread", max: 1, min: 0, step: 0.01 },
   { field: "bloomMult", label: "bloom", max: 3, min: 0, step: 0.05 },
