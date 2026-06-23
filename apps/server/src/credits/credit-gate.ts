@@ -1,4 +1,5 @@
 import { FRAME_COST_CREDITS } from "@sonara/shared";
+import type { UserId } from "@sonara/shared/typeid";
 
 import type { Logger } from "../lib/logger";
 import { debitFrame, refundFrame, tryConsumeFreeTier } from "./credits.service";
@@ -21,7 +22,8 @@ const FREE_TIER_HOURLY = 3;
 export const CREDIT_DENIAL_COOLDOWN_MS = 60_000;
 
 export interface CreditGateInput {
-  userId: string;
+  /** App-standard `usr_…` typeid (drizzle translates to the stored uuid). */
+  userId: UserId;
   /** Voice / semantic / pause triggers. Bypasses the cooldown on the error toast. */
   isUserInitiated: boolean;
   lastCreditDenialAt: number;
@@ -109,7 +111,7 @@ export const tryDebitCredit = async (
  * path.
  */
 export const refundOnError = (
-  userId: string,
+  userId: UserId,
   paidCost: number | null,
   logger: Logger
 ): void => {

@@ -83,7 +83,7 @@ describe("migrateFrameSetsOnBoot", () => {
   });
 
   test("converges builtins and recordings into frame_set", async () => {
-    await migrateFrameSetsOnBoot(noopLogger, pool);
+    await migrateFrameSetsOnBoot(noopLogger, db);
 
     const sets = await pool.query<{
       deck_key: string | null;
@@ -145,7 +145,7 @@ describe("migrateFrameSetsOnBoot", () => {
   });
 
   test("is idempotent — a second run adds nothing", async () => {
-    await migrateFrameSetsOnBoot(noopLogger, pool);
+    await migrateFrameSetsOnBoot(noopLogger, db);
 
     const sets = await pool.query<{ n: number }>(
       "SELECT count(*)::int AS n FROM frame_set"
@@ -163,7 +163,7 @@ describe("migrateFrameSetsOnBoot", () => {
       `UPDATE frame_set SET look_preset = 'rave', look_intensity = 0.9
        WHERE origin = 'builtin' AND deck_key = 'noir'`
     );
-    await migrateFrameSetsOnBoot(noopLogger, pool);
+    await migrateFrameSetsOnBoot(noopLogger, db);
 
     const noir = await pool.query<{
       look_intensity: number | null;
@@ -178,7 +178,7 @@ describe("migrateFrameSetsOnBoot", () => {
 
   test("appends newly seeded frames past max(position) on rerun", async () => {
     const extra = typeIdToUuid(await insertNoirFrame({ source: "seed" })).uuid;
-    await migrateFrameSetsOnBoot(noopLogger, pool);
+    await migrateFrameSetsOnBoot(noopLogger, db);
 
     const noirMembers = await pool.query<{
       frame_id: string;

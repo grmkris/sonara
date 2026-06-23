@@ -28,7 +28,7 @@ import type {
   ServerEvent,
   TextModelKey,
 } from "@sonara/shared";
-import { typeIdGenerator, typeIdToUuid } from "@sonara/shared/typeid";
+import { typeIdFromUuid, typeIdGenerator } from "@sonara/shared/typeid";
 import type {
   ImageLibraryId,
   LiveSessionId,
@@ -36,7 +36,7 @@ import type {
 } from "@sonara/shared/typeid";
 
 import { refundOnError, tryDebitCredit } from "../credits/credit-gate";
-import { getPool } from "../db/pool";
+import { getDb } from "../db/db";
 import { streamPreview } from "../generation/fal-provider";
 import { serializeResolvedScene } from "../generation/prompt-compiler";
 import { DriftTrajectory } from "../generation/prompt-drift";
@@ -447,7 +447,7 @@ export class Session implements ControllableSession {
     if (this.userId !== null) {
       void (async () => {
         try {
-          await finalizeRecordingSet(getPool(), previous);
+          await finalizeRecordingSet(getDb(), previous);
         } catch (error) {
           this.logger.warn(
             { error, liveSessionId: previous },
@@ -984,17 +984,15 @@ export class Session implements ControllableSession {
     }
     void (async () => {
       try {
-        const pool = getPool();
-        await ensureRecordingSet(pool, {
+        const db = getDb();
+        await ensureRecordingSet(db, {
           liveSessionId: this.liveSessionId,
-          stageUuid: this.stageId
-            ? typeIdToUuid(this.stageId as StageId).uuid
-            : null,
+          stageId: this.stageId ? (this.stageId as StageId) : null,
           startedAt: new Date(this.sessionStartAt),
-          userUuid: userId,
+          userId: typeIdFromUuid("user", userId),
         });
-        await appendRecordingFrame(pool, {
-          frameUuid: typeIdToUuid(frameId).uuid,
+        await appendRecordingFrame(db, {
+          frameId,
           liveSessionId: this.liveSessionId,
           tMs,
         });
@@ -1102,6 +1100,9 @@ export class Session implements ControllableSession {
       return;
     }
     const { userId } = this;
+    // The credit + persist layer works in typeid space; convert the session's
+    // raw-uuid identity once at this boundary.
+    const userTypeId = typeIdFromUuid("user", userId);
 
     // Empty-prompt fast-exit. `serializeResolvedScene` also returns "" when
     // subjects[0] is blank, but short-circuiting here saves the resolver and
@@ -1122,7 +1123,7 @@ export class Session implements ControllableSession {
       lastCreditDenialAt: this.lastCreditDenialAt,
       logger: this.logger,
       now: Date.now(),
-      userId,
+      userId: userTypeId,
     });
     this.lastCreditDenialAt = gate.nextLastDenialAt;
 
@@ -1262,7 +1263,7 @@ export class Session implements ControllableSession {
         // generations through onError too, and the user should get the
         // credit back since no frame was delivered. Free-tier paths set
         // paidCost=null so this is a no-op for them.
-        refundOnError(userId, paidCost, this.logger);
+        refundOnError(userTypeId, paidCost, this.logger);
         // Aborts are expected (newer trigger superseded this one). Don't
         // log noisily or surface to the client.
         if (controller.signal.aborted) {
@@ -1353,7 +1354,7 @@ export class Session implements ControllableSession {
           sessionId: this.liveSessionId,
           tMs,
           triggerReason: source,
-          userId,
+          userId: userTypeId,
           width: size.width,
         });
         void (async () => {

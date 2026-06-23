@@ -14,15 +14,16 @@ import { createTestUser } from "@sonara/test-utils/factories";
 import { getTestDb } from "@sonara/test-utils/test-db";
 import type { TestDb } from "@sonara/test-utils/test-db";
 
+import { __setDbForTests } from "../db/db";
 import {
   CREDIT_DENIAL_COOLDOWN_MS,
   COST_PER_FRAME,
   tryDebitCredit,
 } from "./credit-gate";
-import { __setPoolForTests } from "./credits.service";
 
-// The credit gate works in raw-uuid space; derive the actor uuid from a real
-// typeid so the user-row factory insert round-trips cleanly.
+// The credit gate now works in typeid space (drizzle translates to the stored
+// uuid). tryDebitCredit is called with the typeid (USER_ID); the raw t.pg
+// seedCredits helper still addresses the uuid column directly (USER).
 const USER_ID = typeIdGenerator("user") as UserId;
 const USER = typeIdToUuid(USER_ID).uuid;
 const NOW = 1_700_000_000_000;
@@ -32,11 +33,11 @@ let t: TestDb;
 
 beforeAll(async () => {
   t = await getTestDb();
-  __setPoolForTests(t.pool);
+  __setDbForTests(t.db);
 }, 30_000);
 
 afterAll(() => {
-  __setPoolForTests(null);
+  __setDbForTests(null);
 });
 
 beforeEach(async () => {
@@ -62,7 +63,7 @@ describe("paid debit", () => {
       lastCreditDenialAt: 0,
       logger,
       now: NOW,
-      userId: USER,
+      userId: USER_ID,
     });
     expect(r.ok).toBe(true);
     if (r.ok) {
@@ -77,7 +78,7 @@ describe("paid debit", () => {
       lastCreditDenialAt: NOW - 1000,
       logger,
       now: NOW,
-      userId: USER,
+      userId: USER_ID,
     });
     expect(r.ok).toBe(true);
     if (r.ok) {
@@ -94,7 +95,7 @@ describe("free-tier fallback", () => {
       lastCreditDenialAt: 0,
       logger,
       now: NOW,
-      userId: USER,
+      userId: USER_ID,
     });
     expect(r.ok).toBe(true);
     if (r.ok) {
@@ -113,7 +114,7 @@ describe("free-tier fallback", () => {
         lastCreditDenialAt: 0,
         logger,
         now: NOW,
-        userId: USER,
+        userId: USER_ID,
       });
     }
     // Fourth call exceeds the free quota
@@ -122,7 +123,7 @@ describe("free-tier fallback", () => {
       lastCreditDenialAt: 0,
       logger,
       now: NOW,
-      userId: USER,
+      userId: USER_ID,
     });
     expect(r.ok).toBe(false);
     if (!r.ok) {
@@ -146,7 +147,7 @@ describe("cooldown rule", () => {
         lastCreditDenialAt: 0,
         logger,
         now: NOW,
-        userId: USER,
+        userId: USER_ID,
       });
     }
   };
@@ -158,7 +159,7 @@ describe("cooldown rule", () => {
       lastCreditDenialAt: 0,
       logger,
       now: NOW,
-      userId: USER,
+      userId: USER_ID,
     });
     expect(r.ok).toBe(false);
     if (!r.ok) {
@@ -175,7 +176,7 @@ describe("cooldown rule", () => {
       lastCreditDenialAt: NOW - 1000,
       logger,
       now: NOW,
-      userId: USER,
+      userId: USER_ID,
     });
     expect(r.ok).toBe(false);
     if (!r.ok) {
@@ -192,7 +193,7 @@ describe("cooldown rule", () => {
       lastCreditDenialAt: NOW - CREDIT_DENIAL_COOLDOWN_MS - 1000,
       logger,
       now: NOW,
-      userId: USER,
+      userId: USER_ID,
     });
     expect(r.ok).toBe(false);
     if (!r.ok) {
@@ -209,7 +210,7 @@ describe("cooldown rule", () => {
       lastCreditDenialAt: NOW - 1000,
       logger,
       now: NOW,
-      userId: USER,
+      userId: USER_ID,
     });
     expect(r.ok).toBe(false);
     if (!r.ok) {

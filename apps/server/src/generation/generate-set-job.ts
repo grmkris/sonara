@@ -1,7 +1,7 @@
 import { SCHEMA } from "@sonara/db";
 import type { Database } from "@sonara/db";
 import { typeIdGenerator } from "@sonara/shared/typeid";
-import type { FrameSetId } from "@sonara/shared/typeid";
+import type { FrameSetId, UserId } from "@sonara/shared/typeid";
 import { eq } from "drizzle-orm";
 
 import {
@@ -104,7 +104,9 @@ const renderFrame = (args: {
 
 interface RunArgs {
   db: Database;
-  userId: string;
+  // App-standard `usr_…` typeid — flows straight into the (drizzle) credit +
+  // persist layer, which keys on the typeid.
+  userId: UserId;
   setId: FrameSetId;
   prompts: string[];
   logger: Logger;

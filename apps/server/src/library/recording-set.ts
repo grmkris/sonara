@@ -1,18 +1,30 @@
-import { typeIdToUuid } from "@sonara/shared/typeid";
-import type { LiveSessionId } from "@sonara/shared/typeid";
-
-import type { PoolLike } from "../db/pool";
+import { SCHEMA } from "@sonara/db";
+import type { Database } from "@sonara/db";
+import { typeIdFromUuid, typeIdToUuid } from "@sonara/shared/typeid";
+import type {
+  FrameSetId,
+  ImageLibraryId,
+  LiveSessionId,
+  StageId,
+  UserId,
+} from "@sonara/shared/typeid";
+import { and, eq, inArray, sql } from "drizzle-orm";
 
 // Recording-on-live: a signed-in performance auto-records into a frame_set
 // (origin 'recording'). Same identity scheme as the boot converger
 // (frame-set-boot-migrate.ts): set uuid = the lse_ typeid's uuid, so the
 // converger, this live path, and a /s/<set_id> permalink all land on the same
-// row for the same performance. Every call is plain idempotent SQL — callers
+// row for the same performance. drizzle over the shared db handle — callers
 // fire-and-forget; recording must never break generation.
 
 // Name format matches the converger's backfilled recordings ("2026-06-09 · 14:05").
 const recordingName = (startedAt: Date): string =>
   startedAt.toISOString().slice(0, 16).replace("T", " · ");
+
+// The recording set's id: a frameSet typeid whose uuid IS the live session's
+// uuid, so /s/<set_id> is derivable from the lse id without a round trip.
+const recordingSetId = (liveSessionId: LiveSessionId): FrameSetId =>
+  typeIdFromUuid("frameSet", typeIdToUuid(liveSessionId).uuid);
 
 // Upsert the performance's recording set. Cheap enough to run before every
 // frame append; ON CONFLICT resumes status='recording' so a reconnect (or a
@@ -24,71 +36,82 @@ const recordingName = (startedAt: Date): string =>
 // link is the capability. (Converger-backfilled legacy sessions stay private;
 // nobody ever held their links.) The owner can flip to private to kill a link.
 export const ensureRecordingSet = async (
-  pool: PoolLike,
+  db: Database,
   opts: {
     liveSessionId: LiveSessionId;
-    userUuid: string;
+    userId: UserId;
     startedAt: Date;
-    // The stage (uuid form) this run plays on; null for legacy/anon runs.
-    // COALESCE keeps an existing stamp — a resume can only fill, never move
-    // a recording to a different stage.
-    stageUuid?: string | null;
+    // The stage this run plays on; null for legacy/anon runs. COALESCE keeps
+    // an existing stamp — a resume can only fill, never move a recording to a
+    // different stage.
+    stageId?: StageId | null;
   }
 ): Promise<void> => {
-  const setUuid = typeIdToUuid(opts.liveSessionId).uuid;
-  await pool.query(
-    `INSERT INTO frame_set
-       (id, live_session_id, name, origin, stage_id, status, user_id, visibility)
-     VALUES ($1::uuid, $2, $3, 'recording', $5::uuid, 'recording', $4::uuid, 'unlisted')
-     ON CONFLICT (id) DO UPDATE
-       SET status = 'recording',
-           stage_id = COALESCE(frame_set.stage_id, EXCLUDED.stage_id)`,
-    [
-      setUuid,
-      opts.liveSessionId,
-      recordingName(opts.startedAt),
-      opts.userUuid,
-      opts.stageUuid ?? null,
-    ]
-  );
+  await db
+    .insert(SCHEMA.frameSet)
+    .values({
+      id: recordingSetId(opts.liveSessionId),
+      liveSessionId: opts.liveSessionId,
+      name: recordingName(opts.startedAt),
+      origin: "recording",
+      stageId: opts.stageId ?? null,
+      status: "recording",
+      userId: opts.userId,
+      visibility: "unlisted",
+    })
+    .onConflictDoUpdate({
+      set: {
+        stageId: sql`COALESCE(${SCHEMA.frameSet.stageId}, excluded.stage_id)`,
+        status: "recording",
+      },
+      target: SCHEMA.frameSet.id,
+    });
 };
 
 // Append one persisted frame at the end of the recording. Bare ON CONFLICT DO
 // NOTHING covers both unique indexes ((set_id, frame_id) and
 // (set_id, position)); the frame_count cache only bumps on an actual insert.
 export const appendRecordingFrame = async (
-  pool: PoolLike,
-  opts: { liveSessionId: LiveSessionId; frameUuid: string; tMs: number }
+  db: Database,
+  opts: { liveSessionId: LiveSessionId; frameId: ImageLibraryId; tMs: number }
 ): Promise<void> => {
+  const setId = recordingSetId(opts.liveSessionId);
+  // The position subquery lives in a raw sql fragment, which binds values
+  // verbatim (no typeId translation) — so it addresses set_id by the raw uuid.
   const setUuid = typeIdToUuid(opts.liveSessionId).uuid;
-  const inserted = await pool.query(
-    `INSERT INTO frame_set_frame (id, set_id, frame_id, position, t_ms)
-     VALUES (gen_random_uuid(), $1::uuid, $2::uuid,
-             COALESCE((SELECT max(position) + 1 FROM frame_set_frame
-                       WHERE set_id = $1::uuid), 0),
-             $3)
-     ON CONFLICT DO NOTHING`,
-    [setUuid, opts.frameUuid, opts.tMs]
-  );
-  if ((inserted.rowCount ?? 0) > 0) {
-    await pool.query(
-      "UPDATE frame_set SET frame_count = frame_count + 1 WHERE id = $1::uuid",
-      [setUuid]
-    );
+  const inserted = await db
+    .insert(SCHEMA.frameSetFrame)
+    .values({
+      frameId: opts.frameId,
+      position: sql`COALESCE((SELECT max(${SCHEMA.frameSetFrame.position}) + 1 FROM ${SCHEMA.frameSetFrame} WHERE ${SCHEMA.frameSetFrame.setId} = ${setUuid}::uuid), 0)`,
+      setId,
+      tMs: opts.tMs,
+    })
+    .onConflictDoNothing()
+    .returning();
+  if (inserted.length > 0) {
+    await db
+      .update(SCHEMA.frameSet)
+      .set({ frameCount: sql`${SCHEMA.frameSet.frameCount} + 1` })
+      .where(eq(SCHEMA.frameSet.id, setId));
   }
 };
 
 // Close out the performance: the take is final. Status-guarded so finalizing
 // an already-final (or never-created) recording is a no-op.
 export const finalizeRecordingSet = async (
-  pool: PoolLike,
+  db: Database,
   liveSessionId: LiveSessionId
 ): Promise<void> => {
-  await pool.query(
-    `UPDATE frame_set SET status = 'final'
-     WHERE live_session_id = $1 AND status = 'recording'`,
-    [liveSessionId]
-  );
+  await db
+    .update(SCHEMA.frameSet)
+    .set({ status: "final" })
+    .where(
+      and(
+        eq(SCHEMA.frameSet.liveSessionId, liveSessionId),
+        eq(SCHEMA.frameSet.status, "recording")
+      )
+    );
 };
 
 // Boot sweep: the session registry is in-memory, so any row still 'recording'
@@ -98,15 +121,18 @@ export const finalizeRecordingSet = async (
 // reconnecting screen mints a fresh lse id), and the one resumable case —
 // legacy clients re-sending their sessionStorage lse — re-opens the set via
 // ensureRecordingSet's ON CONFLICT anyway. Returns the swept count.
+//
+// Also sweeps stale 'generating' sets: an AI "generate a set" job is a
+// single-process fire-and-forget loop, so a deploy/crash mid-generation leaves
+// the set 'generating' with no worker to resume it. Finalizing it here leaves
+// a usable partial set (the frames it managed to persist).
 export const finalizeStaleRecordingSets = async (
-  pool: PoolLike
+  db: Database
 ): Promise<number> => {
-  // Also sweeps stale 'generating' sets: an AI "generate a set" job is a
-  // single-process fire-and-forget loop, so a deploy/crash mid-generation
-  // leaves the set 'generating' with no worker to resume it. Finalizing it
-  // here leaves a usable partial set (the frames it managed to persist).
-  const res = await pool.query(
-    "UPDATE frame_set SET status = 'final' WHERE status IN ('recording', 'generating')"
-  );
-  return res.rowCount ?? 0;
+  const rows = await db
+    .update(SCHEMA.frameSet)
+    .set({ status: "final" })
+    .where(inArray(SCHEMA.frameSet.status, ["recording", "generating"]))
+    .returning();
+  return rows.length;
 };
