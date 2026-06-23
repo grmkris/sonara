@@ -41,8 +41,9 @@ import { COST_PER_FRAME } from "../credits/credit-gate";
 import { getBalance } from "../credits/credits.service";
 import { expandSet } from "../generation/expand-set";
 import {
-  isUserGenerating,
+  releaseUser,
   startSetGeneration,
+  tryClaimUser,
 } from "../generation/generate-set-job";
 import { logger } from "../lib/logger";
 import { stageRooms } from "../stage/stage-rooms";
@@ -547,65 +548,78 @@ export const setsRouter = {
     .handler(async ({ context, input }) => {
       const { db, userId } = context;
 
-      if (isUserGenerating(userId)) {
+      // Claim the one-generation-per-user slot ATOMICALLY and up front — held
+      // across the slow LLM expansion below so a double-submit can't slip a
+      // second job through (which would create two sets + double-charge).
+      if (!tryClaimUser(userId)) {
         throw new ORPCError("CONFLICT", {
           message: "A set is already generating — let it finish first.",
         });
       }
 
-      // Fail fast: a generate request that can't pay for all its frames is
-      // rejected before the LLM call or any DB write.
-      const needed = input.count * COST_PER_FRAME;
-      const balance = await getBalance(userId);
-      if (balance.frames < needed) {
-        throw new ORPCError("BAD_REQUEST", {
-          message: `Not enough credits — this set needs ${needed}, you have ${balance.frames}.`,
-        });
-      }
+      // Release the slot on any failure BEFORE the loop takes ownership; once
+      // startSetGeneration runs, the loop's `finally` owns the release.
+      let handedOff = false;
+      try {
+        // Fail fast: a generate request that can't pay for all its frames is
+        // rejected before the LLM call or any DB write.
+        const needed = input.count * COST_PER_FRAME;
+        const balance = await getBalance(userId);
+        if (balance.frames < needed) {
+          throw new ORPCError("BAD_REQUEST", {
+            message: `Not enough credits — this set needs ${needed}, you have ${balance.frames}.`,
+          });
+        }
 
-      const jobLogger = logger.child({
-        component: "generate-set",
-        userId,
-      });
-      const spec = await expandSet({
-        count: input.count,
-        description: input.description,
-        logger: jobLogger,
-      });
-
-      // Materialize the header now (status='generating') with the AI-chosen
-      // look baked in, so the UI navigates + polls while frames stream in.
-      const [row] = await db
-        .insert(SCHEMA.frameSet)
-        .values({
-          frameCount: 0,
-          lookCadenceCalmMs: spec.look.cadence.calm,
-          lookCadenceLoudMs: spec.look.cadence.loud,
-          lookIntensity: spec.look.intensity,
-          lookPreset: spec.look.preset,
-          name: spec.name,
-          origin: "curated",
-          status: "generating",
-          styleDrift: spec.style,
+        const jobLogger = logger.child({
+          component: "generate-set",
           userId,
-        })
-        .returning();
-      if (!row) {
-        throw new ORPCError("INTERNAL_SERVER_ERROR");
+        });
+        const spec = await expandSet({
+          count: input.count,
+          description: input.description,
+          logger: jobLogger,
+        });
+
+        // Materialize the header now (status='generating') with the AI-chosen
+        // look baked in, so the UI navigates + polls while frames stream in.
+        const [row] = await db
+          .insert(SCHEMA.frameSet)
+          .values({
+            frameCount: 0,
+            lookCadenceCalmMs: spec.look.cadence.calm,
+            lookCadenceLoudMs: spec.look.cadence.loud,
+            lookIntensity: spec.look.intensity,
+            lookPreset: spec.look.preset,
+            name: spec.name,
+            origin: "curated",
+            status: "generating",
+            styleDrift: spec.style,
+            userId,
+          })
+          .returning();
+        if (!row) {
+          throw new ORPCError("INTERNAL_SERVER_ERROR");
+        }
+
+        // Detached t2i loop (credit-gated per frame). Not awaited — the header
+        // is already returned; progress shows via polling `get`.
+        startSetGeneration({
+          db,
+          logger: jobLogger,
+          prompts: spec.prompts,
+          setId: row.id,
+          userId,
+        });
+        handedOff = true;
+
+        const set = toSummary({ ...row, frameCount: 0 } as SetRow, null);
+        return { set };
+      } finally {
+        if (!handedOff) {
+          releaseUser(userId);
+        }
       }
-
-      // Detached t2i loop (credit-gated per frame). Not awaited — the header
-      // is already returned; progress shows via polling `get`.
-      startSetGeneration({
-        db,
-        logger: jobLogger,
-        prompts: spec.prompts,
-        setId: row.id,
-        userId,
-      });
-
-      const set = toSummary({ ...row, frameCount: 0 } as SetRow, null);
-      return { set };
     }),
 
   /**

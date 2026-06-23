@@ -1,19 +1,17 @@
-import { createFalClient } from "@fal-ai/client";
 import { ResolvedSceneCoreSchema } from "@sonara/shared";
 import type { SonaraSceneState, ResolvedSceneCore } from "@sonara/shared";
 
-import { env } from "../env";
 import type { Logger } from "../lib/logger";
+import { callLlmForJson, stripFences } from "./llm-json";
 
 // Server-side LLM expander: parses the user's flat prompt string + slider
 // values into a FLUX.2-style structured ResolvedSceneCore (subjects, palette
 // hex, camera, composition, drift candidates). One LLM call per prompt hash;
 // the resolver caches the result and reuses it across keyframes.
 //
-// Uses FAL's `any-llm` endpoint via the shared FAL key (no extra SDK / env).
-// Override model with FAL_LLM_MODEL.
+// Transport (Gemini-or-fal-any-llm + fence-stripping) lives in ./llm-json;
+// this module owns the scene schema, prompts, moderation, and fallback.
 
-const DEFAULT_MODEL = "google/gemini-2.5-flash-lite";
 const MAX_OUTPUT_TOKENS = 600;
 
 // Used ONLY when the moderator flags a prompt unsafe but returns a malformed
@@ -76,32 +74,6 @@ Sliders (0..1):
   stability: ${s.stability.toFixed(2)}
 
 Emit the JSON object.`;
-};
-
-interface AnyLlmResult {
-  output?: string;
-}
-
-const extractOutput = (data: unknown): string | null => {
-  if (!data || typeof data !== "object") {
-    return null;
-  }
-  const r = data as AnyLlmResult;
-  if (typeof r.output === "string") {
-    return r.output;
-  }
-  return null;
-};
-
-const stripFences = (text: string): string => {
-  let out = text.trim();
-  const fence = /^```(?:json)?\s*\n?(?<body>[\s\S]*?)\n?```$/u;
-  const m = out.match(fence);
-  const body = m?.groups?.body;
-  if (body !== undefined && body.length > 0) {
-    out = body.trim();
-  }
-  return out;
 };
 
 // Heuristic anchor extraction: take the first ~5 words of the prompt as the
@@ -181,98 +153,27 @@ export interface ExpandSceneOpts {
   logger: Logger;
 }
 
-// Pull the text payload out of a Gemini generateContent response.
-const extractGeminiText = (data: unknown): string | null => {
-  if (data === null || typeof data !== "object") {
-    return null;
-  }
-  const { candidates } = data as { candidates?: unknown };
-  if (!Array.isArray(candidates) || candidates.length === 0) {
-    return null;
-  }
-  const parts = (candidates[0] as { content?: { parts?: unknown } })?.content
-    ?.parts;
-  if (!Array.isArray(parts) || parts.length === 0) {
-    return null;
-  }
-  const { text } = parts[0] as { text?: unknown };
-  return typeof text === "string" ? text : null;
-};
-
-// Direct Google Gemini call — bypasses fal any-llm's ~1.5-2s queue overhead.
-// responseMimeType JSON forces a bare JSON object (no markdown fences).
-const callGemini = async (
-  apiKey: string,
-  system: string,
-  user: string,
-  signal: AbortSignal | undefined
-): Promise<string | null> => {
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${env.GEMINI_MODEL}:generateContent`;
-  const res = await fetch(url, {
-    body: JSON.stringify({
-      contents: [{ parts: [{ text: user }] }],
-      generationConfig: {
-        maxOutputTokens: MAX_OUTPUT_TOKENS,
-        responseMimeType: "application/json",
-        temperature: 0.8,
-      },
-      systemInstruction: { parts: [{ text: system }] },
-    }),
-    // This key authenticates via the header, not a ?key= query param.
-    headers: { "Content-Type": "application/json", "x-goog-api-key": apiKey },
-    method: "POST",
-    signal,
-  });
-  if (!res.ok) {
-    const errBody = await res.text();
-    throw new Error(`gemini ${res.status}: ${errBody.slice(0, 200)}`);
-  }
-  const json = await res.json();
-  return extractGeminiText(json);
-};
-
-// FAL any-llm fallback (the original transport). Used when GEMINI_API_KEY is
-// unset. Carries the queue overhead; kept for zero-config deploys.
-const callFalAnyLlm = async (
-  system: string,
-  user: string,
-  signal: AbortSignal | undefined
-): Promise<string | null> => {
-  const model = env.FAL_LLM_MODEL ?? DEFAULT_MODEL;
-  const scoped = createFalClient({ credentials: env.FAL_KEY });
-  const result = await scoped.subscribe("fal-ai/any-llm", {
-    abortSignal: signal,
-    input: {
-      max_tokens: MAX_OUTPUT_TOKENS,
-      model,
-      priority: "latency",
-      prompt: user,
-      system_prompt: system,
-    },
-    logs: false,
-  });
-  return extractOutput(result?.data);
-};
-
 export const expandScene = async (
   scene: SonaraSceneState,
   opts: ExpandSceneOpts
 ): Promise<ResolvedSceneCore> => {
   const system = buildSystemPrompt();
   const user = buildUserPrompt(scene);
-  const apiKey = env.GEMINI_API_KEY;
-  const useGemini = apiKey !== undefined && apiKey.length > 0;
 
   try {
-    const output = useGemini
-      ? await callGemini(apiKey, system, user, opts.signal)
-      : await callFalAnyLlm(system, user, opts.signal);
+    const output = await callLlmForJson({
+      maxTokens: MAX_OUTPUT_TOKENS,
+      signal: opts.signal,
+      system,
+      temperature: 0.8,
+      user,
+    });
     if (opts.signal?.aborted) {
       return deterministicResolve(scene);
     }
 
     if (output === null || output.length === 0) {
-      opts.logger.debug({ useGemini }, "scene-expander: empty LLM output");
+      opts.logger.debug("scene-expander: empty LLM output");
       return deterministicResolve(scene);
     }
 

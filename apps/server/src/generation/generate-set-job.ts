@@ -34,8 +34,23 @@ const NOMINAL_FRAME_MS = 2000;
 // sweep finalizes its set.
 const inFlight = new Set<string>();
 
-export const isUserGenerating = (userId: string): boolean =>
-  inFlight.has(userId);
+// Atomic claim: returns false if the user already has a generation running,
+// else marks them in-flight and returns true. JS is single-threaded and there
+// is no await between the `has` and the `add`, so two concurrent `generate`
+// calls cannot both win the slot — this is what prevents a double-submit from
+// creating two sets + double-charging. The RPC claims here BEFORE the (slow)
+// LLM expansion; `startSetGeneration` then owns the slot and releases it.
+export const tryClaimUser = (userId: string): boolean => {
+  if (inFlight.has(userId)) {
+    return false;
+  }
+  inFlight.add(userId);
+  return true;
+};
+
+export const releaseUser = (userId: string): void => {
+  inFlight.delete(userId);
+};
 
 // Deterministic seed from (prompt, index) so a given spec renders
 // reproducibly and the seeds are well-spread across the set. Plain
@@ -126,12 +141,13 @@ const runLoop = async (args: RunArgs): Promise<void> => {
       break;
     }
 
+    const seed = seedFrom(prompt, i);
     let url: string;
     try {
       url = await renderFrame({
         logger,
         prompt,
-        seed: seedFrom(prompt, i),
+        seed,
         signal: controller.signal,
       });
     } catch (error) {
@@ -150,7 +166,7 @@ const runLoop = async (args: RunArgs): Promise<void> => {
       model: env.FAL_TEXT_MODEL,
       palette: null,
       prompt,
-      seed: seedFrom(prompt, i),
+      seed,
       sessionId: jobSessionId,
       tMs: i * NOMINAL_FRAME_MS,
       triggerReason: "generated",
@@ -197,10 +213,11 @@ const runLoop = async (args: RunArgs): Promise<void> => {
   logger.info({ frameCount: position, setId }, "generate-set: complete");
 };
 
-// Fire-and-forget. Marks the user in-flight, runs the loop detached (never
-// awaited by the RPC), and always clears the guard when it settles.
+// Fire-and-forget. The caller has ALREADY claimed the in-flight slot via
+// tryClaimUser (so the slot is held across the LLM expansion too); this runs
+// the loop detached (never awaited by the RPC) and always releases the slot
+// when it settles.
 export const startSetGeneration = (args: RunArgs): void => {
-  inFlight.add(args.userId);
   void (async () => {
     try {
       await runLoop(args);
@@ -210,7 +227,7 @@ export const startSetGeneration = (args: RunArgs): void => {
         "generate-set: loop threw unexpectedly"
       );
     } finally {
-      inFlight.delete(args.userId);
+      releaseUser(args.userId);
     }
   })();
 };

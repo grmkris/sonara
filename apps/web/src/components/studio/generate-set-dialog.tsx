@@ -76,7 +76,6 @@ export const GenerateSetDialog = ({
               </span>
               <textarea
                 value={description}
-                // biome-ignore lint/a11y/noAutofocus: focus the one input on open
                 autoFocus
                 maxLength={DESC_MAX}
                 placeholder={PLACEHOLDER}

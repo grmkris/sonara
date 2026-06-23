@@ -1,12 +1,11 @@
-import { createFalClient } from "@fal-ai/client";
 import {
   VISUAL_PRESET_DESCRIPTIONS,
   VISUAL_PRESET_NAMES,
 } from "@sonara/shared";
 import { z } from "zod";
 
-import { env } from "../env";
 import type { Logger } from "../lib/logger";
+import { callLlmForJson, stripFences } from "./llm-json";
 
 // Server-side LLM expander for the "generate a set with AI" feature. Turns a
 // user's free-text description + a frame count into a coherent SetSpec — one
@@ -20,9 +19,11 @@ import type { Logger } from "../lib/logger";
 // FAL_KEY); strip fences → JSON.parse → zod-validate → deterministic fallback
 // so generation never hard-fails on an off-spec model.
 
-const DEFAULT_MODEL = "google/gemini-2.5-flash-lite";
-// Larger budget than the per-scene expander — a set is N prompts in one shot.
-const MAX_OUTPUT_TOKENS = 2000;
+// Output-token budget scales with the prompt count — a set is N prompts in
+// one shot, so a fixed budget would truncate large sets mid-JSON and drop us
+// to the deterministic fallback. Flash-lite caps output at 8192.
+const maxTokensFor = (count: number): number =>
+  Math.min(8000, 800 + count * 180);
 
 export interface SetSpec {
   // 2-5 word library title for the set.
@@ -77,97 +78,6 @@ const buildUserPrompt = (description: string, count: number): string =>
   `Description: "${description.trim()}"
 
 Design the set: pick the palette + aesthetic, choose a fitting preset/intensity/cadence, and write EXACTLY ${count} prompts that all obey that one world. Emit the JSON object.`;
-
-interface AnyLlmResult {
-  output?: string;
-}
-
-const extractOutput = (data: unknown): string | null => {
-  if (!data || typeof data !== "object") {
-    return null;
-  }
-  const r = data as AnyLlmResult;
-  return typeof r.output === "string" ? r.output : null;
-};
-
-const stripFences = (text: string): string => {
-  let out = text.trim();
-  const fence = /^```(?:json)?\s*\n?(?<body>[\s\S]*?)\n?```$/u;
-  const m = out.match(fence);
-  const body = m?.groups?.body;
-  if (body !== undefined && body.length > 0) {
-    out = body.trim();
-  }
-  return out;
-};
-
-// Pull the text payload out of a Gemini generateContent response.
-const extractGeminiText = (data: unknown): string | null => {
-  if (data === null || typeof data !== "object") {
-    return null;
-  }
-  const { candidates } = data as { candidates?: unknown };
-  if (!Array.isArray(candidates) || candidates.length === 0) {
-    return null;
-  }
-  const parts = (candidates[0] as { content?: { parts?: unknown } })?.content
-    ?.parts;
-  if (!Array.isArray(parts) || parts.length === 0) {
-    return null;
-  }
-  const { text } = parts[0] as { text?: unknown };
-  return typeof text === "string" ? text : null;
-};
-
-const callGemini = async (
-  apiKey: string,
-  system: string,
-  user: string,
-  signal: AbortSignal | undefined
-): Promise<string | null> => {
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${env.GEMINI_MODEL}:generateContent`;
-  const res = await fetch(url, {
-    body: JSON.stringify({
-      contents: [{ parts: [{ text: user }] }],
-      generationConfig: {
-        maxOutputTokens: MAX_OUTPUT_TOKENS,
-        responseMimeType: "application/json",
-        temperature: 0.9,
-      },
-      systemInstruction: { parts: [{ text: system }] },
-    }),
-    headers: { "Content-Type": "application/json", "x-goog-api-key": apiKey },
-    method: "POST",
-    signal,
-  });
-  if (!res.ok) {
-    const errBody = await res.text();
-    throw new Error(`gemini ${res.status}: ${errBody.slice(0, 200)}`);
-  }
-  const json = await res.json();
-  return extractGeminiText(json);
-};
-
-const callFalAnyLlm = async (
-  system: string,
-  user: string,
-  signal: AbortSignal | undefined
-): Promise<string | null> => {
-  const model = env.FAL_LLM_MODEL ?? DEFAULT_MODEL;
-  const scoped = createFalClient({ credentials: env.FAL_KEY });
-  const result = await scoped.subscribe("fal-ai/any-llm", {
-    abortSignal: signal,
-    input: {
-      max_tokens: MAX_OUTPUT_TOKENS,
-      model,
-      priority: "latency",
-      prompt: user,
-      system_prompt: system,
-    },
-    logs: false,
-  });
-  return extractOutput(result?.data);
-};
 
 // Validation: preset must be a real key; counts clamp; prompts must number
 // exactly `count` (we pad/trim defensively below before this runs).
@@ -243,18 +153,20 @@ export const expandSet = async (input: ExpandSetInput): Promise<SetSpec> => {
   const { count, description, logger, signal } = input;
   const system = buildSystemPrompt(count);
   const user = buildUserPrompt(description, count);
-  const apiKey = env.GEMINI_API_KEY;
-  const useGemini = apiKey !== undefined && apiKey.length > 0;
 
   try {
-    const output = useGemini
-      ? await callGemini(apiKey, system, user, signal)
-      : await callFalAnyLlm(system, user, signal);
+    const output = await callLlmForJson({
+      maxTokens: maxTokensFor(count),
+      signal,
+      system,
+      temperature: 0.9,
+      user,
+    });
     if (signal?.aborted) {
       return deterministicSet(description, count);
     }
     if (output === null || output.length === 0) {
-      logger.debug({ useGemini }, "expand-set: empty LLM output");
+      logger.debug("expand-set: empty LLM output");
       return deterministicSet(description, count);
     }
 
