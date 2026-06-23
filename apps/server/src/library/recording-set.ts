@@ -101,8 +101,12 @@ export const finalizeRecordingSet = async (
 export const finalizeStaleRecordingSets = async (
   pool: PoolLike
 ): Promise<number> => {
+  // Also sweeps stale 'generating' sets: an AI "generate a set" job is a
+  // single-process fire-and-forget loop, so a deploy/crash mid-generation
+  // leaves the set 'generating' with no worker to resume it. Finalizing it
+  // here leaves a usable partial set (the frames it managed to persist).
   const res = await pool.query(
-    "UPDATE frame_set SET status = 'final' WHERE status = 'recording'"
+    "UPDATE frame_set SET status = 'final' WHERE status IN ('recording', 'generating')"
   );
   return res.rowCount ?? 0;
 };

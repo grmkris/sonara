@@ -37,6 +37,14 @@ import {
 } from "drizzle-orm";
 import { z } from "zod";
 
+import { COST_PER_FRAME } from "../credits/credit-gate";
+import { getBalance } from "../credits/credits.service";
+import { expandSet } from "../generation/expand-set";
+import {
+  isUserGenerating,
+  startSetGeneration,
+} from "../generation/generate-set-job";
+import { logger } from "../lib/logger";
 import { stageRooms } from "../stage/stage-rooms";
 import { stageState } from "../stage/stage-state";
 import { FRAME_COLUMNS, frameReadUrl, rowToFrame } from "./frame-mapping";
@@ -80,6 +88,12 @@ const LIST_DEFAULT_LIMIT = 50;
 const LIST_MAX_LIMIT = 100;
 const NAME_MAX = 120;
 const BATCH_FRAMES_MAX = 200;
+// "Generate a set with AI" bounds: each prompt is one billed t2i frame, so
+// the count is the credit cost. Kept small — a set is one coherent world.
+const GENERATE_COUNT_MIN = 4;
+const GENERATE_COUNT_MAX = 24;
+const GENERATE_DESC_MIN = 4;
+const GENERATE_DESC_MAX = 500;
 
 const SET_COLUMNS = {
   coverFrameId: SCHEMA.frameSet.coverFrameId,
@@ -106,7 +120,7 @@ type SetRow = {
   id: FrameSetId;
   name: string;
   origin: "builtin" | "recording" | "curated";
-  status: "recording" | "final";
+  status: "recording" | "generating" | "final";
   visibility: "private" | "unlisted" | "public";
   frameCount: number;
   createdAt: Date;
@@ -508,6 +522,93 @@ export const setsRouter = {
     }),
 
   /**
+   * "Generate a set with AI": the user describes a set + picks a frame count;
+   * the LLM expands it into one coherent visual world (palette/style anchor +
+   * a baked look + N palette-anchored prompts), and a fire-and-forget loop
+   * renders each prompt (independent t2i), persists it, and appends it. The
+   * header returns immediately as `status:'generating'` so the UI can navigate
+   * and poll `get` while frames stream in; it flips to `'final'` when done.
+   *
+   * Cost: one credit per frame (count). Pre-checked against the paid balance
+   * up front so an under-funded request is rejected before any work. A single
+   * generation per user at a time (in-memory guard).
+   */
+  generate: protectedProcedure
+    .input(
+      z.object({
+        count: z.number().int().min(GENERATE_COUNT_MIN).max(GENERATE_COUNT_MAX),
+        description: z
+          .string()
+          .trim()
+          .min(GENERATE_DESC_MIN)
+          .max(GENERATE_DESC_MAX),
+      })
+    )
+    .handler(async ({ context, input }) => {
+      const { db, userId } = context;
+
+      if (isUserGenerating(userId)) {
+        throw new ORPCError("CONFLICT", {
+          message: "A set is already generating — let it finish first.",
+        });
+      }
+
+      // Fail fast: a generate request that can't pay for all its frames is
+      // rejected before the LLM call or any DB write.
+      const needed = input.count * COST_PER_FRAME;
+      const balance = await getBalance(userId);
+      if (balance.frames < needed) {
+        throw new ORPCError("BAD_REQUEST", {
+          message: `Not enough credits — this set needs ${needed}, you have ${balance.frames}.`,
+        });
+      }
+
+      const jobLogger = logger.child({
+        component: "generate-set",
+        userId,
+      });
+      const spec = await expandSet({
+        count: input.count,
+        description: input.description,
+        logger: jobLogger,
+      });
+
+      // Materialize the header now (status='generating') with the AI-chosen
+      // look baked in, so the UI navigates + polls while frames stream in.
+      const [row] = await db
+        .insert(SCHEMA.frameSet)
+        .values({
+          frameCount: 0,
+          lookCadenceCalmMs: spec.look.cadence.calm,
+          lookCadenceLoudMs: spec.look.cadence.loud,
+          lookIntensity: spec.look.intensity,
+          lookPreset: spec.look.preset,
+          name: spec.name,
+          origin: "curated",
+          status: "generating",
+          styleDrift: spec.style,
+          userId,
+        })
+        .returning();
+      if (!row) {
+        throw new ORPCError("INTERNAL_SERVER_ERROR");
+      }
+
+      // Detached t2i loop (credit-gated per frame). Not awaited — the header
+      // is already returned; progress shows via polling `get`.
+      startSetGeneration({
+        db,
+        logger: jobLogger,
+        prompts: spec.prompts,
+        setId: row.id,
+        userId,
+      });
+
+      const set = toSummary({ ...row, frameCount: 0 } as SetRow, null);
+      return { set };
+    }),
+
+  /**
    * Full set: header + ordered member frames (fresh read urls). PUBLIC with
    * optional auth — the /s/[id] replay path. Member tMs (the junction's
    * original-timing offset; recordings only) overrides the frame row's own.
@@ -574,7 +675,7 @@ export const setsRouter = {
         liveSessionId: LiveSessionId | null;
         name: string;
         origin: "builtin" | "recording" | "curated";
-        status: "recording" | "final";
+        status: "recording" | "generating" | "final";
         userId: UserId | null;
         visibility: "private" | "unlisted" | "public";
       } | null = null;

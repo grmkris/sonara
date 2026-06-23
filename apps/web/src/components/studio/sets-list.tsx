@@ -5,6 +5,7 @@ import { Plus } from "lucide-react";
 import type { ReactNode } from "react";
 import { useState } from "react";
 
+import { GenerateSetDialog } from "@/components/studio/generate-set-dialog";
 import { LibraryRow } from "@/components/studio/library-row";
 import { NewSetDropRow, SetDropRow } from "@/components/studio/set-drop-row";
 
@@ -19,6 +20,9 @@ interface SetsListProps {
   selectedSetId: string | null;
   onSelect: (setId: string) => void;
   onCreate: (name: string) => void;
+  // "Generate a set with AI" — opens the describe-a-world dialog. Returns true
+  // once the generating set was created (the dialog closes on success).
+  onGenerate: (description: string, count: number) => Promise<boolean>;
   // Size of the in-flight frame drag (0 = none) — rows light up as targets.
   dragCount?: number;
 }
@@ -53,6 +57,7 @@ export const SetsList = ({
   selectedSetId,
   onSelect,
   onCreate,
+  onGenerate,
   dragCount = 0,
 }: SetsListProps) => {
   const [creating, setCreating] = useState(false);
@@ -109,15 +114,18 @@ export const SetsList = ({
         <h3 className="font-sans text-[9px] uppercase tracking-[0.26em] text-[color:var(--stone)]">
           sets
         </h3>
-        <button
-          type="button"
-          onClick={() => setCreating((c) => !c)}
-          aria-label="new set"
-          className="focus-ring flex items-center gap-1 font-sans text-[9px] uppercase tracking-[0.22em] text-[color:var(--stone)] transition-colors hover:text-[color:var(--paper)]"
-        >
-          <Plus className="size-3" strokeWidth={1.5} />
-          new
-        </button>
+        <div className="flex items-center gap-3">
+          <GenerateSetDialog onGenerate={onGenerate} />
+          <button
+            type="button"
+            onClick={() => setCreating((c) => !c)}
+            aria-label="new set"
+            className="focus-ring flex items-center gap-1 font-sans text-[9px] uppercase tracking-[0.22em] text-[color:var(--stone)] transition-colors hover:text-[color:var(--paper)]"
+          >
+            <Plus className="size-3" strokeWidth={1.5} />
+            new
+          </button>
+        </div>
       </div>
 
       {creating && (

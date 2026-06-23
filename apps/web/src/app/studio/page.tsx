@@ -2,7 +2,7 @@
 
 import type { FrameSet, FrameSetSummary } from "@sonara/shared";
 import type { FrameSetId } from "@sonara/shared/typeid";
-import { ChevronLeft } from "lucide-react";
+import { ChevronLeft, Loader2 } from "lucide-react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
@@ -349,6 +349,35 @@ const StudioInner = () => {
       cancelled = true;
     };
   }, [isSignedIn, selectedSetId, setDetailNonce]);
+
+  // While an AI "generate a set" job is running, poll the open set so freshly
+  // rendered frames stream onto the timeline. Updates setDetail in place (no
+  // loading flash); stops the instant status flips to 'final'. Separate from
+  // the load effect so the editor doesn't blink to "loading…" every tick.
+  const generating = setDetail?.status === "generating";
+  useEffect(() => {
+    if (!(isSignedIn && selectedSetId && generating)) {
+      return;
+    }
+    let cancelled = false;
+    const tick = async () => {
+      try {
+        const detail = await rpcClient.sets.get({
+          setId: selectedSetId as FrameSetId,
+        });
+        if (!cancelled) {
+          setSetDetail(detail);
+        }
+      } catch {
+        // Transient read error — keep polling; the next tick recovers.
+      }
+    };
+    const interval = setInterval(() => void tick(), 2000);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, [isSignedIn, selectedSetId, generating]);
 
   const selectedFrame = useMemo(() => {
     const pool =
@@ -726,6 +755,47 @@ const StudioInner = () => {
   // the full editor. Extracted (like renderRecordingsCenter) so the branches
   // don't inflate StudioInner's complexity.
   const renderSetsCenter = () => {
+    // AI generation in progress: the server owns the growing frame list, so
+    // the set is read-only with a progress banner. Polling (above) streams
+    // frames in; when status flips to 'final' the normal editor returns.
+    if (setDetail && setDetail.status === "generating") {
+      const n = setDetail.frames.length;
+      return (
+        <div className="flex h-full flex-col">
+          <div className="flex shrink-0 items-center gap-2 border-b border-[color:var(--hairline)]/30 px-4 py-2 md:px-6">
+            <Loader2
+              className="size-3.5 animate-spin text-[color:var(--signal)]"
+              strokeWidth={2}
+            />
+            <span className="font-mono text-[10px] uppercase tracking-[0.22em] text-[color:var(--stone)]">
+              generating — {n} {n === 1 ? "frame" : "frames"} so far
+            </span>
+          </div>
+          <div className="min-h-0 flex-1">
+            <SetEditor
+              frameSet={setDetail}
+              loading={setDetailLoading}
+              error={setDetailError}
+              onRetry={retrySetDetail}
+              selectedFrameId={selectedFrameId}
+              onFrameClick={(frameId) => onFrameOpen(frameId)}
+              onFrameOpen={onFrameOpen}
+              onFrameCheck={noop}
+              isSelected={noopFalse}
+              isSelecting={false}
+              pinned={false}
+              onTogglePinned={noop}
+              onMarquee={noop}
+              onWhitespaceClick={onWhitespaceClick}
+              marqueeEnabled={false}
+              getDragPayload={getSetDragPayload}
+              selectionApi={NEUTRAL_SELECTION}
+              selectable={false}
+            />
+          </div>
+        </div>
+      );
+    }
     if (setDetail?.origin === "builtin") {
       // Built-in decks are edited as a client draft too — but multi-select is
       // off (seed frames aren't user-owned) and clicks only inspect.
@@ -851,6 +921,7 @@ const StudioInner = () => {
                 selectedSetId={selectedSetId}
                 onSelect={onSelectSet}
                 onCreate={onCreateSet}
+                onGenerate={mutations.generateSet}
                 dragCount={dragCount}
               />
             )}

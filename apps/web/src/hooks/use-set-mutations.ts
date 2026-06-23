@@ -32,6 +32,11 @@ interface SetMutationDeps {
 
 export interface SetMutations {
   createSet: (name: string) => void;
+  // "Generate a set with AI": the server expands the description into a world
+  // + N prompts and streams frames in. Returns true once the (generating) set
+  // was created so the dialog can close; false (and toasts) on rejection
+  // (out of credits / already generating / LLM error).
+  generateSet: (description: string, count: number) => Promise<boolean>;
   // Seed a set from explicit frames (selection bar / drop on "new set").
   // Undoable (removes the created set).
   createSetFrom: (
@@ -139,6 +144,33 @@ export const useSetMutations = (deps: SetMutationDeps): SetMutations => {
       }
     })();
   }, []);
+
+  const generateSet = useCallback(
+    async (description: string, count: number): Promise<boolean> => {
+      try {
+        const { set: created } = await rpcClient.sets.generate({
+          count,
+          description,
+        });
+        d.current.refreshSets();
+        d.current.router.push(setsHref(created.id));
+        toast(`generating “${created.name}” — ${count} frames…`, {
+          duration: 2600,
+        });
+        return true;
+      } catch (error) {
+        // Surface the server's reason (out of credits / already generating)
+        // when present; otherwise a generic failure.
+        const message =
+          error instanceof Error && error.message.length > 0
+            ? error.message
+            : "couldn't start generation";
+        toast.error(message);
+        return false;
+      }
+    },
+    []
+  );
 
   const createSetFrom = useCallback(
     async (
@@ -564,6 +596,7 @@ export const useSetMutations = (deps: SetMutationDeps): SetMutations => {
       createSet,
       createSetFrom,
       deleteSet,
+      generateSet,
       insertFramesAt,
       makeCut,
       moveFrame,
@@ -581,6 +614,7 @@ export const useSetMutations = (deps: SetMutationDeps): SetMutations => {
       createSet,
       createSetFrom,
       deleteSet,
+      generateSet,
       insertFramesAt,
       makeCut,
       moveFrame,
