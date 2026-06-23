@@ -5,6 +5,7 @@ import type { FrameSetSummary } from "@sonara/shared";
 import { Plus } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
+import { LibraryRow } from "@/components/studio/library-row";
 import { isFramePayload } from "@/lib/curation-dnd";
 import { cn } from "@/lib/utils";
 
@@ -44,56 +45,20 @@ export const SetDropRow = ({
   }, [set.id, set.name]);
 
   return (
-    <button
-      ref={ref}
-      type="button"
+    <LibraryRow
+      rootRef={ref}
+      coverUrl={set.coverUrl}
+      title={set.name}
+      meta={
+        isOver && dragCount > 0
+          ? `+${dragCount}`
+          : `${set.frameCount} frame${set.frameCount === 1 ? "" : "s"}`
+      }
+      metaTone={isOver && dragCount > 0 ? "signal" : "default"}
+      selected={selected}
+      highlighted={isOver}
       onClick={onSelect ? () => onSelect(set.id) : undefined}
-      aria-current={selected ? "true" : undefined}
-      className={cn(
-        "focus-ring flex w-full items-center gap-3 border-b border-l-2 border-l-transparent border-[color:var(--hairline)]/20 px-4 py-2 text-left transition-colors",
-        selected
-          ? "border-l-[color:var(--paper)] bg-[color:var(--paper)]/10"
-          : "hover:bg-[color:var(--paper)]/5",
-        isOver &&
-          "bg-[color:var(--paper)]/10 ring-1 ring-inset ring-[color:var(--signal)]"
-      )}
-    >
-      {set.coverUrl ? (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img
-          src={set.coverUrl}
-          alt=""
-          loading="lazy"
-          className="size-10 shrink-0 rounded-sm border border-[color:var(--hairline)]/40 object-cover"
-        />
-      ) : (
-        <div className="size-10 shrink-0 rounded-sm border border-[color:var(--hairline)]/40 bg-[color:var(--ink)]/40" />
-      )}
-      <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-        <span
-          className={cn(
-            "truncate font-sans text-[11px] uppercase tracking-[0.16em]",
-            selected
-              ? "text-[color:var(--paper)]"
-              : "text-[color:var(--paper)]/80"
-          )}
-        >
-          {set.name}
-        </span>
-        <span
-          className={cn(
-            "font-mono text-[9px] uppercase tracking-[0.18em]",
-            isOver && dragCount > 0
-              ? "text-[color:var(--signal)]"
-              : "text-[color:var(--stone)]"
-          )}
-        >
-          {isOver && dragCount > 0
-            ? `+${dragCount}`
-            : `${set.frameCount} frame${set.frameCount === 1 ? "" : "s"}`}
-        </span>
-      </div>
-    </button>
+    />
   );
 };
 

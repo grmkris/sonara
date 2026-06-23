@@ -5,8 +5,8 @@ import { Plus } from "lucide-react";
 import type { ReactNode } from "react";
 import { useState } from "react";
 
+import { LibraryRow } from "@/components/studio/library-row";
 import { NewSetDropRow, SetDropRow } from "@/components/studio/set-drop-row";
-import { cn } from "@/lib/utils";
 
 interface SetsListProps {
   sets: FrameSetSummary[];
@@ -32,46 +32,15 @@ const BuiltinRow = ({
   selected: boolean;
   onSelect: (setId: string) => void;
 }) => (
-  <button
-    type="button"
+  <LibraryRow
+    coverUrl={set.coverUrl}
+    title={set.name}
+    meta={`${set.frameCount} frames${
+      set.look ? ` · ${set.look.preset.replaceAll("_", " ")}` : ""
+    }${set.visibility === "unlisted" ? " · unlisted" : ""}`}
+    selected={selected}
     onClick={() => onSelect(set.id)}
-    aria-current={selected ? "true" : undefined}
-    className={cn(
-      "focus-ring flex w-full items-center gap-3 border-b border-l-2 border-l-transparent border-[color:var(--hairline)]/20 px-4 py-2 text-left transition-colors",
-      selected
-        ? "border-l-[color:var(--paper)] bg-[color:var(--paper)]/10"
-        : "hover:bg-[color:var(--paper)]/5"
-    )}
-  >
-    {set.coverUrl ? (
-      // eslint-disable-next-line @next/next/no-img-element
-      <img
-        src={set.coverUrl}
-        alt=""
-        loading="lazy"
-        className="size-10 shrink-0 rounded-sm border border-[color:var(--hairline)]/40 object-cover"
-      />
-    ) : (
-      <div className="size-10 shrink-0 rounded-sm border border-[color:var(--hairline)]/40 bg-[color:var(--ink)]/40" />
-    )}
-    <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-      <span
-        className={cn(
-          "truncate font-sans text-[11px] uppercase tracking-[0.16em]",
-          selected
-            ? "text-[color:var(--paper)]"
-            : "text-[color:var(--paper)]/80"
-        )}
-      >
-        {set.name}
-      </span>
-      <span className="font-mono text-[9px] uppercase tracking-[0.18em] text-[color:var(--stone)]">
-        {set.frameCount} frames
-        {set.look ? ` · ${set.look.preset.replaceAll("_", " ")}` : ""}
-        {set.visibility === "unlisted" ? " · unlisted" : ""}
-      </span>
-    </div>
-  </button>
+  />
 );
 
 // Left-rail list of curated sets. Each card shows the cover thumb, name, and

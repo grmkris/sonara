@@ -2,7 +2,7 @@
 
 import type { FrameSet, FrameSetVisibility, SetLook } from "@sonara/shared";
 import type { ImageLibraryId } from "@sonara/shared/typeid";
-import { Pencil, RotateCcw, Save, Trash2 } from "lucide-react";
+import { Pencil, RotateCcw, Save } from "lucide-react";
 import { useEffect, useState } from "react";
 
 import { useTimelinePlayback } from "@/hooks/use-timeline-playback";
@@ -10,8 +10,8 @@ import type { FrameDragPayload, TileClickMods } from "@/lib/curation-dnd";
 
 import { ActivateOnStage } from "./activate-on-stage";
 import { ErrorState } from "./error-state";
-import { SelectModeToggle } from "./select-mode-toggle";
 import { SetEmptyDraft } from "./set-empty-draft";
+import { SetHeaderMenu } from "./set-header-menu";
 import { SetLookEditor } from "./set-look-editor";
 import { SetShareControls } from "./set-share-controls";
 import { SetTimelineTrack } from "./set-timeline-track";
@@ -103,6 +103,7 @@ const SetHeaderActions = ({
     {onLookChange && (
       <SetLookEditor look={frameSet.look} onChange={onLookChange} />
     )}
+    {frameSet.frames.length > 0 && <ActivateOnStage setId={frameSet.id} />}
     {onVisibilityChange && (
       <SetShareControls
         setId={frameSet.id}
@@ -110,10 +111,8 @@ const SetHeaderActions = ({
         onVisibilityChange={onVisibilityChange}
       />
     )}
-    {selectable && frameSet.frames.length > 0 && (
-      <SelectModeToggle active={pinned} onToggle={onTogglePinned} />
-    )}
-    {frameSet.frames.length > 0 && <ActivateOnStage setId={frameSet.id} />}
+    {/* Draft mode shows the save / discard pair inline — they're the active
+        editing actions, only present while a frozen source is being cut. */}
     {draft?.dirty && (
       <Tip text="Discard your unsaved edits">
         <button
@@ -140,19 +139,13 @@ const SetHeaderActions = ({
         </button>
       </Tip>
     )}
-    {onDelete && (
-      <Tip text="Delete this set (the frames themselves are kept)">
-        <button
-          type="button"
-          onClick={onDelete}
-          aria-label="delete set"
-          className="focus-ring inline-flex items-center gap-1.5 border border-[color:var(--hairline)]/40 px-3 py-1.5 font-sans text-[10px] uppercase tracking-[0.22em] text-[color:var(--stone)] transition-colors hover:border-[color:var(--signal)] hover:text-[color:var(--signal)]"
-        >
-          <Trash2 className="size-3" strokeWidth={1.5} />
-          delete
-        </button>
-      </Tip>
-    )}
+    {/* Secondary, occasional actions tuck into the overflow menu. */}
+    <SetHeaderMenu
+      canSelect={selectable && frameSet.frames.length > 0}
+      selectActive={pinned}
+      onToggleSelect={onTogglePinned}
+      onDelete={onDelete}
+    />
   </div>
 );
 
@@ -238,7 +231,7 @@ export const SetEditor = ({
   };
 
   return (
-    <div className="flex h-full flex-col gap-4 px-6 py-8 md:px-10">
+    <div className="flex h-full min-h-0 flex-col gap-4 overflow-y-auto px-6 py-8 md:px-10">
       <header className="flex flex-wrap items-start justify-between gap-4">
         <div className="flex min-w-0 flex-col gap-1">
           <span className="font-mono text-[10px] uppercase tracking-[0.26em] text-[color:var(--stone)]">

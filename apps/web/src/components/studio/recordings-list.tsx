@@ -3,7 +3,7 @@
 import type { FrameSetSummary } from "@sonara/shared";
 import { useMemo } from "react";
 
-import { cn } from "@/lib/utils";
+import { LibraryRow } from "@/components/studio/library-row";
 
 interface RecordingsListProps {
   recordings: FrameSetSummary[];
@@ -92,51 +92,17 @@ export const RecordingsList = ({
             {g.band}
           </h3>
           <ul className="flex flex-col">
-            {g.items.map((r) => {
-              const selected = r.id === selectedRecordingId;
-              return (
-                <li key={r.id}>
-                  <button
-                    type="button"
-                    onClick={() => onSelect(r.id)}
-                    className={cn(
-                      "focus-ring flex w-full items-center gap-3 px-4 py-2 text-left",
-                      "border-b border-l-2 border-l-transparent border-[color:var(--hairline)]/20 transition-colors",
-                      selected
-                        ? "border-l-[color:var(--paper)] bg-[color:var(--paper)]/10"
-                        : "hover:bg-[color:var(--paper)]/5"
-                    )}
-                    aria-current={selected ? "true" : undefined}
-                  >
-                    {r.coverUrl ? (
-                      <img
-                        src={r.coverUrl}
-                        alt=""
-                        loading="lazy"
-                        className="size-10 shrink-0 rounded-sm border border-[color:var(--hairline)]/40 object-cover"
-                      />
-                    ) : (
-                      <div className="size-10 shrink-0 rounded-sm border border-[color:var(--hairline)]/40 bg-[color:var(--ink)]/40" />
-                    )}
-                    <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-                      <span
-                        className={cn(
-                          "truncate font-sans text-[11px] uppercase tracking-[0.18em]",
-                          selected
-                            ? "text-[color:var(--paper)]"
-                            : "text-[color:var(--paper)]/80"
-                        )}
-                      >
-                        {r.name || formatTime(r.createdAt)}
-                      </span>
-                      <span className="font-mono text-[9px] uppercase tracking-[0.18em] text-[color:var(--stone)]">
-                        {r.frameCount} frame{r.frameCount === 1 ? "" : "s"}
-                      </span>
-                    </div>
-                  </button>
-                </li>
-              );
-            })}
+            {g.items.map((r) => (
+              <li key={r.id}>
+                <LibraryRow
+                  coverUrl={r.coverUrl}
+                  title={r.name || formatTime(r.createdAt)}
+                  meta={`${r.frameCount} frame${r.frameCount === 1 ? "" : "s"}`}
+                  selected={r.id === selectedRecordingId}
+                  onClick={() => onSelect(r.id)}
+                />
+              </li>
+            ))}
           </ul>
         </section>
       ))}

@@ -55,9 +55,9 @@ const parseTab = (raw: string | null): StudioTab => {
 // /studio — the user's set library. Two tabs: "recordings" (auto-captured
 // live performances; frame list frozen, replayable on original timing) and
 // "sets" (curated, named groups of frames the user assembles, reorders, and
-// replays). Browse, inspect a frame's metadata + context, act on it (anchor /
-// reseed / download / copy / add-to-set), make a cut of a recording, share a
-// set, and replay either in /play.
+// replays). Browse, inspect a frame's metadata + context, act on it (add to a
+// set / download / copy prompt), make a cut of a recording, share a set, and
+// replay either in /play.
 
 const StudioFallback = () => (
   <main className="flex min-h-svh items-center justify-center bg-[color:var(--ink)] text-[color:var(--stone)]">
@@ -790,7 +790,7 @@ const StudioInner = () => {
   };
 
   return (
-    <main className="relative flex min-h-svh flex-col overflow-hidden bg-[color:var(--ink)] text-[color:var(--paper)]">
+    <main className="relative flex h-svh flex-col overflow-hidden bg-[color:var(--ink)] text-[color:var(--paper)]">
       {/* Header */}
       <header className="flex shrink-0 items-center justify-between border-b border-[color:var(--hairline)]/30 px-4 py-3 md:px-10">
         <div className="flex items-center gap-4">
@@ -810,49 +810,51 @@ const StudioInner = () => {
       </header>
 
       {/* Body — 3-panel desktop / drilldown mobile */}
-      <div className="flex flex-1 overflow-hidden">
-        {/* Left rail: tabs + the active tab's list */}
+      <div className="flex min-h-0 flex-1 overflow-hidden">
+        {/* Left rail: tabs (pinned) + the active tab's scrollable list */}
         <aside
           className={cn(
-            "shrink-0 overflow-y-auto border-r border-[color:var(--hairline)]/30",
-            "hidden md:block md:w-[280px]",
-            !showMobileCenter && "block w-full md:w-[280px]"
+            "flex min-h-0 shrink-0 flex-col border-r border-[color:var(--hairline)]/30",
+            "hidden md:flex md:w-[280px]",
+            !showMobileCenter && "flex w-full md:w-[280px]"
           )}
         >
           <LiveNowCard />
           <StudioSidebarTabs tab={tab} onTab={onTab} />
-          {tab === "recordings" &&
-            (dragActive ? (
-              // Mid-drag the recordings list is useless as a destination —
-              // swap in curated-set drop targets for the drag's duration.
-              <SetsDropShelf sets={curatedSets} dragCount={dragCount} />
-            ) : (
-              <RecordingsList
-                recordings={recordings}
-                loading={recordingsLoading}
-                bootstrapped={recordingsBootstrapped}
-                selectedRecordingId={selectedRecordingId}
-                onSelect={onSelectRecording}
+          <div className="min-h-0 flex-1 overflow-y-auto">
+            {tab === "recordings" &&
+              (dragActive ? (
+                // Mid-drag the recordings list is useless as a destination —
+                // swap in curated-set drop targets for the drag's duration.
+                <SetsDropShelf sets={curatedSets} dragCount={dragCount} />
+              ) : (
+                <RecordingsList
+                  recordings={recordings}
+                  loading={recordingsLoading}
+                  bootstrapped={recordingsBootstrapped}
+                  selectedRecordingId={selectedRecordingId}
+                  onSelect={onSelectRecording}
+                />
+              ))}
+            {tab === "sets" && (
+              <SetsList
+                sets={curatedSets}
+                builtins={builtinSets}
+                loading={setsLoading}
+                bootstrapped={setsBootstrapped}
+                selectedSetId={selectedSetId}
+                onSelect={onSelectSet}
+                onCreate={onCreateSet}
+                dragCount={dragCount}
               />
-            ))}
-          {tab === "sets" && (
-            <SetsList
-              sets={curatedSets}
-              builtins={builtinSets}
-              loading={setsLoading}
-              bootstrapped={setsBootstrapped}
-              selectedSetId={selectedSetId}
-              onSelect={onSelectSet}
-              onCreate={onCreateSet}
-              dragCount={dragCount}
-            />
-          )}
+            )}
+          </div>
         </aside>
 
         {/* Center pane */}
         <section
           className={cn(
-            "flex-1 overflow-hidden",
+            "min-h-0 flex-1 overflow-hidden",
             !showMobileCenter && "hidden md:block"
           )}
         >

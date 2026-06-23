@@ -1,7 +1,6 @@
 "use client";
 
 import type { LibraryFrame } from "@sonara/shared";
-import { useRouter } from "next/navigation";
 import { useCallback } from "react";
 import { toast } from "sonner";
 
@@ -78,27 +77,13 @@ const shortModelName = (
 ): string => (frame.anchorUrl ? "chained · klein/edit" : "fresh · klein/9b");
 
 // The inspector body. Reused by the desktop right-pane wrapper and the
-// mobile Sheet wrapper. All actions are URL-driven — clicking "use as
-// anchor" navigates to /play?anchor=..., etc. /play's
-// useSearchParams consumer dispatches the WS action after the socket
-// opens, then router.replace clears the params (Phase 8e).
+// mobile Sheet wrapper. The primary action is adding the frame to a curated
+// set; download + copy-prompt are utilities. (The old "use as anchor" /
+// "reseed" jump-to-/play actions were removed — they silently navigated away
+// and confused more than they helped.)
 export const FrameInspectorContent = ({
   frame,
 }: FrameInspectorContentProps) => {
-  const router = useRouter();
-
-  const onUseAsAnchor = useCallback(() => {
-    const qs = new URLSearchParams({ anchor: frame.url });
-    router.push(`/play?${qs.toString()}`);
-  }, [frame.url, router]);
-
-  const onReseed = useCallback(() => {
-    const qs = new URLSearchParams({
-      prompt: frame.prompt,
-    });
-    router.push(`/play?${qs.toString()}`);
-  }, [frame.prompt, router]);
-
   const onCopyPrompt = useCallback(() => {
     void (async () => {
       try {
@@ -128,57 +113,42 @@ export const FrameInspectorContent = ({
         />
       </div>
 
-      {/* Actions */}
-      <div className="grid grid-cols-2 gap-1.5">
-        <Button
-          variant="default"
-          size="sm"
-          onClick={onUseAsAnchor}
-          className="font-sans text-[10px] uppercase tracking-[0.22em]"
-        >
-          use as anchor
-        </Button>
-        <Button
-          variant="default"
-          size="sm"
-          onClick={onReseed}
-          className="font-sans text-[10px] uppercase tracking-[0.22em]"
-        >
-          reseed
-        </Button>
-        <Button
-          variant="ghost"
-          size="sm"
-          asChild
-          className="font-sans text-[10px] uppercase tracking-[0.22em]"
-        >
-          <a
-            href={frame.url}
-            download={downloadName}
-            target="_blank"
-            rel="noreferrer"
+      {/* Actions — "add to set" is the primary thing you do with a frame in
+          the library. Hidden for example-session frames: those are synthesized
+          from shared seed rows (user_id NULL), so the server's ownership check
+          would reject them — a new user (who only has example sessions) would
+          otherwise hit an error. Real generated frames carry a normal lse_
+          session id and are addable. */}
+      <div className="flex flex-col gap-1.5">
+        {!frame.sessionId.startsWith("lse_example_") && (
+          <AddToSetPopover frame={frame} />
+        )}
+        <div className="grid grid-cols-2 gap-1.5">
+          <Button
+            variant="ghost"
+            size="sm"
+            asChild
+            className="font-sans text-[10px] uppercase tracking-[0.22em]"
           >
-            download
-          </a>
-        </Button>
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={onCopyPrompt}
-          className="font-sans text-[10px] uppercase tracking-[0.22em]"
-        >
-          copy prompt
-        </Button>
+            <a
+              href={frame.url}
+              download={downloadName}
+              target="_blank"
+              rel="noreferrer"
+            >
+              download
+            </a>
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={onCopyPrompt}
+            className="font-sans text-[10px] uppercase tracking-[0.22em]"
+          >
+            copy prompt
+          </Button>
+        </div>
       </div>
-
-      {/* Add to a curated set. Hidden for example-session frames: those are
-          synthesized from shared seed rows (user_id NULL), so the server's
-          ownership check would reject them — a new user (who only has example
-          sessions) would otherwise hit an error. Real generated frames carry a
-          normal lse_ session id and are addable. */}
-      {!frame.sessionId.startsWith("lse_example_") && (
-        <AddToSetPopover frame={frame} />
-      )}
 
       {/* Metadata */}
       <section className="flex flex-col gap-3 border-t border-[color:var(--hairline)]/30 pt-4">
