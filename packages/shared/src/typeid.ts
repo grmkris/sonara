@@ -14,6 +14,10 @@ export const idTypesMapNameToPrefix = {
   // to dodge JS Set / SQL SET collisions.
   frameSet: "set",
   frameSetFrame: "fsf",
+  // A durable AI set-generation job — the resumable unit of work behind
+  // "generate a set" / "generate more". One row carries the prompt list +
+  // progress cursor so a deploy mid-job resumes instead of stranding frames.
+  generationJob: "genj",
   imageLibrary: "img",
   // Visualizer WS session — minted in-memory on each Session construction.
   // Distinct from `session` (Better Auth's browser session). Used to group
@@ -91,6 +95,7 @@ export type FrameSetId = TypeIdString<"frameSet">;
 export type FrameSetFrameId = TypeIdString<"frameSetFrame">;
 export type StageId = TypeIdString<"stage">;
 export type LookProfileId = TypeIdString<"lookProfile">;
+export type GenerationJobId = TypeIdString<"generationJob">;
 
 export const UserIdSchema = typeIdValidator("user");
 export const SessionIdSchema = typeIdValidator("session");
@@ -105,3 +110,4 @@ export const FrameSetIdSchema = typeIdValidator("frameSet");
 export const FrameSetFrameIdSchema = typeIdValidator("frameSetFrame");
 export const StageIdSchema = typeIdValidator("stage");
 export const LookProfileIdSchema = typeIdValidator("lookProfile");
+export const GenerationJobIdSchema = typeIdValidator("generationJob");
