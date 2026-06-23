@@ -4,6 +4,7 @@ import type { FrameSetSummary } from "@sonara/shared";
 import { useMemo } from "react";
 
 import { LibraryRow } from "@/components/studio/library-row";
+import { formatClockTime } from "@/lib/format-time";
 
 interface RecordingsListProps {
   recordings: FrameSetSummary[];
@@ -38,12 +39,6 @@ const bandOf = (date: Date, now: Date): DateBand => {
     return "this week";
   }
   return "older";
-};
-
-const formatTime = (date: Date): string => {
-  const h = date.getHours().toString().padStart(2, "0");
-  const m = date.getMinutes().toString().padStart(2, "0");
-  return `${h}:${m}`;
 };
 
 // Left-rail list of recording sets (auto-captured live performances), grouped
@@ -96,7 +91,7 @@ export const RecordingsList = ({
               <li key={r.id}>
                 <LibraryRow
                   coverUrl={r.coverUrl}
-                  title={r.name || formatTime(r.createdAt)}
+                  title={r.name || formatClockTime(r.createdAt)}
                   meta={`${r.frameCount} frame${r.frameCount === 1 ? "" : "s"}`}
                   selected={r.id === selectedRecordingId}
                   onClick={() => onSelect(r.id)}

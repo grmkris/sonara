@@ -12,6 +12,7 @@ export const FrameDragPreview = ({
 }) => (
   <div className="relative h-20 w-20">
     {urls.slice(0, 3).map((url, i) => (
+      // eslint-disable-next-line @next/next/no-img-element
       <img
         key={url}
         src={url}

@@ -5,7 +5,7 @@ import { useCallback } from "react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
-import { formatMmSs } from "@/lib/format-time";
+import { formatFileStamp, formatMmSs } from "@/lib/format-time";
 import { cn } from "@/lib/utils";
 
 import { AddToSetPopover } from "./add-to-set-popover";
@@ -55,15 +55,6 @@ const Bar = ({ label, value }: { label: string; value: number }) => {
   );
 };
 
-const formatStamp = (date: Date): string => {
-  const y = date.getFullYear();
-  const m = (date.getMonth() + 1).toString().padStart(2, "0");
-  const d = date.getDate().toString().padStart(2, "0");
-  const hh = date.getHours().toString().padStart(2, "0");
-  const mm = date.getMinutes().toString().padStart(2, "0");
-  return `${y}${m}${d}-${hh}${mm}`;
-};
-
 // Friendly name for the fal model. Falls back to whatever the row stores
 // if we don't recognise it.
 // Model isn't in LibraryFrame directly (we omit it from the wire shape
@@ -98,7 +89,7 @@ export const FrameInspectorContent = ({
     })();
   }, [frame.prompt]);
 
-  const downloadName = `sonara-${formatStamp(frame.createdAt)}-${frame.id.slice(-8)}.webp`;
+  const downloadName = `sonara-${formatFileStamp(frame.createdAt)}-${frame.id.slice(-8)}.webp`;
 
   return (
     <div className="flex flex-col gap-5 p-5">

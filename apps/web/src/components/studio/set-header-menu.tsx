@@ -39,11 +39,7 @@ export const SetHeaderMenu = ({
           <MoreHorizontal className="size-4" strokeWidth={1.5} />
         </Button>
       </PopoverTrigger>
-      <PopoverContent
-        align="end"
-        side="bottom"
-        className="w-52 rounded-sm border-[color:var(--hairline)]/40 bg-[color:var(--ink)]/95 p-1 text-[color:var(--paper)] backdrop-blur-md"
-      >
+      <PopoverContent align="end" side="bottom" className="w-52 p-1">
         {canSelect && (
           <button
             type="button"

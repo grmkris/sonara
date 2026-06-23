@@ -56,7 +56,9 @@ const PopoverContent = ({
       <PopoverPrimitive.Popup
         data-slot="popover-content"
         className={cn(
-          "z-50 w-72 origin-(--transform-origin) rounded-md border bg-popover p-4 text-popover-foreground shadow-md outline-hidden data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95 data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95",
+          // Default to the app's frosted ink theme so call sites only set
+          // width/padding. Overridable via `className` (cn merges last-wins).
+          "z-50 w-72 origin-(--transform-origin) rounded-sm border border-[color:var(--hairline)]/40 bg-[color:var(--ink)]/95 p-4 text-[color:var(--paper)] shadow-md backdrop-blur-md outline-hidden data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95 data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95",
           className
         )}
         {...props}

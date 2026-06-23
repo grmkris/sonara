@@ -28,3 +28,19 @@ export const formatDuration = (ms: number): string => {
   }
   return `${m}m ${s.toString().padStart(2, "0")}s`;
 };
+
+const pad2 = (n: number): string => n.toString().padStart(2, "0");
+
+/**
+ * Date → `YYYYMMDD-HHmm`. Used for download filenames (the inspector's
+ * per-frame webp export).
+ */
+export const formatFileStamp = (date: Date): string =>
+  `${date.getFullYear()}${pad2(date.getMonth() + 1)}${pad2(date.getDate())}-${pad2(date.getHours())}${pad2(date.getMinutes())}`;
+
+/**
+ * Date → `HH:mm` wall-clock. Used as the fallback label for an unnamed
+ * recording in the studio sidebar.
+ */
+export const formatClockTime = (date: Date): string =>
+  `${pad2(date.getHours())}:${pad2(date.getMinutes())}`;

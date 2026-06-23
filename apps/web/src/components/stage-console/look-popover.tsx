@@ -38,11 +38,7 @@ export const LookPopover = () => {
           <span className="truncate">{label}</span>
         </button>
       </PopoverTrigger>
-      <PopoverContent
-        align="end"
-        side="bottom"
-        className="w-72 rounded-sm border-[color:var(--hairline)]/40 bg-[color:var(--ink)]/95 p-4 text-[color:var(--paper)] backdrop-blur-md"
-      >
+      <PopoverContent align="end" side="bottom" className="w-72 p-4">
         <PresetPicker />
         <div
           aria-hidden

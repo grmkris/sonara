@@ -63,11 +63,7 @@ export const StageChip = ({ current }: { current: OwnStage | null }) => {
           <ChevronDown className="size-3 shrink-0" strokeWidth={1.5} />
         </button>
       </PopoverTrigger>
-      <PopoverContent
-        align="start"
-        side="bottom"
-        className="w-60 rounded-sm border-[color:var(--hairline)]/40 bg-[color:var(--ink)]/95 p-1 text-[color:var(--paper)] backdrop-blur-md"
-      >
+      <PopoverContent align="start" side="bottom" className="w-60 p-1">
         <ul className="flex flex-col">
           {stages.map((s) => (
             <li key={s.stageId}>

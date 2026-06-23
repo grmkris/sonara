@@ -262,11 +262,7 @@ export const SourceSwitcher = ({
             />
           </button>
         </PopoverTrigger>
-        <PopoverContent
-          align="start"
-          side="bottom"
-          className="w-64 rounded-sm border-[color:var(--hairline)]/40 bg-[color:var(--ink)]/95 p-0 text-[color:var(--paper)] backdrop-blur-md"
-        >
+        <PopoverContent align="start" side="bottom" className="w-64 p-0">
           <div className="pb-1">
             <div className={GROUP_HEADER}>built-ins</div>
             <div className="max-h-[160px] overflow-y-auto">

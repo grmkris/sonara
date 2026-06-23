@@ -71,11 +71,7 @@ export const SetLookEditor = ({ look, onChange }: SetLookEditorProps) => {
           {look ? `look · ${look.preset}` : "look"}
         </button>
       </PopoverTrigger>
-      <PopoverContent
-        align="end"
-        side="bottom"
-        className="w-72 rounded-sm border-[color:var(--hairline)]/40 bg-[color:var(--ink)]/95 p-4 text-[color:var(--paper)] backdrop-blur-md"
-      >
+      <PopoverContent align="end" side="bottom" className="w-72 p-4">
         <div className="flex flex-col gap-4">
           <div className="flex flex-col gap-1.5">
             <span className={LABEL}>preset</span>
