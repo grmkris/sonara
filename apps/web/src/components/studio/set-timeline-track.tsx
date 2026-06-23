@@ -18,6 +18,7 @@ import { formatMmSs } from "@/lib/format-time";
 import { computeTimelineLayout } from "@/lib/timeline-layout";
 import { cn } from "@/lib/utils";
 
+import { ShortcutsHelp } from "./shortcuts-help";
 import { TimelineClip } from "./timeline-clip";
 import { Tip } from "./tip";
 
@@ -260,22 +261,36 @@ export const SetTimelineTrack = ({
     }
   };
 
-  // 'n' toggles snapping (an NLE convention) without stealing keys from the
-  // shared cursor; everything else falls through to it.
+  // Local timeline keys — snap (n) + zoom (=/+ in, - out, f fit); everything
+  // else falls through to the shared cursor (arrows / shift-arrows / space /
+  // enter / delete / cmd-arrow reorder).
   const onKeyDown = (e: React.KeyboardEvent) => {
     const target = e.target as HTMLElement;
     const typing =
       target.tagName === "INPUT" ||
       target.tagName === "TEXTAREA" ||
       target.isContentEditable;
-    if (
-      !typing &&
-      (e.key === "n" || e.key === "N") &&
-      !(e.metaKey || e.ctrlKey)
-    ) {
-      e.preventDefault();
-      setSnap((s) => !s);
-      return;
+    if (!(typing || e.metaKey || e.ctrlKey)) {
+      if (e.key === "n" || e.key === "N") {
+        e.preventDefault();
+        setSnap((s) => !s);
+        return;
+      }
+      if (e.key === "=" || e.key === "+") {
+        e.preventDefault();
+        zoomBy(1.4);
+        return;
+      }
+      if (e.key === "-" || e.key === "_") {
+        e.preventDefault();
+        zoomBy(1 / 1.4);
+        return;
+      }
+      if (e.key === "f" || e.key === "F") {
+        e.preventDefault();
+        fitToWindow();
+        return;
+      }
     }
     cursor.onKeyDown(e);
   };
@@ -316,6 +331,7 @@ export const SetTimelineTrack = ({
         <span className="ml-auto font-mono text-[10px] uppercase tracking-[0.18em] text-[color:var(--stone)]">
           {formatMmSs(layout.totalMs)}
         </span>
+        <ShortcutsHelp />
       </div>
 
       {/* Scroll surface (both axes) — marquee + cursor measure against this. */}

@@ -1,8 +1,13 @@
+import { SCHEMA } from "@sonara/db";
 import type { InspectorContext } from "@sonara/shared";
 import { typeIdToUuid } from "@sonara/shared/typeid";
-import type { ImageLibraryId, LiveSessionId } from "@sonara/shared/typeid";
+import type {
+  ImageLibraryId,
+  LiveSessionId,
+  UserId,
+} from "@sonara/shared/typeid";
 
-import { getPool } from "../db/pool";
+import { getDb } from "../db/db";
 import type { Logger } from "../lib/logger";
 import {
   bucketKeyFromUrl,
@@ -15,10 +20,9 @@ export interface PersistFrameInput {
   // Pre-minted by the caller so the matching frame.final event can carry
   // the id WITHOUT waiting for the persist round-trip to complete.
   id: ImageLibraryId;
-  // Raw user uuid (matches the Session.userId shape + credits.service
-  // conventions on the server). The library router converts to typeid at
-  // the API boundary.
-  userId: string;
+  // App-standard `usr_…` typeid. drizzle stores the uuid; the bucket key
+  // derives the raw uuid form (see below).
+  userId: UserId;
   sessionId: LiveSessionId;
   deck: string;
   prompt: string;
@@ -74,9 +78,11 @@ export const persistFrame = async (
   }
 
   const { id } = input;
-  // Bucket key uses the raw uuid (no `usr_` prefix) so all of one user's
-  // frames live under the same prefix without typeid-encoding overhead.
-  const key = `generated/${input.userId}/${id}.webp`;
+  // Bucket key keeps the raw-uuid prefix (generated/<uuid>/<frame-typeid>.webp)
+  // so existing and new objects share one layout — drizzle stores the uuid in
+  // the row, but the object path is addressed by the raw uuid.
+  const userUuid = typeIdToUuid(input.userId).uuid;
+  const key = `generated/${userUuid}/${id}.webp`;
 
   let bytes: ArrayBuffer;
   let contentType = "image/webp";
@@ -114,55 +120,41 @@ export const persistFrame = async (
   }
 
   // Hash is non-unique among generated rows; just feed something stable
-  // per (user, prompt, sessionId, tMs) so the partial-unique seed index
-  // is never tickled by live rows.
+  // per (session, tMs) so the partial-unique seed index is never tickled by
+  // live rows.
   const promptHash = `gen:${input.sessionId}:${input.tMs}`;
-  const frameUuid = typeIdToUuid(id).uuid;
 
   let createdAt: Date;
   try {
-    const client = await getPool().connect();
-    try {
-      const result = await client.query<{ created_at: Date }>(
-        `INSERT INTO image_library
-           (id, deck, prompt, prompt_hash, model, seed, url, width, height,
-            palette, status, source, user_id, session_id, t_ms, source_url,
-            trigger_reason, anchor_url, inspector_context)
-         VALUES
-           ($1::uuid, $2, $3, $4, $5, $6, $7, $8, $9,
-            $10::text[], 'active', 'generated', $11::uuid, $12, $13, $14,
-            $15, $16, $17::jsonb)
-         RETURNING created_at`,
-        [
-          frameUuid,
-          input.deck,
-          input.prompt,
-          promptHash,
-          input.model,
-          input.seed,
-          key,
-          input.width,
-          input.height,
-          input.palette,
-          input.userId,
-          input.sessionId,
-          input.tMs,
-          input.falUrl,
-          input.triggerReason ?? null,
-          // Store a durable bucket key when the anchor came from our bucket so
-          // it can be re-presigned on read; keep external/public URLs as-is.
-          input.anchorUrl
-            ? (bucketKeyFromUrl(input.anchorUrl) ?? input.anchorUrl)
-            : null,
-          input.inspectorContext
-            ? JSON.stringify(input.inspectorContext)
-            : null,
-        ]
-      );
-      createdAt = result.rows[0]?.created_at ?? new Date();
-    } finally {
-      client.release();
-    }
+    const [row] = await getDb()
+      .insert(SCHEMA.imageLibrary)
+      .values({
+        // Store a durable bucket key when the anchor came from our bucket so
+        // it can be re-presigned on read; keep external/public URLs as-is.
+        anchorUrl: input.anchorUrl
+          ? (bucketKeyFromUrl(input.anchorUrl) ?? input.anchorUrl)
+          : null,
+        deck: input.deck,
+        height: input.height,
+        id: input.id,
+        inspectorContext: input.inspectorContext ?? null,
+        model: input.model,
+        palette: input.palette,
+        prompt: input.prompt,
+        promptHash,
+        seed: input.seed,
+        sessionId: input.sessionId,
+        source: "generated",
+        sourceUrl: input.falUrl,
+        status: "active",
+        tMs: input.tMs,
+        triggerReason: input.triggerReason ?? null,
+        url: key,
+        userId: input.userId,
+        width: input.width,
+      })
+      .returning();
+    createdAt = row?.createdAt ?? new Date();
   } catch (error) {
     logger.warn(
       { err: String(error), key, sessionId: input.sessionId },

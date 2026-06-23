@@ -293,11 +293,7 @@ export const SelectionBar = ({
               <ChevronUp className="size-3" strokeWidth={1.5} />
             </button>
           </PopoverTrigger>
-          <PopoverContent
-            align="center"
-            side="top"
-            className="w-64 rounded-sm border-[color:var(--hairline)]/40 bg-[color:var(--ink)]/95 p-0 text-[color:var(--paper)] backdrop-blur-md"
-          >
+          <PopoverContent align="center" side="top" className="w-64 p-0">
             <SetPickerContent
               loading={loading}
               onCreate={(name) => void onCreateInPicker(name)}

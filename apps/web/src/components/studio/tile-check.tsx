@@ -2,6 +2,7 @@
 
 import { Check } from "lucide-react";
 
+import type { TileClickMods } from "@/lib/curation-dnd";
 import { cn } from "@/lib/utils";
 
 // The implicit-selection entry point on every frame tile: a check-circle that
@@ -15,7 +16,9 @@ export const TileCheck = ({
   forceVisible,
 }: {
   checked: boolean;
-  onCheck: () => void;
+  // Modifiers ride along so a SHIFT-click on the check ranges (like the clip
+  // body) instead of just toggling the one frame.
+  onCheck: (mods: TileClickMods) => void;
   // True while selecting (selection non-empty or pinned) — checks stay up.
   forceVisible: boolean;
 }) => (
@@ -25,7 +28,7 @@ export const TileCheck = ({
     aria-pressed={checked}
     onClick={(e) => {
       e.stopPropagation();
-      onCheck();
+      onCheck({ metaOrCtrl: e.metaKey || e.ctrlKey, shiftKey: e.shiftKey });
     }}
     onDoubleClick={(e) => e.stopPropagation()}
     className={cn(

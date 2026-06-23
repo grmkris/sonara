@@ -377,7 +377,9 @@ export const TimelineClip = ({
       <TileCheck
         checked={checked}
         forceVisible={selecting}
-        onCheck={() => onCheck(frame.id)}
+        onCheck={(mods) =>
+          mods.shiftKey ? onClick(frame.id, mods) : onCheck(frame.id)
+        }
       />
 
       {editable && (

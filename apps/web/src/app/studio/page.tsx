@@ -2,7 +2,7 @@
 
 import type { FrameSet, FrameSetSummary } from "@sonara/shared";
 import type { FrameSetId } from "@sonara/shared/typeid";
-import { ChevronLeft } from "lucide-react";
+import { ChevronLeft, Loader2 } from "lucide-react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
@@ -55,9 +55,9 @@ const parseTab = (raw: string | null): StudioTab => {
 // /studio — the user's set library. Two tabs: "recordings" (auto-captured
 // live performances; frame list frozen, replayable on original timing) and
 // "sets" (curated, named groups of frames the user assembles, reorders, and
-// replays). Browse, inspect a frame's metadata + context, act on it (anchor /
-// reseed / download / copy / add-to-set), make a cut of a recording, share a
-// set, and replay either in /play.
+// replays). Browse, inspect a frame's metadata + context, act on it (add to a
+// set / download / copy prompt), make a cut of a recording, share a set, and
+// replay either in /play.
 
 const StudioFallback = () => (
   <main className="flex min-h-svh items-center justify-center bg-[color:var(--ink)] text-[color:var(--stone)]">
@@ -350,6 +350,35 @@ const StudioInner = () => {
     };
   }, [isSignedIn, selectedSetId, setDetailNonce]);
 
+  // While an AI "generate a set" job is running, poll the open set so freshly
+  // rendered frames stream onto the timeline. Updates setDetail in place (no
+  // loading flash); stops the instant status flips to 'final'. Separate from
+  // the load effect so the editor doesn't blink to "loading…" every tick.
+  const generating = setDetail?.status === "generating";
+  useEffect(() => {
+    if (!(isSignedIn && selectedSetId && generating)) {
+      return;
+    }
+    let cancelled = false;
+    const tick = async () => {
+      try {
+        const detail = await rpcClient.sets.get({
+          setId: selectedSetId as FrameSetId,
+        });
+        if (!cancelled) {
+          setSetDetail(detail);
+        }
+      } catch {
+        // Transient read error — keep polling; the next tick recovers.
+      }
+    };
+    const interval = setInterval(() => void tick(), 2000);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, [isSignedIn, selectedSetId, generating]);
+
   const selectedFrame = useMemo(() => {
     const pool =
       tab === "sets"
@@ -445,18 +474,24 @@ const StudioInner = () => {
   // shift = range (no anchor → plain); check/long-press = toggle always.
   const onFrameClick = useCallback(
     (frameId: string, mods: { shiftKey: boolean; metaOrCtrl: boolean }) => {
-      if (mods.metaOrCtrl) {
-        selection.toggle(frameId);
+      // Shift = range from the anchor (the last plain/cmd-clicked frame).
+      // Unconditional: rangeTo self-heals to a toggle when there's no anchor,
+      // so "click A, shift-click B" selects the A…B span from a cold start.
+      if (mods.shiftKey) {
+        selection.rangeTo(frameId);
         return;
       }
-      if (mods.shiftKey && isSelecting) {
-        selection.rangeTo(frameId);
+      if (mods.metaOrCtrl) {
+        selection.toggle(frameId);
         return;
       }
       if (isSelecting) {
         selection.toggle(frameId);
         return;
       }
+      // Plain click = inspect, but also ARM the anchor so the next shift-click
+      // ranges from here.
+      selection.setAnchor(frameId);
       onFrameOpen(frameId);
     },
     [selection, isSelecting, onFrameOpen]
@@ -524,10 +559,11 @@ const StudioInner = () => {
         }
         return;
       }
+      // Cmd/Ctrl+A selects every clip in the open set/recording (the typing
+      // guard above keeps it from hijacking select-all in the rename field).
       if (
         (e.metaKey || e.ctrlKey) &&
         e.key.toLowerCase() === "a" &&
-        isSelecting &&
         displayOrder.length > 0
       ) {
         e.preventDefault();
@@ -541,7 +577,6 @@ const StudioInner = () => {
     selectedFrameId,
     clearSelection,
     onCloseInspector,
-    isSelecting,
     displayOrder.length,
     selection,
   ]);
@@ -720,6 +755,47 @@ const StudioInner = () => {
   // the full editor. Extracted (like renderRecordingsCenter) so the branches
   // don't inflate StudioInner's complexity.
   const renderSetsCenter = () => {
+    // AI generation in progress: the server owns the growing frame list, so
+    // the set is read-only with a progress banner. Polling (above) streams
+    // frames in; when status flips to 'final' the normal editor returns.
+    if (setDetail && setDetail.status === "generating") {
+      const n = setDetail.frames.length;
+      return (
+        <div className="flex h-full flex-col">
+          <div className="flex shrink-0 items-center gap-2 border-b border-[color:var(--hairline)]/30 px-4 py-2 md:px-6">
+            <Loader2
+              className="size-3.5 animate-spin text-[color:var(--signal)]"
+              strokeWidth={2}
+            />
+            <span className="font-mono text-[10px] uppercase tracking-[0.22em] text-[color:var(--stone)]">
+              generating — {n} {n === 1 ? "frame" : "frames"} so far
+            </span>
+          </div>
+          <div className="min-h-0 flex-1">
+            <SetEditor
+              frameSet={setDetail}
+              loading={setDetailLoading}
+              error={setDetailError}
+              onRetry={retrySetDetail}
+              selectedFrameId={selectedFrameId}
+              onFrameClick={(frameId) => onFrameOpen(frameId)}
+              onFrameOpen={onFrameOpen}
+              onFrameCheck={noop}
+              isSelected={noopFalse}
+              isSelecting={false}
+              pinned={false}
+              onTogglePinned={noop}
+              onMarquee={noop}
+              onWhitespaceClick={onWhitespaceClick}
+              marqueeEnabled={false}
+              getDragPayload={getSetDragPayload}
+              selectionApi={NEUTRAL_SELECTION}
+              selectable={false}
+            />
+          </div>
+        </div>
+      );
+    }
     if (setDetail?.origin === "builtin") {
       // Built-in decks are edited as a client draft too — but multi-select is
       // off (seed frames aren't user-owned) and clicks only inspect.
@@ -790,7 +866,7 @@ const StudioInner = () => {
   };
 
   return (
-    <main className="relative flex min-h-svh flex-col overflow-hidden bg-[color:var(--ink)] text-[color:var(--paper)]">
+    <main className="relative flex h-svh flex-col overflow-hidden bg-[color:var(--ink)] text-[color:var(--paper)]">
       {/* Header */}
       <header className="flex shrink-0 items-center justify-between border-b border-[color:var(--hairline)]/30 px-4 py-3 md:px-10">
         <div className="flex items-center gap-4">
@@ -810,49 +886,52 @@ const StudioInner = () => {
       </header>
 
       {/* Body — 3-panel desktop / drilldown mobile */}
-      <div className="flex flex-1 overflow-hidden">
-        {/* Left rail: tabs + the active tab's list */}
+      <div className="flex min-h-0 flex-1 overflow-hidden">
+        {/* Left rail: tabs (pinned) + the active tab's scrollable list */}
         <aside
           className={cn(
-            "shrink-0 overflow-y-auto border-r border-[color:var(--hairline)]/30",
-            "hidden md:block md:w-[280px]",
-            !showMobileCenter && "block w-full md:w-[280px]"
+            "flex min-h-0 shrink-0 flex-col border-r border-[color:var(--hairline)]/30",
+            "hidden md:flex md:w-[280px]",
+            !showMobileCenter && "flex w-full md:w-[280px]"
           )}
         >
           <LiveNowCard />
           <StudioSidebarTabs tab={tab} onTab={onTab} />
-          {tab === "recordings" &&
-            (dragActive ? (
-              // Mid-drag the recordings list is useless as a destination —
-              // swap in curated-set drop targets for the drag's duration.
-              <SetsDropShelf sets={curatedSets} dragCount={dragCount} />
-            ) : (
-              <RecordingsList
-                recordings={recordings}
-                loading={recordingsLoading}
-                bootstrapped={recordingsBootstrapped}
-                selectedRecordingId={selectedRecordingId}
-                onSelect={onSelectRecording}
+          <div className="min-h-0 flex-1 overflow-y-auto">
+            {tab === "recordings" &&
+              (dragActive ? (
+                // Mid-drag the recordings list is useless as a destination —
+                // swap in curated-set drop targets for the drag's duration.
+                <SetsDropShelf sets={curatedSets} dragCount={dragCount} />
+              ) : (
+                <RecordingsList
+                  recordings={recordings}
+                  loading={recordingsLoading}
+                  bootstrapped={recordingsBootstrapped}
+                  selectedRecordingId={selectedRecordingId}
+                  onSelect={onSelectRecording}
+                />
+              ))}
+            {tab === "sets" && (
+              <SetsList
+                sets={curatedSets}
+                builtins={builtinSets}
+                loading={setsLoading}
+                bootstrapped={setsBootstrapped}
+                selectedSetId={selectedSetId}
+                onSelect={onSelectSet}
+                onCreate={onCreateSet}
+                onGenerate={mutations.generateSet}
+                dragCount={dragCount}
               />
-            ))}
-          {tab === "sets" && (
-            <SetsList
-              sets={curatedSets}
-              builtins={builtinSets}
-              loading={setsLoading}
-              bootstrapped={setsBootstrapped}
-              selectedSetId={selectedSetId}
-              onSelect={onSelectSet}
-              onCreate={onCreateSet}
-              dragCount={dragCount}
-            />
-          )}
+            )}
+          </div>
         </aside>
 
         {/* Center pane */}
         <section
           className={cn(
-            "flex-1 overflow-hidden",
+            "min-h-0 flex-1 overflow-hidden",
             !showMobileCenter && "hidden md:block"
           )}
         >

@@ -70,6 +70,13 @@ export const useFrameSelection = (opts: {
     setAnchorId(frameId);
   }, []);
 
+  // Arm the anchor without changing the selection — so a plain inspect-click
+  // becomes the pivot for the next shift-click range (the desktop idiom: click
+  // A, shift-click B → select A…B).
+  const setAnchor = useCallback((frameId: string) => {
+    setAnchorId(frameId);
+  }, []);
+
   // Shift behavior: extend the contiguous range from the anchor (which stays
   // put so successive shift-clicks keep extending). No anchor → plain toggle.
   const rangeTo = useCallback(
@@ -121,6 +128,7 @@ export const useFrameSelection = (opts: {
     replace,
     selectAll,
     selectedFrameIds,
+    setAnchor,
     toggle,
     togglePinned,
   };

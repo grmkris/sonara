@@ -92,8 +92,9 @@ export const FrameSetSummarySchema = z.object({
   look: SetLookSchema.nullable(),
   name: z.string(),
   origin: FrameSetOriginSchema,
-  // recording = a live performance is still appending frames.
-  status: z.enum(["recording", "final"]),
+  // recording = a live performance is still appending frames; generating =
+  // an AI set-generation job is still adding frames.
+  status: z.enum(["recording", "generating", "final"]),
   // Prompt-drift modifier for live generation after leaving this set.
   styleDrift: z.string().nullable(),
   visibility: FrameSetVisibilitySchema,

@@ -91,10 +91,7 @@ export const ShareLink = ({
           <Share2 className="size-4" strokeWidth={1.5} />
         </button>
       </PopoverTrigger>
-      <PopoverContent
-        align="end"
-        className="w-64 rounded-sm border-[color:var(--hairline)]/30 bg-[color:var(--ink)]/95 p-4 text-[color:var(--paper)] backdrop-blur-md"
-      >
+      <PopoverContent align="end" className="w-64 p-4">
         <div className="flex flex-col gap-3">
           {qr && (
             // eslint-disable-next-line @next/next/no-img-element

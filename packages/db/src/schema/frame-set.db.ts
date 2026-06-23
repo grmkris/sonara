@@ -82,9 +82,11 @@ export const frameSet = pgTable(
     stageId: typeId("stage", "stage_id")
       .references(() => stage.id, { onDelete: "set null" })
       .$type<StageId>(),
-    // recording = a live performance is still appending frames; final =
-    // frozen. Builtin/curated sets are always final.
-    status: text("status", { enum: ["recording", "final"] })
+    // recording = a live performance is still appending frames; generating =
+    // an AI "generate a set" job is still adding frames; final = frozen.
+    // Builtin/curated sets are always final. (TS-only enum — no PG check
+    // constraint, so widening it needs no migration.)
+    status: text("status", { enum: ["recording", "generating", "final"] })
       .notNull()
       .default("final"),
     // Prompt-drift modifier carried into live generation after leaving this

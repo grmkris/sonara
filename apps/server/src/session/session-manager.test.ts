@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 
+import type { Database } from "@sonara/db";
 import { createLogger } from "@sonara/logger";
 import type { ServerEvent } from "@sonara/shared";
 import { typeIdGenerator, typeIdToUuid } from "@sonara/shared/typeid";
@@ -8,7 +9,7 @@ import type { PoolShim } from "@sonara/test-utils";
 import { createTestStage, createTestUser } from "@sonara/test-utils/factories";
 import { getTestDb } from "@sonara/test-utils/test-db";
 
-import { __setPoolForTests } from "../db/pool";
+import { __setDbForTests } from "../db/db";
 import { ensureRecordingSet } from "../library/recording-set";
 import type { AttachedWs } from "./session-manager";
 import { SessionManager } from "./session-manager";
@@ -39,6 +40,7 @@ const makeWs = (id: string): AttachedWs & { closed: { code?: number }[] } => {
 };
 
 let pool: PoolShim;
+let db: Database;
 const userId = typeIdGenerator("user") as UserId;
 const userUuid = typeIdToUuid(userId).uuid;
 let stageId: StageId;
@@ -53,15 +55,15 @@ const recordingStatus = async (lse: LiveSessionId): Promise<string | null> => {
 
 beforeAll(async () => {
   const t = await getTestDb();
-  ({ pool } = t);
+  ({ db, pool } = t);
   await t.reset();
-  __setPoolForTests(pool);
+  __setDbForTests(db);
   await createTestUser(t.db, { id: userId });
   ({ id: stageId } = await createTestStage(t.db, { userId }));
 }, 30_000);
 
 afterAll(() => {
-  __setPoolForTests(null);
+  __setDbForTests(null);
 });
 
 describe("SessionManager (stage-keyed)", () => {
@@ -107,11 +109,11 @@ describe("SessionManager (stage-keyed)", () => {
       ws,
     });
     const run = session.liveSessionId;
-    await ensureRecordingSet(pool, {
+    await ensureRecordingSet(db, {
       liveSessionId: run,
-      stageUuid: typeIdToUuid(stageId).uuid,
+      stageId,
       startedAt: new Date(),
-      userUuid,
+      userId,
     });
     expect(await recordingStatus(run)).toBe("recording");
 
@@ -225,10 +227,10 @@ describe("SessionManager (stage-keyed)", () => {
       ws,
     });
     expect(session.liveSessionId).toBe(legacyLse);
-    await ensureRecordingSet(pool, {
+    await ensureRecordingSet(db, {
       liveSessionId: legacyLse,
       startedAt: new Date(),
-      userUuid,
+      userId,
     });
 
     m.detach("conn:legacy-1", ws);
@@ -267,10 +269,10 @@ describe("SessionManager (stage-keyed)", () => {
       ws,
     });
     const first = session.liveSessionId;
-    await ensureRecordingSet(pool, {
+    await ensureRecordingSet(db, {
       liveSessionId: first,
       startedAt: new Date(),
-      userUuid,
+      userId,
     });
 
     const events: ServerEvent[] = [];
@@ -310,11 +312,11 @@ describe("SessionManager (stage-keyed)", () => {
       ws,
     });
     const run = session.liveSessionId;
-    await ensureRecordingSet(pool, {
+    await ensureRecordingSet(db, {
       liveSessionId: run,
-      stageUuid: typeIdToUuid(stageId).uuid,
+      stageId,
       startedAt: new Date(),
-      userUuid,
+      userId,
     });
     expect(await recordingStatus(run)).toBe("recording");
 

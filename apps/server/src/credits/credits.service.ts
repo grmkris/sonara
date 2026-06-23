@@ -1,154 +1,135 @@
-import { typeIdGenerator, typeIdToUuid } from "@sonara/shared/typeid";
+import { SCHEMA } from "@sonara/db";
+import type { UserId } from "@sonara/shared/typeid";
+import { and, eq, gte, lt, sql } from "drizzle-orm";
 
-import { getPool } from "../db/pool";
+import { getDb } from "../db/db";
 import type { Logger } from "../lib/logger";
 
-// Re-export the test-only pool setter so existing tests
-// (credits.service.test.ts, credit-gate.test.ts) keep importing from this
-// module. PoolLike type re-exported for the same reason.
-export { __setPoolForTests, type PoolLike } from "../db/pool";
-
-// Generate a fresh `usage_ledger` row id as a UUID. The DB column is `uuid`
-// but the application layer thinks in typeid-prefixed strings — use the
-// shared typeid generator so ledger rows from apps/server are time-sortable
-// and round-trip through drizzle's `typeId` customType the same way as rows
-// written via the web router.
-const newLedgerId = (): string =>
-  typeIdToUuid(typeIdGenerator("usageLedger")).uuid;
+// Credit ledger access — drizzle over the shared db handle (getDb), in typeid
+// space: every `userId` is the app-standard `usr_…` typeid and the schema's
+// typeId columns translate it to the stored uuid for us. No raw SQL.
 
 /**
  * Atomic decrement of `balance_frames` by `cost`. Returns the new balance if
- * the user had at least `cost` to spend, or `null` if insufficient. A ledger
- * row is written in the same tx for audit.
+ * the user had at least `cost` to spend, or `null` if insufficient. A
+ * `usage_ledger` row is written in the same transaction for audit.
  *
- * Cost model: every keyframe costs 1 (see COST_PER_FRAME in credit-gate.ts).
- * The `cost` parameter exists so callers can still pass an explicit number;
- * production always passes 1.
- *
- * Race-safe: single UPDATE with a WHERE clause; concurrent callers see
- * either the decrement or a 0-row result, never a double-spend.
+ * Race-safe: the single UPDATE carries a `>= cost` guard, so concurrent
+ * callers see either the decrement or a 0-row result (→ null), never a
+ * double-spend. The ledger insert only happens when the debit succeeded.
  */
 export const debitFrame = async (
-  userId: string,
+  userId: UserId,
   cost: number,
   logger?: Logger
 ): Promise<number | null> => {
-  const client = await getPool().connect();
+  const db = getDb();
   try {
-    await client.query("BEGIN");
-    const upd = await client.query<{ balance: number }>(
-      `UPDATE credits
-         SET balance_frames = balance_frames - $2, updated_at = now()
-         WHERE user_id = $1 AND balance_frames >= $2
-         RETURNING balance_frames AS balance`,
-      [userId, cost]
-    );
-    if (upd.rowCount === 0) {
-      await client.query("ROLLBACK");
-      return null;
-    }
-    await client.query(
-      `INSERT INTO usage_ledger (id, user_id, kind, delta, created_at)
-       VALUES ($1, $2, 'frame', $3, now())`,
-      [newLedgerId(), userId, -cost]
-    );
-    await client.query("COMMIT");
-    return upd.rows[0]?.balance ?? 0;
-  } catch (error) {
-    await client.query("ROLLBACK").catch(() => {
-      // noop — rollback best-effort; original error is rethrown below
+    return await db.transaction(async (tx) => {
+      const [row] = await tx
+        .update(SCHEMA.credits)
+        .set({
+          balanceFrames: sql`${SCHEMA.credits.balanceFrames} - ${cost}`,
+          updatedAt: new Date(),
+        })
+        .where(
+          and(
+            eq(SCHEMA.credits.userId, userId),
+            gte(SCHEMA.credits.balanceFrames, cost)
+          )
+        )
+        .returning();
+      if (!row) {
+        return null;
+      }
+      await tx
+        .insert(SCHEMA.usageLedger)
+        .values({ delta: -cost, kind: "frame", userId });
+      return row.balanceFrames;
     });
+  } catch (error) {
     logger?.error({ cost, error, userId }, "debitFrame failed");
     throw error;
-  } finally {
-    client.release();
   }
 };
 
 /**
- * Inverse of `debitFrame`. Increments `balance_frames` by `cost` and appends
- * a `kind: "refund"` ledger row with delta=+cost in the same transaction.
- * Returns the new balance, or `null` when the user has no `credits` row at
- * all (caller should treat as a no-op).
+ * Inverse of `debitFrame`. Increments `balance_frames` by `cost` and appends a
+ * `kind: "refund"` ledger row in the same transaction. Returns the new
+ * balance, or `null` when the user has no `credits` row at all (caller treats
+ * as a no-op).
  *
  * Use case: a fal generation fails after the credit was already debited.
  */
 export const refundFrame = async (
-  userId: string,
+  userId: UserId,
   cost: number,
   logger?: Logger
 ): Promise<number | null> => {
-  const client = await getPool().connect();
+  const db = getDb();
   try {
-    await client.query("BEGIN");
-    const upd = await client.query<{ balance: number }>(
-      `UPDATE credits
-         SET balance_frames = balance_frames + $2, updated_at = now()
-         WHERE user_id = $1
-         RETURNING balance_frames AS balance`,
-      [userId, cost]
-    );
-    if (upd.rowCount === 0) {
-      await client.query("ROLLBACK");
-      return null;
-    }
-    await client.query(
-      `INSERT INTO usage_ledger (id, user_id, kind, delta, created_at)
-       VALUES ($1, $2, 'refund', $3, now())`,
-      [newLedgerId(), userId, cost]
-    );
-    await client.query("COMMIT");
-    return upd.rows[0]?.balance ?? 0;
-  } catch (error) {
-    await client.query("ROLLBACK").catch(() => {
-      // noop — rollback best-effort; original error is rethrown below
+    return await db.transaction(async (tx) => {
+      const [row] = await tx
+        .update(SCHEMA.credits)
+        .set({
+          balanceFrames: sql`${SCHEMA.credits.balanceFrames} + ${cost}`,
+          updatedAt: new Date(),
+        })
+        .where(eq(SCHEMA.credits.userId, userId))
+        .returning();
+      if (!row) {
+        return null;
+      }
+      await tx
+        .insert(SCHEMA.usageLedger)
+        .values({ delta: cost, kind: "refund", userId });
+      return row.balanceFrames;
     });
+  } catch (error) {
     logger?.error({ cost, error, userId }, "refundFrame failed");
     throw error;
-  } finally {
-    client.release();
   }
 };
 
 /**
- * Try to consume one free-tier slot in the current hourly window. Returns
- * true iff the user was under the hourly limit. Composite PK on
+ * Try to consume one free-tier slot in the current hourly window. Returns true
+ * iff the user was under the hourly limit. Composite PK on
  * (user_id, window_start) makes this race-safe without an explicit tx —
- * concurrent callers upsert onto the same row and the WHERE clause in the
- * UPDATE branch gates the increment.
+ * concurrent callers upsert onto the same row and the conditional `setWhere`
+ * gates the increment.
  *
- * Not all Postgres versions honour conditional ON CONFLICT updates via
- * RETURNING + row count — we read the usage_count back and check against
- * the limit on the client side as a second guard.
+ * `ON CONFLICT … DO UPDATE … WHERE usage_count < limit` returns NO row when the
+ * predicate is false, so an empty result reads as "over quota". We also
+ * re-check the returned count client-side as a second guard.
  */
 export const tryConsumeFreeTier = async (
-  userId: string,
+  userId: UserId,
   limitPerHour = 3,
   logger?: Logger
 ): Promise<boolean> => {
-  const res = await getPool().query<{ usage_count: number }>(
-    `INSERT INTO free_tier_ledger (user_id, window_start, usage_count)
-       VALUES ($1, date_trunc('hour', now()), 1)
-     ON CONFLICT (user_id, window_start)
-       DO UPDATE SET usage_count = free_tier_ledger.usage_count + 1
-         WHERE free_tier_ledger.usage_count < $2
-     RETURNING usage_count`,
-    [userId, limitPerHour]
-  );
-  if (res.rowCount === 0) {
-    return false;
-  }
-  const count = res.rows[0]?.usage_count ?? 0;
-  if (count > limitPerHour) {
+  const db = getDb();
+  const rows = await db
+    .insert(SCHEMA.freeTierLedger)
+    .values({
+      usageCount: 1,
+      userId,
+      windowStart: sql`date_trunc('hour', now())`,
+    })
+    .onConflictDoUpdate({
+      set: { usageCount: sql`${SCHEMA.freeTierLedger.usageCount} + 1` },
+      setWhere: lt(SCHEMA.freeTierLedger.usageCount, limitPerHour),
+      target: [SCHEMA.freeTierLedger.userId, SCHEMA.freeTierLedger.windowStart],
+    })
+    .returning();
+  const [row] = rows;
+  if (!row || row.usageCount > limitPerHour) {
     return false;
   }
   // Append a 'free' row to the ledger for consistent usage analytics.
   try {
-    await getPool().query(
-      `INSERT INTO usage_ledger (id, user_id, kind, delta, created_at)
-       VALUES ($1, $2, 'free', -1, now())`,
-      [newLedgerId(), userId]
-    );
+    await db
+      .insert(SCHEMA.usageLedger)
+      .values({ delta: -1, kind: "free", userId });
   } catch (error) {
     logger?.warn({ error, userId }, "failed to append free-tier ledger row");
   }
@@ -156,15 +137,13 @@ export const tryConsumeFreeTier = async (
 };
 
 export const getBalance = async (
-  userId: string
+  userId: UserId
 ): Promise<{ frames: number }> => {
-  const res = await getPool().query<{ balance_frames: number }>(
-    `SELECT balance_frames FROM credits WHERE user_id = $1`,
-    [userId]
-  );
-  const [row] = res.rows;
-  if (res.rowCount === 0 || !row) {
-    return { frames: 0 };
-  }
-  return { frames: row.balance_frames };
+  const db = getDb();
+  const [row] = await db
+    .select({ balanceFrames: SCHEMA.credits.balanceFrames })
+    .from(SCHEMA.credits)
+    .where(eq(SCHEMA.credits.userId, userId))
+    .limit(1);
+  return { frames: row?.balanceFrames ?? 0 };
 };

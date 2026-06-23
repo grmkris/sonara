@@ -11,6 +11,12 @@
   --color-hairline: #c9c0ae;
   --color-indigo: #1c2d52;
   --color-signal: #a4343a;
+
+  /* shadcn-shaped aliases over the palette, so the ui/ primitives' default
+     `bg-popover` / `text-popover-foreground` / `border` utilities resolve. */
+  --color-popover: #1a1612;
+  --color-popover-foreground: #ede7d9;
+  --color-border: #c9c0ae;
 }
 
 :root {
@@ -20,6 +26,13 @@
   --hairline: #c9c0ae;
   --indigo: #1c2d52;
   --signal: #a4343a;
+
+  /* Consumed directly (via var()) by the sonner toaster + shadcn primitives.
+     Without these the toaster's --normal-bg/-text/-border resolve to nothing. */
+  --popover: var(--ink);
+  --popover-foreground: var(--paper);
+  --border: var(--hairline);
+  --radius: 0.125rem;
 }
 
 html,

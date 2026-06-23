@@ -1,7 +1,7 @@
 import type { SessionRegistry } from "@sonara/api/server";
 import type { LiveSessionId } from "@sonara/shared/typeid";
 
-import { getPool } from "../db/pool";
+import { getDb } from "../db/db";
 import type { Logger } from "../lib/logger";
 import { finalizeRecordingSet } from "../library/recording-set";
 import { Session } from "./session";
@@ -155,7 +155,7 @@ export class SessionManager implements SessionRegistry {
       const { liveSessionId } = session;
       void (async () => {
         try {
-          await finalizeRecordingSet(getPool(), liveSessionId);
+          await finalizeRecordingSet(getDb(), liveSessionId);
         } catch (error) {
           this.logger.warn(
             { error, liveSessionId },
@@ -185,7 +185,7 @@ export class SessionManager implements SessionRegistry {
         finalizes.push(
           (async () => {
             try {
-              await finalizeRecordingSet(getPool(), liveSessionId);
+              await finalizeRecordingSet(getDb(), liveSessionId);
             } catch (error) {
               this.logger.warn(
                 { error, liveSessionId },

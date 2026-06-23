@@ -74,11 +74,7 @@ export const AddToSetPopover = ({ frame }: { frame: LibraryFrame }) => {
           add to set
         </Button>
       </PopoverTrigger>
-      <PopoverContent
-        align="end"
-        side="top"
-        className="w-64 rounded-sm border-[color:var(--hairline)]/40 bg-[color:var(--ink)]/95 p-0 text-[color:var(--paper)] backdrop-blur-md"
-      >
+      <PopoverContent align="end" side="top" className="w-64 p-0">
         <div className="border-b border-[color:var(--hairline)]/30 px-3 py-2 font-mono text-[9px] uppercase tracking-[0.26em] text-[color:var(--stone)]">
           add to set
         </div>

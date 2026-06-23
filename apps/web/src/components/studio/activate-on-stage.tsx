@@ -69,11 +69,7 @@ export const ActivateOnStage = ({ setId }: { setId: FrameSetId }) => {
           activate on…
         </button>
       </PopoverTrigger>
-      <PopoverContent
-        align="end"
-        side="bottom"
-        className="w-56 rounded-sm border-[color:var(--hairline)]/40 bg-[color:var(--ink)]/95 p-1 text-[color:var(--paper)] backdrop-blur-md"
-      >
+      <PopoverContent align="end" side="bottom" className="w-56 p-1">
         <ul className="flex flex-col">
           {liveStages.map((s) => (
             <li key={s.stageId}>
