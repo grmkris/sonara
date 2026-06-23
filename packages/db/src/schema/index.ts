@@ -10,6 +10,7 @@ export * from "./allowlist.db";
 export * from "./auth.db";
 export * from "./credits.db";
 export * from "./frame-set.db";
+export * from "./generation-job.db";
 export * from "./image-library.db";
 export * from "./look-profile.db";
 export * from "./stage.db";

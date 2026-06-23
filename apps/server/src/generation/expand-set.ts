@@ -209,3 +209,133 @@ export const expandSet = async (input: ExpandSetInput): Promise<SetSpec> => {
     return deterministicSet(description, count);
   }
 };
+
+// --- continuation expansion (lazy batches + "generate more") ---------------
+
+// Just the prompts — the world (style/look) is already fixed by the create.
+const BatchSchema = z.object({
+  prompts: z.array(z.string().trim().min(1)).min(1),
+});
+
+const BATCH_ANGLES = [
+  "wide establishing view",
+  "intimate macro detail",
+  "overhead aerial",
+  "low backlit silhouette",
+  "drifting close-up",
+  "reflection on still water",
+  "silhouette against the light",
+] as const;
+
+// Deterministic continuation: append a cycling camera angle to the locked
+// world. `offset` keeps angles spread across batches.
+const deterministicBatch = (
+  styleAnchor: string,
+  offset: number,
+  want: number
+): string[] =>
+  Array.from({ length: want }, (_v, i) => {
+    const angle = BATCH_ANGLES[(offset + i) % BATCH_ANGLES.length];
+    return `${styleAnchor}, ${angle}`;
+  });
+
+const buildBatchSystem = (want: number): string =>
+  `You CONTINUE an existing music-reactive visual SET — one locked "world" (a single palette + aesthetic). Add ${want} MORE prompts in that SAME world: vary the subject and camera angle, but NEVER the palette or aesthetic, and do NOT repeat any prompt already in the set.
+
+Emit a SINGLE JSON object — no prose, no markdown fences:
+{ "prompts": [string] }   // EXACTLY ${want} entries
+
+Each prompt: [concrete subject/scene] · [the SAME palette tokens from the world, repeated verbatim] · [mood tokens] · [render hint (cinematic / macro / long exposure / ink wash / soft focus …)]. 12-30 words. No text/letters in the image, no real public figures, nothing that trips image moderation. Output ONLY the JSON object.`;
+
+const buildBatchUser = (
+  styleAnchor: string,
+  description: string | null,
+  have: string[],
+  want: number,
+  nudge: string | null
+): string => {
+  // Keep the prompt small: only the most recent prompts give continuity
+  // context (dedup is global, via the `seen` set in expandSetBatch).
+  const sample = have.slice(-12);
+  return `The locked world: "${styleAnchor}".${
+    description ? `\nOriginal brief: "${description.trim()}".` : ""
+  }${nudge ? `\nFor these new ones, lean into: "${nudge.trim()}".` : ""}
+Prompts already in the set (do NOT repeat these):
+${sample.map((p, i) => `${i + 1}. ${p}`).join("\n")}
+
+Write EXACTLY ${want} NEW prompts in the same world. Emit the JSON object.`;
+};
+
+export interface ExpandSetBatchInput {
+  styleAnchor: string;
+  description: string | null;
+  have: string[];
+  want: number;
+  // Optional steer for "generate more" ("more dragons", "darker") — never
+  // overrides the locked world.
+  nudge?: string | null;
+  signal?: AbortSignal;
+  logger: Logger;
+}
+
+// More style-anchored prompts for an in-progress set: the worker's lazy batches
+// (200-frame sets) and "generate more". Never repeats `have`; returns exactly
+// `want` prompts, backfilling deterministically if the model under-delivers, so
+// generation never stalls.
+export const expandSetBatch = async (
+  input: ExpandSetBatchInput
+): Promise<string[]> => {
+  const { description, have, logger, nudge, signal, styleAnchor, want } = input;
+  const seen = new Set(have.map((p) => p.trim().toLowerCase()));
+  const fallback = (): string[] =>
+    deterministicBatch(styleAnchor, have.length, want);
+
+  try {
+    const output = await callLlmForJson({
+      maxTokens: maxTokensFor(want),
+      signal,
+      system: buildBatchSystem(want),
+      temperature: 0.95,
+      user: buildBatchUser(styleAnchor, description, have, want, nudge ?? null),
+    });
+    if (signal?.aborted || output === null || output.length === 0) {
+      return fallback();
+    }
+
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(stripFences(output));
+    } catch (error) {
+      logger.warn({ error }, "expand-set-batch: JSON parse failed");
+      return fallback();
+    }
+    const validated = BatchSchema.safeParse(parsed);
+    if (!validated.success) {
+      logger.warn(
+        { issues: validated.error.issues },
+        "expand-set-batch: validation failed"
+      );
+      return fallback();
+    }
+
+    const fresh = validated.data.prompts.filter(
+      (p) => !seen.has(p.trim().toLowerCase())
+    );
+    if (fresh.length >= want) {
+      return fresh.slice(0, want);
+    }
+    // Model under-delivered (or repeated) — backfill deterministically.
+    const filler = deterministicBatch(
+      styleAnchor,
+      have.length + fresh.length,
+      want - fresh.length
+    );
+    return [...fresh, ...filler];
+  } catch (error) {
+    if (signal?.aborted) {
+      return fallback();
+    }
+    logger.warn({ error }, "expand-set-batch: LLM error");
+    return fallback();
+  }
+};

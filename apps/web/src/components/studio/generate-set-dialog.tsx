@@ -6,33 +6,51 @@ import { useState } from "react";
 
 import { Slider } from "@/components/ui/slider";
 
-// "Generate a set with AI": the user describes a visual world + picks a frame
-// count; the server expands it into a coherent set (palette/style anchor + a
-// baked look + N prompts) and streams frames in. Self-contained — owns its
-// trigger button + dialog state; the parent passes only the mutation. Editorial
-// --ink/--paper styling, mirroring shortcuts-help.tsx.
+// "Generate a set with AI" / "Generate more": describe a visual world (or steer
+// a follow-up) + pick a frame count; the server expands it into style-coherent
+// prompts and streams frames in. One component, two uses — the create flow
+// requires a description; the "generate more" flow makes the text an optional
+// steer. Self-contained (owns its trigger + state). Editorial --ink/--paper.
 
-const COUNT_MIN = 4;
-const COUNT_MAX = 24;
-const COUNT_DEFAULT = 12;
 const DESC_MIN = 4;
 const DESC_MAX = 500;
 
-const PLACEHOLDER =
+const CREATE_PLACEHOLDER =
   "misty jade dragon ascending over emerald mountains at dawn…";
 
 export const GenerateSetDialog = ({
   onGenerate,
+  triggerLabel = "generate",
+  title = "Generate a set",
+  blurb = "Describe one visual world. The AI picks a palette, a look, and the prompts, then renders the frames into a new editable set.",
+  textLabel = "description",
+  textPlaceholder = CREATE_PLACEHOLDER,
+  textRequired = true,
+  countMin = 4,
+  countMax = 200,
+  countDefault = 12,
+  submitLabel = "generate",
 }: {
-  onGenerate: (description: string, count: number) => Promise<boolean>;
+  onGenerate: (text: string, count: number) => Promise<boolean>;
+  triggerLabel?: string;
+  title?: string;
+  blurb?: string;
+  textLabel?: string;
+  textPlaceholder?: string;
+  textRequired?: boolean;
+  countMin?: number;
+  countMax?: number;
+  countDefault?: number;
+  submitLabel?: string;
 }) => {
   const [open, setOpen] = useState(false);
-  const [description, setDescription] = useState("");
-  const [count, setCount] = useState(COUNT_DEFAULT);
+  const [text, setText] = useState("");
+  const [count, setCount] = useState(countDefault);
   const [submitting, setSubmitting] = useState(false);
 
-  const trimmed = description.trim();
-  const canSubmit = trimmed.length >= DESC_MIN && !submitting;
+  const trimmed = text.trim();
+  const canSubmit =
+    (!textRequired || trimmed.length >= DESC_MIN) && !submitting;
 
   const submit = async () => {
     if (!canSubmit) {
@@ -42,8 +60,8 @@ export const GenerateSetDialog = ({
     const ok = await onGenerate(trimmed, count);
     setSubmitting(false);
     if (ok) {
-      setDescription("");
-      setCount(COUNT_DEFAULT);
+      setText("");
+      setCount(countDefault);
       setOpen(false);
     }
   };
@@ -51,36 +69,35 @@ export const GenerateSetDialog = ({
   return (
     <Dialog.Root open={open} onOpenChange={setOpen}>
       <Dialog.Trigger
-        aria-label="generate a set with AI"
+        aria-label={title}
         className="focus-ring flex items-center gap-1 font-sans text-[9px] uppercase tracking-[0.22em] text-[color:var(--stone)] transition-colors hover:text-[color:var(--paper)]"
       >
         <Sparkles className="size-3" strokeWidth={1.5} />
-        generate
+        {triggerLabel}
       </Dialog.Trigger>
       <Dialog.Portal>
         <Dialog.Backdrop className="fixed inset-0 z-50 bg-[color:var(--ink)]/70 backdrop-blur-sm data-closed:animate-out data-closed:fade-out-0 data-open:animate-in data-open:fade-in-0" />
         <Dialog.Popup className="-translate-x-1/2 -translate-y-1/2 fixed top-1/2 left-1/2 z-50 w-[min(520px,92vw)] rounded-sm border border-[color:var(--hairline)]/40 bg-[color:var(--ink)] p-6 text-[color:var(--paper)] shadow-xl data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95 data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95">
           <Dialog.Title className="flex items-center gap-2 font-serif text-[18px] text-[color:var(--paper)] italic">
             <Sparkles className="size-4" strokeWidth={1.5} />
-            Generate a set
+            {title}
           </Dialog.Title>
           <Dialog.Description className="mt-2 font-sans text-[12px] text-[color:var(--stone)] leading-relaxed">
-            Describe one visual world. The AI picks a palette, a look, and the
-            prompts, then renders the frames into a new editable set.
+            {blurb}
           </Dialog.Description>
 
           <div className="mt-5 flex flex-col gap-5">
             <label className="flex flex-col gap-2">
               <span className="font-mono text-[9px] uppercase tracking-[0.26em] text-[color:var(--stone)]">
-                description
+                {textLabel}
               </span>
               <textarea
-                value={description}
+                value={text}
                 autoFocus
                 maxLength={DESC_MAX}
-                placeholder={PLACEHOLDER}
+                placeholder={textPlaceholder}
                 rows={3}
-                onChange={(e) => setDescription(e.target.value)}
+                onChange={(e) => setText(e.target.value)}
                 onKeyDown={(e) => {
                   if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
                     e.preventDefault();
@@ -103,8 +120,8 @@ export const GenerateSetDialog = ({
               <Slider
                 aria-label="frame count"
                 value={[count]}
-                min={COUNT_MIN}
-                max={COUNT_MAX}
+                min={countMin}
+                max={countMax}
                 step={1}
                 onValueChange={(v) => {
                   const next = Array.isArray(v) ? v[0] : v;
@@ -135,7 +152,7 @@ export const GenerateSetDialog = ({
                 ) : (
                   <Sparkles className="size-3" strokeWidth={2} />
                 )}
-                generate
+                {submitLabel}
               </button>
             </div>
           </div>

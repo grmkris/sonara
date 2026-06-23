@@ -30,6 +30,40 @@ const LABEL =
 
 const secs = (ms: number): string => `${(ms / 1000).toFixed(1)}s`;
 
+// The look's calm/loud cadence is the audio-reactive hold range (un-pinned
+// frames interpolate between them by live intensity). We expose it as two
+// intuitive knobs instead — an "average hold" and how hard it "reacts to
+// music" — and map back and forth. react=0 → calm==loud (steady); higher react
+// → longer on calm, shorter on loud.
+const MIN_HOLD = 500;
+const MAX_HOLD = 30_000;
+const clamp = (n: number, lo: number, hi: number): number =>
+  Math.max(lo, Math.min(hi, n));
+
+const toCadence = (
+  avgHold: number,
+  react: number
+): { calm: number; loud: number } => ({
+  calm: Math.round(clamp(avgHold * (1 + react), 1000, MAX_HOLD)),
+  loud: Math.round(clamp(avgHold * (1 - 0.8 * react), MIN_HOLD, MAX_HOLD)),
+});
+
+const fromCadence = (cadence: {
+  calm: number;
+  loud: number;
+}): { avgHold: number; react: number } => ({
+  avgHold: clamp(
+    Math.round((cadence.calm + cadence.loud) / 2),
+    MIN_HOLD,
+    12_000
+  ),
+  react: clamp(
+    (cadence.calm - cadence.loud) / (0.9 * (cadence.calm + cadence.loud)),
+    0,
+    1
+  ),
+});
+
 // Author a set's baked look: render preset + reactivity intensity + frame
 // cadence, applied as a unit whenever the set is picked (the deck DECK_LOOK
 // contract, now on any owned set). Edits a local draft; save commits via
@@ -53,6 +87,8 @@ export const SetLookEditor = ({ look, onChange }: SetLookEditorProps) => {
     onChange(null);
     setOpen(false);
   };
+
+  const { avgHold, react } = fromCadence(draft.cadence);
 
   return (
     <Popover open={open} onOpenChange={onOpenChange}>
@@ -119,49 +155,47 @@ export const SetLookEditor = ({ look, onChange }: SetLookEditorProps) => {
 
           <div className="flex flex-col gap-1.5">
             <div className="flex items-baseline justify-between">
-              <span className={LABEL}>hold · calm</span>
+              <span className={LABEL}>average hold</span>
               <span className="font-mono text-[10px] text-[color:var(--paper)]/70">
-                {secs(draft.cadence.calm)}
+                {secs(avgHold)}
               </span>
             </div>
             <Slider
-              value={[draft.cadence.calm]}
-              min={1000}
-              max={30_000}
-              step={500}
+              value={[avgHold]}
+              min={MIN_HOLD}
+              max={12_000}
+              step={100}
               onValueChange={(v) => {
                 const next = Array.isArray(v) ? v[0] : v;
-                setDraft((d) => ({
-                  ...d,
-                  cadence: {
-                    ...d.cadence,
-                    calm: (next as number | undefined) ?? d.cadence.calm,
-                  },
-                }));
+                if (typeof next === "number") {
+                  setDraft((d) => ({ ...d, cadence: toCadence(next, react) }));
+                }
               }}
             />
             <div className="flex items-baseline justify-between">
-              <span className={LABEL}>hold · loud</span>
+              <span className={LABEL}>react to music</span>
               <span className="font-mono text-[10px] text-[color:var(--paper)]/70">
-                {secs(draft.cadence.loud)}
+                {Math.round(react * 100)}%
               </span>
             </div>
             <Slider
-              value={[draft.cadence.loud]}
-              min={500}
-              max={30_000}
-              step={500}
+              value={[react]}
+              min={0}
+              max={1}
+              step={0.01}
               onValueChange={(v) => {
                 const next = Array.isArray(v) ? v[0] : v;
-                setDraft((d) => ({
-                  ...d,
-                  cadence: {
-                    ...d.cadence,
-                    loud: (next as number | undefined) ?? d.cadence.loud,
-                  },
-                }));
+                if (typeof next === "number") {
+                  setDraft((d) => ({
+                    ...d,
+                    cadence: toCadence(avgHold, next),
+                  }));
+                }
               }}
             />
+            <span className="font-mono text-[9px] text-[color:var(--stone)] leading-relaxed">
+              {secs(draft.cadence.calm)} calm → {secs(draft.cadence.loud)} loud
+            </span>
           </div>
 
           <div className="flex items-center justify-end gap-2">

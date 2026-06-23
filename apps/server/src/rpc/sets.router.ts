@@ -13,6 +13,7 @@ import {
   FrameSetIdSchema,
   ImageLibraryIdSchema,
   typeIdFromUuid,
+  typeIdGenerator,
   typeIdToUuid,
 } from "@sonara/shared/typeid";
 import type {
@@ -37,15 +38,25 @@ import {
 } from "drizzle-orm";
 import { z } from "zod";
 
-import { COST_PER_FRAME } from "../credits/credit-gate";
-import { getBalance } from "../credits/credits.service";
-import { expandSet } from "../generation/expand-set";
 import {
-  releaseUser,
-  startSetGeneration,
-  tryClaimUser,
-} from "../generation/generate-set-job";
+  COST_PER_FRAME,
+  refundOnError,
+  tryDebitCredit,
+} from "../credits/credit-gate";
+import { getBalance } from "../credits/credits.service";
+import { env } from "../env";
+import { expandSet, expandSetBatch } from "../generation/expand-set";
+import {
+  FRAME_SIZE,
+  renderFrame,
+  seedFrom,
+} from "../generation/frame-pipeline";
+import {
+  enqueueGenerationJob,
+  hasActiveJobForUser,
+} from "../generation/generation-worker";
 import { logger } from "../lib/logger";
+import { persistFrame } from "../library/persist-frame";
 import { stageRooms } from "../stage/stage-rooms";
 import { stageState } from "../stage/stage-state";
 import { FRAME_COLUMNS, frameReadUrl, rowToFrame } from "./frame-mapping";
@@ -92,9 +103,16 @@ const BATCH_FRAMES_MAX = 200;
 // "Generate a set with AI" bounds: each prompt is one billed t2i frame, so
 // the count is the credit cost. Kept small — a set is one coherent world.
 const GENERATE_COUNT_MIN = 4;
-const GENERATE_COUNT_MAX = 24;
+const GENERATE_COUNT_MAX = 200;
 const GENERATE_DESC_MIN = 4;
 const GENERATE_DESC_MAX = 500;
+// Only the first batch of prompts is expanded up front (name/style/look + a
+// starter set); the worker lazily expands the rest in style-anchored chunks,
+// so a 200-frame set never needs 200 prompts in one LLM call.
+const GENERATE_INITIAL_BATCH = 16;
+// "Generate more" / extend: how many frames a single follow-up adds.
+const GENERATE_MORE_MIN = 1;
+const GENERATE_MORE_MAX = 100;
 
 const SET_COLUMNS = {
   coverFrameId: SCHEMA.frameSet.coverFrameId,
@@ -445,6 +463,50 @@ export const setsRouter = {
     }),
 
   /**
+   * Cancel an in-progress generation on a set: its active job(s) flip to
+   * 'canceled' (the worker stops at its next cursor check and finalizes the
+   * partial). A never-started (pending) job's set is finalized here so it
+   * doesn't hang in 'generating'.
+   */
+  cancelGeneration: protectedProcedure
+    .input(z.object({ setId: FrameSetIdSchema }))
+    .handler(async ({ context, input }) => {
+      const { db, userId } = context;
+      await requireOwnedSet(db, userId, input.setId);
+
+      await db
+        .update(SCHEMA.generationJob)
+        .set({ status: "canceled", updatedAt: new Date() })
+        .where(
+          and(
+            eq(SCHEMA.generationJob.setId, input.setId),
+            inArray(SCHEMA.generationJob.status, ["pending", "running"])
+          )
+        );
+
+      // If nothing is left running, finalize now (covers a pending job the
+      // worker never claimed). A still-running job will also self-finalize.
+      const [activeJob] = await db
+        .select({ id: SCHEMA.generationJob.id })
+        .from(SCHEMA.generationJob)
+        .where(
+          and(
+            eq(SCHEMA.generationJob.setId, input.setId),
+            inArray(SCHEMA.generationJob.status, ["pending", "running"])
+          )
+        )
+        .limit(1);
+      if (!activeJob) {
+        await db
+          .update(SCHEMA.frameSet)
+          .set({ status: "final" })
+          .where(eq(SCHEMA.frameSet.id, input.setId));
+      }
+
+      return { ok: true as const };
+    }),
+
+  /**
    * Create a curated set. Two optional seed sources:
    *   - `frameIds`  — explicit frames (owned by the caller), in input order.
    *   - `fromSetId` — "make a cut": the source set's frames in order
@@ -548,78 +610,143 @@ export const setsRouter = {
     .handler(async ({ context, input }) => {
       const { db, userId } = context;
 
-      // Claim the one-generation-per-user slot ATOMICALLY and up front — held
-      // across the slow LLM expansion below so a double-submit can't slip a
-      // second job through (which would create two sets + double-charge).
-      if (!tryClaimUser(userId)) {
+      // One generation at a time per user (durable guard — a pending/running
+      // job in generation_job). The dialog also disables re-submit.
+      if (await hasActiveJobForUser(db, userId)) {
         throw new ORPCError("CONFLICT", {
           message: "A set is already generating — let it finish first.",
         });
       }
 
-      // Release the slot on any failure BEFORE the loop takes ownership; once
-      // startSetGeneration runs, the loop's `finally` owns the release.
-      let handedOff = false;
-      try {
-        // Fail fast: a generate request that can't pay for all its frames is
-        // rejected before the LLM call or any DB write.
-        const needed = input.count * COST_PER_FRAME;
-        const balance = await getBalance(userId);
-        if (balance.frames < needed) {
-          throw new ORPCError("BAD_REQUEST", {
-            message: `Not enough credits — this set needs ${needed}, you have ${balance.frames}.`,
-          });
-        }
-
-        const jobLogger = logger.child({
-          component: "generate-set",
-          userId,
+      // Fail fast: a generate request that can't pay for all its frames is
+      // rejected before the LLM call or any DB write.
+      const needed = input.count * COST_PER_FRAME;
+      const balance = await getBalance(userId);
+      if (balance.frames < needed) {
+        throw new ORPCError("BAD_REQUEST", {
+          message: `Not enough credits — this set needs ${needed}, you have ${balance.frames}.`,
         });
-        const spec = await expandSet({
-          count: input.count,
-          description: input.description,
-          logger: jobLogger,
-        });
-
-        // Materialize the header now (status='generating') with the AI-chosen
-        // look baked in, so the UI navigates + polls while frames stream in.
-        const [row] = await db
-          .insert(SCHEMA.frameSet)
-          .values({
-            frameCount: 0,
-            lookCadenceCalmMs: spec.look.cadence.calm,
-            lookCadenceLoudMs: spec.look.cadence.loud,
-            lookIntensity: spec.look.intensity,
-            lookPreset: spec.look.preset,
-            name: spec.name,
-            origin: "curated",
-            status: "generating",
-            styleDrift: spec.style,
-            userId,
-          })
-          .returning();
-        if (!row) {
-          throw new ORPCError("INTERNAL_SERVER_ERROR");
-        }
-
-        // Detached t2i loop (credit-gated per frame). Not awaited — the header
-        // is already returned; progress shows via polling `get`.
-        startSetGeneration({
-          db,
-          logger: jobLogger,
-          prompts: spec.prompts,
-          setId: row.id,
-          userId,
-        });
-        handedOff = true;
-
-        const set = toSummary({ ...row, frameCount: 0 } as SetRow, null);
-        return { set };
-      } finally {
-        if (!handedOff) {
-          releaseUser(userId);
-        }
       }
+
+      const jobLogger = logger.child({ component: "generate-set", userId });
+      // Expand only the first batch up front (name/style/look + starter
+      // prompts); the worker lazily expands the rest to `total`.
+      const spec = await expandSet({
+        count: Math.min(input.count, GENERATE_INITIAL_BATCH),
+        description: input.description,
+        logger: jobLogger,
+      });
+
+      // Materialize the header now (status='generating') with the AI-chosen
+      // look baked in, so the UI navigates + polls while frames stream in.
+      const [row] = await db
+        .insert(SCHEMA.frameSet)
+        .values({
+          frameCount: 0,
+          lookCadenceCalmMs: spec.look.cadence.calm,
+          lookCadenceLoudMs: spec.look.cadence.loud,
+          lookIntensity: spec.look.intensity,
+          lookPreset: spec.look.preset,
+          name: spec.name,
+          origin: "curated",
+          status: "generating",
+          styleDrift: spec.style,
+          userId,
+        })
+        .returning();
+      if (!row) {
+        throw new ORPCError("INTERNAL_SERVER_ERROR");
+      }
+
+      // Enqueue the durable job — the worker (resumable across restarts) picks
+      // it up and streams frames in. The header is already returned.
+      await enqueueGenerationJob({
+        db,
+        description: input.description,
+        kind: "create",
+        look: spec.look,
+        prompts: spec.prompts,
+        setId: row.id,
+        styleAnchor: spec.style,
+        total: input.count,
+        userId,
+      });
+
+      const set = toSummary({ ...row, frameCount: 0 } as SetRow, null);
+      return { set };
+    }),
+
+  /**
+   * "Generate more": append N style-coherent frames to an existing generated/
+   * curated set, reusing its locked world (styleDrift). Enqueues an 'extend'
+   * job and flips the set back to 'generating' so the editor polls progress.
+   * One generation per user at a time; one credit per frame.
+   */
+  generateMore: protectedProcedure
+    .input(
+      z.object({
+        count: z.number().int().min(GENERATE_MORE_MIN).max(GENERATE_MORE_MAX),
+        // Optional steer ("more dragons", "darker") — never overrides the world.
+        nudge: z.string().trim().max(200).optional(),
+        setId: FrameSetIdSchema,
+      })
+    )
+    .handler(async ({ context, input }) => {
+      const { db, userId } = context;
+
+      if (await hasActiveJobForUser(db, userId)) {
+        throw new ORPCError("CONFLICT", {
+          message: "A set is already generating — let it finish first.",
+        });
+      }
+
+      const set = await requireOwnedSet(db, userId, input.setId);
+      // curated/generated only
+      requireEditableFrameList(set);
+
+      const needed = input.count * COST_PER_FRAME;
+      const balance = await getBalance(userId);
+      if (balance.frames < needed) {
+        throw new ORPCError("BAD_REQUEST", {
+          message: `Not enough credits — this needs ${needed}, you have ${balance.frames}.`,
+        });
+      }
+
+      const jobLogger = logger.child({
+        component: "generate-more",
+        setId: input.setId,
+        userId,
+      });
+      // The locked world: the set's styleDrift (falls back to its name).
+      const styleAnchor = set.styleDrift ?? set.name;
+      const prompts = await expandSetBatch({
+        description: null,
+        have: [],
+        logger: jobLogger,
+        nudge: input.nudge ?? null,
+        styleAnchor,
+        want: Math.min(input.count, GENERATE_INITIAL_BATCH),
+      });
+
+      // Re-enter 'generating' so the editor polls + shows progress.
+      await db
+        .update(SCHEMA.frameSet)
+        .set({ status: "generating" })
+        .where(eq(SCHEMA.frameSet.id, input.setId));
+
+      await enqueueGenerationJob({
+        db,
+        description: null,
+        kind: "extend",
+        look: toLook(set),
+        prompts,
+        setId: input.setId,
+        styleAnchor,
+        total: input.count,
+        userId,
+      });
+
+      return { ok: true as const };
     }),
 
   /**
@@ -898,6 +1025,140 @@ export const setsRouter = {
         ? (trimmed.at(-1)?.createdAt.toISOString() ?? null)
         : null;
       return { nextCursor, sets };
+    }),
+
+  /**
+   * Regenerate one member frame in place: render a new image (from the edited
+   * prompt, or the frame's stored prompt) and swap the membership to it — the
+   * old image stays in the library, position + duration are preserved. Curated
+   * sets only; one credit, refunded on render failure.
+   */
+  regenerateFrame: protectedProcedure
+    .input(
+      z.object({
+        frameId: ImageLibraryIdSchema,
+        prompt: z.string().trim().min(1).max(2000).optional(),
+        seed: z.number().int().nonnegative().optional(),
+        setId: FrameSetIdSchema,
+      })
+    )
+    .handler(async ({ context, input }) => {
+      const { db, userId } = context;
+      const set = await requireOwnedSet(db, userId, input.setId);
+      requireEditableFrameList(set);
+
+      // The frame must be a member of this set.
+      const [member] = await db
+        .select({ frameId: SCHEMA.frameSetFrame.frameId })
+        .from(SCHEMA.frameSetFrame)
+        .where(
+          and(
+            eq(SCHEMA.frameSetFrame.setId, input.setId),
+            eq(SCHEMA.frameSetFrame.frameId, input.frameId)
+          )
+        )
+        .limit(1);
+      if (!member) {
+        throw new ORPCError("NOT_FOUND", { message: "Frame not in set." });
+      }
+
+      // Defaults from the source frame (its prompt + seed) unless overridden.
+      const [src] = await db
+        .select({
+          prompt: SCHEMA.imageLibrary.prompt,
+          seed: SCHEMA.imageLibrary.seed,
+        })
+        .from(SCHEMA.imageLibrary)
+        .where(eq(SCHEMA.imageLibrary.id, input.frameId))
+        .limit(1);
+      const prompt = input.prompt ?? src?.prompt ?? "";
+      if (prompt.length === 0) {
+        throw new ORPCError("BAD_REQUEST", { message: "No prompt to render." });
+      }
+      const seed = input.seed ?? src?.seed ?? seedFrom(prompt, 0);
+
+      const frameLogger = logger.child({
+        component: "regenerate-frame",
+        setId: input.setId,
+        userId,
+      });
+      const gate = await tryDebitCredit({
+        cost: COST_PER_FRAME,
+        isUserInitiated: true,
+        lastCreditDenialAt: 0,
+        logger: frameLogger,
+        now: Date.now(),
+        userId,
+      });
+      if (!gate.ok) {
+        throw new ORPCError("BAD_REQUEST", {
+          message:
+            gate.reason === "out_of_credits"
+              ? "Out of credits."
+              : "Payment system unavailable.",
+        });
+      }
+
+      const controller = new AbortController();
+      let url: string;
+      try {
+        url = await renderFrame({
+          logger: frameLogger,
+          prompt,
+          seed,
+          signal: controller.signal,
+        });
+      } catch (error) {
+        refundOnError(userId, gate.paidCost, frameLogger);
+        frameLogger.warn({ error }, "regenerate-frame: render failed");
+        throw new ORPCError("INTERNAL_SERVER_ERROR", {
+          message: "Couldn't render the frame.",
+        });
+      }
+
+      const newId = typeIdGenerator("imageLibrary");
+      const persisted = await persistFrame({
+        deck: "generated",
+        falUrl: url,
+        height: FRAME_SIZE,
+        id: newId,
+        logger: frameLogger,
+        model: env.FAL_TEXT_MODEL,
+        palette: null,
+        prompt,
+        seed,
+        sessionId: typeIdGenerator("liveSession"),
+        tMs: 0,
+        triggerReason: "regenerated",
+        userId,
+        width: FRAME_SIZE,
+      });
+      if (!persisted) {
+        refundOnError(userId, gate.paidCost, frameLogger);
+        throw new ORPCError("INTERNAL_SERVER_ERROR", {
+          message: "Couldn't save the frame.",
+        });
+      }
+
+      // Swap the membership to the new image (keep position + duration).
+      await db
+        .update(SCHEMA.frameSetFrame)
+        .set({ frameId: newId })
+        .where(
+          and(
+            eq(SCHEMA.frameSetFrame.setId, input.setId),
+            eq(SCHEMA.frameSetFrame.frameId, input.frameId)
+          )
+        );
+      // Move the cover with it if it pointed at the old frame.
+      if (set.coverFrameId === input.frameId) {
+        await db
+          .update(SCHEMA.frameSet)
+          .set({ coverFrameId: newId })
+          .where(eq(SCHEMA.frameSet.id, input.setId));
+      }
+
+      return { frameId: newId };
     }),
 
   /** Delete a set (cascades membership; underlying frames are untouched). */

@@ -122,17 +122,24 @@ export const finalizeRecordingSet = async (
 // legacy clients re-sending their sessionStorage lse — re-opens the set via
 // ensureRecordingSet's ON CONFLICT anyway. Returns the swept count.
 //
-// Also sweeps stale 'generating' sets: an AI "generate a set" job is a
-// single-process fire-and-forget loop, so a deploy/crash mid-generation leaves
-// the set 'generating' with no worker to resume it. Finalizing it here leaves
-// a usable partial set (the frames it managed to persist).
+// Also sweeps 'generating' sets that have NO live generation_job — orphans
+// from before the durable-worker era (or a job row that was deleted). A
+// 'generating' set that still has a pending/running job is left alone: the
+// worker resumes it from its cursor (resetOrphanedJobs flips dead 'running'
+// jobs back to 'pending' at boot). Recording sets never have a job, so the
+// NOT EXISTS is always true for them — their behaviour is unchanged.
 export const finalizeStaleRecordingSets = async (
   db: Database
 ): Promise<number> => {
   const rows = await db
     .update(SCHEMA.frameSet)
     .set({ status: "final" })
-    .where(inArray(SCHEMA.frameSet.status, ["recording", "generating"]))
+    .where(
+      and(
+        inArray(SCHEMA.frameSet.status, ["recording", "generating"]),
+        sql`NOT EXISTS (SELECT 1 FROM ${SCHEMA.generationJob} j WHERE j.set_id = ${SCHEMA.frameSet.id} AND j.status IN ('pending', 'running'))`
+      )
+    )
     .returning();
   return rows.length;
 };

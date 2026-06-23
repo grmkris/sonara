@@ -21,6 +21,10 @@ import { getDb } from "./db/db";
 import { migrateFrameSetsOnBoot } from "./db/frame-set-boot-migrate";
 import { seedLibraryOnBoot } from "./db/library-boot-seed";
 import { env } from "./env";
+import {
+  resetOrphanedJobs,
+  startGenerationWorker,
+} from "./generation/generation-worker";
 import { uploadImage } from "./http/upload";
 import { logger } from "./lib/logger";
 import { finalizeStaleRecordingSets } from "./library/recording-set";
@@ -53,16 +57,28 @@ await seedLibraryOnBoot(logger);
 // library seed so builtin sets pick up the seed frames.
 await migrateFrameSetsOnBoot(logger);
 
-// Orphan sweep: any frame_set still 'recording' at boot belongs to a run
-// that died with the previous process — the registry is in-memory, so no
-// live owner can exist. See finalizeStaleRecordingSets for why this is safe.
+// Resume durable generation: a fresh process can have no legitimately-running
+// job, so flip any 'running' generation_job (orphaned by the dead process)
+// back to 'pending' — the worker then resumes each from its persisted cursor.
+const resumedJobs = await resetOrphanedJobs(getDb());
+if (resumedJobs > 0) {
+  logger.info({ resumedJobs }, "reset orphaned generation jobs for resume");
+}
+
+// Orphan sweep: any frame_set still 'recording' at boot belongs to a run that
+// died with the previous process. 'generating' sets WITH a live job are left
+// for the worker; only true orphans get finalized. See
+// finalizeStaleRecordingSets for why this is safe.
 const sweptSets = await finalizeStaleRecordingSets(getDb());
 if (sweptSets > 0) {
   logger.info(
     { sweptSets },
-    "finalized orphaned recording sets from previous process"
+    "finalized orphaned recording/generating sets from previous process"
   );
 }
+
+// Start the durable generation worker pool (claims + runs generation_job rows).
+startGenerationWorker();
 
 const port = env.PORT;
 
