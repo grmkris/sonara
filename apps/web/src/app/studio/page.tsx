@@ -445,18 +445,24 @@ const StudioInner = () => {
   // shift = range (no anchor → plain); check/long-press = toggle always.
   const onFrameClick = useCallback(
     (frameId: string, mods: { shiftKey: boolean; metaOrCtrl: boolean }) => {
-      if (mods.metaOrCtrl) {
-        selection.toggle(frameId);
+      // Shift = range from the anchor (the last plain/cmd-clicked frame).
+      // Unconditional: rangeTo self-heals to a toggle when there's no anchor,
+      // so "click A, shift-click B" selects the A…B span from a cold start.
+      if (mods.shiftKey) {
+        selection.rangeTo(frameId);
         return;
       }
-      if (mods.shiftKey && isSelecting) {
-        selection.rangeTo(frameId);
+      if (mods.metaOrCtrl) {
+        selection.toggle(frameId);
         return;
       }
       if (isSelecting) {
         selection.toggle(frameId);
         return;
       }
+      // Plain click = inspect, but also ARM the anchor so the next shift-click
+      // ranges from here.
+      selection.setAnchor(frameId);
       onFrameOpen(frameId);
     },
     [selection, isSelecting, onFrameOpen]
@@ -524,10 +530,11 @@ const StudioInner = () => {
         }
         return;
       }
+      // Cmd/Ctrl+A selects every clip in the open set/recording (the typing
+      // guard above keeps it from hijacking select-all in the rename field).
       if (
         (e.metaKey || e.ctrlKey) &&
         e.key.toLowerCase() === "a" &&
-        isSelecting &&
         displayOrder.length > 0
       ) {
         e.preventDefault();
@@ -541,7 +548,6 @@ const StudioInner = () => {
     selectedFrameId,
     clearSelection,
     onCloseInspector,
-    isSelecting,
     displayOrder.length,
     selection,
   ]);
