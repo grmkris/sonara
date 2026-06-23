@@ -1,5 +1,7 @@
 import {
   buildContext,
+  onError,
+  ORPCError,
   RPCHandler,
   sessionRouter,
   WsRPCHandler,
@@ -71,7 +73,29 @@ const app = new Hono();
 // createDb pools per connection string, so this is cheap.
 const auth = getAuth();
 const db = createDb(env.DATABASE_URL);
-const rpcHandler = new RPCHandler(appRouter);
+// Log unexpected RPC failures. oRPC otherwise swallows a thrown handler error
+// into a generic 500 response with NO server-side trace, so silent
+// "Internal server error" toasts were undebuggable. Expected typed errors
+// (BAD_REQUEST / NOT_FOUND / CONFLICT … status < 500) are normal control flow
+// and stay quiet; everything else (plain throws → INTERNAL_SERVER_ERROR) is
+// logged with its stack.
+const rpcHandler = new RPCHandler(appRouter, {
+  clientInterceptors: [
+    // oxlint-disable-next-line promise/prefer-await-to-callbacks -- oRPC interceptor lifecycle hook, not a node-style callback
+    onError((error) => {
+      const expected =
+        error instanceof ORPCError &&
+        typeof error.status === "number" &&
+        error.status < 500;
+      if (!expected) {
+        logger.error(
+          error instanceof Error ? error : { err: error },
+          "rpc handler error"
+        );
+      }
+    }),
+  ],
+});
 
 // Live in-memory sessions. Created/destroyed by the WS lifecycle below, and
 // also threaded into the HTTP context so the authed `control` router can find
