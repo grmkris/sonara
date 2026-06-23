@@ -607,6 +607,24 @@ const StudioInner = () => {
     [mutations]
   );
 
+  // The inspected frame is regeneratable only when it's a member of the open,
+  // final, owned curated set. Bound here (not inline in JSX) to keep
+  // StudioInner's cyclomatic complexity down.
+  const inspectorRegenerate = useMemo<
+    ((prompt: string) => Promise<boolean>) | undefined
+  >(() => {
+    if (
+      tab !== "sets" ||
+      setDetail?.origin !== "curated" ||
+      setDetail.status === "generating" ||
+      !selectedFrame
+    ) {
+      return;
+    }
+    const frameId = selectedFrame.id;
+    return (prompt: string) => mutations.regenerateFrame(frameId, prompt);
+  }, [tab, setDetail, selectedFrame, mutations]);
+
   // --- Drag and drop (desktop): one monitor routes every frame drop. ---
   const setOrderedIds = useMemo(
     () => (setDetail?.frames ?? []).map((f) => f.id as string),
@@ -984,7 +1002,11 @@ const StudioInner = () => {
         {/* Desktop inspector pane */}
         {showInspectorOnDesktop && selectedFrame && (
           <aside className="hidden w-[360px] shrink-0 overflow-y-auto border-l border-[color:var(--hairline)]/30 md:block">
-            <FrameInspector frame={selectedFrame} onClose={onCloseInspector} />
+            <FrameInspector
+              frame={selectedFrame}
+              onClose={onCloseInspector}
+              onRegenerate={inspectorRegenerate}
+            />
           </aside>
         )}
       </div>
@@ -1019,7 +1041,12 @@ const StudioInner = () => {
             inspector
           </SheetTitle>
           <div className="max-h-[calc(100svh-50px)] overflow-y-auto">
-            {selectedFrame && <FrameInspectorContent frame={selectedFrame} />}
+            {selectedFrame && (
+              <FrameInspectorContent
+                frame={selectedFrame}
+                onRegenerate={inspectorRegenerate}
+              />
+            )}
           </div>
         </SheetContent>
       </Sheet>

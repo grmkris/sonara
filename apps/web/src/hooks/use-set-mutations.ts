@@ -42,6 +42,9 @@ export interface SetMutations {
   generateMore: (nudge: string, count: number) => Promise<boolean>;
   // Cancel an in-progress generation on the OPEN set.
   cancelGeneration: () => Promise<void>;
+  // Regenerate one member frame of the OPEN curated set in place (optionally
+  // from an edited prompt). Returns true on success (the set is refreshed).
+  regenerateFrame: (frameId: string, prompt: string) => Promise<boolean>;
   // Seed a set from explicit frames (selection bar / drop on "new set").
   // Undoable (removes the created set).
   createSetFrom: (
@@ -219,6 +222,33 @@ export const useSetMutations = (deps: SetMutationDeps): SetMutations => {
       toast.error("couldn't cancel");
     }
   }, []);
+
+  const regenerateFrame = useCallback(
+    async (frameId: string, prompt: string): Promise<boolean> => {
+      const setId = d.current.selectedSetId;
+      if (!setId) {
+        return false;
+      }
+      try {
+        await rpcClient.sets.regenerateFrame({
+          frameId: frameId as ImageLibraryId,
+          prompt: prompt.trim() || undefined,
+          setId: setId as FrameSetId,
+        });
+        d.current.retrySetDetail();
+        toast("frame regenerated", { duration: 1600 });
+        return true;
+      } catch (error) {
+        const message =
+          error instanceof Error && error.message.length > 0
+            ? error.message
+            : "couldn't regenerate";
+        toast.error(message);
+        return false;
+      }
+    },
+    []
+  );
 
   const createSetFrom = useCallback(
     async (
@@ -651,6 +681,7 @@ export const useSetMutations = (deps: SetMutationDeps): SetMutations => {
       makeCut,
       moveFrame,
       recordingVisibility,
+      regenerateFrame,
       removeFrames,
       renameSet,
       reorderTo,
@@ -671,6 +702,7 @@ export const useSetMutations = (deps: SetMutationDeps): SetMutations => {
       makeCut,
       moveFrame,
       recordingVisibility,
+      regenerateFrame,
       removeFrames,
       renameSet,
       reorderTo,

@@ -13,6 +13,7 @@ import {
   FrameSetIdSchema,
   ImageLibraryIdSchema,
   typeIdFromUuid,
+  typeIdGenerator,
   typeIdToUuid,
 } from "@sonara/shared/typeid";
 import type {
@@ -37,14 +38,25 @@ import {
 } from "drizzle-orm";
 import { z } from "zod";
 
-import { COST_PER_FRAME } from "../credits/credit-gate";
+import {
+  COST_PER_FRAME,
+  refundOnError,
+  tryDebitCredit,
+} from "../credits/credit-gate";
 import { getBalance } from "../credits/credits.service";
+import { env } from "../env";
 import { expandSet, expandSetBatch } from "../generation/expand-set";
+import {
+  FRAME_SIZE,
+  renderFrame,
+  seedFrom,
+} from "../generation/frame-pipeline";
 import {
   enqueueGenerationJob,
   hasActiveJobForUser,
 } from "../generation/generation-worker";
 import { logger } from "../lib/logger";
+import { persistFrame } from "../library/persist-frame";
 import { stageRooms } from "../stage/stage-rooms";
 import { stageState } from "../stage/stage-state";
 import { FRAME_COLUMNS, frameReadUrl, rowToFrame } from "./frame-mapping";
@@ -1013,6 +1025,140 @@ export const setsRouter = {
         ? (trimmed.at(-1)?.createdAt.toISOString() ?? null)
         : null;
       return { nextCursor, sets };
+    }),
+
+  /**
+   * Regenerate one member frame in place: render a new image (from the edited
+   * prompt, or the frame's stored prompt) and swap the membership to it — the
+   * old image stays in the library, position + duration are preserved. Curated
+   * sets only; one credit, refunded on render failure.
+   */
+  regenerateFrame: protectedProcedure
+    .input(
+      z.object({
+        frameId: ImageLibraryIdSchema,
+        prompt: z.string().trim().min(1).max(2000).optional(),
+        seed: z.number().int().nonnegative().optional(),
+        setId: FrameSetIdSchema,
+      })
+    )
+    .handler(async ({ context, input }) => {
+      const { db, userId } = context;
+      const set = await requireOwnedSet(db, userId, input.setId);
+      requireEditableFrameList(set);
+
+      // The frame must be a member of this set.
+      const [member] = await db
+        .select({ frameId: SCHEMA.frameSetFrame.frameId })
+        .from(SCHEMA.frameSetFrame)
+        .where(
+          and(
+            eq(SCHEMA.frameSetFrame.setId, input.setId),
+            eq(SCHEMA.frameSetFrame.frameId, input.frameId)
+          )
+        )
+        .limit(1);
+      if (!member) {
+        throw new ORPCError("NOT_FOUND", { message: "Frame not in set." });
+      }
+
+      // Defaults from the source frame (its prompt + seed) unless overridden.
+      const [src] = await db
+        .select({
+          prompt: SCHEMA.imageLibrary.prompt,
+          seed: SCHEMA.imageLibrary.seed,
+        })
+        .from(SCHEMA.imageLibrary)
+        .where(eq(SCHEMA.imageLibrary.id, input.frameId))
+        .limit(1);
+      const prompt = input.prompt ?? src?.prompt ?? "";
+      if (prompt.length === 0) {
+        throw new ORPCError("BAD_REQUEST", { message: "No prompt to render." });
+      }
+      const seed = input.seed ?? src?.seed ?? seedFrom(prompt, 0);
+
+      const frameLogger = logger.child({
+        component: "regenerate-frame",
+        setId: input.setId,
+        userId,
+      });
+      const gate = await tryDebitCredit({
+        cost: COST_PER_FRAME,
+        isUserInitiated: true,
+        lastCreditDenialAt: 0,
+        logger: frameLogger,
+        now: Date.now(),
+        userId,
+      });
+      if (!gate.ok) {
+        throw new ORPCError("BAD_REQUEST", {
+          message:
+            gate.reason === "out_of_credits"
+              ? "Out of credits."
+              : "Payment system unavailable.",
+        });
+      }
+
+      const controller = new AbortController();
+      let url: string;
+      try {
+        url = await renderFrame({
+          logger: frameLogger,
+          prompt,
+          seed,
+          signal: controller.signal,
+        });
+      } catch (error) {
+        refundOnError(userId, gate.paidCost, frameLogger);
+        frameLogger.warn({ error }, "regenerate-frame: render failed");
+        throw new ORPCError("INTERNAL_SERVER_ERROR", {
+          message: "Couldn't render the frame.",
+        });
+      }
+
+      const newId = typeIdGenerator("imageLibrary");
+      const persisted = await persistFrame({
+        deck: "generated",
+        falUrl: url,
+        height: FRAME_SIZE,
+        id: newId,
+        logger: frameLogger,
+        model: env.FAL_TEXT_MODEL,
+        palette: null,
+        prompt,
+        seed,
+        sessionId: typeIdGenerator("liveSession"),
+        tMs: 0,
+        triggerReason: "regenerated",
+        userId,
+        width: FRAME_SIZE,
+      });
+      if (!persisted) {
+        refundOnError(userId, gate.paidCost, frameLogger);
+        throw new ORPCError("INTERNAL_SERVER_ERROR", {
+          message: "Couldn't save the frame.",
+        });
+      }
+
+      // Swap the membership to the new image (keep position + duration).
+      await db
+        .update(SCHEMA.frameSetFrame)
+        .set({ frameId: newId })
+        .where(
+          and(
+            eq(SCHEMA.frameSetFrame.setId, input.setId),
+            eq(SCHEMA.frameSetFrame.frameId, input.frameId)
+          )
+        );
+      // Move the cover with it if it pointed at the old frame.
+      if (set.coverFrameId === input.frameId) {
+        await db
+          .update(SCHEMA.frameSet)
+          .set({ coverFrameId: newId })
+          .where(eq(SCHEMA.frameSet.id, input.setId));
+      }
+
+      return { frameId: newId };
     }),
 
   /** Delete a set (cascades membership; underlying frames are untouched). */

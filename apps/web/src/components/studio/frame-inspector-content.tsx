@@ -1,7 +1,8 @@
 "use client";
 
 import type { LibraryFrame } from "@sonara/shared";
-import { useCallback } from "react";
+import { Loader2 } from "lucide-react";
+import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -12,6 +13,8 @@ import { AddToSetPopover } from "./add-to-set-popover";
 
 interface FrameInspectorContentProps {
   frame: LibraryFrame;
+  // Present only for a member of the open curated set — edit & re-render it.
+  onRegenerate?: (prompt: string) => Promise<boolean>;
 }
 
 interface FieldProps {
@@ -74,7 +77,28 @@ const shortModelName = (
 // and confused more than they helped.)
 export const FrameInspectorContent = ({
   frame,
+  onRegenerate,
 }: FrameInspectorContentProps) => {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(frame.prompt);
+  const [submitting, setSubmitting] = useState(false);
+  // Close the editor when switching to a different frame.
+  useEffect(() => {
+    setEditing(false);
+  }, [frame.id]);
+
+  const submitRegenerate = async () => {
+    if (!onRegenerate || submitting || draft.trim().length === 0) {
+      return;
+    }
+    setSubmitting(true);
+    const ok = await onRegenerate(draft);
+    setSubmitting(false);
+    if (ok) {
+      setEditing(false);
+    }
+  };
+
   const onCopyPrompt = useCallback(() => {
     void (async () => {
       try {
@@ -139,6 +163,53 @@ export const FrameInspectorContent = ({
             copy prompt
           </Button>
         </div>
+
+        {/* Edit & regenerate — only for a member of the open curated set. */}
+        {onRegenerate &&
+          (editing ? (
+            <div className="flex flex-col gap-2">
+              <textarea
+                value={draft}
+                autoFocus
+                rows={4}
+                maxLength={2000}
+                onChange={(e) => setDraft(e.target.value)}
+                className="focus-ring resize-none rounded-sm border border-[color:var(--hairline)]/40 bg-transparent px-3 py-2 font-sans text-[12px] text-[color:var(--paper)] leading-relaxed"
+              />
+              <div className="flex items-center justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setEditing(false)}
+                  className="focus-ring inline-flex items-center border border-[color:var(--hairline)]/40 px-2.5 py-1 font-sans text-[10px] uppercase tracking-[0.22em] text-[color:var(--stone)] transition-colors hover:border-[color:var(--paper)]/70 hover:text-[color:var(--paper)]"
+                >
+                  cancel
+                </button>
+                <button
+                  type="button"
+                  disabled={submitting || draft.trim().length === 0}
+                  onClick={() => void submitRegenerate()}
+                  className="focus-ring inline-flex items-center gap-1.5 border border-[color:var(--signal)] bg-[color:var(--signal)] px-2.5 py-1 font-sans text-[10px] uppercase tracking-[0.22em] text-[color:var(--paper)] transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  {submitting && (
+                    <Loader2 className="size-3 animate-spin" strokeWidth={2} />
+                  )}
+                  regenerate · 1 credit
+                </button>
+              </div>
+            </div>
+          ) : (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                setDraft(frame.prompt);
+                setEditing(true);
+              }}
+              className="font-sans text-[10px] uppercase tracking-[0.22em]"
+            >
+              edit & regenerate
+            </Button>
+          ))}
       </div>
 
       {/* Metadata */}
