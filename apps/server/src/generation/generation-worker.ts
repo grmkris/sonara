@@ -14,6 +14,7 @@ import { getDb } from "../db/db";
 import { env } from "../env";
 import { logger as rootLogger } from "../lib/logger";
 import { persistFrame } from "../library/persist-frame";
+import { expandSetBatch } from "./expand-set";
 import {
   FRAME_SIZE,
   NOMINAL_FRAME_MS,
@@ -32,6 +33,10 @@ type JobRow = typeof SCHEMA.generationJob.$inferSelect;
 
 const CONCURRENCY = 3;
 const POLL_MS = 1500;
+// Lazy prompt expansion: top up in chunks as the cursor nears the end, so a
+// 200-frame job never needs 200 prompts in one LLM call.
+const EXPAND_CHUNK = 16;
+const EXPAND_LOOKAHEAD = 4;
 // A claimed job that doesn't renew its lease within this window is considered
 // dead (the process died) and becomes re-claimable.
 const LEASE_SQL = sql`now() + interval '90 seconds'`;
@@ -181,7 +186,7 @@ export const runJob = async (
   const jobSessionId = typeIdGenerator("liveSession");
   const setUuid = typeIdToUuid(job.setId).uuid;
   const controller = new AbortController();
-  const { prompts } = job;
+  const prompts = [...job.prompts];
   let { cursor } = job;
 
   logger.info(
@@ -190,7 +195,7 @@ export const runJob = async (
   );
 
   /* oxlint-disable no-await-in-loop -- sequential per-frame pipeline */
-  while (cursor < prompts.length) {
+  while (cursor < job.total) {
     // Cancellation check (also our natural lease-renewal cadence).
     const [fresh] = await db
       .select({ status: SCHEMA.generationJob.status })
@@ -202,7 +207,35 @@ export const runJob = async (
       break;
     }
 
-    const prompt = prompts[cursor] as string;
+    // Top up the prompt list (style-anchored) as the cursor nears the end —
+    // and persist it, so a resume doesn't re-expand.
+    if (
+      prompts.length < job.total &&
+      prompts.length - cursor <= EXPAND_LOOKAHEAD
+    ) {
+      const want = Math.min(EXPAND_CHUNK, job.total - prompts.length);
+      const more = await expandSetBatch({
+        description: job.description,
+        have: prompts,
+        logger,
+        styleAnchor: job.styleAnchor,
+        want,
+      });
+      if (more.length === 0) {
+        logger.warn("gen-worker: expansion produced no prompts; stopping");
+        break;
+      }
+      prompts.push(...more);
+      await db
+        .update(SCHEMA.generationJob)
+        .set({ prompts, updatedAt: new Date() })
+        .where(eq(SCHEMA.generationJob.id, job.id));
+    }
+
+    const prompt = prompts[cursor];
+    if (prompt === undefined) {
+      break;
+    }
     const gate = await tryDebitCredit({
       cost: COST_PER_FRAME,
       isUserInitiated: true,
@@ -288,7 +321,7 @@ export interface EnqueueJobInput {
   kind: "create" | "extend";
   description: string | null;
   styleAnchor: string;
-  look: SetLook;
+  look: SetLook | null;
   prompts: string[];
   total: number;
 }

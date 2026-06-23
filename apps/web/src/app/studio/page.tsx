@@ -13,6 +13,7 @@ import { EmptyState } from "@/components/studio/empty-state";
 import { ErrorState } from "@/components/studio/error-state";
 import { FrameInspector } from "@/components/studio/frame-inspector";
 import { FrameInspectorContent } from "@/components/studio/frame-inspector-content";
+import { GenerateSetDialog } from "@/components/studio/generate-set-dialog";
 import { LiveNowCard } from "@/components/studio/live-now-card";
 import { RecordingsList } from "@/components/studio/recordings-list";
 import { SelectionBar } from "@/components/studio/selection-bar";
@@ -770,6 +771,13 @@ const StudioInner = () => {
             <span className="font-mono text-[10px] uppercase tracking-[0.22em] text-[color:var(--stone)]">
               generating — {n} {n === 1 ? "frame" : "frames"} so far
             </span>
+            <button
+              type="button"
+              onClick={() => void mutations.cancelGeneration()}
+              className="focus-ring ml-auto inline-flex items-center border border-[color:var(--hairline)]/40 px-2.5 py-1 font-sans text-[9px] uppercase tracking-[0.22em] text-[color:var(--stone)] transition-colors hover:border-[color:var(--paper)]/70 hover:text-[color:var(--paper)]"
+            >
+              cancel
+            </button>
           </div>
           <div className="min-h-0 flex-1">
             <SetEditor
@@ -833,35 +841,56 @@ const StudioInner = () => {
       );
     }
     return (
-      <SetEditor
-        frameSet={setDetail}
-        loading={setDetailLoading}
-        error={setDetailError}
-        onRetry={retrySetDetail}
-        selectedFrameId={selectedFrameId}
-        coverFrameId={setDetail?.coverFrameId ?? null}
-        onRename={onRenameSet}
-        onDelete={onDeleteSet}
-        onMoveFrame={onMoveFrame}
-        onRemoveFrame={onRemoveFrame}
-        onSetCover={onSetCover}
-        onVisibilityChange={onSetVisibility}
-        onLookChange={mutations.setLook}
-        onSetFrameDuration={mutations.setFrameDuration}
-        onFrameClick={onFrameClick}
-        onFrameOpen={onFrameOpen}
-        onFrameCheck={onFrameCheck}
-        isSelected={selection.isSelected}
-        isSelecting={isSelecting}
-        pinned={selection.pinned}
-        onTogglePinned={selection.togglePinned}
-        onMarquee={onMarquee}
-        onWhitespaceClick={onWhitespaceClick}
-        marqueeEnabled={!dragActive}
-        getDragPayload={getSetDragPayload}
-        selectionApi={selection}
-        onRemoveFrames={mutations.removeFrames}
-      />
+      <div className="flex h-full flex-col">
+        {setDetail?.origin === "curated" && (
+          <div className="flex shrink-0 items-center justify-end border-b border-[color:var(--hairline)]/30 px-4 py-2 md:px-6">
+            <GenerateSetDialog
+              onGenerate={mutations.generateMore}
+              triggerLabel="generate more"
+              title="Generate more"
+              blurb="Add more frames in the same world — optionally steer the new ones."
+              textLabel="steer (optional)"
+              textPlaceholder="more dragons, darker, golden hour…"
+              textRequired={false}
+              countMin={1}
+              countMax={100}
+              countDefault={12}
+              submitLabel="add"
+            />
+          </div>
+        )}
+        <div className="min-h-0 flex-1">
+          <SetEditor
+            frameSet={setDetail}
+            loading={setDetailLoading}
+            error={setDetailError}
+            onRetry={retrySetDetail}
+            selectedFrameId={selectedFrameId}
+            coverFrameId={setDetail?.coverFrameId ?? null}
+            onRename={onRenameSet}
+            onDelete={onDeleteSet}
+            onMoveFrame={onMoveFrame}
+            onRemoveFrame={onRemoveFrame}
+            onSetCover={onSetCover}
+            onVisibilityChange={onSetVisibility}
+            onLookChange={mutations.setLook}
+            onSetFrameDuration={mutations.setFrameDuration}
+            onFrameClick={onFrameClick}
+            onFrameOpen={onFrameOpen}
+            onFrameCheck={onFrameCheck}
+            isSelected={selection.isSelected}
+            isSelecting={isSelecting}
+            pinned={selection.pinned}
+            onTogglePinned={selection.togglePinned}
+            onMarquee={onMarquee}
+            onWhitespaceClick={onWhitespaceClick}
+            marqueeEnabled={!dragActive}
+            getDragPayload={getSetDragPayload}
+            selectionApi={selection}
+            onRemoveFrames={mutations.removeFrames}
+          />
+        </div>
+      </div>
     );
   };
 

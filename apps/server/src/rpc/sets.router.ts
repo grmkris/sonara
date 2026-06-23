@@ -39,7 +39,7 @@ import { z } from "zod";
 
 import { COST_PER_FRAME } from "../credits/credit-gate";
 import { getBalance } from "../credits/credits.service";
-import { expandSet } from "../generation/expand-set";
+import { expandSet, expandSetBatch } from "../generation/expand-set";
 import {
   enqueueGenerationJob,
   hasActiveJobForUser,
@@ -91,9 +91,16 @@ const BATCH_FRAMES_MAX = 200;
 // "Generate a set with AI" bounds: each prompt is one billed t2i frame, so
 // the count is the credit cost. Kept small — a set is one coherent world.
 const GENERATE_COUNT_MIN = 4;
-const GENERATE_COUNT_MAX = 24;
+const GENERATE_COUNT_MAX = 200;
 const GENERATE_DESC_MIN = 4;
 const GENERATE_DESC_MAX = 500;
+// Only the first batch of prompts is expanded up front (name/style/look + a
+// starter set); the worker lazily expands the rest in style-anchored chunks,
+// so a 200-frame set never needs 200 prompts in one LLM call.
+const GENERATE_INITIAL_BATCH = 16;
+// "Generate more" / extend: how many frames a single follow-up adds.
+const GENERATE_MORE_MIN = 1;
+const GENERATE_MORE_MAX = 100;
 
 const SET_COLUMNS = {
   coverFrameId: SCHEMA.frameSet.coverFrameId,
@@ -444,6 +451,50 @@ export const setsRouter = {
     }),
 
   /**
+   * Cancel an in-progress generation on a set: its active job(s) flip to
+   * 'canceled' (the worker stops at its next cursor check and finalizes the
+   * partial). A never-started (pending) job's set is finalized here so it
+   * doesn't hang in 'generating'.
+   */
+  cancelGeneration: protectedProcedure
+    .input(z.object({ setId: FrameSetIdSchema }))
+    .handler(async ({ context, input }) => {
+      const { db, userId } = context;
+      await requireOwnedSet(db, userId, input.setId);
+
+      await db
+        .update(SCHEMA.generationJob)
+        .set({ status: "canceled", updatedAt: new Date() })
+        .where(
+          and(
+            eq(SCHEMA.generationJob.setId, input.setId),
+            inArray(SCHEMA.generationJob.status, ["pending", "running"])
+          )
+        );
+
+      // If nothing is left running, finalize now (covers a pending job the
+      // worker never claimed). A still-running job will also self-finalize.
+      const [activeJob] = await db
+        .select({ id: SCHEMA.generationJob.id })
+        .from(SCHEMA.generationJob)
+        .where(
+          and(
+            eq(SCHEMA.generationJob.setId, input.setId),
+            inArray(SCHEMA.generationJob.status, ["pending", "running"])
+          )
+        )
+        .limit(1);
+      if (!activeJob) {
+        await db
+          .update(SCHEMA.frameSet)
+          .set({ status: "final" })
+          .where(eq(SCHEMA.frameSet.id, input.setId));
+      }
+
+      return { ok: true as const };
+    }),
+
+  /**
    * Create a curated set. Two optional seed sources:
    *   - `frameIds`  — explicit frames (owned by the caller), in input order.
    *   - `fromSetId` — "make a cut": the source set's frames in order
@@ -566,8 +617,10 @@ export const setsRouter = {
       }
 
       const jobLogger = logger.child({ component: "generate-set", userId });
+      // Expand only the first batch up front (name/style/look + starter
+      // prompts); the worker lazily expands the rest to `total`.
       const spec = await expandSet({
-        count: input.count,
+        count: Math.min(input.count, GENERATE_INITIAL_BATCH),
         description: input.description,
         logger: jobLogger,
       });
@@ -609,6 +662,79 @@ export const setsRouter = {
 
       const set = toSummary({ ...row, frameCount: 0 } as SetRow, null);
       return { set };
+    }),
+
+  /**
+   * "Generate more": append N style-coherent frames to an existing generated/
+   * curated set, reusing its locked world (styleDrift). Enqueues an 'extend'
+   * job and flips the set back to 'generating' so the editor polls progress.
+   * One generation per user at a time; one credit per frame.
+   */
+  generateMore: protectedProcedure
+    .input(
+      z.object({
+        count: z.number().int().min(GENERATE_MORE_MIN).max(GENERATE_MORE_MAX),
+        // Optional steer ("more dragons", "darker") — never overrides the world.
+        nudge: z.string().trim().max(200).optional(),
+        setId: FrameSetIdSchema,
+      })
+    )
+    .handler(async ({ context, input }) => {
+      const { db, userId } = context;
+
+      if (await hasActiveJobForUser(db, userId)) {
+        throw new ORPCError("CONFLICT", {
+          message: "A set is already generating — let it finish first.",
+        });
+      }
+
+      const set = await requireOwnedSet(db, userId, input.setId);
+      // curated/generated only
+      requireEditableFrameList(set);
+
+      const needed = input.count * COST_PER_FRAME;
+      const balance = await getBalance(userId);
+      if (balance.frames < needed) {
+        throw new ORPCError("BAD_REQUEST", {
+          message: `Not enough credits — this needs ${needed}, you have ${balance.frames}.`,
+        });
+      }
+
+      const jobLogger = logger.child({
+        component: "generate-more",
+        setId: input.setId,
+        userId,
+      });
+      // The locked world: the set's styleDrift (falls back to its name).
+      const styleAnchor = set.styleDrift ?? set.name;
+      const prompts = await expandSetBatch({
+        description: null,
+        have: [],
+        logger: jobLogger,
+        nudge: input.nudge ?? null,
+        styleAnchor,
+        want: Math.min(input.count, GENERATE_INITIAL_BATCH),
+      });
+
+      // Re-enter 'generating' so the editor polls + shows progress.
+      await db
+        .update(SCHEMA.frameSet)
+        .set({ status: "generating" })
+        .where(eq(SCHEMA.frameSet.id, input.setId));
+
+      await enqueueGenerationJob({
+        db,
+        description: null,
+        kind: "extend",
+        look: toLook(set),
+        prompts,
+        setId: input.setId,
+        styleAnchor,
+        total: input.count,
+        userId,
+      });
+
+      return { ok: true as const };
     }),
 
   /**

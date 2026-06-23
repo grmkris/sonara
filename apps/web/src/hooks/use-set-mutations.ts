@@ -37,6 +37,11 @@ export interface SetMutations {
   // was created so the dialog can close; false (and toasts) on rejection
   // (out of credits / already generating / LLM error).
   generateSet: (description: string, count: number) => Promise<boolean>;
+  // "Generate more": append N style-coherent frames to the OPEN generated set,
+  // reusing its world. Re-enters 'generating'; the editor polls progress.
+  generateMore: (nudge: string, count: number) => Promise<boolean>;
+  // Cancel an in-progress generation on the OPEN set.
+  cancelGeneration: () => Promise<void>;
   // Seed a set from explicit frames (selection bar / drop on "new set").
   // Undoable (removes the created set).
   createSetFrom: (
@@ -171,6 +176,49 @@ export const useSetMutations = (deps: SetMutationDeps): SetMutations => {
     },
     []
   );
+
+  const generateMore = useCallback(
+    async (nudge: string, count: number): Promise<boolean> => {
+      const setId = d.current.selectedSetId;
+      if (!setId) {
+        return false;
+      }
+      try {
+        await rpcClient.sets.generateMore({
+          count,
+          nudge: nudge.trim() || undefined,
+          setId: setId as FrameSetId,
+        });
+        d.current.refreshSets();
+        d.current.retrySetDetail();
+        toast(`generating ${count} more…`, { duration: 2400 });
+        return true;
+      } catch (error) {
+        const message =
+          error instanceof Error && error.message.length > 0
+            ? error.message
+            : "couldn't start generation";
+        toast.error(message);
+        return false;
+      }
+    },
+    []
+  );
+
+  const cancelGeneration = useCallback(async (): Promise<void> => {
+    const setId = d.current.selectedSetId;
+    if (!setId) {
+      return;
+    }
+    try {
+      await rpcClient.sets.cancelGeneration({ setId: setId as FrameSetId });
+      d.current.refreshSets();
+      d.current.retrySetDetail();
+      toast("generation canceled", { duration: 1600 });
+    } catch {
+      toast.error("couldn't cancel");
+    }
+  }, []);
 
   const createSetFrom = useCallback(
     async (
@@ -593,9 +641,11 @@ export const useSetMutations = (deps: SetMutationDeps): SetMutations => {
   return useMemo(
     () => ({
       addToSet,
+      cancelGeneration,
       createSet,
       createSetFrom,
       deleteSet,
+      generateMore,
       generateSet,
       insertFramesAt,
       makeCut,
@@ -611,9 +661,11 @@ export const useSetMutations = (deps: SetMutationDeps): SetMutations => {
     }),
     [
       addToSet,
+      cancelGeneration,
       createSet,
       createSetFrom,
       deleteSet,
+      generateMore,
       generateSet,
       insertFramesAt,
       makeCut,
