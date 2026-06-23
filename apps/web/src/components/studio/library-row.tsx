@@ -41,7 +41,7 @@ export const LibraryRow = ({
     className={cn(
       "focus-ring flex w-full items-center gap-3 border-b border-l-2 border-l-transparent border-[color:var(--hairline)]/20 px-4 py-2 text-left transition-colors",
       selected
-        ? "border-l-[color:var(--paper)] bg-[color:var(--paper)]/10"
+        ? "border-l-[color:var(--paper)] bg-[color:var(--paper)]/15"
         : "hover:bg-[color:var(--paper)]/5",
       highlighted &&
         "bg-[color:var(--paper)]/10 ring-1 ring-inset ring-[color:var(--signal)]"
@@ -53,17 +53,29 @@ export const LibraryRow = ({
         src={coverUrl}
         alt=""
         loading="lazy"
-        className="size-10 shrink-0 rounded-sm border border-[color:var(--hairline)]/40 object-cover"
+        className={cn(
+          "size-10 shrink-0 rounded-sm border object-cover",
+          selected
+            ? "border-[color:var(--paper)]/70"
+            : "border-[color:var(--hairline)]/40"
+        )}
       />
     ) : (
-      <div className="size-10 shrink-0 rounded-sm border border-[color:var(--hairline)]/40 bg-[color:var(--ink)]/40" />
+      <div
+        className={cn(
+          "size-10 shrink-0 rounded-sm border bg-[color:var(--ink)]/40",
+          selected
+            ? "border-[color:var(--paper)]/70"
+            : "border-[color:var(--hairline)]/40"
+        )}
+      />
     )}
     <div className="flex min-w-0 flex-1 flex-col gap-0.5">
       <span
         className={cn(
           "truncate font-sans text-[11px] uppercase tracking-[0.16em]",
           selected
-            ? "text-[color:var(--paper)]"
+            ? "font-medium text-[color:var(--paper)]"
             : "text-[color:var(--paper)]/80"
         )}
       >

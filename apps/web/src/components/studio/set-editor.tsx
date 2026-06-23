@@ -85,7 +85,6 @@ const SetHeaderActions = ({
   pinned,
   onTogglePinned,
   onVisibilityChange,
-  onLookChange,
   onDelete,
   draft,
   selectable = true,
@@ -94,15 +93,11 @@ const SetHeaderActions = ({
   pinned: boolean;
   onTogglePinned: () => void;
   onVisibilityChange?: (visibility: FrameSetVisibility) => void;
-  onLookChange?: (look: SetLook | null) => void;
   onDelete?: () => void;
   draft?: SetEditorProps["draft"];
   selectable?: boolean;
 }) => (
   <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
-    {onLookChange && (
-      <SetLookEditor look={frameSet.look} onChange={onLookChange} />
-    )}
     {frameSet.frames.length > 0 && <ActivateOnStage setId={frameSet.id} />}
     {onVisibilityChange && (
       <SetShareControls
@@ -154,6 +149,32 @@ const Hint = ({ children }: { children: string }) => (
     {children}
   </div>
 );
+
+// The set's saved look (preset + reactivity + cadence) surfaced on the timeline
+// surface — applied across every frame at playback, so it reads as a property
+// of the whole track, not a header action. Renders nothing for sources that
+// can't carry a look (recordings / built-ins pass no onChange).
+const LookBar = ({
+  look,
+  onChange,
+}: {
+  look: FrameSet["look"];
+  onChange?: (look: SetLook | null) => void;
+}) => {
+  if (!onChange) {
+    return null;
+  }
+  return (
+    <div className="flex shrink-0 flex-wrap items-center gap-2.5">
+      <SetLookEditor look={look} onChange={onChange} />
+      <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-[color:var(--stone)]">
+        {look
+          ? "applied across this set at playback"
+          : "no look · plays with app defaults"}
+      </span>
+    </div>
+  );
+};
 
 // Center pane for the sets tab: the selected curated set rendered as an
 // editable, non-destructive timeline (frames as clips on a time axis; width =
@@ -287,7 +308,6 @@ export const SetEditor = ({
           pinned={pinned}
           onTogglePinned={onTogglePinned}
           onVisibilityChange={onVisibilityChange}
-          onLookChange={onLookChange}
           onDelete={onDelete}
           draft={draft}
           selectable={selectable}
@@ -311,6 +331,7 @@ export const SetEditor = ({
             playing={previewPlaying}
             setPlaying={setPreviewPlaying}
           />
+          <LookBar look={frameSet.look} onChange={onLookChange} />
           <SetTimelineTrack
             frames={frameSet.frames}
             setId={frameSet.id}

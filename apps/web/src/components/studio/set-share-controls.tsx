@@ -1,7 +1,7 @@
 "use client";
 
 import type { FrameSetVisibility } from "@sonara/shared";
-import { Check, Link2, Share2 } from "lucide-react";
+import { Check, ExternalLink, Link2, Share2 } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -12,6 +12,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import { cn } from "@/lib/utils";
 
 const VISIBILITIES: FrameSetVisibility[] = ["private", "unlisted", "public"];
 
@@ -65,44 +66,60 @@ export const SetShareControls = ({
           share
         </Button>
       </PopoverTrigger>
-      <PopoverContent align="end" side="bottom" className="w-64 p-0">
-        <div className="border-b border-[color:var(--hairline)]/30 px-3 py-2 font-mono text-[9px] uppercase tracking-[0.26em] text-[color:var(--stone)]">
+      <PopoverContent align="end" side="bottom" className="w-72 p-0">
+        <div className="border-b border-[color:var(--hairline)]/30 px-3 py-2.5 font-mono text-[9px] uppercase tracking-[0.26em] text-[color:var(--stone)]">
           who can open this
         </div>
-        <ul className="flex flex-col">
-          {VISIBILITIES.map((v) => (
-            <li key={v}>
-              <button
-                type="button"
-                onClick={() => onVisibilityChange(v)}
-                aria-current={visibility === v ? "true" : undefined}
-                className="focus-ring flex w-full items-center justify-between gap-2 px-3 py-2 text-left transition-colors hover:bg-[color:var(--paper)]/10"
-              >
-                <span className="flex min-w-0 flex-col gap-0.5">
-                  <span className="font-sans text-[11px] uppercase tracking-[0.18em] text-[color:var(--paper)]/90">
-                    {v}
+        <ul className="flex flex-col p-1">
+          {VISIBILITIES.map((v) => {
+            const active = visibility === v;
+            return (
+              <li key={v}>
+                <button
+                  type="button"
+                  onClick={() => onVisibilityChange(v)}
+                  aria-current={active ? "true" : undefined}
+                  className={cn(
+                    "focus-ring flex w-full items-center justify-between gap-3 rounded-[2px] px-2.5 py-2 text-left transition-colors",
+                    active
+                      ? "bg-[color:var(--paper)]/10"
+                      : "hover:bg-[color:var(--paper)]/5"
+                  )}
+                >
+                  <span className="flex min-w-0 flex-col gap-0.5">
+                    <span
+                      className={cn(
+                        "font-sans text-[11px] uppercase tracking-[0.18em]",
+                        active
+                          ? "text-[color:var(--paper)]"
+                          : "text-[color:var(--paper)]/80"
+                      )}
+                    >
+                      {v}
+                    </span>
+                    <span className="font-mono text-[9px] uppercase tracking-[0.14em] text-[color:var(--stone)]">
+                      {VISIBILITY_HINT[v]}
+                    </span>
                   </span>
-                  <span className="font-mono text-[9px] uppercase tracking-[0.14em] text-[color:var(--stone)]">
-                    {VISIBILITY_HINT[v]}
-                  </span>
-                </span>
-                {visibility === v && (
                   <Check
-                    className="size-3 shrink-0 text-[color:var(--paper)]"
+                    className={cn(
+                      "size-3.5 shrink-0 text-[color:var(--paper)] transition-opacity",
+                      active ? "opacity-100" : "opacity-0"
+                    )}
                     strokeWidth={1.5}
                   />
-                )}
-              </button>
-            </li>
-          ))}
+                </button>
+              </li>
+            );
+          })}
         </ul>
-        <div className="flex flex-col border-t border-[color:var(--hairline)]/30 p-2">
+        <div className="flex flex-col border-t border-[color:var(--hairline)]/30 p-1">
           <button
             type="button"
             onClick={onCopyLink}
-            className="focus-ring flex w-full items-center gap-2 px-1 py-1.5 font-sans text-[10px] uppercase tracking-[0.22em] text-[color:var(--stone)] transition-colors hover:text-[color:var(--paper)]"
+            className="focus-ring flex w-full items-center gap-2.5 rounded-[2px] px-2.5 py-2 font-sans text-[10px] uppercase tracking-[0.22em] text-[color:var(--stone)] transition-colors hover:bg-[color:var(--paper)]/5 hover:text-[color:var(--paper)]"
           >
-            <Link2 className="size-3" strokeWidth={1.5} />
+            <Link2 className="size-3.5 shrink-0" strokeWidth={1.5} />
             copy link
           </button>
           {/* See it as your audience would — the permalink in a new tab. */}
@@ -110,9 +127,10 @@ export const SetShareControls = ({
             href={`/set/${setId}`}
             target="_blank"
             rel="noopener"
-            className="focus-ring flex w-full items-center gap-2 px-1 py-1.5 font-sans text-[10px] uppercase tracking-[0.22em] text-[color:var(--stone)] transition-colors hover:text-[color:var(--paper)]"
+            className="focus-ring flex w-full items-center gap-2.5 rounded-[2px] px-2.5 py-2 font-sans text-[10px] uppercase tracking-[0.22em] text-[color:var(--stone)] transition-colors hover:bg-[color:var(--paper)]/5 hover:text-[color:var(--paper)]"
           >
-            open player ↗
+            <ExternalLink className="size-3.5 shrink-0" strokeWidth={1.5} />
+            open player
           </Link>
         </div>
       </PopoverContent>
