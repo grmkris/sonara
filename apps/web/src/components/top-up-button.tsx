@@ -13,10 +13,11 @@ interface TopUpButtonProps {
 
 /**
  * Dodo Payments checkout redirect. Click a pack → server creates a Dodo
- * checkout session → window navigates to the hosted checkout page. The
- * webhook handler (apps/web/src/server/dodo-webhook.ts) credits frames on
- * `payment.succeeded`. After redirect back to /credits/success the panel
- * re-fetches the balance.
+ * checkout session → window navigates to the hosted checkout page. On return
+ * to /credits/success the page confirms the payment server-side
+ * (credits.confirmTopUp); the webhook handler
+ * (apps/server/src/auth/dodo-webhook.ts) credits on `payment.succeeded` as
+ * the other half of the race — both share one idempotent ledger write.
  */
 export const TopUpButton = ({ onCredited: _ }: TopUpButtonProps) => {
   const [busy, setBusy] = useState<Pack["id"] | null>(null);

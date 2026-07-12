@@ -5,6 +5,7 @@ import DodoPayments from "dodopayments";
 import { and, eq, gte, sum } from "drizzle-orm";
 import { z } from "zod";
 
+import { applyCreditTopUp, resolveTopUpPack } from "../auth/dodo-webhook";
 import { env } from "../env";
 import { protectedProcedure } from "./procedures";
 
@@ -21,6 +22,85 @@ const getDodoClient = (): DodoPayments => {
 };
 
 export const creditsRouter = {
+  /**
+   * Confirm-on-return: the /credits/success page hands us the `payment_id`
+   * Dodo appended to the return_url and we reconcile server-side instead of
+   * depending on webhook delivery timing. Retrieves the payment from Dodo
+   * (trusted), verifies it belongs to the caller, and applies the credit
+   * through the SAME ledger write as the webhook — tx_hash idempotency makes
+   * the race between the two safe.
+   */
+  confirmTopUp: protectedProcedure
+    .input(z.object({ paymentId: z.string().min(1).max(120) }))
+    .handler(async ({ input, context }) => {
+      const { db, userId } = context;
+      const dodo = getDodoClient();
+
+      let payment: Awaited<ReturnType<typeof dodo.payments.retrieve>>;
+      try {
+        payment = await dodo.payments.retrieve(input.paymentId);
+      } catch {
+        throw new ORPCError("NOT_FOUND", { message: "unknown payment" });
+      }
+
+      const [u] = await db
+        .select({
+          dodoCustomerId: SCHEMA.user.dodoCustomerId,
+          email: SCHEMA.user.email,
+        })
+        .from(SCHEMA.user)
+        .where(eq(SCHEMA.user.id, userId))
+        .limit(1);
+      if (!u) {
+        throw new ORPCError("UNAUTHORIZED");
+      }
+
+      const ownsByMetadata = payment.metadata?.userId === userId;
+      const ownsByCustomer =
+        u.dodoCustomerId !== null &&
+        u.dodoCustomerId === payment.customer.customer_id;
+      const ownsByEmail =
+        u.email.trim().toLowerCase() ===
+        payment.customer.email.trim().toLowerCase();
+      if (!(ownsByMetadata || ownsByCustomer || ownsByEmail)) {
+        throw new ORPCError("FORBIDDEN", {
+          message: "payment does not belong to this account",
+        });
+      }
+
+      const status = payment.status ?? "processing";
+      if (status !== "succeeded") {
+        return { credited: false, frames: 0, status };
+      }
+
+      const pack = resolveTopUpPack(
+        { ...payment, metadata: payment.metadata ?? {} },
+        {
+          DODO_PRODUCT_MAX: env.DODO_PRODUCT_MAX,
+          DODO_PRODUCT_PRO: env.DODO_PRODUCT_PRO,
+          DODO_PRODUCT_STARTER: env.DODO_PRODUCT_STARTER,
+        }
+      );
+      if (!pack) {
+        throw new ORPCError("BAD_REQUEST", {
+          message: "payment is not a known credit pack",
+        });
+      }
+
+      const outcome = await applyCreditTopUp(db, {
+        pack,
+        paymentId: payment.payment_id,
+        userId,
+      });
+      console.info("[credits.confirmTopUp] applied", {
+        outcome,
+        packId: pack.id,
+        paymentId: payment.payment_id,
+        userId,
+      });
+      return { credited: true, frames: pack.frames, status };
+    }),
+
   /**
    * Create a Dodo Payments checkout session for the given pack and return
    * the hosted checkout URL. Client redirects to it; the user pays on
@@ -52,13 +132,16 @@ export const creditsRouter = {
 
       const dodo = getDodoClient();
 
-      // Lazy customer provisioning. New signups already have dodoCustomerId
-      // (better-auth dodo plugin's createCustomerOnSignUp:true); this covers
-      // pre-existing email/password users from before the plugin landed.
+      // Lazy customer provisioning — createCustomerOnSignUp is FALSE (signup
+      // must not depend on Dodo availability), so every user gets their Dodo
+      // customer created here on first checkout and persisted. The metadata
+      // userId stamp gives webhooks a customer-level identity channel in
+      // addition to the session metadata below.
       let customerId = u.dodoCustomerId;
       if (!customerId) {
         const customer = await dodo.customers.create({
           email: u.email,
+          metadata: { userId },
           name: u.name,
         });
         customerId = customer.customer_id;

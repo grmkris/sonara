@@ -2,6 +2,7 @@ import { dodopayments, webhooks } from "@dodopayments/better-auth";
 import { createDb, SCHEMA } from "@sonara/db";
 import type { Database } from "@sonara/db";
 import { dodoModeForEnv, SERVICE_URLS } from "@sonara/shared";
+import type { DodoProductEnv } from "@sonara/shared";
 import { typeIdGenerator } from "@sonara/shared/typeid";
 import type { IdTypePrefixNames } from "@sonara/shared/typeid";
 import { betterAuth } from "better-auth";
@@ -28,9 +29,17 @@ export const createAuth = (props: {
   dodoApiKey: string;
   dodoWebhookSecret: string;
   dodoMode: "test_mode" | "live_mode";
+  dodoProductEnvMap: Record<DodoProductEnv, string>;
 }) => {
-  const { db, secret, baseURL, dodoApiKey, dodoWebhookSecret, dodoMode } =
-    props;
+  const {
+    db,
+    secret,
+    baseURL,
+    dodoApiKey,
+    dodoWebhookSecret,
+    dodoMode,
+    dodoProductEnvMap,
+  } = props;
 
   // Empty Dodo creds → skip the plugin entirely. Login + signup still work;
   // only the checkout/webhook surfaces are disabled.
@@ -93,7 +102,10 @@ export const createAuth = (props: {
             use: [
               webhooks({
                 webhookKey: dodoWebhookSecret,
-                ...createDodoWebhookHandlers({ db }),
+                ...createDodoWebhookHandlers({
+                  db,
+                  productEnvMap: dodoProductEnvMap,
+                }),
               }),
             ],
           }),
@@ -118,6 +130,11 @@ export const getAuth = (): Auth => {
     db,
     dodoApiKey: env.DODO_PAYMENTS_API_KEY,
     dodoMode: dodoModeForEnv(env.APP_ENV),
+    dodoProductEnvMap: {
+      DODO_PRODUCT_MAX: env.DODO_PRODUCT_MAX,
+      DODO_PRODUCT_PRO: env.DODO_PRODUCT_PRO,
+      DODO_PRODUCT_STARTER: env.DODO_PRODUCT_STARTER,
+    },
     dodoWebhookSecret: env.DODO_PAYMENTS_WEBHOOK_SECRET,
     secret: env.BETTER_AUTH_SECRET,
   });

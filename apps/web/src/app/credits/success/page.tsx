@@ -1,32 +1,75 @@
 "use client";
 
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import type { ReactNode } from "react";
-import { useEffect, useRef, useState } from "react";
+import { Suspense, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import { rpcClient } from "@/lib/orpc";
 
-// Poll cadence + ceiling. Dodo webhook delivery is async — the user lands
-// here before the credit row is updated. Poll the balance for up to ~20s.
+// Poll cadence + ceiling for the webhook-race fallback. The primary path is
+// confirm-on-return (credits.confirmTopUp with the payment_id Dodo appends to
+// the return_url) which settles immediately; polling only matters for legacy
+// redirects without the param or a transient confirm failure.
 const POLL_INTERVAL_MS = 1500;
 const POLL_TIMEOUT_MS = 20_000;
 
-export default function CheckoutSuccessPage() {
+type Status = "waiting" | "credited" | "failed" | "timeout";
+
+const CheckoutSuccessContent = () => {
   const router = useRouter();
-  const [status, setStatus] = useState<"waiting" | "credited" | "timeout">(
-    "waiting"
-  );
+  const searchParams = useSearchParams();
+  const paymentId = searchParams.get("payment_id");
+  const [status, setStatus] = useState<Status>("waiting");
   const initialFrames = useRef<number | null>(null);
+  const confirmFired = useRef(false);
 
   useEffect(() => {
     const startedAt = Date.now();
-    let cancelled = false;
+    const cancelled = { current: false };
+
+    const goToPlaySoon = (cancelledRef: { current: boolean }) => {
+      setTimeout(() => {
+        if (!cancelledRef.current) {
+          router.push("/play");
+        }
+      }, 1200);
+    };
+
+    // Primary: reconcile against Dodo by payment id, server-side. Credits
+    // apply through the same idempotent ledger write as the webhook.
+    const confirm = async (): Promise<boolean> => {
+      if (!paymentId || confirmFired.current) {
+        return false;
+      }
+      confirmFired.current = true;
+      try {
+        const result = await rpcClient.credits.confirmTopUp({ paymentId });
+        if (cancelled.current) {
+          return true;
+        }
+        if (result.credited) {
+          setStatus("credited");
+          toast.success(`+${result.frames} frames credited`);
+          goToPlaySoon(cancelled);
+          return true;
+        }
+        if (result.status === "failed" || result.status === "cancelled") {
+          setStatus("failed");
+          return true;
+        }
+        // Still processing → fall through to polling.
+        return false;
+      } catch {
+        // Confirm unavailable → fall through to polling.
+        return false;
+      }
+    };
 
     const poll = async (): Promise<void> => {
       try {
         const { frames } = await rpcClient.credits.getBalance();
-        if (cancelled) {
+        if (cancelled.current) {
           return;
         }
         if (initialFrames.current === null) {
@@ -34,18 +77,14 @@ export default function CheckoutSuccessPage() {
         } else if (frames > initialFrames.current) {
           setStatus("credited");
           toast.success(`+${frames - initialFrames.current} frames credited`);
-          setTimeout(() => {
-            if (!cancelled) {
-              router.push("/play");
-            }
-          }, 1200);
+          goToPlaySoon(cancelled);
           return;
         }
       } catch {
         // ignore transient errors; keep polling
       }
       if (Date.now() - startedAt > POLL_TIMEOUT_MS) {
-        if (!cancelled) {
+        if (!cancelled.current) {
           setStatus("timeout");
         }
         return;
@@ -53,11 +92,16 @@ export default function CheckoutSuccessPage() {
       setTimeout(() => void poll(), POLL_INTERVAL_MS);
     };
 
-    void poll();
+    void (async () => {
+      const settled = await confirm();
+      if (!(settled || cancelled.current)) {
+        void poll();
+      }
+    })();
     return () => {
-      cancelled = true;
+      cancelled.current = true;
     };
-  }, [router]);
+  }, [paymentId, router]);
 
   let statusBody: ReactNode;
   if (status === "waiting") {
@@ -71,6 +115,22 @@ export default function CheckoutSuccessPage() {
       <p className="font-sans text-[12px] leading-relaxed text-[color:var(--paper)]">
         Frames credited — back to the visualizer.
       </p>
+    );
+  } else if (status === "failed") {
+    statusBody = (
+      <>
+        <p className="font-sans text-[12px] leading-relaxed text-[color:var(--paper)]/80">
+          The payment didn&apos;t go through — nothing was charged. You can try
+          again from the credits panel.
+        </p>
+        <button
+          type="button"
+          className="font-mono text-[11px] uppercase tracking-[0.2em] text-[color:var(--signal)] underline"
+          onClick={() => router.push("/play")}
+        >
+          back to visualiser
+        </button>
+      </>
     );
   } else {
     statusBody = (
@@ -94,10 +154,18 @@ export default function CheckoutSuccessPage() {
     <main className="flex min-h-screen items-center justify-center bg-[color:var(--ink)] p-8">
       <div className="flex w-full max-w-sm flex-col gap-4 border border-[color:var(--hairline)]/50 bg-[color:var(--ink)]/95 p-6 text-center">
         <h1 className="font-mono text-[11px] uppercase tracking-[0.28em] text-[color:var(--stone)]">
-          payment received
+          {status === "failed" ? "payment failed" : "payment received"}
         </h1>
         {statusBody}
       </div>
     </main>
+  );
+};
+
+export default function CheckoutSuccessPage() {
+  return (
+    <Suspense fallback={null}>
+      <CheckoutSuccessContent />
+    </Suspense>
   );
 }
