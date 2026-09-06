@@ -32,6 +32,9 @@ export class InstrumentRuntime {
   private targetControls = this.controls;
   private lastControlAt = -100;
   private lastAudioAt = -100;
+  private lastAudioInput: AudioFeatureFrame | null = null;
+  private audioUpdated = false;
+  private controlsUpdated = false;
   private lastBeat = 0;
   private lastScene = 0;
   private sceneIndex = 0;
@@ -67,12 +70,16 @@ export class InstrumentRuntime {
     });
   }
   setAudio(frame: AudioFeatureFrame): void {
+    if (frame === this.lastAudioInput) {
+      return;
+    }
+    this.lastAudioInput = frame;
     this.audio = frame;
-    this.lastAudioAt = this.elapsed;
+    this.audioUpdated = true;
   }
   setControls(control: PerformanceControlFrame): void {
     this.targetControls = control;
-    this.lastControlAt = this.elapsed;
+    this.controlsUpdated = true;
   }
   freeze(): void {
     this.transport.frozen = !this.transport.frozen;
@@ -89,6 +96,16 @@ export class InstrumentRuntime {
   }
   advance(time: number): void {
     this.elapsed = time;
+    // Inputs arrive between draws. Timestamp them on this draw, not the
+    // previous one, so slow graphics cannot immediately expire fresh input.
+    if (this.audioUpdated) {
+      this.lastAudioAt = time;
+      this.audioUpdated = false;
+    }
+    if (this.controlsUpdated) {
+      this.lastControlAt = time;
+      this.controlsUpdated = false;
+    }
     if (time - this.lastAudioAt > 0.3) {
       this.audio = { confidence: 0, features: { ...defaultAudio }, time };
     }
