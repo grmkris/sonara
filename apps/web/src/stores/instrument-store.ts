@@ -8,7 +8,7 @@ import {
 import { create } from "zustand";
 
 const KEY = "sonara_experience_v3";
-export const RESPONSIVE_LIVE_ENABLED = false;
+export const RESPONSIVE_LIVE_ENABLED = true;
 const liveConfig = (config: EngineConfig): EngineConfig => {
   if (!RESPONSIVE_LIVE_ENABLED || config.version === 3) {
     return config;

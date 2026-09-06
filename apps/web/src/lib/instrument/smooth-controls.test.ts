@@ -52,3 +52,23 @@ test("rotation crosses the angle boundary by the short route", () => {
   const value = smoothControls({ ...next, rotation: 3.1 }, next, 0.016, 0, 1);
   expect(Math.abs(value.rotation)).toBeGreaterThan(3);
 });
+
+test("switching from body to hands restores vertical hand control", () => {
+  const body = { ...target, lift: 0.8 };
+  const hands = smoothControls(body, target, 1 / 60, 0, 2);
+  expect(hands.lift).toBeUndefined();
+  expect(hands.attractors).toHaveLength(1);
+});
+
+test("turning two hands through vertical does not flip the material", () => {
+  const points = [...target.attractors, { force: 1, id: 1, x: 0.2, y: 0.4 }];
+  const value = smoothControls(
+    { ...target, attractors: points, rotation: 1.56 },
+    { ...target, attractors: points, rotation: -1.56 },
+    0.016,
+    0,
+    1
+  );
+  expect(value.rotation).toBeGreaterThan(1.56);
+  expect(value.rotation).toBeLessThan(1.59);
+});

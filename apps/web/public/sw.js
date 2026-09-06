@@ -4,7 +4,7 @@
  * slow/no internet after a first online visit. Demo frame-driving is already
  * client-native (use-demo-frame-loop), so once assets are cached the whole
  * show runs with the network down. */
-const VERSION = "v4";
+const VERSION = "v5";
 const NAV_CACHE = `sonara-nav-${VERSION}`;
 const ASSET_CACHE = `sonara-assets-${VERSION}`;
 // Library images are content-addressed + immutable — keep across deploys so a

@@ -43,10 +43,11 @@ export const handControls = (
   // Anatomical identity stays stable when hands cross or detection order changes.
   attractors.sort((a, b) => a.id - b.id);
   const [a, b] = attractors;
+  const angle = a && b ? Math.atan2(b.y - a.y, b.x - a.x) : 0;
   return {
     attractors,
     expansion: a && b ? clamp(Math.hypot(a.x - b.x, a.y - b.y) * 1.5) : 0.5,
-    rotation: a && b ? Math.atan2(b.y - a.y, b.x - a.x) : 0,
+    rotation: Math.atan2(Math.sin(angle * 2), Math.cos(angle * 2)) / 2,
     time,
   };
 };

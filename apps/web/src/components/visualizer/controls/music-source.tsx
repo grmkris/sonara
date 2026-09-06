@@ -35,6 +35,7 @@ export const MusicSource = ({ source, setSource }: MusicSourceProps) => {
   const file = useRef<HTMLInputElement>(null);
   const alive = useRef(true);
   const request = useRef(false);
+  const audibleAt = useRef(-10_000);
   const [sharing, setSharing] = useState(false);
   const [available, setAvailable] = useState(true);
   const [message, setMessage] = useState("");
@@ -52,11 +53,16 @@ export const MusicSource = ({ source, setSource }: MusicSourceProps) => {
     const update = () => {
       const engine = getCurrentAudioEngine();
       const rms = engine?.latest.features.rms ?? 0;
+      if (rms > 0.003) {
+        audibleAt.current = performance.now();
+      }
       setLevel(source.type === "none" ? 0 : Math.min(1, Math.sqrt(rms) * 2));
       if (source.type === "none") {
         setStatus(sharing ? "connecting" : "disconnected");
       } else if (engine?.connected) {
-        setStatus(rms > 0.003 ? "receiving" : "silent");
+        setStatus(
+          performance.now() - audibleAt.current < 1200 ? "receiving" : "silent"
+        );
       } else {
         setStatus("connecting");
       }

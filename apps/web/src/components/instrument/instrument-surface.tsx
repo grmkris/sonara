@@ -366,6 +366,12 @@ export const InstrumentSurface = ({
     camera.current = null;
     runtime.current?.renderer.clearMask();
     recorder.current?.recordMask(new Uint8Array(0), 0, 0);
+    runtime.current?.setControls({
+      attractors: [],
+      expansion: 0.5,
+      rotation: 0,
+      time: performance.now() / 1000,
+    });
     if (mode === "off" || tracking === mode) {
       setTrackingStatus("Camera off");
       setTracking("off");
@@ -378,6 +384,8 @@ export const InstrumentSurface = ({
         return;
       }
       setTracking("off");
+      setTrackingStatus(message);
+      camera.current = null;
       runtime.current?.renderer.clearMask();
       recorder.current?.recordMask(new Uint8Array(0), 0, 0);
       toast.error(message);
@@ -417,6 +425,8 @@ export const InstrumentSurface = ({
     } catch (error) {
       input.stop();
       if (camera.current === input) {
+        camera.current = null;
+        setTrackingStatus("Camera unavailable");
         setTracking("off");
         toast.error(
           error instanceof Error ? error.message : "Camera unavailable."
@@ -596,7 +606,11 @@ export const InstrumentSurface = ({
     }
   };
   return (
-    <main className="experience-shell" data-sleeping={hidden}>
+    <main
+      className="experience-shell"
+      data-sleeping={hidden}
+      data-idle={audioSource.type === "none"}
+    >
       <canvas
         key={recovery}
         ref={canvas}

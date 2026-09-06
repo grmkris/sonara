@@ -1200,40 +1200,6 @@ body {
   border-radius: 6px;
   box-shadow: 0 12px 60px #0005;
 }
-.experience-intensity {
-  width: 150px;
-  margin-left: 14px;
-  padding: 0 4px 0 20px;
-  border-left: 1px solid #ffffff1a;
-  display: flex;
-  flex-direction: column;
-  gap: 9px;
-}
-.experience-intensity label {
-  font-family: var(--font-mono);
-  font-size: 9px;
-  letter-spacing: 0.08em;
-  color: var(--stone);
-}
-.experience-sheet {
-  padding: 44px 28px 32px;
-  overflow-y: auto;
-  gap: 24px;
-}
-.experience-sheet > p {
-  font-size: 14px;
-  color: var(--stone);
-  line-height: 1.7;
-}
-.experience-sheet > [data-slot="sheet-title"] {
-  font-family: var(--font-serif);
-  font-weight: 400;
-  font-size: 32px;
-  letter-spacing: -0.02em;
-}
-.experience-sheet .flex:has(> input[type="file"]) {
-  flex-wrap: wrap;
-}
 .experience-controls {
   display: flex;
   flex-direction: column;
@@ -1359,18 +1325,6 @@ body {
     width: calc(100% - 32px);
     padding: 10px 8px;
   }
-  .experience-intensity {
-    flex: 1 0 75%;
-    flex-direction: row;
-    align-items: center;
-    gap: 16px;
-    border: 0;
-    padding: 10px 12px 2px;
-    margin: 0;
-  }
-  .experience-intensity [data-slot="slider"] {
-    flex: 1;
-  }
   .experience-session-line {
     inset-inline: 24px;
     bottom: 135px;
@@ -1378,9 +1332,6 @@ body {
   }
   .experience-session-line span:nth-child(2) {
     display: none;
-  }
-  .experience-sheet {
-    width: min(100%, 440px);
   }
 }
 @media (prefers-reduced-motion: reduce) {
@@ -1401,9 +1352,6 @@ body {
   letter-spacing: 0.12em;
   text-transform: uppercase;
   color: #cabfad;
-}
-.experience-sheet .group > span {
-  opacity: 1;
 }
 
 .experience-captured {
@@ -1683,4 +1631,27 @@ body {
   border: 1px solid var(--color-border);
   border-radius: 12px;
   background: var(--color-background);
+}
+
+.experience-shell[data-idle="true"]::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  background: linear-gradient(90deg, #07090ccc, #07090c44 50%, transparent 75%);
+}
+.experience-invitation .sound-source > [data-slot="button"] {
+  font-size: 14px;
+}
+.experience-controls > [data-slot="toggle-group"]:not(.experience-treatments) {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+.experience-controls
+  > [data-slot="toggle-group"]:not(.experience-treatments)
+  > button {
+  padding-inline: 4px;
+  font-size: 12px;
+  gap: 6px;
 }

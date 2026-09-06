@@ -44,10 +44,10 @@ export const smoothControls = (
     .slice(0, 2);
   const angle = fresh && points.length === 2 ? target.rotation : 0;
   const delta = Math.atan2(
-    Math.sin(angle - previous.rotation),
-    Math.cos(angle - previous.rotation)
+    Math.sin(2 * (angle - previous.rotation)),
+    Math.cos(2 * (angle - previous.rotation))
   );
-  const rotation = previous.rotation + follow(0, delta, dt, 0.09);
+  const rotation = previous.rotation + follow(0, delta / 2, dt, 0.09);
   return {
     attractors,
     expansion: follow(
@@ -56,16 +56,11 @@ export const smoothControls = (
       dt,
       0.09
     ),
-    ...(target.lift !== undefined || previous.lift !== undefined
-      ? {
-          lift: follow(
-            previous.lift ?? 0,
-            fresh ? (target.lift ?? 0) : 0,
-            dt,
-            0.09
-          ),
-        }
-      : {}),
+    ...(target.lift === undefined
+      ? {}
+      : {
+          lift: follow(previous.lift ?? 0, fresh ? target.lift : 0, dt, 0.09),
+        }),
     rotation: Math.atan2(Math.sin(rotation), Math.cos(rotation)),
     time,
   };
