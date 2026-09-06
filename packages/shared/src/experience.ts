@@ -16,6 +16,7 @@ export const ExperienceConfig = z.object({
 export type ExperienceConfig = z.infer<typeof ExperienceConfig>;
 export const ResponsiveConfig = ExperienceConfig.extend({
   response: unit,
+  treatment: z.enum(["ink", "silk", "prism", "kaleido", "loom", "orbit"]),
   version: z.literal(3),
 });
 export type ResponsiveConfig = z.infer<typeof ResponsiveConfig>;

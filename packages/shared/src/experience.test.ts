@@ -4,6 +4,8 @@ import {
   DEFAULT_EXPERIENCE,
   DEFAULT_RESPONSIVE,
   EMPTY_MUSIC,
+  ExperienceConfig,
+  ResponsiveConfig,
 } from "./experience";
 import { DEFAULT_INSTRUMENT, TakeEvent, TakeManifest } from "./instrument";
 import { LookConfig } from "./looks";
@@ -76,4 +78,31 @@ test("a captured motion frame includes the resolved music and simulation clock",
   expect(TakeEvent.safeParse({ ...event, simulationTime: -1 }).success).toBe(
     false
   );
+});
+
+
+test("new effects belong to responsive takes while legacy materials stay unchanged", () => {
+  for (const treatment of ["kaleido", "loom", "orbit"]) {
+    const config = { ...DEFAULT_RESPONSIVE, treatment };
+    expect(ResponsiveConfig.safeParse(config).success).toBe(true);
+    expect(LookConfig.safeParse(config).success).toBe(true);
+    expect(
+      TakeManifest.safeParse({
+        config,
+        createdAt: new Date().toISOString(),
+        duration: 4,
+        engine: "sonara-3",
+        id: crypto.randomUUID(),
+        name: treatment,
+        version: 3,
+      }).success
+    ).toBe(true);
+    expect(
+      ExperienceConfig.safeParse({ ...DEFAULT_EXPERIENCE, treatment }).success
+    ).toBe(false);
+  }
+  expect(
+    ResponsiveConfig.safeParse({ ...DEFAULT_RESPONSIVE, treatment: "unknown" })
+      .success
+  ).toBe(false);
 });

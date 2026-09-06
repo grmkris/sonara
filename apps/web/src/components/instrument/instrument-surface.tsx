@@ -450,10 +450,13 @@ export const InstrumentSurface = ({
           if (key === "next") {
             if (value > 0.5) {
               const choices = ["ink", "silk", "prism"] as const;
+              const index = (choices as readonly string[]).indexOf(
+                state.config.treatment
+              );
               state.setConfig({
                 ...state.config,
                 treatment:
-                  choices[(choices.indexOf(state.config.treatment) + 1) % 3] ??
+                  choices[(index + 1) % choices.length] ??
                   "silk",
               });
             }
