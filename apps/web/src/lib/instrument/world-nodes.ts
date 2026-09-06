@@ -274,13 +274,15 @@ export const worldColor = (world: WorldId, u: WorldUniforms) =>
         .mul(0.5)
         .add(0.5);
       color.assign(
-        palette(inside.add(radius.mul(0.3))).mul(
-          body
-            .mul(inside)
-            .mul(0.9)
-            .add(outline)
-            .add(contours.mul(body).mul(0.5))
-        )
+        palette(inside.add(radius.mul(0.3)))
+          .mul(
+            body
+              .mul(inside)
+              .mul(0.9)
+              .add(outline)
+              .add(contours.mul(body).mul(0.5))
+          )
+          .mul(energy.add(0.55))
       );
     }
     const previousUv = uv()

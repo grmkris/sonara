@@ -54,11 +54,17 @@ export class FeatureAnalyzer {
       return { confidence: 0, features: { ...defaultAudio }, time };
     }
     const spectrum = extracted.amplitudeSpectrum as Float32Array;
-    const dt = this.lastTime > 0 ? Math.min(0.2, time - this.lastTime) : 1 / 60;
-    // A stalled worker must not reinterpret sparse samples as a 60 Hz history.
-    if (dt > 0.04) {
+    const gap = this.lastTime > 0 ? Math.max(0, time - this.lastTime) : 1 / 60;
+    const dt = Math.min(0.2, gap);
+    // Keep onset history on the audio clock. Short scheduling gaps occupy
+    // empty slots instead of compressing time or erasing several bars.
+    if (gap > 0.5) {
       this.flux = [];
       this.bpm = 0;
+    } else {
+      for (let missing = 1; missing < Math.round(gap * 60); missing += 1) {
+        this.flux.push(0);
+      }
     }
     this.lastTime = time;
     let sum = 0;
@@ -137,7 +143,7 @@ export class FeatureAnalyzer {
     }
     this.flux.push(flux);
     if (this.flux.length > 480) {
-      this.flux.shift();
+      this.flux.splice(0, this.flux.length - 480);
     }
     if (this.flux.length >= 240 && time - this.lastTempo >= 0.5) {
       this.bpm = estimateBpm(this.flux, this.bpm);

@@ -94,7 +94,9 @@ export class TakeRecorder {
       .then(async () => {
         let index = this.images.get(url);
         if (index === undefined) {
-          const response = await fetch(url);
+          const response = await fetch(url, {
+            signal: AbortSignal.timeout(15_000),
+          });
           if (!response.ok) {
             throw new Error("Could not preserve an image input in this take.");
           }
@@ -127,7 +129,15 @@ export class TakeRecorder {
             ? error.message
             : "Could not preserve the image input."
         );
+        if (!this.stopped) {
+          this.stopAfterFailure();
+        }
       });
+  }
+  private stopAfterFailure(): void {
+    void this.stop().catch(() => {
+      /* Saved chunks remain recoverable if storage is full. */
+    });
   }
   private addRecorder(
     stream: MediaStream,

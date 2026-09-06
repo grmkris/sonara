@@ -22,7 +22,11 @@ export const Slider = ({
     <SliderPrimitive.Control className="flex w-full grow items-center">
       <SliderPrimitive.Track className="relative h-px w-full grow bg-[color:var(--hairline)]/50">
         <SliderPrimitive.Indicator className="absolute h-full bg-[color:var(--paper)]/70" />
-        <SliderPrimitive.Thumb className="block h-2 w-2 rounded-full bg-[color:var(--paper)] shadow-[0_0_0_4px_rgba(26,22,18,0.4)] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[color:var(--indigo)]" />
+        <SliderPrimitive.Thumb
+          aria-label={props["aria-label"]}
+          aria-labelledby={props["aria-labelledby"]}
+          className="block h-2 w-2 rounded-full bg-[color:var(--paper)] shadow-[0_0_0_4px_rgba(26,22,18,0.4)] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[color:var(--indigo)]"
+        />
       </SliderPrimitive.Track>
     </SliderPrimitive.Control>
   </SliderPrimitive.Root>

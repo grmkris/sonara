@@ -293,6 +293,8 @@ export const InstrumentSurface = ({
         return;
       }
       setTracking("off");
+      runtime.current?.renderer.clearMask();
+      recorder.current?.recordMask(new Uint8Array(0), 0, 0);
       toast.error(message);
     };
     input.onFrame = (frame) => {
