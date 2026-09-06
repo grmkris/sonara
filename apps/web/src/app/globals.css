@@ -1271,6 +1271,29 @@ body {
     #101321 35deg 60deg
   );
 }
+.experience-treatment-kaleido {
+  background: repeating-conic-gradient(from 30deg, #0e1524 0deg 20deg, #acd9cf 22deg 25deg, #72599e 28deg, #0e1524 30deg 60deg);
+}
+.experience-treatment-loom {
+  background: repeating-linear-gradient(173deg, transparent 0 7px, #070a10 8px 10px), linear-gradient(120deg, #39727c, #d1b8d3 45%, #774974 75%, #233a62);
+}
+.experience-treatment-orbit {
+  background: radial-gradient(circle at 25% 30%, #e9e1d1 0 1px, transparent 2px), radial-gradient(circle at 65% 70%, #8cf3dc 0 1px, transparent 3px), radial-gradient(circle at 80% 20%, #edb5fa 0 1px, transparent 2px), radial-gradient(ellipse at 45% 55%, #34485a, #071019 70%);
+  background-size: 27px 29px, 43px 37px, 53px 47px, 100% 100%;
+}
+.experience-look-tabs {
+  gap: 24px;
+}
+.experience-look-tabs [data-slot="tabs-list"] {
+  height: 44px;
+}
+.experience-look-tabs [data-slot="tabs-trigger"] {
+  font-size: 13px;
+}
+.experience-imagery [data-slot="button"],
+.experience-imagery [data-slot="input"] {
+  min-height: 44px;
+}
 .experience-parameter {
   display: flex;
   flex-direction: column;

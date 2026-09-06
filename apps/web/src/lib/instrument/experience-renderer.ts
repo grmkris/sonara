@@ -23,6 +23,7 @@ import type {
 } from "three/webgpu";
 
 import { PALETTES } from "./catalog";
+import { effectPass, isExtendedTreatment } from "./experience-effects";
 import {
   bloomPass,
   curlPass,
@@ -136,7 +137,9 @@ export class ExperienceLayer {
       divergence: material(divergencePass(u)),
       dye: material(dyePass(u)),
       flow: material(flowPass(u)),
-      material: material(materialPass(u, config.version === 3)),
+      material: material(
+        effectPass(u, config.treatment) ?? materialPass(u, config.version === 3)
+      ),
       present: material(presentPass(u)),
       pressure: material(pressurePass(u)),
       project: material(projectPass(u)),
@@ -145,6 +148,17 @@ export class ExperienceLayer {
     this.configure(config);
   }
   configure(config: MaterialConfig): void {
+    if (
+      this.config.treatment !== config.treatment &&
+      (isExtendedTreatment(this.config.treatment) ||
+        isExtendedTreatment(config.treatment))
+    ) {
+      this.passes.material.dispose();
+      this.passes.material = material(
+        effectPass(this.u, config.treatment) ??
+          materialPass(this.u, config.version === 3)
+      );
+    }
     this.config = config;
     const { u } = this;
     u.response.value = config.version === 3 ? config.response : 0;

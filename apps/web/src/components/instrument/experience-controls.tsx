@@ -12,7 +12,7 @@ import { PALETTES } from "@/lib/instrument/catalog";
 
 import { InstrumentControls } from "./instrument-controls";
 
-const treatments = [
+const originalTreatments = [
   {
     description: "Deep pigment. Slow currents.",
     flow: 0.28,
@@ -39,6 +39,34 @@ const treatments = [
   },
 ] as const;
 
+const treatments = [
+  ...originalTreatments,
+  {
+    description: "Mirrored geometry. Endless folds.",
+    flow: 0.5,
+    name: "Kaleido",
+    symmetry: 0.85,
+    trails: 0.4,
+    value: "kaleido",
+  },
+  {
+    description: "Woven ribbons. Rippling images.",
+    flow: 0.65,
+    name: "Loom",
+    symmetry: 0.1,
+    trails: 0.45,
+    value: "loom",
+  },
+  {
+    description: "Orbital dust. Magnetic light.",
+    flow: 0.6,
+    name: "Orbit",
+    symmetry: 0.2,
+    trails: 0.55,
+    value: "orbit",
+  },
+] as const;
+
 export const ExperienceControls = ({
   config,
   onChange,
@@ -54,6 +82,21 @@ export const ExperienceControls = ({
       className="experience-treatments"
       value={[config.treatment]}
       onValueChange={(values) => {
+        if (config.version === 2) {
+          const treatment = originalTreatments.find(
+            (t) => t.value === values[0]
+          );
+          if (treatment) {
+            onChange({
+              ...config,
+              flow: treatment.flow,
+              symmetry: treatment.symmetry,
+              trails: treatment.trails,
+              treatment: treatment.value,
+            });
+          }
+          return;
+        }
         const treatment = treatments.find((t) => t.value === values[0]);
         if (treatment) {
           onChange({
@@ -66,7 +109,7 @@ export const ExperienceControls = ({
         }
       }}
     >
-      {treatments.map((t) => (
+      {(config.version === 2 ? originalTreatments : treatments).map((t) => (
         <ToggleGroupItem
           key={t.value}
           value={t.value}
@@ -130,29 +173,32 @@ export const ExperienceControls = ({
     )}
     {!compact && (
       <>
-        {(["intensity", "flow", "symmetry", "trails", "reveal"] as const).map(
-          (key) => (
-            <Field key={key}>
-              <FieldLabel htmlFor={`visual-${key}`}>
-                {key === "reveal" ? "Image presence" : key}
-              </FieldLabel>
-              <Slider
-                id={`visual-${key}`}
-                aria-label={key === "reveal" ? "Image presence" : key}
-                min={0}
-                max={1}
-                step={0.01}
-                value={[config[key]]}
-                onValueChange={(value) =>
-                  onChange({
-                    ...config,
-                    [key]: Array.isArray(value) ? (value[0] ?? 0.5) : value,
-                  })
-                }
-              />
-            </Field>
-          )
-        )}
+        {(config.treatment === "kaleido" ||
+        config.treatment === "loom" ||
+        config.treatment === "orbit"
+          ? (["intensity", "flow", "reveal"] as const)
+          : (["intensity", "flow", "symmetry", "trails", "reveal"] as const)
+        ).map((key) => (
+          <Field key={key}>
+            <FieldLabel htmlFor={`visual-${key}`}>
+              {key === "reveal" ? "Image presence" : key}
+            </FieldLabel>
+            <Slider
+              id={`visual-${key}`}
+              aria-label={key === "reveal" ? "Image presence" : key}
+              min={0}
+              max={1}
+              step={0.01}
+              value={[config[key]]}
+              onValueChange={(value) =>
+                onChange({
+                  ...config,
+                  [key]: Array.isArray(value) ? (value[0] ?? 0.5) : value,
+                })
+              }
+            />
+          </Field>
+        ))}
         <Field orientation="horizontal">
           <FieldLabel>
             <Switch

@@ -1,6 +1,6 @@
 "use client";
 
-import type { PerformanceControlFrame } from "@sonara/shared";
+import type { EngineConfig, PerformanceControlFrame } from "@sonara/shared";
 import { Camera, Circle, Expand, Square } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -10,7 +10,10 @@ import { toast } from "sonner";
 import { StageWire } from "@/components/stage/stage-wire";
 import { StudioCreateNav } from "@/components/studio/studio-sidebar-tabs";
 import { Button } from "@/components/ui/button";
+import { Field, FieldLabel } from "@/components/ui/field";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
+import { Slider } from "@/components/ui/slider";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { UserControls } from "@/components/user-controls";
 import { MusicSource } from "@/components/visualizer/controls/music-source";
@@ -72,6 +75,105 @@ const SessionLine = ({
     {status !== "ready" && <span>{status}</span>}
   </div>
 );
+
+const LookControls = ({
+  advanced,
+  config,
+  setConfig,
+  deck,
+  setDeck,
+  send,
+  open,
+  onSave,
+}: {
+  advanced: boolean;
+  config: EngineConfig;
+  setConfig: (config: EngineConfig) => void;
+  deck: "a" | "b";
+  setDeck: (deck: "a" | "b") => void;
+  send: SessionSend;
+  open: boolean;
+  onSave: () => Promise<void>;
+}) => {
+  const [lookTab, setLookTab] = useState("looks");
+  return (
+    <>
+      {advanced ? (
+        <>
+          {config.version === 1 ? (
+            <EngineControls
+              config={config}
+              onChange={setConfig}
+              deck={deck}
+              onDeck={setDeck}
+            />
+          ) : (
+            <ExperienceControls config={config} onChange={setConfig} />
+          )}
+          <ExperienceMood send={send} open={open} />
+          <Button
+            variant="outline"
+            onClick={() => {
+              void onSave();
+            }}
+          >
+            Save this look
+          </Button>
+        </>
+      ) : (
+        <Tabs
+          value={lookTab}
+          onValueChange={(value) => setLookTab(String(value))}
+          className="experience-look-tabs"
+        >
+          <TabsList aria-label="Look options" className="w-full">
+            <TabsTrigger value="looks">Looks</TabsTrigger>
+            <TabsTrigger value="image">Image</TabsTrigger>
+          </TabsList>
+          <TabsContent value="looks">
+            {config.version === 1 ? (
+              <EngineControls config={config} onChange={setConfig} />
+            ) : (
+              <ExperienceControls
+                config={config}
+                onChange={setConfig}
+                compact
+              />
+            )}
+          </TabsContent>
+          <TabsContent value="image" keepMounted>
+            <ExperienceMood
+              send={send}
+              open={open && lookTab === "image"}
+              compact
+            />
+            {config.version !== 1 && (
+              <Field className="mt-6">
+                <FieldLabel htmlFor="play-image-presence">
+                  Image presence
+                </FieldLabel>
+                <Slider
+                  id="play-image-presence"
+                  aria-label="Image presence"
+                  min={0}
+                  max={1}
+                  step={0.01}
+                  value={[config.reveal]}
+                  onValueChange={(value) =>
+                    setConfig({
+                      ...config,
+                      reveal: Array.isArray(value) ? (value[0] ?? 0.5) : value,
+                    })
+                  }
+                />
+              </Field>
+            )}
+          </TabsContent>
+        </Tabs>
+      )}
+    </>
+  );
+};
 
 export const InstrumentSurface = ({
   audioSource,
@@ -449,16 +551,28 @@ export const InstrumentSurface = ({
         } else if (state.config.version !== 1) {
           if (key === "next") {
             if (value > 0.5) {
-              const choices = ["ink", "silk", "prism"] as const;
-              const index = (choices as readonly string[]).indexOf(
-                state.config.treatment
-              );
-              state.setConfig({
-                ...state.config,
-                treatment:
-                  choices[(index + 1) % choices.length] ??
+              if (state.config.version === 3) {
+                const choices = [
+                  "ink",
                   "silk",
-              });
+                  "prism",
+                  "kaleido",
+                  "loom",
+                  "orbit",
+                ] as const;
+                const index = choices.indexOf(state.config.treatment);
+                state.setConfig({
+                  ...state.config,
+                  treatment: choices[(index + 1) % choices.length] ?? "silk",
+                });
+              } else {
+                const choices = ["ink", "silk", "prism"] as const;
+                const index = choices.indexOf(state.config.treatment);
+                state.setConfig({
+                  ...state.config,
+                  treatment: choices[(index + 1) % choices.length] ?? "silk",
+                });
+              }
             }
           } else {
             const field = key === "energy" ? "intensity" : key;
@@ -813,33 +927,16 @@ export const InstrumentSurface = ({
           open={panel === "mood"}
           onOpenChange={(open) => setPanel(open ? "mood" : null)}
         >
-          {config.version === 1 ? (
-            <EngineControls
-              config={config}
-              onChange={setConfig}
-              deck={deck}
-              onDeck={setDeck}
-            />
-          ) : (
-            <ExperienceControls
-              config={config}
-              onChange={setConfig}
-              compact={!advanced}
-            />
-          )}
-          {advanced && (
-            <>
-              <ExperienceMood send={send} open={panel === "mood"} />
-              <Button
-                variant="outline"
-                onClick={() => {
-                  void saveLook();
-                }}
-              >
-                Save this look
-              </Button>
-            </>
-          )}
+          <LookControls
+            advanced={advanced}
+            config={config}
+            setConfig={setConfig}
+            deck={deck}
+            setDeck={setDeck}
+            send={send}
+            open={panel === "mood"}
+            onSave={saveLook}
+          />
         </InstrumentPanel>
         <InstrumentPanel
           label="Camera"
