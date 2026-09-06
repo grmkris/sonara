@@ -225,7 +225,7 @@ export const ExperienceMood = ({
           localUrls.current.push(url);
           applyLocalImage(url);
           setMessage(
-            "Your photo stays on this device unless you share a capture."
+            "Photo added. It keeps moving with your music."
           );
         }}
       />

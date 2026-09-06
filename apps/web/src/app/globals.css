@@ -1409,7 +1409,7 @@ input::placeholder {
 .experience-captured {
   z-index: 4;
 }
-.experience-dock > [data-slot="button"] {
+.experience-dock > button {
   min-height: 40px;
   padding-inline: 13px;
   font-size: 12px;
@@ -1428,7 +1428,7 @@ input::placeholder {
   border-radius: 4px;
 }
 @media (max-width: 680px) {
-  .experience-dock > [data-slot="button"] {
+  .experience-dock > button {
     padding-inline: 10px;
   }
 }
