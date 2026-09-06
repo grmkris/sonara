@@ -4,7 +4,7 @@
  * slow/no internet after a first online visit. Demo frame-driving is already
  * client-native (use-demo-frame-loop), so once assets are cached the whole
  * show runs with the network down. */
-const VERSION = "v3";
+const VERSION = "v4";
 const NAV_CACHE = `sonara-nav-${VERSION}`;
 const ASSET_CACHE = `sonara-assets-${VERSION}`;
 // Library images are content-addressed + immutable — keep across deploys so a
@@ -102,6 +102,14 @@ self.addEventListener("fetch", (event) => {
     return;
   }
   const p = url.pathname;
+  // Turbopack encodes each worker's module list in its URL fragment. Cache
+  // matching ignores that fragment, but a cached Response.url can replace
+  // self.location and start a different worker (or a previous build's code).
+  // Let the browser handle worker entrypoints; their imported chunks remain
+  // cacheable below. See FetchEvent.respondWith's final-URL semantics.
+  if (req.destination === "worker" || p.includes("turbopack-worker-")) {
+    return;
+  }
   // Never intercept realtime / API — let them hit the network and fail
   // gracefully offline (the demo loop is client-native and doesn't need them).
   if (p.startsWith("/rpc") || p.startsWith("/api") || p.startsWith("/ws")) {
@@ -120,46 +128,7 @@ self.addEventListener("fetch", (event) => {
     );
     return;
   }
-  if (p.startsWith("/_next/")) {
+  if (p.startsWith("/_next/") || p.startsWith("/audio/")) {
     event.respondWith(cacheFirst(req, ASSET_CACHE));
   }
 });
-
-// Background prefetch of a full deck (posted by the page when online), cached
-// in small batches so a slow link isn't saturated. Frames already cached are
-// skipped, so the live demo's misses don't get re-fetched.
-self.addEventListener("message", (event) => {
-  const { data } = event;
-  if (!data || data.type !== "PREFETCH_DECK" || !Array.isArray(data.urls)) {
-    return;
-  }
-  event.waitUntil(prefetchUrls(data.urls));
-});
-
-// oxlint-disable-next-line func-style, no-implicit-globals -- classic service-worker script: hoisted global helper referenced by the message handler above
-async function prefetchUrls(urls) {
-  const cache = await caches.open(LIB_CACHE);
-  const BATCH = 6;
-  for (let i = 0; i < urls.length; i += BATCH) {
-    if (self.navigator && self.navigator.onLine === false) {
-      return;
-    }
-    const batch = urls.slice(i, i + BATCH);
-    // oxlint-disable-next-line no-await-in-loop -- deliberate bounded concurrency: prefetch 6 at a time to cap memory/network during install
-    await Promise.all(
-      batch.map(async (u) => {
-        try {
-          if (await cache.match(u)) {
-            return;
-          }
-          const res = await fetch(u, { cache: "no-store" });
-          if (res.ok) {
-            await cache.put(u, res.clone());
-          }
-        } catch {
-          /* ignore individual frame failures */
-        }
-      })
-    );
-  }
-}

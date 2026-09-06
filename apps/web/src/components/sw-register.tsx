@@ -2,74 +2,26 @@
 
 import { useEffect } from "react";
 
-// The default deck we want cached for offline playback.
-const PREFETCH_DECK = "liquid";
-
-interface NetworkInformation {
-  saveData?: boolean;
-  effectiveType?: string;
-}
-
-const prefetchDeck = async (): Promise<void> => {
-  try {
-    const res = await fetch(`/library/${PREFETCH_DECK}/manifest.json`);
-    if (!res.ok) {
-      return;
-    }
-    const data = (await res.json()) as { frames?: string[] };
-    const urls = Array.isArray(data.frames) ? data.frames : [];
-    const ctrl = navigator.serviceWorker.controller;
-    if (urls.length > 0 && ctrl) {
-      // ServiceWorker.postMessage takes (message, transfer) — no targetOrigin.
-      // oxlint-disable-next-line unicorn/require-post-message-target-origin -- REVIEW: ServiceWorker.postMessage has no targetOrigin param
-      ctrl.postMessage({ type: "PREFETCH_DECK", urls });
-    }
-  } catch {
-    /* ignore */
-  }
-};
-
-// Registers the offline service worker (production only) and, once it's
-// controlling the page, background-prefetches the full showcase deck while on a
-// decent connection — so "open it once on wifi, then it works in the basement".
+// Cache what the listener actually uses. Startup no longer downloads an
+// unrelated image deck; the procedural surface needs no library assets.
 export const SwRegister = () => {
   useEffect(() => {
-    if (process.env.NODE_ENV !== "production") {
+    if (
+      process.env.NODE_ENV !== "production" ||
+      !("serviceWorker" in navigator)
+    ) {
       return;
     }
-    if (typeof navigator === "undefined" || !("serviceWorker" in navigator)) {
-      return;
-    }
-    void (async () => {
+    const register = async () => {
       try {
-        await navigator.serviceWorker.register("/sw.js");
-        await navigator.serviceWorker.ready;
-        if (!navigator.onLine) {
-          return;
-        }
-        const conn = (
-          navigator as Navigator & {
-            connection?: NetworkInformation;
-          }
-        ).connection;
-        // Skip the ~30 MB prefetch on metered / very slow links; runtime
-        // caching still captures whatever frames actually play.
-        if (conn?.saveData) {
-          return;
-        }
-        if (
-          conn?.effectiveType &&
-          /(?:^|-)(?:2g|slow)/u.test(conn.effectiveType)
-        ) {
-          return;
-        }
-        // Give the live demo a head start, then prefetch the rest.
-        setTimeout(() => void prefetchDeck(), 8000);
+        await navigator.serviceWorker.register("/sw.js", {
+          updateViaCache: "none",
+        });
       } catch {
-        /* registration failures are non-fatal */
+        /* Offline caching is optional. */
       }
-    })();
+    };
+    void register();
   }, []);
-
   return null;
 };

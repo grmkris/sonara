@@ -150,6 +150,15 @@ export const StageScreen = ({ code }: { code: string | null }) => {
   const hostTarget = ownStage ? { stageId: ownStage.stageId } : null;
   const [audioSource, setAudioSource] = useState<AudioSource>({ type: "none" });
 
+  const playbackElement =
+    audioSource.type === "element" ? audioSource.element : null;
+  useEffect(
+    () => () => {
+      playbackElement?.pause();
+    },
+    [playbackElement]
+  );
+
   // Console footer actions. "New set" closes the current recording segment
   // and starts the next one (own /studio entry) — no reconnect; "reset" only
   // clears the current scene. Both drop the local audio source so the next

@@ -1405,3 +1405,30 @@ input::placeholder {
 .experience-captured > span {
   color: #b5a68b;
 }
+
+.experience-captured {
+  z-index: 4;
+}
+.experience-dock > [data-slot="button"] {
+  min-height: 40px;
+  padding-inline: 13px;
+  font-size: 12px;
+  text-transform: none;
+  letter-spacing: 0.02em;
+}
+.experience-invitation [data-slot="button"] {
+  min-height: 46px;
+  padding: 12px 20px;
+  font-size: 12px;
+}
+.experience-invitation [data-slot="button"]:first-child {
+  color: #14110e;
+  background: #ead9bd;
+  border: 0;
+  border-radius: 4px;
+}
+@media (max-width: 680px) {
+  .experience-dock > [data-slot="button"] {
+    padding-inline: 10px;
+  }
+}

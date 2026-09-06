@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { UsagePanel } from "@/components/usage-panel";
 import { signOut, useSession } from "@/lib/auth-client";
 
-export const UserControls = () => {
+export const UserControls = ({ compact = false }: { compact?: boolean }) => {
   const { data: sessionData } = useSession();
   const isSignedIn = !!sessionData?.session;
   const [panelOpen, setPanelOpen] = useState(false);
@@ -48,7 +48,7 @@ export const UserControls = () => {
     );
   }
 
-  const label = sessionData?.user?.email ?? "signed in";
+  const label = compact ? "Account" : (sessionData?.user?.email ?? "signed in");
 
   return (
     <div className="pointer-events-auto relative flex items-center gap-2">

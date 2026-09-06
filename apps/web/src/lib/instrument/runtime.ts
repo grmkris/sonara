@@ -77,9 +77,7 @@ export class InstrumentRuntime {
     }
     this.lastAudioInput = frame;
     this.audio = frame;
-    if (frame.music) {
-      this.music = frame.music;
-    }
+    this.music = frame.music ?? { ...EMPTY_MUSIC, time: frame.time };
     this.audioUpdated = true;
   }
   setControls(control: PerformanceControlFrame): void {

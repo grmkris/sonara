@@ -703,7 +703,7 @@ export const InstrumentSurface = ({
         <nav aria-label="Your session" className="flex items-center gap-3">
           <Link href="/studio">Your collection</Link>
           {remoteControl}
-          <UserControls />
+          <UserControls compact />
           <Button
             size="icon"
             variant="ghost"

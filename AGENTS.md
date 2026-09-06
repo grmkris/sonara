@@ -310,3 +310,5 @@ These exist in reference projects (`invok`, `appmisha.com`) and are deliberately
 - Performance takes extend `frame_set` through `performance_take` and resumable `performance_take_chunk` rows. Original takes are immutable after finalization; edits create a curated remix. Browser IndexedDB keeps recoverable chunks before upload. `/studio/takes/[id]` accepts a local UUID or account `set_` ID; `/set/[id]` also opens performance takes. The shared take manifest versions renderer settings and retains trim points.
 
 Public worklets and world previews use content hashes in their filenames. Rename them and update their references when their bytes change: the gateway/CDN caches public assets, and a stale worklet can speak an incompatible message protocol to a new client.
+
+Worker entrypoints must bypass the service-worker response cache: Turbopack uses one bootstrap filename with different `#params` module lists. Cache matching drops fragments, and a cached response URL can start an unrelated/old worker. Imported build chunks remain cacheable.
