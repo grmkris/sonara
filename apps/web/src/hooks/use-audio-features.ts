@@ -90,9 +90,6 @@ export const useAudioFeatures = (
         } else {
           engine.detachSource();
         }
-        if (cancelled) {
-          engine.detachSource();
-        }
       } catch (error) {
         if (!cancelled) {
           onError?.(error);

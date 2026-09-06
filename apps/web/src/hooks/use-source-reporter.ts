@@ -4,6 +4,7 @@ import type { DeckKey } from "@sonara/shared";
 import { useEffect } from "react";
 
 import type { SessionSend } from "@/lib/session-actions";
+import { useInstrumentStore } from "@/stores/instrument-store";
 import { useVisualizerStore } from "@/stores/visualizer";
 import type { VisualizerState } from "@/stores/visualizer";
 
@@ -23,8 +24,18 @@ type ReportedSource = Extract<
   { type: "source.report" }
 >["source"];
 
-const deriveSource = (s: VisualizerState): ReportedSource => {
+export const deriveSource = (s: VisualizerState): ReportedSource => {
   const { source } = s;
+  const instrument = useInstrumentStore.getState();
+  const hasDream =
+    instrument.config.a.world === "dream" ||
+    instrument.config.b.world === "dream";
+  if (instrument.enabled && !(hasDream && source.kind === "live")) {
+    return {
+      kind: "procedural",
+      label: `${instrument.config.a.world} / ${instrument.config.b.world}`,
+    };
+  }
   switch (source.kind) {
     case "set": {
       return {
@@ -64,7 +75,11 @@ export const useSourceReporter = (send: SessionSend): void => {
     const unsub = useVisualizerStore.subscribe((s) => {
       report(deriveSource(s));
     });
+    const unsubInstrument = useInstrumentStore.subscribe(() => {
+      report(deriveSource(useVisualizerStore.getState()));
+    });
     return () => {
+      unsubInstrument();
       unsub();
     };
   }, [send]);

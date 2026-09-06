@@ -27,7 +27,6 @@ import { createFbo, createProgram, createShader } from "./webgl-util";
 import type { Fbo, QuadBuffer } from "./webgl-util";
 
 const RD_SIZE = 256;
-const ITERATIONS_PER_FRAME = 6;
 
 const VS = `#version 300 es
 layout(location = 0) in vec2 aPos;
@@ -82,9 +81,7 @@ void main() {
 }
 `;
 
-// One Gray-Scott substep. Uses a 5-point Laplacian (cross stencil, not
-// 9-point) — simpler and the pattern quality is indistinguishable at our
-// resolution.
+// Weighted nine-point stencil: stable at dt=1 with Du=1, Dv=0.5.
 const UPDATE_FRAG = `#version 300 es
 precision highp float;
 in vec2 vUv;
@@ -98,13 +95,17 @@ void main() {
   vec4 here = texture(uSrc, vUv);
   float U = here.r;
   float V = here.g;
-  // 5-point Laplacian on each species.
+  // Weighted nine-point Laplacian on each species.
   vec4 n = texture(uSrc, vUv + vec2(0.0,  uTexel.y));
   vec4 s = texture(uSrc, vUv - vec2(0.0,  uTexel.y));
   vec4 e = texture(uSrc, vUv + vec2(uTexel.x, 0.0));
   vec4 w = texture(uSrc, vUv - vec2(uTexel.x, 0.0));
-  float lapU = n.r + s.r + e.r + w.r - 4.0 * U;
-  float lapV = n.g + s.g + e.g + w.g - 4.0 * V;
+  vec4 ne = texture(uSrc, vUv + uTexel);
+  vec4 sw = texture(uSrc, vUv - uTexel);
+  vec4 nw = texture(uSrc, vUv + vec2(-uTexel.x, uTexel.y));
+  vec4 se = texture(uSrc, vUv + vec2(uTexel.x, -uTexel.y));
+  float lapU = 0.2 * (n.r + s.r + e.r + w.r) + 0.05 * (ne.r + sw.r + nw.r + se.r) - U;
+  float lapV = 0.2 * (n.g + s.g + e.g + w.g) + 0.05 * (ne.g + sw.g + nw.g + se.g) - V;
   float Du = 1.0;
   float Dv = 0.5;
   float uvv = U * V * V;
@@ -117,6 +118,7 @@ void main() {
 `;
 
 export interface RDFrameOpts {
+  dtMs: number;
   feed: number;
   kill: number;
   // 0..1, rising edge seeds a dot
@@ -149,12 +151,14 @@ export class RDLayer {
     };
   };
   private prevKick = 0;
+  private accumulated = 0;
 
   constructor(gl: WebGL2RenderingContext, quad: QuadBuffer) {
     this.gl = gl;
     this.quad = quad;
-    this.fboA = createFbo(gl, RD_SIZE, RD_SIZE);
-    this.fboB = createFbo(gl, RD_SIZE, RD_SIZE);
+    const floating = !!gl.getExtension("EXT_color_buffer_float");
+    this.fboA = createFbo(gl, RD_SIZE, RD_SIZE, floating);
+    this.fboB = createFbo(gl, RD_SIZE, RD_SIZE, floating);
 
     const vs = createShader(gl, gl.VERTEX_SHADER, VS);
     const resetFs = createShader(gl, gl.FRAGMENT_SHADER, RESET_FRAG);
@@ -163,6 +167,9 @@ export class RDLayer {
     this.resetProgram = createProgram(gl, vs, resetFs);
     this.seedProgram = createProgram(gl, vs, seedFs);
     this.updateProgram = createProgram(gl, vs, updateFs);
+    for (const shader of [vs, resetFs, seedFs, updateFs]) {
+      gl.deleteShader(shader);
+    }
 
     this.uni = {
       seed: {
@@ -195,9 +202,10 @@ export class RDLayer {
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
     gl.bindVertexArray(null);
     this.writeIsA = true;
+    this.accumulated = 0;
   }
 
-  // Run one display-frame's worth of substeps (default 6). Returns the
+  // Advance at 360 substeps per second, independent of display refresh. Returns the
   // texture holding the latest state.
   update(opts: RDFrameOpts): WebGLTexture {
     const { gl } = this;
@@ -215,10 +223,13 @@ export class RDLayer {
     gl.uniform1f(this.uni.update.uFeed, opts.feed);
     gl.uniform1f(this.uni.update.uKill, opts.kill);
     gl.uniform1f(this.uni.update.uDt, 1);
+    this.accumulated += Math.min(100, opts.dtMs) * 0.36;
+    const steps = Math.min(36, Math.floor(this.accumulated));
+    this.accumulated -= steps;
     gl.activeTexture(gl.TEXTURE0);
     gl.uniform1i(this.uni.update.uSrc, 0);
 
-    for (let i = 0; i < ITERATIONS_PER_FRAME; i += 1) {
+    for (let i = 0; i < steps; i += 1) {
       const write = this.writeIsA ? this.fboA : this.fboB;
       const read = this.writeIsA ? this.fboB : this.fboA;
       gl.bindFramebuffer(gl.FRAMEBUFFER, write.fbo);

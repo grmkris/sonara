@@ -19,6 +19,8 @@ export const SOURCE_KEY = "viz_source";
 //         builtin sets, the static deck manifest behind their deckKey)
 export type PlaybackSource =
   | { kind: "idle" }
+  | { kind: "procedural" }
+  | { kind: "take" }
   | { kind: "live" }
   | {
       kind: "set";

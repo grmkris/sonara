@@ -10,6 +10,7 @@ import { toast } from "sonner";
 
 import { AppNavLinks } from "@/components/app-nav";
 import { Mark } from "@/components/brand/mark";
+import { TakeStudio } from "@/components/instrument/take-studio";
 import { Seismograph } from "@/components/stage/seismograph";
 import { StageJoinQr } from "@/components/stage/stage-join-qr";
 import { TapTicker } from "@/components/stage/tap-ticker";
@@ -437,7 +438,7 @@ const LensView = ({
   );
 };
 
-export default function SetPermalinkPage() {
+const LegacySetPermalinkPage = () => {
   const params = useParams<{ id: string }>();
   const { id } = params;
 
@@ -475,4 +476,31 @@ export default function SetPermalinkPage() {
       setAudioSource={setAudioSource}
     />
   );
+};
+
+export default function SetPermalinkPage() {
+  const { id } = useParams<{ id: string }>();
+  const [hasTake, setHasTake] = useState<boolean | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        await rpcClient.takes.get({ setId: id as FrameSetId });
+        if (!cancelled) {
+          setHasTake(true);
+        }
+      } catch {
+        if (!cancelled) {
+          setHasTake(false);
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [id]);
+  if (hasTake === null) {
+    return <main className="min-h-svh bg-[color:var(--ink)]" />;
+  }
+  return hasTake ? <TakeStudio id={id} /> : <LegacySetPermalinkPage />;
 }

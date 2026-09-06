@@ -3,7 +3,7 @@
 import type { LookConfig } from "@sonara/shared";
 import { useEffect, useRef } from "react";
 
-import { debounce } from "@/lib/debounce";
+import { coalesce } from "@/lib/debounce";
 import { resolveLook } from "@/lib/render/presets";
 import type { SessionSend } from "@/lib/session-actions";
 import { useVisualizerStore } from "@/stores/visualizer";
@@ -17,7 +17,7 @@ export const useLookRelay = (send: SessionSend): void => {
   sendRef.current = send;
 
   useEffect(() => {
-    const relay = debounce(() => {
+    const relay = coalesce(() => {
       const s = useVisualizerStore.getState();
       const config = resolveLook(
         s.preset,
@@ -42,7 +42,7 @@ export const useLookRelay = (send: SessionSend): void => {
 
     return () => {
       unsub();
-      relay.cancel();
+      relay.flush();
     };
   }, []);
 };

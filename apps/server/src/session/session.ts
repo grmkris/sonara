@@ -430,7 +430,12 @@ export class Session implements ControllableSession {
 
   // Relay a remote look switch to the screen (console → screen). The resolved
   // render look; the screen applies it as the active custom look.
+  private currentLook: LookConfig | undefined;
+  reportLook(config: LookConfig): void {
+    this.currentLook = config;
+  }
   notifyLook(config: LookConfig): void {
+    this.currentLook = config;
     this.send({ config, type: "look.set" });
   }
 
@@ -508,6 +513,7 @@ export class Session implements ControllableSession {
       jobStatus: this.lastJobStatus,
       lastFrameUrl: this.lastFrameUrl,
       liveSessionId: this.liveSessionId,
+      look: this.currentLook,
       nowPlaying: this.scene.nowPlaying ?? null,
       scene: this.scene,
       source: this.source,
@@ -535,6 +541,8 @@ export class Session implements ControllableSession {
       (source.kind === "live" || source.kind === "idle") &&
       this.userId !== null
     ) {
+      this.source = { kind: source.kind };
+    } else if (source.kind === "procedural" || source.kind === "take") {
       this.source = { kind: source.kind };
     } else if (source.kind === "set" && (source.setId || source.deckKey)) {
       this.source = {
@@ -955,7 +963,11 @@ export class Session implements ControllableSession {
       }
       // Set playback is client-driven; the server only auto-triggers
       // LIVE generation, never while a playback source is showing.
-      if (this.source.kind === "set") {
+      if (
+        this.source.kind === "set" ||
+        this.source.kind === "procedural" ||
+        this.source.kind === "take"
+      ) {
         return;
       }
       // No screen attached (reconnect grace window) → nobody is watching;
@@ -1068,7 +1080,11 @@ export class Session implements ControllableSession {
     // internet and the server never generates during it). This path runs
     // only for live generation. Idle + the empty-prompt guard below keep
     // idle sessions from generating, while a typed prompt still flows.
-    if (this.source.kind === "set") {
+    if (
+      this.source.kind === "set" ||
+      this.source.kind === "procedural" ||
+      this.source.kind === "take"
+    ) {
       return;
     }
 

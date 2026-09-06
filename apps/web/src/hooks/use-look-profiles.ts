@@ -4,6 +4,7 @@ import type { LookConfig, LookProfile } from "@sonara/shared";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 
+import { applySavedLook } from "@/lib/apply-look";
 import { rpcClient } from "@/lib/orpc";
 import { resolveLook } from "@/lib/render/presets";
 import { useVisualizerStore } from "@/stores/visualizer";
@@ -22,7 +23,7 @@ export interface LookProfilesApi {
 export const useLookProfiles = (): LookProfilesApi => {
   const [profiles, setProfiles] = useState<LookProfile[]>([]);
   const [activeId, setActiveId] = useState<LookProfile["id"] | null>(null);
-  const applyLookConfig = useVisualizerStore((s) => s.applyLookConfig);
+  const applyLookConfig = applySavedLook;
 
   const refresh = useCallback(() => {
     void (async () => {

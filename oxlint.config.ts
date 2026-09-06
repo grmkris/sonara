@@ -8,7 +8,11 @@ export default defineConfig({
   // brand/ is a separate assets sub-project, not a workspace and not part of
   // the per-package CI lint — exclude it so the root type-aware / format checks
   // match the CI scope (workspaces only).
-  ignorePatterns: [...(core.ignorePatterns ?? []), "brand/**"],
+  ignorePatterns: [
+    ...(core.ignorePatterns ?? []),
+    "brand/**",
+    "**/public/vision/wasm/**",
+  ],
   overrides: [
     {
       // Dev/seed/probe scripts get relaxed norms vs app/lib code:

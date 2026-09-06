@@ -813,7 +813,6 @@ export const DisplacementCanvas = () => {
       effective = { ...effective, ...state.paramOverrides };
 
       lastEffective = effective;
-      useVisualizerStore.getState().setLastEffective(effective);
 
       // ===== Advance reaction-diffusion overlay =====
       // Only step when any preset is asking for it (cfg.rd > 0). Skipping
@@ -822,6 +821,7 @@ export const DisplacementCanvas = () => {
       const rdTex =
         effective.rd > 0.001
           ? rdLayer.update({
+              dtMs,
               feed: effective.rdFeed,
               kickImpulse: impulses.kick,
               kill: effective.rdKill,

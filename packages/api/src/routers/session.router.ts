@@ -2,6 +2,7 @@ import { eventIterator, os } from "@orpc/server";
 import type { RouterClient } from "@orpc/server";
 import {
   AudioFeatures,
+  LookConfig,
   ClientScenePatch,
   DeckKeySchema,
   ImageAnchor,
@@ -23,6 +24,7 @@ import type { SessionSource, SessionSourceState } from "../session-registry";
 // stays framework-agnostic and buildable on its own.
 export interface SessionLike {
   init: () => void;
+  reportLook?: (config: LookConfig) => void;
   applyPatch: (patch: ClientScenePatch, origin?: "client" | "voice") => void;
   applyAudio: (features: AudioFeatures) => void;
   recognize: (
@@ -107,7 +109,7 @@ const ReportSourceInput = z.object({
   source: z
     .object({
       deckKey: DeckKeySchema.optional(),
-      kind: z.enum(["live", "set", "idle"]),
+      kind: z.enum(["live", "set", "idle", "procedural", "take"]),
       label: z.string().max(200).nullable(),
       setId: z.string().max(64).optional(),
     })
@@ -120,6 +122,8 @@ const ReportSourceInput = z.object({
 const SourceStateOutput = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("live") }),
   z.object({ kind: z.literal("idle") }),
+  z.object({ kind: z.literal("procedural") }),
+  z.object({ kind: z.literal("take") }),
   z.object({
     deckKey: DeckKeySchema.nullable(),
     kind: z.literal("set"),
@@ -192,6 +196,12 @@ export const sessionRouter = {
     .input(ReportFrameInput)
     .handler(({ context, input }) => {
       context.session.setCurrentFrame(input.url);
+    }),
+
+  reportLook: sessionOs
+    .input(z.object({ config: LookConfig }))
+    .handler(({ context, input }) => {
+      context.session.reportLook?.(input.config);
     }),
 
   // The producer reports its current SOURCE (live / deck / set / idle) on

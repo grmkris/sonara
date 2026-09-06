@@ -14,3 +14,4 @@ export * from "./generation-job.db";
 export * from "./image-library.db";
 export * from "./look-profile.db";
 export * from "./stage.db";
+export * from "./performance-take.db";

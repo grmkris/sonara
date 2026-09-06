@@ -20,7 +20,7 @@ export type JobStatus = "idle" | "running" | "cancelled" | "error";
 // self-sufficient manifest capability there.
 export interface SessionSource {
   deckKey?: DeckKey;
-  kind: "live" | "set" | "idle";
+  kind: "live" | "set" | "idle" | "procedural" | "take";
   label: string | null;
   setId?: string;
 }
@@ -33,6 +33,8 @@ export interface SessionSource {
 export type SessionSourceState =
   | { kind: "live" }
   | { kind: "idle" }
+  | { kind: "procedural" }
+  | { kind: "take" }
   | {
       kind: "set";
       setId: string | null;
@@ -46,6 +48,7 @@ export type SessionSourceState =
 // device that drives the same session.
 export interface ControlSnapshot {
   liveSessionId: LiveSessionId;
+  look?: LookConfig;
   scene: SonaraSceneState;
   // Server intent — what the session should be showing. The producer confirm
   // lives in currentSource; keep both (console pills read intent, viewers

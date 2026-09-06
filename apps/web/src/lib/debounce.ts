@@ -47,3 +47,38 @@ export const debounce = <Args extends readonly unknown[]>(
   debounced.cancel = cancel;
   return debounced;
 };
+
+// Latest-value throttle: continuous input cannot postpone delivery forever.
+export const coalesce = <Args extends readonly unknown[]>(
+  fn: (...args: Args) => void,
+  intervalMs: number
+): Debounced<Args> => {
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  let pending: Args | null = null;
+  const flush = () => {
+    if (timer !== null) {
+      clearTimeout(timer);
+    }
+    timer = null;
+    if (pending !== null) {
+      const args = pending;
+      pending = null;
+      fn(...args);
+    }
+  };
+  const call = ((...args: Args) => {
+    pending = args;
+    if (timer === null) {
+      timer = setTimeout(flush, intervalMs);
+    }
+  }) as Debounced<Args>;
+  call.flush = flush;
+  call.cancel = () => {
+    if (timer !== null) {
+      clearTimeout(timer);
+    }
+    timer = null;
+    pending = null;
+  };
+  return call;
+};

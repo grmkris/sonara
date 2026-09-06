@@ -439,14 +439,28 @@ const StudioInner = () => {
 
   const onSelectRecording = useCallback(
     (recordingId: string) => {
-      router.push(recordingsHref(recordingId));
+      void (async () => {
+        try {
+          await rpcClient.takes.get({ setId: recordingId as FrameSetId });
+          router.push(`/studio/takes/${recordingId}`);
+        } catch {
+          router.push(recordingsHref(recordingId));
+        }
+      })();
     },
     [router]
   );
 
   const onSelectSet = useCallback(
     (setId: string) => {
-      router.push(setsHref(setId));
+      void (async () => {
+        try {
+          await rpcClient.takes.get({ setId: setId as FrameSetId });
+          router.push(`/studio/takes/${setId}`);
+        } catch {
+          router.push(setsHref(setId));
+        }
+      })();
     },
     [router]
   );
@@ -924,6 +938,9 @@ const StudioInner = () => {
             sonara.fm
           </Link>
           <AppNavLinks current="studio" />
+          <Link href="/studio/takes" className="font-serif text-sm italic">
+            performances ↗
+          </Link>
         </div>
         <HeaderCount
           tab={tab}

@@ -301,3 +301,9 @@ These exist in reference projects (`invok`, `appmisha.com`) and are deliberately
 - Prefer editing existing files over creating new ones.
 - For UI changes, push to `dev` and verify on dev.sonara.fm — don't run the app locally (dev-flow; see `~/.claude/CLAUDE.md`). Static checks (typecheck/build/lint) before pushing are fine.
 - Don't write new docs unless asked. Update this file when a convention solidifies.
+
+## Performance instrument
+
+- `/play` opens the six-world instrument; the classic image visualizer remains available from its controls. `apps/web/src/lib/instrument` owns instance-scoped Three/TSL rendering, fixed-step transport, MediaPipe input, MIDI, capture, replay, and streamed export. Local rendering does not generate images: the server receives a `procedural` source unless Dream is selected with an explicitly live image source.
+- Audio windows originate in `/audio/capture-worklet.js`; musical analysis runs in `analysis.worker.ts`. Keep FFT work and tracking inference off the render/UI thread. MediaPipe models and WASM are self-hosted in `public/vision`, loaded only after camera opt-in. Captures store processed silhouettes and control values, never webcam video.
+- Performance takes extend `frame_set` through `performance_take` and resumable `performance_take_chunk` rows. Original takes are immutable after finalization; edits create a curated remix. Browser IndexedDB keeps recoverable chunks before upload. `/studio/takes/[id]` accepts a local UUID or account `set_` ID; `/set/[id]` also opens performance takes. The shared take manifest versions renderer settings and retains trim points.

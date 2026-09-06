@@ -117,7 +117,7 @@ export const resizeCanvasToDisplay = (
   canvas: HTMLCanvasElement,
   gl: WebGL2RenderingContext
 ): boolean => {
-  const dpr = window.devicePixelRatio || 1;
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
   const w = Math.max(1, Math.floor(canvas.clientWidth * dpr));
   const h = Math.max(1, Math.floor(canvas.clientHeight * dpr));
   if (canvas.width !== w || canvas.height !== h) {
@@ -141,7 +141,8 @@ export interface Fbo {
 export const createFbo = (
   gl: WebGL2RenderingContext,
   width: number,
-  height: number
+  height: number,
+  floating = false
 ): Fbo => {
   const tex = gl.createTexture();
   if (!tex) {
@@ -155,12 +156,12 @@ export const createFbo = (
   gl.texImage2D(
     gl.TEXTURE_2D,
     0,
-    gl.RGBA,
+    floating ? gl.RGBA16F : gl.RGBA,
     Math.max(1, width),
     Math.max(1, height),
     0,
     gl.RGBA,
-    gl.UNSIGNED_BYTE,
+    floating ? gl.HALF_FLOAT : gl.UNSIGNED_BYTE,
     null
   );
 

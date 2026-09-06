@@ -36,7 +36,7 @@ export type SessionAction =
         // deckKey rides along so the server can adopt client-native builtin
         // picks (no setId known) into its authoritative source state.
         deckKey?: DeckKey;
-        kind: "live" | "set" | "idle";
+        kind: "live" | "set" | "idle" | "procedural" | "take";
         label: string | null;
         setId?: string;
       };
@@ -83,8 +83,10 @@ export const dispatchSessionAction = (
     case "set.new": {
       return client.newSet();
     }
-    case "source.set":
     case "look.set": {
+      return client.reportLook({ config: action.config });
+    }
+    case "source.set": {
       // Producer-side no-ops: the attached screen applies source + look
       // locally; only the control-router dispatcher relays these remotely.
       return Promise.resolve();

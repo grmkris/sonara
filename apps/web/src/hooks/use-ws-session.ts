@@ -4,11 +4,14 @@ import type { DeckKey, ServerEvent } from "@sonara/shared";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
+import { deriveSource } from "@/hooks/use-source-reporter";
+import { applySavedLook } from "@/lib/apply-look";
 import { applyBuiltinSetLocally, startSetReplayById } from "@/lib/apply-source";
 import { createSessionConnection } from "@/lib/orpc-ws";
 import { isKnownPreset } from "@/lib/render/presets";
 import { dispatchSessionAction } from "@/lib/session-actions";
 import type { SessionAction, SessionSend } from "@/lib/session-actions";
+import { useInstrumentStore } from "@/stores/instrument-store";
 import { useVisualizerStore } from "@/stores/visualizer";
 
 // Server close code for "another screen took over this stage" — the one close
@@ -209,7 +212,7 @@ export const useWsSession = (target: { code: string | null }): WsSession => {
         case "look.set": {
           // Remote look switch from the console — apply as the active custom
           // look (BASE-backfilled in the store). Mirrors source.set.
-          s.applyLookConfig(event.config);
+          applySavedLook(event.config);
           break;
         }
         case "screen.takenOver": {
@@ -260,6 +263,16 @@ export const useWsSession = (target: { code: string | null }): WsSession => {
             console.warn("[ws] dispatch failed", error);
           });
         };
+        sendRef.current({
+          source: deriveSource(store.getState()),
+          type: "source.report",
+        });
+        if (useInstrumentStore.getState().enabled) {
+          sendRef.current({
+            config: useInstrumentStore.getState().config,
+            type: "look.set",
+          });
+        }
         store.getState().setConnected(true);
         // Fire hello on every (re)connect so the server can re-init its
         // side idempotently. The state() pull below hydrates the playback
@@ -337,7 +350,9 @@ export const useWsSession = (target: { code: string | null }): WsSession => {
                   // as idle rather than crash.
                   s.setSource({ kind: "idle" });
                 } else {
-                  s.setSource({ kind: src.kind });
+                  if (src.kind === "live" || src.kind === "idle") {
+                    s.setSource({ kind: src.kind });
+                  }
                 }
                 // Hydrate image-anchor too — if the user pinned an anchor
                 // and the WS dropped (tab refresh, transient disconnect),

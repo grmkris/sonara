@@ -81,7 +81,7 @@ export const usePlaybackLoop = (): void => {
     // stale by pushFrame.
     store.getState().resetFrameVersion();
 
-    if (source.kind === "live" || source.kind === "idle") {
+    if (source.kind !== "set") {
       return;
     }
 

@@ -3,6 +3,7 @@
 import { useEffect } from "react";
 
 import type { SessionSend } from "@/lib/session-actions";
+import { useInstrumentStore } from "@/stores/instrument-store";
 import { useVisualizerStore } from "@/stores/visualizer";
 
 // Reports the frame actually on screen up to the server (frame.report) so the
@@ -20,7 +21,11 @@ export const useFrameReporter = (send: SessionSend): void => {
   useEffect(() => {
     let lastReported: string | null = null;
     const report = (url: string | null): void => {
-      if (!url || url === lastReported) {
+      if (
+        useInstrumentStore.getState().enabled ||
+        !url ||
+        url === lastReported
+      ) {
         return;
       }
       lastReported = url;

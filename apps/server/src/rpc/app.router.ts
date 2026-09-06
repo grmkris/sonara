@@ -8,6 +8,7 @@ import { looksRouter } from "./looks.router";
 import { publicProcedure } from "./procedures";
 import { setsRouter } from "./sets.router";
 import { stageRouter } from "./stage.router";
+import { takesRouter } from "./takes.router";
 
 // The HTTP (oRPC over fetch) router. Mounted by the server's Hono app at
 // /rpc and reached from the browser through the Caddy gateway (same-origin).
@@ -23,6 +24,7 @@ export const appRouter = {
   looks: looksRouter,
   sets: setsRouter,
   stage: stageRouter,
+  takes: takesRouter,
 };
 
 export type AppRouter = typeof appRouter;

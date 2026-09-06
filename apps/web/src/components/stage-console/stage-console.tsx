@@ -1,9 +1,11 @@
 "use client";
 
 import type { ControlSnapshot } from "@sonara/api/server";
+import { InstrumentConfig } from "@sonara/shared";
 import type { SonaraSceneState } from "@sonara/shared";
 import { useEffect, useState } from "react";
 
+import { InstrumentControls } from "@/components/instrument/instrument-controls";
 import { LookPopover } from "@/components/stage-console/look-popover";
 import { StageSheet } from "@/components/stage-console/stage-sheet";
 import { StageHostPanel } from "@/components/stage/stage-host-panel";
@@ -15,8 +17,10 @@ import { SliderRow } from "@/components/visualizer/controls/slider-row";
 import { SourceSwitcher } from "@/components/visualizer/controls/source-switcher";
 import { useLookRelay } from "@/hooks/use-look-relay";
 import type { ControlTarget } from "@/lib/control-actions";
+import { coalesce } from "@/lib/debounce";
 import type { SessionSend } from "@/lib/session-actions";
 import { cn } from "@/lib/utils";
+import { useInstrumentStore } from "@/stores/instrument-store";
 import { useVisualizerStore } from "@/stores/visualizer";
 
 // THE console — one component, two mounts ("one console, two mounts",
@@ -288,6 +292,25 @@ const DetachedConsole = ({
   // Relay this console's look edits (preset / Feel sliders / applied profile)
   // to the screen — the console has no canvas, so the relay is how they land.
   useLookRelay(send);
+  const instrument = useInstrumentStore((s) => s.config);
+  const [deck, setDeck] = useState<"a" | "b">("a");
+  useEffect(() => {
+    const parsed = InstrumentConfig.safeParse(snapshot?.look);
+    if (parsed.success) {
+      useInstrumentStore.setState({ config: parsed.data });
+    }
+  }, [snapshot?.look]);
+  const [relay] = useState(() =>
+    coalesce((config: InstrumentConfig) => {
+      send({ config, type: "look.set" });
+    }, 100)
+  );
+  useEffect(
+    () => () => {
+      relay.flush();
+    },
+    [relay]
+  );
   return (
     <div className="flex flex-col gap-6">
       <PreviewCard
@@ -304,6 +327,15 @@ const DetachedConsole = ({
         connected={connected}
       />
 
+      <InstrumentControls
+        config={instrument}
+        onChange={(config) => {
+          useInstrumentStore.getState().setConfig(config);
+          relay(config);
+        }}
+        deck={deck}
+        onDeck={setDeck}
+      />
       <StageHostPanel target={hostTarget} />
 
       <div className="flex flex-col gap-5">

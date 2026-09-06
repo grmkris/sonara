@@ -7,6 +7,7 @@ import { toast } from "sonner";
 
 import { AppNavLinks } from "@/components/app-nav";
 import { Mark } from "@/components/brand/mark";
+import { InstrumentSurface } from "@/components/instrument/instrument-surface";
 import { StageConsole } from "@/components/stage-console/stage-console";
 import { StageChip } from "@/components/stage-screen/stage-chip";
 import { StageWire } from "@/components/stage/stage-wire";
@@ -44,6 +45,7 @@ import { applyBuiltinSetLocally } from "@/lib/apply-source";
 import { useSession } from "@/lib/auth-client";
 import { HOTKEYS } from "@/lib/hotkeys";
 import { cn } from "@/lib/utils";
+import { useInstrumentStore } from "@/stores/instrument-store";
 import {
   hydrateAnchorPrefs,
   hydrateModelPrefs,
@@ -130,6 +132,7 @@ const Logotype = () => {
 // (useFrameReporter etc.) live ONLY here — console and crowd faces must
 // never mount them.
 export const StageScreen = ({ code }: { code: string | null }) => {
+  const instrumentEnabled = useInstrumentStore((s) => s.enabled);
   const { send, newSet, takenOver, reclaim } = useWsSession({ code });
   // THE client-side producer for decks and set replays — one loop, one
   // version guard. Deck/builtin playback runs from static manifests, so it
@@ -243,6 +246,33 @@ export const StageScreen = ({ code }: { code: string | null }) => {
   );
 
   const audioConnected = audioSource.type !== "none";
+  if (instrumentEnabled && !takenOver) {
+    return (
+      <>
+        <Suspense fallback={null}>
+          <StudioActionConsumer send={send} />
+          <SetPlaybackConsumer />
+        </Suspense>
+        <InstrumentSurface
+          audioSource={audioSource}
+          setAudioSource={setAudioSource}
+          send={send}
+          sceneControls={
+            <div className="flex flex-col gap-5">
+              {isSignedIn && <PromptInput send={send} />}
+              <StageConsole
+                variant="attached"
+                send={send}
+                hostTarget={hostTarget}
+                onNewSet={onNewSet}
+                onReset={onReset}
+              />
+            </div>
+          }
+        />
+      </>
+    );
+  }
 
   return (
     <main className="fixed inset-0 overflow-hidden">
@@ -304,6 +334,15 @@ export const StageScreen = ({ code }: { code: string | null }) => {
           {isSignedIn && <ShareLink stageCode={ownStage?.code ?? null} />}
           {isSignedIn && ownStage && <RemoteLink code={ownStage.code} />}
           <UserControls />
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => {
+              useInstrumentStore.getState().setEnabled(true);
+            }}
+          >
+            instrument ↗
+          </Button>
           <FullscreenToggle />
           <HideToggle />
           <Sheet>

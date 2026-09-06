@@ -465,3 +465,513 @@ input::placeholder {
     animation: none !important;
   }
 }
+
+/* The performance desk: warm paper labels around an uninterrupted optical field. */
+.instrument-shell {
+  --instrument-edge: color-mix(in srgb, var(--paper) 16%, transparent);
+  position: fixed;
+  inset: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 348px;
+  grid-template-rows: 72px minmax(0, 1fr) 162px;
+  background: var(--ink);
+  color: var(--paper);
+}
+.instrument-header {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 28px;
+  border-bottom: 1px solid var(--instrument-edge);
+  gap: 24px;
+}
+.instrument-wordmark {
+  font-family: var(--font-serif);
+  font-size: 32px;
+  font-style: italic;
+  letter-spacing: -0.06em;
+}
+.instrument-wordmark span {
+  margin-left: 4px;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-style: normal;
+  letter-spacing: 0.05em;
+  vertical-align: super;
+}
+.instrument-edition {
+  font-size: 10px;
+  letter-spacing: 0.09em;
+  color: var(--stone);
+}
+.instrument-edition span {
+  margin-left: 20px;
+  color: var(--paper);
+}
+.instrument-stage {
+  position: relative;
+  min-height: 0;
+  overflow: hidden;
+  background: #08080c;
+}
+.instrument-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+.instrument-touch {
+  position: absolute;
+  inset: 0;
+  cursor: crosshair;
+  touch-action: none;
+  outline-offset: -4px;
+}
+.instrument-touch:focus-visible {
+  outline: 1px solid var(--paper);
+}
+.instrument-stage-label {
+  pointer-events: none;
+  position: absolute;
+  left: 32px;
+  top: 28px;
+  text-shadow: 0 2px 20px #0008;
+}
+.instrument-stage-label h1 {
+  font-family: var(--font-serif);
+  font-size: clamp(30px, 4vw, 60px);
+  letter-spacing: -0.04em;
+  line-height: 1.1;
+  margin-top: 12px;
+}
+.instrument-stage-label h1 i {
+  opacity: 0.6;
+  font-weight: 300;
+}
+.instrument-eyebrow {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+  color: var(--stone);
+}
+.instrument-stage-caption {
+  position: absolute;
+  pointer-events: none;
+  left: 32px;
+  right: 32px;
+  bottom: 22px;
+  display: flex;
+  justify-content: space-between;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  color: var(--paper);
+  opacity: 0.6;
+}
+.instrument-stage-actions {
+  position: absolute;
+  bottom: 52px;
+  left: 32px;
+  display: flex;
+  gap: 8px;
+}
+.instrument-console {
+  border-left: 1px solid var(--instrument-edge);
+  overflow: auto;
+  padding: 20px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+.instrument-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+.instrument-section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 10px;
+}
+.instrument-worlds[data-slot],
+.instrument-worlds {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  width: 100%;
+  gap: 8px;
+}
+.instrument-world-choice[data-slot] {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  height: auto;
+  padding: 0 0 7px;
+  border-radius: 2px;
+  overflow: hidden;
+  border: 1px solid var(--instrument-edge);
+}
+.instrument-world-art {
+  display: block;
+  width: 100%;
+  aspect-ratio: 1.3;
+  background-color: #101015;
+}
+.instrument-world-liquid {
+  background: url("/worlds/liquid.webp") center / cover;
+}
+.instrument-world-dream {
+  background: url("/worlds/dream.webp") center / cover;
+}
+.instrument-world-mycelium {
+  background: url("/worlds/mycelium.webp") center / cover;
+}
+.instrument-world-cosmos {
+  background: url("/worlds/cosmos.webp") center / cover;
+}
+.instrument-world-fractal {
+  background: url("/worlds/fractal.webp") center / cover;
+}
+.instrument-world-mirror {
+  background: url("/worlds/mirror.webp") center / cover;
+}
+.instrument-world-label {
+  display: flex;
+  gap: 5px;
+  align-items: center;
+  font-size: 11px;
+}
+.instrument-world-label small {
+  font-family: var(--font-mono);
+  font-size: 7px;
+  opacity: 0.45;
+}
+.instrument-world-caption {
+  display: flex;
+  justify-content: space-between;
+  font-family: var(--font-serif);
+  font-style: italic;
+  color: var(--stone);
+  font-size: 17px;
+  margin-top: -10px;
+}
+.instrument-looks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px;
+}
+.instrument-looks [data-slot] {
+  white-space: normal;
+  font-size: 9px;
+  height: auto;
+  min-height: 28px;
+  padding: 4px 7px;
+}
+.instrument-macros {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 24px 22px;
+  padding: 22px 0;
+  border-block: 1px solid var(--instrument-edge);
+}
+.instrument-macro {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.instrument-macro label {
+  text-transform: capitalize;
+  font-family: var(--font-serif);
+  font-size: 17px;
+}
+.instrument-value {
+  font-family: var(--font-mono);
+  color: var(--stone);
+  font-size: 10px;
+}
+.instrument-swatch {
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  display: inline-block;
+  margin-right: 4px;
+}
+.instrument-mixer {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  padding-top: 18px;
+  border-top: 1px solid var(--instrument-edge);
+}
+.instrument-footer {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: 1fr 1.2fr 0.9fr;
+  border-top: 1px solid var(--instrument-edge);
+}
+.instrument-audio,
+.instrument-inputs,
+.instrument-capture {
+  padding: 18px 28px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 0;
+}
+.instrument-inputs,
+.instrument-capture {
+  border-left: 1px solid var(--instrument-edge);
+}
+.instrument-tempo {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-family: var(--font-serif);
+  font-size: 23px;
+}
+.instrument-tempo small {
+  font-family: var(--font-mono);
+  font-size: 7px;
+  color: var(--stone);
+  letter-spacing: 0.1em;
+}
+.instrument-hint {
+  font-family: var(--font-serif);
+  font-style: italic;
+  font-size: 12px;
+  color: var(--stone);
+}
+.instrument-shell[data-hidden="true"] {
+  grid-template-columns: 1fr;
+  grid-template-rows: 0 minmax(0, 1fr) 0;
+}
+.instrument-shell[data-hidden="true"] .instrument-console,
+.instrument-shell[data-hidden="true"] .instrument-footer,
+.instrument-shell[data-hidden="true"] .instrument-stage-label,
+.instrument-shell[data-hidden="true"] .instrument-stage-caption,
+.instrument-shell[data-hidden="true"] .instrument-stage-actions {
+  display: none;
+}
+.instrument-shell[data-hidden="true"] .instrument-header {
+  position: absolute;
+  right: 0;
+  top: 0;
+  z-index: 2;
+  border: 0;
+  padding: 8px;
+}
+.instrument-shell[data-hidden="true"] .instrument-header > :not(:last-child) {
+  display: none;
+}
+@media (max-width: 1100px) {
+  .instrument-edition {
+    display: none;
+  }
+  .instrument-shell {
+    grid-template-columns: minmax(0, 1fr) 310px;
+    grid-template-rows: 64px minmax(0, 1fr) 185px;
+  }
+  .instrument-audio,
+  .instrument-inputs,
+  .instrument-capture {
+    padding-inline: 16px;
+  }
+}
+@media (max-width: 760px) {
+  .instrument-shell {
+    position: relative;
+    min-height: 100svh;
+    grid-template-columns: 1fr;
+    grid-template-rows: 60px 55svh auto auto;
+  }
+  .instrument-header {
+    padding-inline: 16px;
+  }
+  .instrument-header nav {
+    display: none;
+  }
+  .instrument-console {
+    border-left: 0;
+    border-top: 1px solid var(--instrument-edge);
+  }
+  .instrument-worlds {
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+  }
+  .instrument-world-label small {
+    display: none;
+  }
+  .instrument-footer {
+    grid-template-columns: 1fr;
+  }
+  .instrument-inputs,
+  .instrument-capture {
+    border-left: 0;
+    border-top: 1px solid var(--instrument-edge);
+  }
+  .instrument-shell[data-hidden="true"] {
+    position: fixed;
+  }
+}
+.take-library,
+.take-studio {
+  min-height: 100svh;
+  background: var(--ink);
+  color: var(--paper);
+}
+.take-library {
+  padding: 24px max(24px, calc((100vw - 1100px) / 2));
+}
+.take-library header,
+.take-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 20px;
+  font-size: 11px;
+  color: var(--stone);
+  border-bottom: 1px solid var(--hairline);
+  padding-bottom: 20px;
+  margin-bottom: 50px;
+}
+.take-library h1 {
+  font-family: var(--font-serif);
+  font-style: italic;
+  font-size: clamp(40px, 7vw, 90px);
+  letter-spacing: -0.05em;
+  margin-top: 12px;
+}
+.take-library > p {
+  font-family: var(--font-serif);
+  color: var(--stone);
+  font-size: 20px;
+  margin: 10px 0 50px;
+}
+.take-list {
+  display: flex;
+  flex-direction: column;
+}
+.take-row {
+  display: flex;
+  gap: 24px;
+  align-items: center;
+  padding: 24px 0;
+  border-top: 1px solid var(--hairline);
+}
+.take-row > div {
+  flex: 1;
+}
+.take-row h2 {
+  font-family: var(--font-serif);
+  font-size: 26px;
+}
+.take-row small,
+.take-row div > span {
+  font-size: 10px;
+  color: var(--stone);
+}
+.take-orbit {
+  font-size: 40px;
+  color: var(--signal);
+}
+.take-empty {
+  padding: 60px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+.take-header {
+  padding: 22px 28px;
+  margin-bottom: 0;
+}
+.take-editor {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 330px;
+}
+.take-workspace {
+  min-width: 0;
+  padding: 28px;
+}
+.take-workspace h1 {
+  font-family: var(--font-serif);
+  font-style: italic;
+  font-size: 35px;
+  margin-bottom: 20px;
+}
+.take-screen {
+  position: relative;
+  max-height: 55vh;
+  margin: 0 auto;
+  background: #09090c;
+  overflow: hidden;
+}
+.take-screen video,
+.take-screen canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+.take-hidden-video {
+  opacity: 0;
+  pointer-events: none;
+}
+.take-transport,
+.take-export {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 16px;
+  padding: 18px 0;
+  font-size: 11px;
+}
+.take-timeline {
+  position: relative;
+  height: 42px;
+  margin-top: 22px;
+  overflow: hidden;
+  border-block: 1px solid var(--hairline);
+  background: color-mix(in srgb, var(--paper) 3%, transparent);
+}
+.take-timeline button {
+  position: absolute;
+  top: 0;
+  height: 100%;
+  padding: 5px;
+  border-left: 1px solid var(--stone);
+  font-size: 8px;
+  writing-mode: vertical-rl;
+  color: var(--stone);
+}
+.take-automation {
+  position: relative;
+  height: 65px;
+  border-bottom: 1px solid var(--hairline);
+  color: var(--signal);
+}
+.take-automation svg {
+  width: 100%;
+  height: 100%;
+}
+.take-automation > span {
+  position: absolute;
+  left: 8px;
+  top: 8px;
+}
+.take-inspector {
+  border-left: 1px solid var(--hairline);
+  padding: 24px;
+}
+@media (max-width: 760px) {
+  .take-editor {
+    grid-template-columns: 1fr;
+  }
+  .take-inspector {
+    border-left: 0;
+    border-top: 1px solid var(--hairline);
+  }
+  .take-workspace {
+    padding: 16px;
+  }
+}
