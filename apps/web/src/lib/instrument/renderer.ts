@@ -23,6 +23,7 @@ import {
   Scene,
   SRGBColorSpace,
   NoColorSpace,
+  NearestFilter,
   TextureLoader,
   UnsignedByteType,
   WebGPURenderer,
@@ -227,8 +228,9 @@ export class InstrumentRenderer {
   }
   configure(config: EngineConfig): void {
     this.config = config;
+    this.filterMask();
     for (const image of [this.image, this.previousImage]) {
-      const colorSpace = config.version === 4 ? SRGBColorSpace : NoColorSpace;
+      const colorSpace = config.version >= 4 ? SRGBColorSpace : NoColorSpace;
       if (image && image.colorSpace !== colorSpace) {
         image.colorSpace = colorSpace;
         image.needsUpdate = true;
@@ -294,8 +296,7 @@ export class InstrumentRenderer {
       return false;
     }
     this.clearDepth();
-    image.colorSpace =
-      this.config.version === 4 ? SRGBColorSpace : NoColorSpace;
+    image.colorSpace = this.config.version >= 4 ? SRGBColorSpace : NoColorSpace;
     this.previousImage?.dispose();
     this.previousImage = this.image;
     this.image = image;
@@ -361,10 +362,19 @@ export class InstrumentRenderer {
     } else {
       this.mask.image.data = data;
     }
+    this.filterMask();
     this.mask.needsUpdate = true;
     this.experience?.setMask(this.mask, true);
     for (const deck of this.decks) {
       deck.uniforms.maskActive.value = 1;
+    }
+  }
+  private filterMask(): void {
+    const filter = this.config.version === 5 ? LinearFilter : NearestFilter;
+    if (this.mask.magFilter !== filter) {
+      this.mask.magFilter = filter;
+      this.mask.minFilter = filter;
+      this.mask.needsUpdate = true;
     }
   }
   clearMask(): void {

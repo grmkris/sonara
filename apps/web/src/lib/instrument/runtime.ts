@@ -101,7 +101,7 @@ export class InstrumentRuntime {
   }
   reset(): void {
     this.surfaceControls.reset();
-    if (this.config.version === 4) {
+    if (this.config.version >= 4) {
       this.controls = {
         attractors: [],
         contacts: [],
@@ -156,7 +156,7 @@ export class InstrumentRuntime {
       this.elapsed - this.lastControlAt < 0.25
         ? this.targetControls
         : { ...this.targetControls, attractors: [] };
-    if (!this.replaying && this.config.version === 4) {
+    if (!this.replaying && this.config.version >= 4) {
       this.controls = this.surfaceControls.step(
         this.controls,
         this.targetControls,

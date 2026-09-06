@@ -81,8 +81,12 @@ const touchTreatments = [
 ] as const;
 
 const availableTreatments = (config: MaterialConfig) => {
-  if (config.version === 2) {return originalTreatments;}
-  if (config.version === 4) {return touchTreatments;}
+  if (config.version === 2) {
+    return originalTreatments;
+  }
+  if (config.version === 4 || config.version === 5) {
+    return touchTreatments;
+  }
   return treatments;
 };
 
@@ -139,7 +143,7 @@ export const ExperienceControls = ({
           }
           return;
         }
-        if (config.version === 4) {
+        if (config.version === 4 || config.version === 5) {
           const treatment = touchTreatments.find((t) => t.value === values[0]);
           if (treatment) {
             onChange({

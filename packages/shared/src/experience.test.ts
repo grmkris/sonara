@@ -2,6 +2,7 @@ import { expect, test } from "bun:test";
 
 import {
   DEFAULT_EXPERIENCE,
+  DEFAULT_FLOW,
   DEFAULT_TOUCH,
   TouchConfig,
   DEFAULT_RESPONSIVE,
@@ -62,6 +63,7 @@ test("existing looks and takes remain valid while new captures identify their en
   for (const config of [
     DEFAULT_RESPONSIVE,
     DEFAULT_EXPERIENCE,
+    DEFAULT_FLOW,
     DEFAULT_INSTRUMENT,
     { displacement: 0.5 },
   ]) {
@@ -158,4 +160,23 @@ test("touch takes preserve held surface points and lossless depth references", (
   expect(
     TakeEvent.parse({ kind: "depth", time: 1, url: "take-image:1" })
   ).toEqual({ kind: "depth", time: 1, url: "take-image:1" });
+});
+
+test("flow takes stay versioned and cannot masquerade as older captures", () => {
+  const manifest = {
+    config: DEFAULT_FLOW,
+    createdAt: new Date().toISOString(),
+    duration: 4,
+    engine: "sonara-5",
+    id: crypto.randomUUID(),
+    name: "Flow",
+    version: 5,
+  };
+  expect(TakeManifest.safeParse(manifest).success).toBe(true);
+  expect(
+    TakeManifest.safeParse({ ...manifest, engine: "sonara-4" }).success
+  ).toBe(false);
+  expect(
+    TakeManifest.safeParse({ ...manifest, config: DEFAULT_TOUCH }).success
+  ).toBe(false);
 });

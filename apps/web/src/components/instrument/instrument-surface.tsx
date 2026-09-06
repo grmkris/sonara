@@ -58,7 +58,7 @@ const updateMarkers = (
       marker.style.left = `${point.x * 100}%`;
       marker.style.top = `${(1 - point.y) * 100}%`;
       marker.dataset.grabbed = String(
-        instance.config.version === 4
+        instance.config.version === 4 || instance.config.version === 5
           ? (contact?.held ?? false)
           : (hand?.force ?? 0) > 0.92
       );
@@ -69,7 +69,7 @@ const updateMarkers = (
 
 const nextMaterial = () => {
   const state = useInstrumentStore.getState();
-  if (state.config.version === 4) {
+  if (state.config.version === 4 || state.config.version === 5) {
     const choices = [
       "ink",
       "silk",
@@ -140,9 +140,13 @@ const SessionLine = ({
   <div className="experience-session-line experience-chrome" aria-live="polite">
     <span>{recording ? "● capturing this moment" : name}</span>
     <span>
-      {tracking === "off"
-        ? "Drag to pull the light."
-        : "Move to pull. Pinch to grab."}
+      {
+        {
+          body: "Spread your arms. Raise the light.",
+          hands: "Move to pull. Pinch to grab.",
+          off: "Drag to pull the light.",
+        }[tracking]
+      }
     </span>
     {status !== "ready" && <span>{status}</span>}
   </div>
@@ -251,28 +255,29 @@ const LookControls = ({
           </TabsContent>
         </Tabs>
       )}
-      {config.version === 4 && config.treatment === "relief" && (
-        <div className="relief-status">
-          <output>
-            {currentFrame
-              ? {
-                  error: "Depth could not load. Your image still works.",
-                  estimating: "Finding the shape of your image…",
-                  idle: "Your image is ready for depth.",
-                  loading:
-                    "Preparing Relief… The first use downloads the depth model.",
-                  ready:
-                    "Depth ready. Move to relight. Pinch and drag to reshape.",
-                }[depthStatus]
-              : "Add a photo or generate an image in the Image tab to give it depth."}
-          </output>
-          {depthStatus === "error" && (
-            <Button size="sm" variant="ghost" onClick={onRetryDepth}>
-              Retry depth
-            </Button>
-          )}
-        </div>
-      )}
+      {(config.version === 4 || config.version === 5) &&
+        config.treatment === "relief" && (
+          <div className="relief-status">
+            <output>
+              {currentFrame
+                ? {
+                    error: "Depth could not load. Your image still works.",
+                    estimating: "Finding the shape of your image…",
+                    idle: "Your image is ready for depth.",
+                    loading:
+                      "Preparing Relief… The first use downloads the depth model.",
+                    ready:
+                      "Depth ready. Move to relight. Pinch and drag to reshape.",
+                  }[depthStatus]
+                : "Add a photo or generate an image in the Image tab to give it depth."}
+            </output>
+            {depthStatus === "error" && (
+              <Button size="sm" variant="ghost" onClick={onRetryDepth}>
+                Retry depth
+              </Button>
+            )}
+          </div>
+        )}
     </>
   );
 };
@@ -457,7 +462,8 @@ export const InstrumentSurface = ({
     const updateDepth = () =>
       depth.update(
         appliedImage,
-        instance.config.version === 4 && instance.config.treatment === "relief"
+        (instance.config.version === 4 || instance.config.version === 5) &&
+          instance.config.treatment === "relief"
       );
     const unsubscribe = useInstrumentStore.subscribe((state, prev) => {
       if (state.config !== prev.config && state.config !== instance.config) {
@@ -680,11 +686,21 @@ export const InstrumentSurface = ({
       if (!pointer.current) {
         runtime.current?.setControls(frame.control);
       }
-      setTrackingStatus(
-        frame.control.attractors.length > 0
-          ? `${mode === "body" ? "Body" : "Hands"} tracked${frame.control.attractors.some((point) => point.force > 0.92) ? " · pinching" : ""}`
-          : `Looking for your ${mode === "body" ? "shoulders and wrists" : "hands"}`
-      );
+      if (mode === "body" && (frame.people ?? 0) > 0) {
+        const people = frame.people ?? 1;
+        setTrackingStatus(
+          `${people} ${people === 1 ? "person" : "people"} tracked`
+        );
+      } else if (frame.control.attractors.length > 0) {
+        const pinching = frame.control.attractors.some(
+          (point) => point.force > 0.92
+        );
+        setTrackingStatus(`Hands tracked${pinching ? " · pinching" : ""}`);
+      } else {
+        setTrackingStatus(
+          `Looking for your ${mode === "body" ? "shoulders and wrists" : "hands"}`
+        );
+      }
       if (
         frame.mask &&
         frame.width !== undefined &&
@@ -1151,7 +1167,7 @@ export const InstrumentSurface = ({
           </output>
           <p className="sound-hint">
             {tracking === "body"
-              ? "Keep your shoulders and wrists in view. Spread your arms to open the form; raise them to lift it."
+              ? "One person or up to three together. Keep shoulders and wrists in view. Spread your arms to open the form; raise them to lift it. Your movements share the scene."
               : "Move a hand to pull the light. Pinch to grab. Pinch with both hands to stretch. While holding, bring your palm closer to swell the surface; pull away to sink it."}
           </p>
           <p className="sound-hint">Camera processing stays on this device.</p>

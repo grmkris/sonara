@@ -33,7 +33,13 @@ export const TouchConfig = ResponsiveConfig.extend({
   version: z.literal(4),
 });
 export type TouchConfig = z.infer<typeof TouchConfig>;
-export type MaterialConfig = ExperienceConfig | ResponsiveConfig | TouchConfig;
+export const FlowConfig = TouchConfig.extend({ version: z.literal(5) });
+export type FlowConfig = z.infer<typeof FlowConfig>;
+export type MaterialConfig =
+  | ExperienceConfig
+  | ResponsiveConfig
+  | TouchConfig
+  | FlowConfig;
 export const DEFAULT_EXPERIENCE: ExperienceConfig = {
   automatic: true,
   flow: 0.45,
@@ -58,6 +64,8 @@ export const DEFAULT_TOUCH: TouchConfig = {
   treatment: "loom",
   version: 4,
 };
+
+export const DEFAULT_FLOW: FlowConfig = { ...DEFAULT_TOUCH, version: 5 };
 
 // Resolved on the audio clock, then recorded verbatim for future replay.
 export const MusicalFrame = z.object({

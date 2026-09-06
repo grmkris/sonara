@@ -126,3 +126,68 @@ export const poseControls = (
     time,
   };
 };
+
+// People share the instrument. Average anatomical arm controls rather than
+// attaching identities to MediaPipe's unstable person ordering.
+export const groupControls = (
+  bodies: Landmark[][],
+  time: number
+): PerformanceControlFrame => {
+  const controls = bodies
+    .slice(0, 3)
+    .map((body) => poseControls(body, time))
+    .filter((control) => control.attractors.length > 0);
+  if (controls.length === 0) {
+    return { attractors: [], expansion: 0.5, lift: 0, rotation: 0, time };
+  }
+  const attractors = [0, 1].flatMap((id) => {
+    const points = controls.flatMap((control) =>
+      control.attractors.filter((point) => point.id === id)
+    );
+    if (points.length === 0) {
+      return [];
+    }
+    return [
+      {
+        force: 0.8,
+        id,
+        x: points.reduce((sum, point) => sum + point.x, 0) / points.length,
+        y: points.reduce((sum, point) => sum + point.y, 0) / points.length,
+      },
+    ];
+  });
+  return {
+    attractors,
+    expansion:
+      controls.reduce((sum, control) => sum + control.expansion, 0) /
+      controls.length,
+    lift:
+      controls.reduce((sum, control) => sum + (control.lift ?? 0), 0) /
+      controls.length,
+    rotation: 0,
+    time,
+  };
+};
+
+export const unionMasks = (
+  masks: { data: Float32Array; width: number; height: number }[],
+  width: number,
+  height: number
+): Uint8Array<ArrayBuffer> => {
+  const pixels = new Uint8Array(width * height);
+  for (const mask of masks) {
+    for (let y = 0; y < height; y += 1) {
+      for (let x = 0; x < width; x += 1) {
+        const index =
+          Math.floor((y * mask.height) / height) * mask.width +
+          Math.floor((x * mask.width) / width);
+        const confidence = mask.data[index] ?? 0;
+        pixels[y * width + x] = Math.max(
+          pixels[y * width + x] ?? 0,
+          Math.round(clamp(confidence) * 255)
+        );
+      }
+    }
+  }
+  return pixels;
+};

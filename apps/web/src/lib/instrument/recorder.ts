@@ -59,11 +59,11 @@ export class TakeRecorder {
     // Snapshot what is actually displayed after the asynchronous storage setup.
     // A photo/depth load can finish between clicking Record and reaching here.
     const initialImage =
-      this.runtime.config.version === 4
+      this.runtime.config.version >= 4
         ? this.runtime.renderer.imageUrl
         : imageUrl;
     const initialDepth =
-      this.runtime.config.version === 4
+      this.runtime.config.version >= 4
         ? this.runtime.renderer.depthUrl
         : depthUrl;
     if (initialImage) {

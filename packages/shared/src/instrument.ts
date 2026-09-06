@@ -3,6 +3,7 @@ import { z } from "zod";
 import { AudioFeatures } from "./audio";
 import {
   ExperienceConfig,
+  FlowConfig,
   MusicalFrame,
   ResponsiveConfig,
   TouchConfig,
@@ -47,6 +48,7 @@ export type InstrumentConfig = z.infer<typeof InstrumentConfig>;
 export const EngineConfig = z.discriminatedUnion("version", [
   InstrumentConfig,
   ExperienceConfig,
+  FlowConfig,
   ResponsiveConfig,
   TouchConfig,
 ]);
@@ -155,13 +157,25 @@ export const TakeManifest = z
     config: EngineConfig,
     createdAt: z.string().datetime(),
     duration: z.number().nonnegative(),
-    engine: z.enum(["sonara-1", "sonara-2", "sonara-3", "sonara-4"]),
+    engine: z.enum([
+      "sonara-1",
+      "sonara-2",
+      "sonara-3",
+      "sonara-4",
+      "sonara-5",
+    ]),
     id: z.string().uuid(),
     name: z.string().min(1).max(160),
     range: z
       .tuple([z.number().nonnegative(), z.number().positive()])
       .optional(),
-    version: z.union([z.literal(1), z.literal(2), z.literal(3), z.literal(4)]),
+    version: z.union([
+      z.literal(1),
+      z.literal(2),
+      z.literal(3),
+      z.literal(4),
+      z.literal(5),
+    ]),
   })
   .refine(
     (take) =>

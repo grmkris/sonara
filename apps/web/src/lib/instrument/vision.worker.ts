@@ -5,7 +5,7 @@ import {
   PoseLandmarker,
 } from "@mediapipe/tasks-vision";
 
-import { handControls, poseControls } from "./vision-controls";
+import { groupControls, handControls, unionMasks } from "./vision-controls";
 
 let hands: HandLandmarker | null = null;
 let body: PoseLandmarker | null = null;
@@ -44,7 +44,7 @@ self.addEventListener(
             },
             minPoseDetectionConfidence: 0.6,
             minPosePresenceConfidence: 0.6,
-            numPoses: 1,
+            numPoses: 3,
             outputSegmentationMasks: true,
             runningMode: "VIDEO",
           });
@@ -67,30 +67,27 @@ self.addEventListener(
           });
         } else if (body) {
           const result = body.detectForVideo(data.image, data.time);
-          const control = poseControls(
-            result.landmarks[0] ?? [],
-            data.time / 1000
-          );
-          const mask = result.segmentationMasks?.[0];
-          const width = 160;
-          const height = 120;
-          const pixels = new Uint8Array(width * height);
-          if (mask) {
-            const floats = mask.getAsFloat32Array();
-            for (let y = 0; y < height; y += 1) {
-              for (let x = 0; x < width; x += 1) {
-                const index =
-                  Math.floor((y * mask.height) / height) * mask.width +
-                  Math.floor((x * mask.width) / width);
-                pixels[y * width + x] = Math.round((floats[index] ?? 0) * 255);
-              }
-            }
+          try {
+            const control = groupControls(result.landmarks, data.time / 1000);
+            const people = result.landmarks.length;
+            const width = people > 0 ? 160 : 0;
+            const height = people > 0 ? 120 : 0;
+            const pixels = unionMasks(
+              (result.segmentationMasks ?? []).map((mask) => ({
+                data: mask.getAsFloat32Array(),
+                height: mask.height,
+                width: mask.width,
+              })),
+              width,
+              height
+            );
+            self.postMessage(
+              { control, height, mask: pixels, people, type: "result", width },
+              [pixels.buffer]
+            );
+          } finally {
+            result.close();
           }
-          result.close();
-          self.postMessage(
-            { control, height, mask: pixels, type: "result", width },
-            [pixels.buffer]
-          );
         }
       } finally {
         data.image.close();

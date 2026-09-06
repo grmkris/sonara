@@ -19,6 +19,7 @@ import {
   vec3,
   vec4,
 } from "three/tsl";
+import type { texture } from "three/tsl";
 import type { Node } from "three/webgpu";
 
 import type { ExperienceUniforms } from "./experience-renderer";
@@ -37,10 +38,14 @@ const influence = (p: Node<"vec2">, u: ExperienceUniforms) => {
   const total = max(a.add(b), 1);
   return vec2(a, b).div(total);
 };
-const imageUv = (u: ExperienceUniforms, p: Node<"vec2">) => {
+const imageUv = (
+  u: ExperienceUniforms,
+  p: Node<"vec2">,
+  aspect: Node<"float"> = u.imageAspect
+) => {
   const fit = vec2(
-    clamp(u.aspect.div(u.imageAspect), 0, 1),
-    clamp(u.imageAspect.div(u.aspect), 0, 1)
+    clamp(u.aspect.div(aspect), 0, 1),
+    clamp(aspect.div(u.aspect), 0, 1)
   );
   return clamp(p.sub(0.5).mul(fit).add(0.5), 0.001, 0.999);
 };
@@ -135,11 +140,18 @@ export const loomSurface = (u: ExperienceUniforms) =>
     );
   })();
 
-const depthAt = (u: ExperienceUniforms, p: Node<"vec2">) => {
-  const depth = u.depth.sample(imageUv(u, p));
+const depthAt = (
+  u: ExperienceUniforms,
+  p: Node<"vec2">,
+  aspect?: Node<"float">
+) => {
+  const depth = u.depth.sample(imageUv(u, p, aspect));
   return depth.r.mul(256 / 257).add(depth.g.mul(1 / 257));
 };
-export const reliefSurface = (u: ExperienceUniforms) =>
+export const reliefSurface = (
+  u: ExperienceUniforms,
+  depthAspect?: Node<"float">
+) =>
   Fn(() => {
     const p = uv();
     const q = p.sub(0.5).mul(vec2(u.aspect, 1));
@@ -147,7 +159,7 @@ export const reliefSurface = (u: ExperienceUniforms) =>
       .mul(cos(q.y.mul(7).sub(u.motionTime.mul(0.7))))
       .mul(0.22)
       .add(0.5);
-    const depth = mix(procedural, depthAt(u, p), u.depthActive);
+    const depth = mix(procedural, depthAt(u, p, depthAspect), u.depthActive);
     const tilt = u.center
       .mul(u.attachment)
       .mul(0.13)
@@ -159,11 +171,11 @@ export const reliefSurface = (u: ExperienceUniforms) =>
       .mul(depth.sub(0.5))
       .add(q.mul(u.music.y.mul(u.response).mul(0.055).add(pulse.mul(0.018))));
     const samplePoint = p.add(parallax);
-    const dx = depthAt(u, samplePoint.add(vec2(0.003, 0))).sub(
-      depthAt(u, samplePoint.sub(vec2(0.003, 0)))
+    const dx = depthAt(u, samplePoint.add(vec2(0.003, 0)), depthAspect).sub(
+      depthAt(u, samplePoint.sub(vec2(0.003, 0)), depthAspect)
     );
-    const dy = depthAt(u, samplePoint.add(vec2(0, 0.003))).sub(
-      depthAt(u, samplePoint.sub(vec2(0, 0.003)))
+    const dy = depthAt(u, samplePoint.add(vec2(0, 0.003)), depthAspect).sub(
+      depthAt(u, samplePoint.sub(vec2(0, 0.003)), depthAspect)
     );
     const normal = normalize(vec3(dx.mul(-22), dy.mul(-22), 1));
     const light = normalize(
@@ -195,7 +207,10 @@ export const reliefSurface = (u: ExperienceUniforms) =>
 
 // One shared deformation pass: pin, two-point stretch, push/pull and damped
 // release work across every material. Read and write targets are distinct.
-export const touchSurface = (u: ExperienceUniforms) =>
+export const touchSurface = (
+  u: ExperienceUniforms,
+  history?: ReturnType<typeof texture>
+) =>
   Fn(() => {
     const p = uv();
     const weights = influence(p, u);
@@ -222,6 +237,39 @@ export const touchSurface = (u: ExperienceUniforms) =>
     const edge = float(1).sub(
       smoothstep(0.45, 1.5, length(p.sub(0.5).mul(2))).mul(0.55)
     );
+    if (history) {
+      const silhouette = smoothstep(
+        0.2,
+        0.8,
+        u.mask.sample(vec2(float(1).sub(p.x), float(1).sub(p.y))).r
+      ).mul(u.maskActive);
+      const echo = history.sample(p).r;
+      const around = max(
+        max(
+          history.sample(p.add(vec2(0.008, 0))).r,
+          history.sample(p.sub(vec2(0.008, 0))).r
+        ),
+        max(
+          history.sample(p.add(vec2(0, 0.008))).r,
+          history.sample(p.sub(vec2(0, 0.008))).r
+        )
+      );
+      const rim = max(around.sub(echo), 0);
+      const trail = max(echo.sub(silhouette), 0);
+      const bands = sin(trail.mul(22).sub(u.motionTime)).mul(0.3).add(0.7);
+      const aura = tint(u, p.y.mul(5).add(trail.mul(6)).sub(u.motionTime));
+      const light = rim
+        .mul(2.5)
+        .add(trail.mul(bands).mul(0.6))
+        .mul(u.music.x.mul(u.response).add(0.65));
+      return vec4(
+        color
+          .mul(edge)
+          .mul(mix(float(1), silhouette.mul(0.65).add(0.35), u.maskActive))
+          .add(aura.mul(light)),
+        1
+      );
+    }
     const silhouette = u.mask.sample(
       vec2(float(1).sub(p.x), float(1).sub(p.y))
     ).r;

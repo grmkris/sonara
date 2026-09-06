@@ -4,6 +4,7 @@ import type { PerformanceControlFrame } from "@sonara/shared";
 export interface VisionFrame {
   control: PerformanceControlFrame;
   mask?: Uint8Array;
+  people?: number;
   width?: number;
   height?: number;
 }
