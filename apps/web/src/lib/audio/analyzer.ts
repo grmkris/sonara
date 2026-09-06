@@ -389,6 +389,9 @@ export class AudioEngine {
         { port: channel.port1, sampleRate: ctx.sampleRate, type: "init" },
         [channel.port1]
       );
+      // The source may have changed while the worklet loaded. Its first frames
+      // must use the current generation, just like frames after a later reset.
+      worker.postMessage({ generation: this.generation, type: "reset" });
       worklet.port.postMessage({ port: channel.port2 }, [channel.port2]);
       worker.addEventListener(
         "message",
