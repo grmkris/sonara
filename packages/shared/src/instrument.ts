@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 import { AudioFeatures } from "./audio";
-import { ExperienceConfig, MusicalFrame } from "./experience";
+import { ExperienceConfig, MusicalFrame, ResponsiveConfig } from "./experience";
 
 export const WorldId = z.enum([
   "dream",
@@ -42,6 +42,7 @@ export type InstrumentConfig = z.infer<typeof InstrumentConfig>;
 export const EngineConfig = z.discriminatedUnion("version", [
   InstrumentConfig,
   ExperienceConfig,
+  ResponsiveConfig,
 ]);
 export type EngineConfig = z.infer<typeof EngineConfig>;
 export const DEFAULT_INSTRUMENT: InstrumentConfig = {
@@ -71,6 +72,7 @@ export const AudioFeatureFrame = z.object({
 export type AudioFeatureFrame = z.infer<typeof AudioFeatureFrame>;
 export const Attractor = z.object({
   force: z.number().min(-1).max(1),
+  id: z.number().int().min(0).max(1).optional(),
   x: unit,
   y: unit,
 });
@@ -78,6 +80,7 @@ export type Attractor = z.infer<typeof Attractor>;
 export const PerformanceControlFrame = z.object({
   attractors: z.array(Attractor).max(2),
   expansion: unit,
+  lift: z.number().min(-1).max(1).optional(),
   rotation: z.number().min(-Math.PI).max(Math.PI),
   time: z.number().nonnegative(),
 });
@@ -123,17 +126,17 @@ export const TakeManifest = z
     config: EngineConfig,
     createdAt: z.string().datetime(),
     duration: z.number().nonnegative(),
-    engine: z.enum(["sonara-1", "sonara-2"]),
+    engine: z.enum(["sonara-1", "sonara-2", "sonara-3"]),
     id: z.string().uuid(),
     name: z.string().min(1).max(160),
     range: z
       .tuple([z.number().nonnegative(), z.number().positive()])
       .optional(),
-    version: z.union([z.literal(1), z.literal(2)]),
+    version: z.union([z.literal(1), z.literal(2), z.literal(3)]),
   })
   .refine(
     (take) =>
-      take.engine === (take.config.version === 2 ? "sonara-2" : "sonara-1") &&
+      take.engine === `sonara-${take.config.version}` &&
       take.version === take.config.version,
     { message: "Take engine and configuration versions must agree." }
   )

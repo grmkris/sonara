@@ -1,14 +1,30 @@
 "use client";
 
-import { cn } from "@/lib/utils";
+import Link from "next/link";
+
+import { Button } from "@/components/ui/button";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 export type StudioTab = "recordings" | "sets";
 
-const TABS: StudioTab[] = ["recordings", "sets"];
+export const StudioCreateNav = ({ visible }: { visible: boolean }) => visible ? (
+  <nav aria-label="Studio workspaces" className="studio-create-nav">
+    <Button variant="ghost" render={<Link href="/studio" />}>
+      Recordings
+    </Button>
+    <Button variant="ghost" render={<Link href="/studio?tab=sets" />}>
+      Sets
+    </Button>
+    <Button
+      variant="outline"
+      aria-current="page"
+      render={<Link href="/studio/live" />}
+    >
+      Create
+    </Button>
+  </nav>
+) : null;
 
-// Two-tab header for the /studio sidebar: "recordings" (auto-captured live
-// performances) and curated "sets" (named groups). URL-driven via ?tab so
-// selection survives refresh + deep links.
 export const StudioSidebarTabs = ({
   tab,
   onTab,
@@ -16,24 +32,22 @@ export const StudioSidebarTabs = ({
   tab: StudioTab;
   onTab: (tab: StudioTab) => void;
 }) => (
-  <div className="border-b border-[color:var(--hairline)]/30 px-4 py-3">
-    <div className="flex rounded-sm border border-[color:var(--hairline)]/30 p-0.5">
-      {TABS.map((t) => (
-        <button
-          key={t}
-          type="button"
-          onClick={() => onTab(t)}
-          aria-current={tab === t ? "true" : undefined}
-          className={cn(
-            "focus-ring flex-1 rounded-[2px] px-3 py-1.5 font-sans text-[10px] uppercase tracking-[0.24em] transition-colors",
-            tab === t
-              ? "bg-[color:var(--paper)]/10 text-[color:var(--paper)]"
-              : "text-[color:var(--stone)] hover:text-[color:var(--paper)]"
-          )}
-        >
-          {t}
-        </button>
-      ))}
-    </div>
-  </div>
+  <nav aria-label="Studio" className="studio-workspace-nav">
+    <Tabs
+      value={tab}
+      onValueChange={(value) => {
+        if (value === "recordings" || value === "sets") {
+          onTab(value);
+        }
+      }}
+    >
+      <TabsList aria-label="Your library">
+        <TabsTrigger value="recordings">Recordings</TabsTrigger>
+        <TabsTrigger value="sets">Sets</TabsTrigger>
+      </TabsList>
+    </Tabs>
+    <Button variant="ghost" render={<Link href="/studio/live" />}>
+      Create
+    </Button>
+  </nav>
 );

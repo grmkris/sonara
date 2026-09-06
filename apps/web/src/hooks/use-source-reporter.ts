@@ -3,6 +3,7 @@
 import type { DeckKey } from "@sonara/shared";
 import { useEffect } from "react";
 
+import { experienceLabel } from "@/lib/instrument/catalog";
 import type { SessionSend } from "@/lib/session-actions";
 import { useInstrumentStore } from "@/stores/instrument-store";
 import { useVisualizerStore } from "@/stores/visualizer";
@@ -24,20 +25,23 @@ type ReportedSource = Extract<
   { type: "source.report" }
 >["source"];
 
-export const deriveSource = (s: VisualizerState): ReportedSource => {
+export const deriveSource = (
+  s: VisualizerState,
+  allowLive = true
+): ReportedSource => {
   const { source } = s;
   const instrument = useInstrumentStore.getState();
   const hasDream =
-    instrument.config.version === 2 ||
+    instrument.config.version !== 1 ||
     instrument.config.a.world === "dream" ||
     instrument.config.b.world === "dream";
-  if (instrument.enabled && !(hasDream && source.kind === "live")) {
+  if (
+    instrument.enabled &&
+    !(allowLive && hasDream && source.kind === "live")
+  ) {
     return {
       kind: "procedural",
-      label:
-        instrument.config.version === 2
-          ? instrument.config.treatment
-          : `${instrument.config.a.world} / ${instrument.config.b.world}`,
+      label: experienceLabel(instrument.config),
     };
   }
   switch (source.kind) {
@@ -64,7 +68,10 @@ const sameSource = (a: ReportedSource, b: ReportedSource): boolean =>
   a.setId === b.setId &&
   a.deckKey === b.deckKey;
 
-export const useSourceReporter = (send: SessionSend): void => {
+export const useSourceReporter = (
+  send: SessionSend,
+  allowLive = true
+): void => {
   useEffect(() => {
     let lastReported: ReportedSource | null = null;
     const report = (source: ReportedSource): void => {
@@ -75,16 +82,16 @@ export const useSourceReporter = (send: SessionSend): void => {
       send({ source, type: "source.report" });
     };
     // Catch up on whatever is already showing when the hook mounts.
-    report(deriveSource(useVisualizerStore.getState()));
+    report(deriveSource(useVisualizerStore.getState(), allowLive));
     const unsub = useVisualizerStore.subscribe((s) => {
-      report(deriveSource(s));
+      report(deriveSource(s, allowLive));
     });
     const unsubInstrument = useInstrumentStore.subscribe(() => {
-      report(deriveSource(useVisualizerStore.getState()));
+      report(deriveSource(useVisualizerStore.getState(), allowLive));
     });
     return () => {
       unsubInstrument();
       unsub();
     };
-  }, [send]);
+  }, [allowLive, send]);
 };

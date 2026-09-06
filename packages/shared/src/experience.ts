@@ -14,6 +14,12 @@ export const ExperienceConfig = z.object({
   version: z.literal(2),
 });
 export type ExperienceConfig = z.infer<typeof ExperienceConfig>;
+export const ResponsiveConfig = ExperienceConfig.extend({
+  response: unit,
+  version: z.literal(3),
+});
+export type ResponsiveConfig = z.infer<typeof ResponsiveConfig>;
+export type MaterialConfig = ExperienceConfig | ResponsiveConfig;
 export const DEFAULT_EXPERIENCE: ExperienceConfig = {
   automatic: true,
   flow: 0.45,
@@ -25,6 +31,12 @@ export const DEFAULT_EXPERIENCE: ExperienceConfig = {
   trails: 0.55,
   treatment: "silk",
   version: 2,
+};
+
+export const DEFAULT_RESPONSIVE: ResponsiveConfig = {
+  ...DEFAULT_EXPERIENCE,
+  response: 0.7,
+  version: 3,
 };
 
 // Resolved on the audio clock, then recorded verbatim for future replay.

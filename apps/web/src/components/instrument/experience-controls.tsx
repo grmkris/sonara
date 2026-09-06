@@ -1,10 +1,12 @@
 "use client";
 
 import { DEFAULT_EXPERIENCE } from "@sonara/shared";
-import type { EngineConfig, ExperienceConfig, MacroId } from "@sonara/shared";
+import type { EngineConfig, MaterialConfig, MacroId } from "@sonara/shared";
 
 import { Button } from "@/components/ui/button";
+import { Field, FieldLabel } from "@/components/ui/field";
 import { Slider } from "@/components/ui/slider";
+import { Switch } from "@/components/ui/switch";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { PALETTES } from "@/lib/instrument/catalog";
 
@@ -42,8 +44,8 @@ export const ExperienceControls = ({
   onChange,
   compact = false,
 }: {
-  config: ExperienceConfig;
-  onChange: (config: ExperienceConfig) => void;
+  config: MaterialConfig;
+  onChange: (config: MaterialConfig) => void;
   compact?: boolean;
 }) => (
   <div className="experience-controls">
@@ -85,7 +87,7 @@ export const ExperienceControls = ({
       aria-label="Color palette"
       value={[config.palette]}
       onValueChange={(values) => {
-        const palette = values[0] as ExperienceConfig["palette"];
+        const palette = values[0] as MaterialConfig["palette"];
         if (palette in PALETTES) {
           onChange({ ...config, palette });
         }
@@ -104,49 +106,66 @@ export const ExperienceControls = ({
         </ToggleGroupItem>
       ))}
     </ToggleGroup>
-    {!compact && (
-      <div className="experience-parameter">
-        <label htmlFor="experience-intensity">Intensity</label>
+    {config.version === 3 && (
+      <Field>
+        <FieldLabel htmlFor="visual-response">Response</FieldLabel>
         <Slider
-          id="experience-intensity"
-          aria-label="Intensity"
+          id="visual-response"
+          aria-label="Response"
           min={0}
           max={1}
           step={0.01}
-          value={[config.intensity]}
+          value={[config.response]}
           onValueChange={(value) =>
             onChange({
               ...config,
-              intensity: Array.isArray(value) ? (value[0] ?? 0.5) : value,
+              response: Array.isArray(value) ? (value[0] ?? 0.7) : value,
             })
           }
         />
-      </div>
+        <p className="sound-hint">
+          How strongly the form moves with your music.
+        </p>
+      </Field>
     )}
-    <div className="experience-parameter">
-      <label htmlFor="image-reveal">Image presence</label>
-      <Slider
-        id="image-reveal"
-        aria-label="Image presence"
-        min={0}
-        max={1}
-        step={0.01}
-        value={[config.reveal]}
-        onValueChange={(value) =>
-          onChange({
-            ...config,
-            reveal: Array.isArray(value) ? (value[0] ?? 0.5) : value,
-          })
-        }
-      />
-    </div>
-    <Button
-      variant={config.automatic ? "primary" : "default"}
-      aria-pressed={config.automatic}
-      onClick={() => onChange({ ...config, automatic: !config.automatic })}
-    >
-      Let the music lead
-    </Button>
+    {!compact && (
+      <>
+        {(["intensity", "flow", "symmetry", "trails", "reveal"] as const).map(
+          (key) => (
+            <Field key={key}>
+              <FieldLabel htmlFor={`visual-${key}`}>
+                {key === "reveal" ? "Image presence" : key}
+              </FieldLabel>
+              <Slider
+                id={`visual-${key}`}
+                aria-label={key === "reveal" ? "Image presence" : key}
+                min={0}
+                max={1}
+                step={0.01}
+                value={[config[key]]}
+                onValueChange={(value) =>
+                  onChange({
+                    ...config,
+                    [key]: Array.isArray(value) ? (value[0] ?? 0.5) : value,
+                  })
+                }
+              />
+            </Field>
+          )
+        )}
+        <Field orientation="horizontal">
+          <FieldLabel>
+            <Switch
+              checked={config.automatic}
+              onCheckedChange={(checked) =>
+                onChange({ ...config, automatic: checked })
+              }
+            />
+            Follow musical build-ups
+          </FieldLabel>
+        </Field>
+      </>
+    )}
   </div>
 );
 
@@ -163,9 +182,7 @@ export const EngineControls = ({
   onDeck?: (deck: "a" | "b") => void;
   onLearn?: (target: MacroId | "crossfade") => void;
 }) =>
-  config.version === 2 ? (
-    <ExperienceControls config={config} onChange={onChange} />
-  ) : (
+  config.version === 1 ? (
     <div className="flex flex-col gap-4">
       <InstrumentControls config={config} onChange={onChange} {...props} />
       {allowUpgrade && (
@@ -183,4 +200,6 @@ export const EngineControls = ({
         </Button>
       )}
     </div>
+  ) : (
+    <ExperienceControls config={config} onChange={onChange} />
   );

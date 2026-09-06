@@ -9,6 +9,7 @@ import type {
 
 import { WORLDS, lookMacros } from "./catalog";
 import { InstrumentRenderer } from "./renderer";
+import { smoothControls } from "./smooth-controls";
 import { Transport } from "./transport";
 
 export class InstrumentRuntime {
@@ -37,6 +38,7 @@ export class InstrumentRuntime {
   private lastAudioInput: AudioFeatureFrame | null = null;
   private audioUpdated = false;
   private controlsUpdated = false;
+  private lastSmoothingAt = 0;
   private lastBeat = 0;
   private lastScene = 0;
   private sceneIndex = 0;
@@ -113,13 +115,24 @@ export class InstrumentRuntime {
       this.audio = { confidence: 0, features: { ...defaultAudio }, time };
       this.music = { ...EMPTY_MUSIC, time };
     }
+    if (this.config.version === 3 && !this.replaying) {
+      const dt = Math.max(0, Math.min(0.1, time - this.lastSmoothingAt));
+      this.lastSmoothingAt = time;
+      this.controls = smoothControls(
+        this.controls,
+        this.targetControls,
+        dt,
+        time - this.lastControlAt,
+        time
+      );
+    }
     this.transport.advance(
       time,
       this.audio.features.bpm,
       () => {
         this.step();
       },
-      this.config.version === 2 ? 3 : 6
+      this.config.version === 1 ? 6 : 3
     );
     this.renderer.present(time);
   }
@@ -128,7 +141,7 @@ export class InstrumentRuntime {
       this.elapsed - this.lastControlAt < 0.25
         ? this.targetControls
         : { ...this.targetControls, attractors: [] };
-    if (!this.replaying) {
+    if (!this.replaying && this.config.version !== 3) {
       this.controls = {
         // oxlint-disable-next-line complexity -- REVIEW: interpolate two optional tracked controls and decay missing inputs
         attractors: [0, 1].flatMap((i) => {
@@ -161,7 +174,7 @@ export class InstrumentRuntime {
         time: this.elapsed,
       };
     }
-    if (this.config.version === 2) {
+    if (this.config.version !== 1) {
       this.onEvent?.({
         control: this.controls,
         frame: this.music,

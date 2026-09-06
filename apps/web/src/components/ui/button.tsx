@@ -9,24 +9,24 @@ import type { ReactElement } from "react";
 import { cn } from "@/lib/utils";
 
 const buttonVariants = cva(
-  "inline-flex items-center justify-center gap-2 whitespace-nowrap font-sans text-[11px] uppercase tracking-[0.14em] transition-colors duration-150 disabled:pointer-events-none disabled:opacity-40 focus-visible:outline-none",
+  "inline-flex shrink-0 items-center justify-center gap-2 rounded-md border border-transparent font-sans text-sm font-medium whitespace-nowrap transition-colors disabled:pointer-events-none disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
   {
     defaultVariants: { size: "default", variant: "default" },
     variants: {
       size: {
-        default: "h-7 px-2 py-1",
-        icon: "h-7 w-7 p-0",
-        lg: "h-8 px-3 py-1.5 text-[12px]",
-        sm: "h-6 px-1.5 py-0.5 text-[10px]",
+        default: "h-11 px-4",
+        icon: "size-11 p-0",
+        lg: "h-12 px-5 text-sm",
+        sm: "h-9 px-3 text-xs pointer-coarse:min-h-11",
       },
       variant: {
         default:
-          "text-[color:var(--paper)]/80 hover:text-[color:var(--paper)] border-b border-[color:var(--hairline)]/40 hover:border-[color:var(--paper)]",
-        ghost: "text-[color:var(--stone)] hover:text-[color:var(--paper)]",
-        primary:
-          "text-[color:var(--paper)] border-b border-[color:var(--indigo)] hover:border-b-2",
-        signal:
-          "text-[color:var(--paper)] bg-[color:var(--signal)]/90 hover:bg-[color:var(--signal)] px-3 py-1",
+          "border-input bg-secondary text-secondary-foreground hover:bg-accent",
+        ghost:
+          "text-muted-foreground hover:bg-muted hover:text-foreground aria-expanded:bg-muted aria-expanded:text-foreground",
+        outline: "border-input bg-transparent text-foreground hover:bg-muted",
+        primary: "bg-primary text-primary-foreground hover:bg-primary/90",
+        signal: "bg-destructive text-background hover:bg-destructive/90",
       },
     },
   }

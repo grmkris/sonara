@@ -524,9 +524,9 @@ export const TakeStudio = ({ id }: { id: string }) => {
               preserveAspectRatio="none"
               role="img"
               aria-label={
-                config?.version === 2
-                  ? "Intensity over time"
-                  : "Crossfade over time"
+                config?.version === 1
+                  ? "Crossfade over time"
+                  : "Intensity over time"
               }
             >
               <polyline
@@ -537,7 +537,7 @@ export const TakeStudio = ({ id }: { id: string }) => {
                   .filter((e) => e.kind === "scene")
                   .map(
                     (e) =>
-                      `${(e.time / Math.max(1, take?.manifest.duration ?? 1)) * 1000},${55 - (e.config.version === 2 ? intensityOf(e.config) : e.config.crossfade) * 50}`
+                      `${(e.time / Math.max(1, take?.manifest.duration ?? 1)) * 1000},${55 - (e.config.version === 1 ? e.config.crossfade : intensityOf(e.config)) * 50}`
                   )
                   .join(" ")}
               />

@@ -39,13 +39,13 @@ const PopoverContent = ({
   alignOffset = 0,
   side = "bottom",
   sideOffset = 4,
+  keepMounted = false,
   ...props
-}: PopoverPrimitive.Popup.Props &
-  Pick<
+}: PopoverPrimitive.Popup.Props & { keepMounted?: boolean } & Pick<
     PopoverPrimitive.Positioner.Props,
     "align" | "alignOffset" | "side" | "sideOffset"
   >) => (
-  <PopoverPrimitive.Portal>
+  <PopoverPrimitive.Portal keepMounted={keepMounted}>
     <PopoverPrimitive.Positioner
       align={align}
       alignOffset={alignOffset}
@@ -56,9 +56,7 @@ const PopoverContent = ({
       <PopoverPrimitive.Popup
         data-slot="popover-content"
         className={cn(
-          // Default to the app's frosted ink theme so call sites only set
-          // width/padding. Overridable via `className` (cn merges last-wins).
-          "z-50 w-72 origin-(--transform-origin) rounded-sm border border-[color:var(--hairline)]/40 bg-[color:var(--ink)]/95 p-4 text-[color:var(--paper)] shadow-md backdrop-blur-md outline-hidden data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95 data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95",
+          "w-80 origin-(--transform-origin) rounded-xl border border-border bg-popover p-5 text-popover-foreground shadow-2xl outline-none",
           className
         )}
         {...props}
@@ -67,4 +65,6 @@ const PopoverContent = ({
   </PopoverPrimitive.Portal>
 );
 
-export { Popover, PopoverTrigger, PopoverContent };
+const PopoverTitle = PopoverPrimitive.Title;
+const PopoverClose = PopoverPrimitive.Close;
+export { Popover, PopoverTrigger, PopoverContent, PopoverTitle, PopoverClose };

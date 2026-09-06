@@ -180,15 +180,41 @@ export const dyePass = (u: ExperienceUniforms) =>
     );
   })();
 
-export const materialPass = (u: ExperienceUniforms) =>
+export const materialPass = (u: ExperienceUniforms, responsive = false) =>
   Fn(() => {
     const p = uv().sub(0.5).mul(vec2(u.aspect, 1)).mul(2);
-    const t = u.time.mul(u.flow.mul(0.12).add(0.035));
+    const t = responsive
+      ? u.motionTime
+      : u.time.mul(u.flow.mul(0.12).add(0.035));
     const spread = u.expansion
       .mul(0.3)
       .add(u.direction.z.mul(0.3))
       .sub(u.direction.y.mul(0.15));
     const q = p.mul(float(1.15).sub(spread)).toVar();
+    if (responsive) {
+      const { response, attachment } = u;
+      const center = u.center.mul(vec2(u.aspect, 1)).mul(2);
+      q.assign(p.sub(center.mul(attachment).mul(response.mul(0.5).add(0.5))));
+      q.y.subAssign(u.lift.mul(attachment).mul(0.65));
+      const angle = u.rotation.mul(attachment);
+      q.assign(
+        vec2(
+          q.x.mul(cos(angle)).add(q.y.mul(sin(angle))),
+          q.y.mul(cos(angle)).sub(q.x.mul(sin(angle)))
+        )
+      );
+      const breathing = u.music.y
+        .mul(0.22)
+        .add(u.music.x.mul(0.16))
+        .mul(response);
+      const stretch = u.expansion.sub(0.5).mul(attachment).mul(0.9);
+      q.mulAssign(clamp(float(1).sub(breathing).sub(stretch), 0.4, 1.5));
+      const ripple = sin(length(q).mul(11).sub(float(1).sub(u.music.x).mul(12)))
+        .mul(u.music.x)
+        .mul(response)
+        .mul(0.14);
+      q.y.addAssign(ripple);
+    }
     const folded = vec2(abs(q.x), q.y);
     q.assign(mix(q, folded, u.symmetry.mul(0.6)));
     const flow = u.velocity.sample(uv()).xy;

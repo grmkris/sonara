@@ -221,7 +221,11 @@ export class InstrumentRenderer {
   }
   configure(config: EngineConfig): void {
     this.config = config;
-    if (config.version === 2) {
+    if (config.version !== 1) {
+      if (this.experience && this.experience.version !== config.version) {
+        this.experience.dispose();
+        this.experience = null;
+      }
       if (!this.experience) {
         this.experience = new ExperienceLayer(this.empty, config);
         if (this.image) {

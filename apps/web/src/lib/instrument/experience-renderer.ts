@@ -1,5 +1,5 @@
 import type {
-  ExperienceConfig,
+  MaterialConfig,
   MusicalFrame,
   PerformanceControlFrame,
 } from "@sonara/shared";
@@ -38,7 +38,9 @@ import {
 
 const uniforms = (empty: Texture) => ({
   aspect: uniform(1),
+  attachment: uniform(0),
   bloom: texture(empty),
+  center: uniform(new Vector2()),
   color1: uniform(new Color()),
   color2: uniform(new Color()),
   color3: uniform(new Color()),
@@ -57,12 +59,16 @@ const uniforms = (empty: Texture) => ({
   imageAspect: uniform(1),
   imageMix: uniform(1),
   intensity: uniform(0.55),
+  lift: uniform(0),
   mask: texture(empty),
   maskActive: uniform(0),
+  motionTime: uniform(0),
   music: uniform(new Vector4()),
   oldImage: texture(empty),
   pressure: texture(empty),
+  response: uniform(0),
   revealAmount: uniform(0),
+  rotation: uniform(0),
   surface: texture(empty),
   symmetry: uniform(0.15),
   texel: uniform(new Vector2(1 / 128, 1 / 128)),
@@ -101,7 +107,7 @@ export class ExperienceLayer {
   private di: 0 | 1 = 0;
   private needsClear = true;
   private imageStarted = -10;
-  private config: ExperienceConfig;
+  private config: MaterialConfig;
   private passes: Record<
     | "flow"
     | "curl"
@@ -116,7 +122,11 @@ export class ExperienceLayer {
     MeshBasicNodeMaterial
   >;
   private pressureIterations = 10;
-  constructor(empty: Texture, config: ExperienceConfig) {
+  private motionClock = 0;
+  private previousTime = 0;
+  readonly version: 2 | 3;
+  constructor(empty: Texture, config: MaterialConfig) {
+    this.version = config.version;
     this.u = uniforms(empty);
     this.config = config;
     const { u } = this;
@@ -126,7 +136,7 @@ export class ExperienceLayer {
       divergence: material(divergencePass(u)),
       dye: material(dyePass(u)),
       flow: material(flowPass(u)),
-      material: material(materialPass(u)),
+      material: material(materialPass(u, config.version === 3)),
       present: material(presentPass(u)),
       pressure: material(pressurePass(u)),
       project: material(projectPass(u)),
@@ -134,9 +144,10 @@ export class ExperienceLayer {
     };
     this.configure(config);
   }
-  configure(config: ExperienceConfig): void {
+  configure(config: MaterialConfig): void {
     this.config = config;
     const { u } = this;
+    u.response.value = config.version === 3 ? config.response : 0;
     u.flow.value = config.flow;
     u.intensity.value = config.intensity;
     u.symmetry.value = config.symmetry;
@@ -170,11 +181,44 @@ export class ExperienceLayer {
   }
   reset(): void {
     this.needsClear = true;
+    this.motionClock = 0;
+    this.previousTime = 0;
     this.u.revealAmount.value = 0;
     this.u.gesture1.value.set(0, 0);
     this.u.gesture2.value.set(0, 0);
     this.u.hand1.value.set(0.5, 0.5, 0);
     this.u.hand2.value.set(0.5, 0.5, 0);
+  }
+  private updateMotion(
+    time: number,
+    music: MusicalFrame,
+    controls: PerformanceControlFrame
+  ): void {
+    const { u } = this;
+    if (this.config.version === 3) {
+      const dt = Math.max(0, Math.min(0.05, time - this.previousTime));
+      this.previousTime = time;
+      const energy = Math.max(music.body, music.weight);
+      this.motionClock +=
+        dt * (0.012 + energy * (this.config.flow * 0.8 + 0.15));
+      u.motionTime.value = this.motionClock + (this.config.seed % 997) * 0.01;
+      const strength = controls.attractors.reduce(
+        (sum, p) => sum + Math.abs(p.force),
+        0
+      );
+      const center = { x: 0, y: 0 };
+      for (const point of controls.attractors) {
+        center.x += (point.x - 0.5) * Math.abs(point.force);
+        center.y += (point.y - 0.5) * Math.abs(point.force);
+      }
+      u.attachment.value = Math.min(1, strength);
+      u.center.value.set(
+        center.x / Math.max(0.001, strength),
+        controls.lift === undefined ? center.y / Math.max(0.001, strength) : 0
+      );
+      u.lift.value = controls.lift ?? 0;
+      u.rotation.value = controls.rotation;
+    }
   }
   private draw(
     renderer: WebGPURenderer,
@@ -220,6 +264,7 @@ export class ExperienceLayer {
       music.confidence
     );
     u.expansion.value = controls.expansion;
+    this.updateMotion(time, music, controls);
     for (const [i, hand] of [u.hand1, u.hand2].entries()) {
       const next = controls.attractors[i];
       const gesture = i === 0 ? u.gesture1 : u.gesture2;

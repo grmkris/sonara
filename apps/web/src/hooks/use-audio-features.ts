@@ -13,9 +13,9 @@ const UPSTREAM_INTERVAL_MS = 1000 / UPSTREAM_HZ;
 
 export type AudioSource =
   | { type: "none" }
-  | { type: "element"; element: HTMLAudioElement }
+  | { type: "element"; element: HTMLAudioElement; name?: string; url?: string }
   | { type: "mic" }
-  | { type: "display" };
+  | { type: "display"; stream?: MediaStream };
 
 // Module-level handle to the current AudioEngine so sibling components
 // (WaveformRibbon, SpectrumCurve, etc.) can read the AnalyserNode directly
@@ -90,7 +90,7 @@ export const useAudioFeatures = (
         } else if (source.type === "mic") {
           await engine.attachMic();
         } else if (source.type === "display") {
-          await engine.attachDisplay();
+          await engine.attachDisplay(source.stream);
         } else {
           engine.detachSource();
         }
@@ -106,6 +106,22 @@ export const useAudioFeatures = (
     return () => {
       cancelled = true;
       engine.detachSource();
+      if (source.type === "element") {
+        source.element.pause();
+      }
     };
   }, [source, onError]);
+  useEffect(
+    () => () => {
+      if (source.type === "element" && source.url) {
+        URL.revokeObjectURL(source.url);
+      }
+      if (source.type === "display" && source.stream) {
+        for (const track of source.stream.getTracks()) {
+          track.stop();
+        }
+      }
+    },
+    [source]
+  );
 };

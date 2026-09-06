@@ -12,10 +12,11 @@ const distance = (a: Landmark, b: Landmark) =>
 
 export const handControls = (
   hands: Landmark[][],
-  time: number
+  time: number,
+  identities: number[] = []
 ): PerformanceControlFrame => {
   const attractors = hands
-    .flatMap((hand) => {
+    .flatMap((hand, index) => {
       const { 0: wrist, 4: thumb, 8: finger, 9: middle } = hand;
       if (!(wrist && middle && thumb && finger)) {
         return [];
@@ -24,15 +25,23 @@ export const handControls = (
       const pinch = 1 - clamp((distance(thumb, finger) / palm - 0.15) / 0.65);
       return [
         {
-          force: 0.15 + pinch * 0.85,
+          force: 0.65 + pinch * 0.35,
+          id: identities[index] ?? index,
           x: clamp(1 - middle.x),
           y: clamp(1 - middle.y),
         },
       ];
     })
     .slice(0, 2);
-  // Spatial ordering avoids identity flips when MediaPipe changes detection order.
-  attractors.sort((a, b) => a.x - b.x);
+  if (attractors.length === 2 && attractors[0]?.id === attractors[1]?.id) {
+    // A low-confidence handedness label must not merge two visible hands.
+    const [, second] = attractors;
+    if (second) {
+      second.id = second.id === 0 ? 1 : 0;
+    }
+  }
+  // Anatomical identity stays stable when hands cross or detection order changes.
+  attractors.sort((a, b) => a.id - b.id);
   const [a, b] = attractors;
   return {
     attractors,
@@ -41,22 +50,50 @@ export const handControls = (
     time,
   };
 };
+const visible = (p: Landmark | undefined): p is Landmark =>
+  !!p && (p.visibility ?? 0) > 0.6;
 export const poseControls = (
   body: Landmark[],
   time: number
 ): PerformanceControlFrame => {
-  const points = [body[15], body[16]].filter(
-    (p): p is Landmark => !!p && (p.visibility ?? 0) > 0.6
+  const { 11: left, 12: right, 15: wristLeft, 16: wristRight } = body;
+  if (!visible(left) || !visible(right)) {
+    return { attractors: [], expansion: 0.5, lift: 0, rotation: 0, time };
+  }
+  const shoulder = Math.max(
+    0.08,
+    Math.hypot(left.x - right.x, left.y - right.y)
   );
-  const attractors = points.map((p) => ({
-    force: 0.6,
-    x: clamp(1 - p.x),
-    y: clamp(1 - p.y),
-  }));
-  const [a, b] = attractors;
+  const center = { x: (left.x + right.x) / 2, y: (left.y + right.y) / 2 };
+  const attractors = [wristLeft, wristRight].flatMap((p, id) =>
+    visible(p)
+      ? [
+          {
+            force: 0.8,
+            id,
+            x: clamp(0.5 - (p.x - center.x) / (shoulder * 4)),
+            y: clamp(0.5 + (center.y - p.y) / (shoulder * 4)),
+          },
+        ]
+      : []
+  );
+  const both = visible(wristLeft) && visible(wristRight);
   return {
     attractors,
-    expansion: a && b ? clamp(Math.hypot(a.x - b.x, a.y - b.y)) : 0.5,
+    expansion: both
+      ? clamp(
+          (Math.hypot(wristLeft.x - wristRight.x, wristLeft.y - wristRight.y) /
+            shoulder -
+            0.5) /
+            3
+        )
+      : 0.5,
+    lift: both
+      ? Math.max(
+          -1,
+          Math.min(1, (center.y - (wristLeft.y + wristRight.y) / 2) / shoulder)
+        )
+      : 0,
     rotation: 0,
     time,
   };

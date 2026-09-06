@@ -32,7 +32,7 @@ export class TakeRecorder {
         config: structuredClone(runtime.config),
         createdAt: new Date().toISOString(),
         duration: 0,
-        engine: runtime.config.version === 2 ? "sonara-2" : "sonara-1",
+        engine: `sonara-${runtime.config.version}`,
         id: crypto.randomUUID(),
         name: name || "Untitled performance",
         version: runtime.config.version,

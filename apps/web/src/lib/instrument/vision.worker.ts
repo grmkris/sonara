@@ -56,7 +56,13 @@ self.addEventListener(
         if (hands) {
           const result = hands.detectForVideo(data.image, data.time);
           self.postMessage({
-            control: handControls(result.landmarks, data.time / 1000),
+            control: handControls(
+              result.landmarks,
+              data.time / 1000,
+              result.handedness.map((hand) =>
+                hand[0]?.categoryName === "Left" ? 0 : 1
+              )
+            ),
             type: "result",
           });
         } else if (body) {

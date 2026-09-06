@@ -131,7 +131,16 @@ const Logotype = () => {
 // server-owned (use-ws-session); the frame/source producers
 // (useFrameReporter etc.) live ONLY here — console and crowd faces must
 // never mount them.
-export const StageScreen = ({ code }: { code: string | null }) => {
+const defaultWorkspace = (code: string | null) => (code ? "stage" : "play");
+
+export const StageScreen = ({
+  code,
+  workspace: selectedWorkspace,
+}: {
+  code: string | null;
+  workspace?: "play" | "create" | "stage";
+}) => {
+  const workspace = selectedWorkspace ?? defaultWorkspace(code);
   const instrumentEnabled = useInstrumentStore((s) => s.enabled);
   const { send, newSet, takenOver, reclaim } = useWsSession({ code });
   // THE client-side producer for decks and set replays — one loop, one
@@ -141,7 +150,7 @@ export const StageScreen = ({ code }: { code: string | null }) => {
   // /play is the producer: report the on-screen frame upward so /control (and
   // viewers) see it in every mode. Viewer surfaces must never mount this.
   useFrameReporter(send);
-  useSourceReporter(send);
+  useSourceReporter(send, workspace !== "play");
   const { data: sessionData } = useSession();
   const isSignedIn = !!sessionData?.session;
   // Which of MY stages this screen performs on — binds the host panel
@@ -209,10 +218,23 @@ export const StageScreen = ({ code }: { code: string | null }) => {
   useEffect(() => {
     hydrateUiVisible();
     hydratePresetPrefs();
-    hydrateSourcePref();
+    if (workspace === "stage") {
+      hydrateSourcePref();
+    } else {
+      useVisualizerStore.getState().stopToIdle();
+    }
     hydrateAnchorPrefs();
     hydrateModelPrefs();
-  }, []);
+    return () => {
+      if (workspace === "create") {
+        useVisualizerStore.getState().stopToIdle();
+        send({
+          source: { kind: "procedural", label: null },
+          type: "source.report",
+        });
+      }
+    };
+  }, [send, workspace]);
 
   // Anonymous visitors normally get a builtin-set source from the server
   // snapshot (constructor-pinned) — but offline there's no connect snapshot,
@@ -263,6 +285,7 @@ export const StageScreen = ({ code }: { code: string | null }) => {
           <SetPlaybackConsumer />
         </Suspense>
         <InstrumentSurface
+          workspace={workspace}
           remoteControl={ownStage ? <RemoteLink code={ownStage.code} /> : null}
           audioSource={audioSource}
           setAudioSource={setAudioSource}

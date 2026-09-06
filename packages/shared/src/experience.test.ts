@@ -1,6 +1,10 @@
 import { expect, test } from "bun:test";
 
-import { DEFAULT_EXPERIENCE, EMPTY_MUSIC } from "./experience";
+import {
+  DEFAULT_EXPERIENCE,
+  DEFAULT_RESPONSIVE,
+  EMPTY_MUSIC,
+} from "./experience";
 import { DEFAULT_INSTRUMENT, TakeEvent, TakeManifest } from "./instrument";
 import { LookConfig } from "./looks";
 
@@ -35,7 +39,24 @@ test("existing looks and takes remain valid while new captures identify their en
       version: 1,
     }).success
   ).toBe(false);
+  expect(
+    TakeManifest.safeParse({
+      ...base,
+      config: DEFAULT_RESPONSIVE,
+      engine: "sonara-3",
+      version: 3,
+    }).success
+  ).toBe(true);
+  expect(
+    TakeManifest.safeParse({
+      ...base,
+      config: DEFAULT_RESPONSIVE,
+      engine: "sonara-2",
+      version: 2,
+    }).success
+  ).toBe(false);
   for (const config of [
+    DEFAULT_RESPONSIVE,
     DEFAULT_EXPERIENCE,
     DEFAULT_INSTRUMENT,
     { displacement: 0.5 },

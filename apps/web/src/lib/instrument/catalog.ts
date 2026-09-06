@@ -57,8 +57,8 @@ export const lookMacros = (look: number): InstrumentMacros =>
   ][look] ?? { energy: 0.5, flow: 0.4, symmetry: 0.2, trails: 0.6 };
 
 export const experienceLabel = (config: EngineConfig): string =>
-  config.version === 2
-    ? config.treatment
-    : `${config.a.world} / ${config.b.world}`;
+  config.version === 1
+    ? `${config.a.world} / ${config.b.world}`
+    : config.treatment;
 export const intensityOf = (config: EngineConfig): number =>
-  config.version === 2 ? config.intensity : config.a.macros.energy;
+  config.version === 1 ? config.a.macros.energy : config.intensity;

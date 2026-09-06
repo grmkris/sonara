@@ -30,6 +30,7 @@ export class AudioEngine {
   private generation = 0;
   private initialization: Promise<void> | null = null;
   private stopped = false;
+  connected = false;
   latest: AudioFeatureFrame = {
     confidence: 0,
     features: { ...defaultAudio },
@@ -37,8 +38,12 @@ export class AudioEngine {
   };
 
   async attachElement(el: HTMLAudioElement): Promise<void> {
-    await this.ensureContext();
     this.detachSource();
+    const { generation } = this;
+    await this.ensureContext();
+    if (this.stopped || generation !== this.generation) {
+      return;
+    }
     if (!this.ctx || !this.analyser || !this.compressor) {
       return;
     }
@@ -65,6 +70,7 @@ export class AudioEngine {
     this.compressor.connect(this.analyser);
     this.analyser.connect(this.ctx.destination);
     this.source = node;
+    this.connected = true;
     if (this.worklet) {
       this.compressor.connect(this.worklet);
       this.worklet.port.postMessage({ active: true });
@@ -73,8 +79,12 @@ export class AudioEngine {
   }
 
   async attachMic(): Promise<void> {
-    await this.ensureContext();
     this.detachSource();
+    const { generation } = this;
+    await this.ensureContext();
+    if (this.stopped || generation !== this.generation) {
+      return;
+    }
     if (!this.ctx || !this.analyser || !this.compressor) {
       return;
     }
@@ -85,7 +95,6 @@ export class AudioEngine {
     // detection). This is the path used for a club line/USB feed (e.g. a
     // Pioneer DJM master over USB, or REC OUT → a USB interface), so turn the
     // voice DSP off and analyse the music as-is.
-    const { generation } = this;
     const stream = await navigator.mediaDevices.getUserMedia({
       audio: {
         autoGainControl: false,
@@ -106,6 +115,7 @@ export class AudioEngine {
     this.compressor.connect(this.analyser);
     // Do NOT connect analyser to destination on mic (avoid feedback).
     this.source = node;
+    this.connected = true;
     if (this.worklet) {
       this.compressor.connect(this.worklet);
       this.worklet.port.postMessage({ active: true });
@@ -119,17 +129,25 @@ export class AudioEngine {
   // video track immediately. The analyser is NOT routed to destination
   // because the shared tab is still playing to the system output — routing
   // again would double-play.
-  async attachDisplay(): Promise<void> {
-    await this.ensureContext();
+  async attachDisplay(captured?: MediaStream): Promise<void> {
     this.detachSource();
+    const { generation } = this;
+    await this.ensureContext();
+    if (this.stopped || generation !== this.generation) {
+      for (const track of captured?.getTracks() ?? []) {
+        track.stop();
+      }
+      return;
+    }
     if (!this.ctx || !this.analyser || !this.compressor) {
       return;
     }
-    const { generation } = this;
-    const stream = await navigator.mediaDevices.getDisplayMedia({
-      audio: true,
-      video: true,
-    });
+    const stream =
+      captured ??
+      (await navigator.mediaDevices.getDisplayMedia({
+        audio: true,
+        video: true,
+      }));
     // We only want audio; stop the video track immediately.
     for (const t of stream.getVideoTracks()) {
       t.stop();
@@ -156,6 +174,7 @@ export class AudioEngine {
     this.compressor.connect(this.analyser);
     // Do NOT connect to destination — the tab is still playing normally.
     this.source = node;
+    this.connected = true;
     if (this.worklet) {
       this.compressor.connect(this.worklet);
       this.worklet.port.postMessage({ active: true });
@@ -176,6 +195,7 @@ export class AudioEngine {
   }
 
   detachSource(): void {
+    this.connected = false;
     this.worklet?.port.postMessage({ active: false });
     this.generation += 1;
     this.worker?.postMessage({ generation: this.generation, type: "reset" });

@@ -57,8 +57,18 @@ export class MusicalDirector {
     const strength = f.onsetType === "kick" ? 1 : 0.6;
     const impulse = f.onset && audible > 0.1 ? strength : 0;
     this.frame = {
-      body: follow(this.frame.body, f.mids * audible, dt, 0.7),
-      brightness: follow(this.frame.brightness, f.treble * audible, dt, 0.12),
+      body: follow(
+        this.frame.body,
+        f.mids * audible,
+        dt,
+        f.mids > this.frame.body ? 0.09 : 0.4
+      ),
+      brightness: follow(
+        this.frame.brightness,
+        f.treble * audible,
+        dt,
+        f.treble > this.frame.brightness ? 0.025 : 0.12
+      ),
       confidence: input.confidence,
       phase: input.confidence > 0.55 ? f.bpmPhase : 0,
       pulse: Math.max(impulse, this.frame.pulse * Math.exp(-dt / 0.22)),
@@ -66,7 +76,12 @@ export class MusicalDirector {
       space: follow(this.frame.space, 1 - unit(this.fast * 1.15), dt, 1.8),
       tension,
       time,
-      weight: follow(this.frame.weight, f.bass * audible, dt, 0.18),
+      weight: follow(
+        this.frame.weight,
+        f.bass * audible,
+        dt,
+        f.bass > this.frame.weight ? 0.025 : 0.18
+      ),
     };
     return this.frame;
   }

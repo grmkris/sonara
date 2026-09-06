@@ -1,251 +1,230 @@
 "use client";
 
-import { FileAudio, Mic, MicOff, MonitorSpeaker } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
-import { toast } from "sonner";
-
 import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
+  FileAudio,
+  Mic,
+  MonitorSpeaker,
+  Pause,
+  Play,
+  Unplug,
+} from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
+import { getCurrentAudioEngine } from "@/hooks/use-audio-features";
 import type { AudioSource } from "@/hooks/use-audio-features";
-import { cn } from "@/lib/utils";
 
 interface MusicSourceProps {
   source: AudioSource;
-  setSource: (s: AudioSource) => void;
+  setSource: (source: AudioSource) => void;
 }
-
-// Safari supports getDisplayMedia for video but silently drops audio tracks.
-// Detect via UA — the usual "Safari but not Chrome/Edge/Android" pattern.
-const isSafariLike = (): boolean => {
-  if (typeof navigator === "undefined") {
-    return false;
-  }
-  const ua = navigator.userAgent;
-  return /^(?:(?!chrome|android|edg|crios|fxios).)*safari/iu.test(ua);
+export type AudioConnectionState =
+  | "disconnected"
+  | "connecting"
+  | "silent"
+  | "receiving";
+const connectionLabel = {
+  connecting: "Connecting…",
+  disconnected: "Choose where your music is playing",
+  receiving: "Receiving sound",
+  silent: "Connected — waiting for sound",
 };
-
-const displayMediaSupported = (): boolean => {
-  if (typeof navigator === "undefined") {
-    return false;
-  }
-  return typeof navigator.mediaDevices?.getDisplayMedia === "function";
-};
-
-const COMPUTER_AUDIO_HINT_KEY = "sonara.computerAudioHintSeen";
-
-interface IconButtonProps {
-  active: boolean;
-  disabled?: boolean;
-  label: string;
-  title?: string;
-  onClick: () => void;
-  icon: React.ReactNode;
-}
-
-const IconButton = ({
-  active,
-  disabled,
-  label,
-  title,
-  onClick,
-  icon,
-}: IconButtonProps) => {
-  let stateClass: string;
-  if (disabled) {
-    stateClass = "cursor-not-allowed text-[color:var(--stone)]/40";
-  } else if (active) {
-    stateClass = "text-[color:var(--paper)]";
-  } else {
-    stateClass = "text-[color:var(--stone)] hover:text-[color:var(--paper)]";
-  }
-  return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <button
-          type="button"
-          onClick={onClick}
-          disabled={disabled}
-          aria-label={label}
-          className={cn(
-            "group flex items-center gap-1.5 transition-colors",
-            stateClass
-          )}
-        >
-          {icon}
-          {/* Compact label, shown when the control is active or hovered.
-             Reserves vertical rhythm without screaming when at rest. */}
-          <span
-            className={cn(
-              "font-sans text-[10px] uppercase tracking-[0.22em] transition-opacity",
-              active ? "opacity-100" : "opacity-0 group-hover:opacity-80"
-            )}
-          >
-            {label}
-          </span>
-        </button>
-      </TooltipTrigger>
-      <TooltipContent
-        side="top"
-        sideOffset={6}
-        className="font-mono bg-[color:var(--ink)] text-[color:var(--paper)] border border-[color:var(--hairline)]/40 px-2 py-0.5 text-[10px] uppercase tracking-[0.18em]"
-      >
-        {title ?? label}
-      </TooltipContent>
-    </Tooltip>
-  );
-};
-
-const truncate = (s: string, n: number): string =>
-  s.length > n ? `${s.slice(0, n - 1)}…` : s;
 
 export const MusicSource = ({ source, setSource }: MusicSourceProps) => {
-  const fileRef = useRef<HTMLInputElement | null>(null);
-  const audioRef = useRef<HTMLAudioElement | null>(null);
-  const objectUrlRef = useRef<string | null>(null);
-  const [fileName, setFileName] = useState<string | null>(null);
-  // Display-audio support detection lives in state so SSR renders the
-  // optimistic "enabled" path and we correct it post-mount.
-  const [displaySupported, setDisplaySupported] = useState(true);
-  const [displayDisabledReason, setDisplayDisabledReason] = useState<
-    string | null
-  >(null);
-
+  const file = useRef<HTMLInputElement>(null);
+  const alive = useRef(true);
+  const request = useRef(false);
+  const [sharing, setSharing] = useState(false);
+  const [available, setAvailable] = useState(true);
+  const [message, setMessage] = useState("");
+  const [status, setStatus] = useState<AudioConnectionState>("disconnected");
+  const [level, setLevel] = useState(0);
+  const [paused, setPaused] = useState(false);
   useEffect(() => {
-    if (!displayMediaSupported()) {
-      setDisplaySupported(false);
-      setDisplayDisabledReason("not supported in this browser");
-      return;
-    }
-    if (isSafariLike()) {
-      setDisplaySupported(false);
-      setDisplayDisabledReason(
-        "safari can't share tab audio — try chrome or edge"
-      );
-    }
+    alive.current = true;
+    setAvailable(typeof navigator.mediaDevices?.getDisplayMedia === "function");
+    return () => {
+      alive.current = false;
+    };
   }, []);
-
-  useEffect(
-    () => () => {
-      if (objectUrlRef.current) {
-        URL.revokeObjectURL(objectUrlRef.current);
+  useEffect(() => {
+    const update = () => {
+      const engine = getCurrentAudioEngine();
+      const rms = engine?.latest.features.rms ?? 0;
+      setLevel(source.type === "none" ? 0 : Math.min(1, Math.sqrt(rms) * 2));
+      if (source.type === "none") {
+        setStatus(sharing ? "connecting" : "disconnected");
+      } else if (engine?.connected) {
+        setStatus(rms > 0.003 ? "receiving" : "silent");
+      } else {
+        setStatus("connecting");
       }
-    },
-    []
-  );
-
-  const pickFile = useCallback(() => {
-    fileRef.current?.click();
-  }, []);
-
-  const onFile = (ev: React.ChangeEvent<HTMLInputElement>) => {
-    const file = ev.target.files?.[0];
-    if (!file) {
+      setPaused(source.type === "element" && source.element.paused);
+    };
+    update();
+    const timer = setInterval(update, 150);
+    return () => clearInterval(timer);
+  }, [sharing, source]);
+  const share = async () => {
+    if (request.current) {
       return;
     }
-    if (fileRef.current) {
-      fileRef.current.value = "";
-    }
-    if (objectUrlRef.current) {
-      URL.revokeObjectURL(objectUrlRef.current);
-    }
-    const url = URL.createObjectURL(file);
-    objectUrlRef.current = url;
-    setFileName(file.name);
-    const el = audioRef.current;
-    if (!el) {
-      return;
-    }
-    el.src = url;
-    el.loop = true;
-    el.crossOrigin = "anonymous";
-    // play() may reject when autoplay is blocked; ignore and proceed without
-    // awaiting so setSource fires synchronously regardless of playback start.
-    // oxlint-disable-next-line prefer-await-to-then -- REVIEW: must not await; setSource runs unconditionally
-    void el.play().catch(() => {
-      // noop — autoplay rejection is non-fatal
-    });
-    setSource({ element: el, type: "element" });
-  };
-
-  const toggleMic = () => {
-    if (source.type === "mic") {
-      setSource({ type: "none" });
-    } else {
-      setSource({ type: "mic" });
-    }
-  };
-
-  const toggleDisplay = () => {
-    if (source.type === "display") {
-      setSource({ type: "none" });
-      return;
-    }
+    request.current = true;
+    setSharing(true);
+    setMessage("");
     try {
-      if (window.localStorage.getItem(COMPUTER_AUDIO_HINT_KEY) !== "1") {
-        toast("pick a browser tab and tick 'share tab audio'", {
-          description:
-            "screen/window sharing often has no audio; a specific tab works best.",
-          duration: 5000,
-        });
-        window.localStorage.setItem(COMPUTER_AUDIO_HINT_KEY, "1");
-      }
-    } catch {
-      // localStorage blocked — skip the hint.
-    }
-    setSource({ type: "display" });
-  };
-
-  const micOn = source.type === "mic";
-  const displayOn = source.type === "display";
-
-  return (
-    <div className="flex items-center gap-4">
-      <IconButton
-        active={!!fileName}
-        label={fileName ? truncate(fileName, 18) : "file"}
-        onClick={pickFile}
-        icon={<FileAudio className="size-3.5" strokeWidth={1.5} />}
-      />
-      <IconButton
-        active={micOn}
-        label="mic"
-        onClick={toggleMic}
-        icon={
-          micOn ? (
-            <Mic className="size-3.5" strokeWidth={1.5} />
-          ) : (
-            <MicOff className="size-3.5" strokeWidth={1.5} />
-          )
+      // Must run in this click handler, before any awaited setup loses activation.
+      const stream = await navigator.mediaDevices.getDisplayMedia({
+        audio: true,
+        video: true,
+      });
+      if (!alive.current || stream.getAudioTracks().length === 0) {
+        for (const track of stream.getTracks()) {
+          track.stop();
         }
-      />
-      <IconButton
-        active={displayOn}
-        disabled={!displaySupported}
-        title={displayDisabledReason ?? undefined}
-        label="tab audio"
-        onClick={toggleDisplay}
-        icon={<MonitorSpeaker className="size-3.5" strokeWidth={1.5} />}
-      />
+        if (alive.current) {
+          setMessage(
+            "No audio was shared. Choose a music tab and enable Share tab audio, or use a microphone or file."
+          );
+        }
+        return;
+      }
+      setSource({ stream, type: "display" });
+    } catch (error) {
+      if (
+        alive.current &&
+        !(error instanceof Error && error.name === "NotAllowedError")
+      ) {
+        setMessage(
+          "Audio sharing is unavailable here. Try a desktop browser with tab audio, or use a microphone or file."
+        );
+      }
+    } finally {
+      request.current = false;
+      if (alive.current) {
+        setSharing(false);
+      }
+    }
+  };
+  const pickFile = async (selected: File) => {
+    const url = URL.createObjectURL(selected);
+    const element = new Audio(url);
+    element.loop = true;
+    setMessage("");
+    setSource({ element, name: selected.name, type: "element", url });
+    try {
+      await element.play();
+    } catch {
+      if (alive.current) {
+        setMessage(
+          "Playback did not start. Press Play; if it still fails, try a different audio file."
+        );
+      }
+    }
+  };
+  const togglePlayback = async () => {
+    if (source.type !== "element") {
+      return;
+    }
+    if (source.element.paused) {
+      try {
+        await source.element.play();
+        setMessage("");
+      } catch {
+        setMessage("This audio file could not be played. Try another file.");
+      }
+    } else {
+      source.element.pause();
+    }
+  };
+  return (
+    <div className="sound-source">
+      <Button
+        variant="primary"
+        size="lg"
+        disabled={!available || sharing}
+        onClick={() => {
+          void share();
+        }}
+      >
+        <MonitorSpeaker data-icon="inline-start" />
+        {sharing ? "Choose a music tab…" : "Share a music tab"}
+      </Button>
+      <p className="sound-hint">
+        {available
+          ? "Play music in another tab, select it, and enable Share tab audio."
+          : "Tab audio is unavailable in this browser. Use a microphone or open a file."}
+      </p>
+      <div className="flex flex-wrap gap-2">
+        <Button
+          variant="outline"
+          onClick={() => {
+            setMessage("");
+            setSource({ type: "mic" });
+          }}
+        >
+          <Mic data-icon="inline-start" />
+          Use microphone
+        </Button>
+        <Button variant="outline" onClick={() => file.current?.click()}>
+          <FileAudio data-icon="inline-start" />
+          Open audio file
+        </Button>
+      </div>
       <input
-        ref={fileRef}
+        ref={file}
         type="file"
         accept="audio/*"
-        className="hidden"
-        onChange={onFile}
-        aria-label="upload audio file"
+        className="sr-only"
+        tabIndex={-1}
+        aria-label="Open audio file"
+        onChange={(event) => {
+          const selected = event.target.files?.[0];
+          event.target.value = "";
+          if (selected) {
+            void pickFile(selected);
+          }
+        }}
       />
-      <audio
-        ref={audioRef}
-        controls
-        aria-label="uploaded audio playback"
-        className={cn(
-          "h-6 w-full max-w-[220px] opacity-60",
-          fileName ? "block" : "hidden"
+      <div className="sound-connection" data-state={status}>
+        <div className="flex items-center justify-between gap-3">
+          <output>{connectionLabel[status]}</output>
+          <meter min={0} max={1} value={level} aria-label="Audio input level" />
+        </div>
+        {source.type === "element" && (
+          <div className="flex items-center justify-between gap-3">
+            <span className="truncate">{source.name ?? "Your audio file"}</span>
+            <Button
+              size="icon"
+              variant="ghost"
+              aria-label={paused ? "Play music" : "Pause music"}
+              onClick={() => {
+                void togglePlayback();
+              }}
+            >
+              {paused ? <Play /> : <Pause />}
+            </Button>
+          </div>
         )}
-      />
+        {source.type === "display" && (
+          <small>Playback stays in your music tab.</small>
+        )}
+        {source.type === "mic" && (
+          <small>Listening through your microphone. Play music nearby.</small>
+        )}
+        {source.type !== "none" && (
+          <Button variant="ghost" onClick={() => setSource({ type: "none" })}>
+            <Unplug data-icon="inline-start" />
+            Disconnect sound
+          </Button>
+        )}
+      </div>
+      {message && (
+        <Alert>
+          <AlertDescription>{message}</AlertDescription>
+        </Alert>
+      )}
     </div>
   );
 };

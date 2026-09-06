@@ -119,7 +119,7 @@ export class TakePlayer {
       }
       let event = this.events[this.eventIndex];
       while (event && event.time <= this.time + 1e-8) {
-        if (this.take.manifest.engine === "sonara-2") {
+        if (this.take.manifest.engine !== "sonara-1") {
           await this.applyMasksThrough(event.time);
         }
         if (event.kind === "image" && event.url.startsWith("take-image:")) {

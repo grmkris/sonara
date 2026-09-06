@@ -15,6 +15,7 @@ import { FrameInspector } from "@/components/studio/frame-inspector";
 import { FrameInspectorContent } from "@/components/studio/frame-inspector-content";
 import { GenerateSetDialog } from "@/components/studio/generate-set-dialog";
 import { LiveNowCard } from "@/components/studio/live-now-card";
+import { RecordingLibrary } from "@/components/studio/recording-library";
 import { RecordingsList } from "@/components/studio/recordings-list";
 import { SelectionBar } from "@/components/studio/selection-bar";
 import { SetEditor } from "@/components/studio/set-editor";
@@ -938,9 +939,6 @@ const StudioInner = () => {
             sonara.fm
           </Link>
           <AppNavLinks current="studio" />
-          <Link href="/studio/takes" className="font-serif text-sm italic">
-            performances ↗
-          </Link>
         </div>
         <HeaderCount
           tab={tab}
@@ -1071,10 +1069,20 @@ const StudioInner = () => {
   );
 };
 
+const StudioEntry = () => {
+  const params = useSearchParams();
+  const library =
+    params.get("tab") !== "sets" &&
+    params.get("tab") !== "decks" &&
+    !params.has("recording") &&
+    !params.has("set");
+  return library ? <RecordingLibrary /> : <StudioInner />;
+};
+
 export default function StudioPage() {
   return (
     <Suspense fallback={<StudioFallback />}>
-      <StudioInner />
+      <StudioEntry />
     </Suspense>
   );
 }
