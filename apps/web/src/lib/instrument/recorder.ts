@@ -56,6 +56,12 @@ export class TakeRecorder {
     }
     this.runtime.reset();
     this.origin = this.runtime.elapsed;
+    if (this.runtime.config.version === 5) {
+      const mask = this.runtime.renderer.snapshotMask();
+      if (mask) {
+        this.recordMask(mask.pixels, mask.width, mask.height);
+      }
+    }
     // Snapshot what is actually displayed after the asynchronous storage setup.
     // A photo/depth load can finish between clicking Record and reaching here.
     const initialImage =

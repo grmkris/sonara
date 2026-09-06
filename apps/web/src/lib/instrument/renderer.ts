@@ -377,6 +377,16 @@ export class InstrumentRenderer {
       this.mask.needsUpdate = true;
     }
   }
+  snapshotMask(): { pixels: Uint8Array; width: number; height: number } | null {
+    if (this.decks[0].uniforms.maskActive.value === 0) {
+      return null;
+    }
+    const { data, width, height } = this.mask.image;
+    if (!data) {
+      return null;
+    }
+    return { height, pixels: new Uint8Array(data), width };
+  }
   clearMask(): void {
     this.experience?.setMask(this.mask, false);
     this.mask.image.data?.fill(0);
