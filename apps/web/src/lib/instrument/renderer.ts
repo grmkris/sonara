@@ -194,10 +194,10 @@ export class InstrumentRenderer {
     );
     const base = mix(this.a.rgb, this.b.rgb, factor);
     const added = this.a.rgb
-      .mul(float(1).sub(this.blend).mul(0.5).add(0.5))
-      .add(this.b.rgb.mul(this.blend));
+      .mul(float(1).sub(this.blend).sqrt())
+      .add(this.b.rgb.mul(this.blend.sqrt()));
     const color = mix(base, added, this.additive);
-    // Soft highlight roll-off; all presentation effects live inside this canvas.
+    // Clamp highlights; all presentation effects live inside this canvas.
     this.composite.fragmentNode = vec4(color.div(max(color, 1)), 1);
     this.quad = new Mesh(this.geometry, this.composite);
     this.scene.add(this.quad);

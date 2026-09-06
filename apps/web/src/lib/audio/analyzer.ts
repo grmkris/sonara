@@ -352,12 +352,17 @@ export class AudioEngine {
     this.compressor = compressor;
     this.analyser = analyser;
     try {
-      await ctx.audioWorklet.addModule("/audio/capture-worklet.js");
+      await ctx.audioWorklet.addModule("/audio/capture-worklet.0a6e52f7ee.js");
       if (this.stopped) {
         await ctx.close();
         return;
       }
       const worklet = new AudioWorkletNode(ctx, "sonara-capture");
+      worklet.addEventListener("processorerror", () => {
+        console.error("Audio capture worklet stopped unexpectedly");
+        this.detachSource();
+        this.sourceLostCb?.();
+      });
       const worker = new Worker(new URL("analysis.worker.ts", import.meta.url));
       const channel = new MessageChannel();
       worker.postMessage(

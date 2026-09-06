@@ -89,7 +89,16 @@ export class MidiInput {
     const channel = status % 16;
     if (this.learning) {
       const target = this.learning;
-      this.mappings = this.mappings.filter((m) => m.target !== target);
+      this.mappings = this.mappings.filter(
+        (m) =>
+          m.target !== target &&
+          !(
+            m.device === device &&
+            m.channel === channel &&
+            m.kind === kind &&
+            m.control === control
+          )
+      );
       this.mappings.push({ channel, control, device, kind, target });
       this.learning = null;
       localStorage.setItem(KEY, JSON.stringify(this.mappings));

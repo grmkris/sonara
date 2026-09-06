@@ -620,22 +620,22 @@ input::placeholder {
   background-color: #101015;
 }
 .instrument-world-liquid {
-  background: url("/worlds/liquid.webp") center / cover;
+  background: url("/worlds/liquid.92cf3e67dd.webp") center / cover;
 }
 .instrument-world-dream {
-  background: url("/worlds/dream.webp") center / cover;
+  background: url("/worlds/dream.27052e3e05.webp") center / cover;
 }
 .instrument-world-mycelium {
-  background: url("/worlds/mycelium.webp") center / cover;
+  background: url("/worlds/mycelium.7fd10fcecd.webp") center / cover;
 }
 .instrument-world-cosmos {
-  background: url("/worlds/cosmos.webp") center / cover;
+  background: url("/worlds/cosmos.11416222d8.webp") center / cover;
 }
 .instrument-world-fractal {
-  background: url("/worlds/fractal.webp") center / cover;
+  background: url("/worlds/fractal.c0c3fab6a9.webp") center / cover;
 }
 .instrument-world-mirror {
-  background: url("/worlds/mirror.webp") center / cover;
+  background: url("/worlds/mirror.f2bfc0d4f9.webp") center / cover;
 }
 .instrument-world-label {
   display: flex;
@@ -1026,4 +1026,11 @@ input::placeholder {
 }
 .take-export [data-pressed] {
   background-color: color-mix(in srgb, var(--paper) 12%, transparent);
+}
+
+.instrument-header button[aria-label="open usage panel"] {
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
