@@ -6,20 +6,15 @@ import {
   Circle,
   Expand,
   Hand,
-  KeyboardMusic,
   Pause,
   Play,
-  RotateCcw,
-  SlidersHorizontal,
   Square,
-  WandSparkles,
 } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { toast } from "sonner";
 
-import { AppNavLinks } from "@/components/app-nav";
 import { StageWire } from "@/components/stage/stage-wire";
 import { Button } from "@/components/ui/button";
 import {
@@ -28,12 +23,14 @@ import {
   SheetTitle,
   SheetTrigger,
 } from "@/components/ui/sheet";
+import { Slider } from "@/components/ui/slider";
 import { UserControls } from "@/components/user-controls";
 import { MusicSource } from "@/components/visualizer/controls/music-source";
 import { getCurrentAudioEngine } from "@/hooks/use-audio-features";
 import type { AudioSource } from "@/hooks/use-audio-features";
 import { coalesce } from "@/lib/debounce";
 import { CameraInput } from "@/lib/instrument/camera";
+import { experienceLabel, intensityOf } from "@/lib/instrument/catalog";
 import { MidiInput } from "@/lib/instrument/midi";
 import type { MidiTarget } from "@/lib/instrument/midi";
 import { TakeRecorder } from "@/lib/instrument/recorder";
@@ -46,18 +43,55 @@ import {
 } from "@/stores/instrument-store";
 import { useVisualizerStore } from "@/stores/visualizer";
 
-import { InstrumentControls } from "./instrument-controls";
+import { EngineControls, ExperienceControls } from "./experience-controls";
+import { ExperienceMood } from "./experience-mood";
+
+const fullscreen = async () => {
+  try {
+    await document.documentElement.requestFullscreen();
+  } catch {
+    toast.error("Fullscreen is unavailable.");
+  }
+};
+
+const isSleeping = (
+  awake: boolean,
+  panel: string | null,
+  audioSource: AudioSource,
+  recording: boolean
+) => !awake && !panel && audioSource.type !== "none" && !recording;
+const midiLabel = (target: string) =>
+  ({ crossfade: "Image presence", energy: "Intensity" })[target] ?? target;
+const SessionLine = ({
+  recording,
+  tracking,
+  name,
+  status,
+}: {
+  recording: boolean;
+  tracking: string;
+  name: string;
+  status: string;
+}) => (
+  <div className="experience-session-line experience-chrome" aria-live="polite">
+    <span>{recording ? "● capturing this moment" : name}</span>
+    <span>
+      {tracking === "off"
+        ? "Drag anywhere to touch the light."
+        : "Move to stir. Pinch to pull."}
+    </span>
+    {status !== "ready" && <span>{status}</span>}
+  </div>
+);
 
 export const InstrumentSurface = ({
   audioSource,
   setAudioSource,
-  sceneControls,
   remoteControl,
   send,
 }: {
   audioSource: AudioSource;
   setAudioSource: (source: AudioSource) => void;
-  sceneControls: ReactNode;
   remoteControl?: ReactNode;
   send: SessionSend;
 }) => {
@@ -74,11 +108,80 @@ export const InstrumentSurface = ({
   const [deck, setDeck] = useState<"a" | "b">("a");
   const [tracking, setTracking] = useState<"off" | "hands" | "body">("off");
   const [recording, setRecording] = useState(false);
+  const [capturedId, setCapturedId] = useState<string | null>(null);
   const [frozen, setFrozen] = useState(false);
   const [status, setStatus] = useState("warming the instrument");
   const [stats, setStats] = useState({ bpm: 0, fps: 0, time: 0 });
   const [recovery, setRecovery] = useState(0);
-  const hidden = useVisualizerStore((state) => !state.uiVisible);
+  const [panel, setPanel] = useState<"music" | "mood" | "interact" | null>(
+    null
+  );
+  const [awake, setAwake] = useState(true);
+  const awakeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const demoAudio = useRef<HTMLAudioElement>(null);
+  const [paused, setPaused] = useState(false);
+  const hidden = isSleeping(awake, panel, audioSource, recording);
+  const wake = useCallback(() => {
+    setAwake(true);
+    if (awakeTimer.current) {
+      clearTimeout(awakeTimer.current);
+    }
+    awakeTimer.current = setTimeout(() => setAwake(false), 4000);
+  }, []);
+  useEffect(() => {
+    const controller = new AbortController();
+    for (const type of ["pointermove", "pointerdown", "focusin", "keydown"]) {
+      window.addEventListener(type, wake, { signal: controller.signal });
+    }
+    return () => controller.abort();
+  }, [wake]);
+  useEffect(
+    () => () => {
+      if (awakeTimer.current) {
+        clearTimeout(awakeTimer.current);
+      }
+    },
+    []
+  );
+  useEffect(() => {
+    if (audioSource.type !== "none") {
+      setPanel(null);
+      setPaused(false);
+    }
+  }, [audioSource]);
+  const playDemo = async () => {
+    const element = demoAudio.current;
+    if (!element) {
+      return;
+    }
+    element.src = "/audio/first-light.74210e9ade.wav";
+    element.loop = true;
+    setAudioSource({ element, type: "element" });
+    try {
+      await element.play();
+    } catch {
+      toast.error("Press play to start the demo.");
+    }
+    wake();
+  };
+  const togglePlayback = async () => {
+    if (audioSource.type !== "element") {
+      return;
+    }
+    const { element } = audioSource;
+    if (element.paused) {
+      try {
+        await element.play();
+        setPaused(false);
+      } catch {
+        toast.error("Playback could not start.");
+      }
+    } else {
+      element.pause();
+      setPaused(true);
+    }
+    wake();
+  };
   const [midiReady, setMidiReady] = useState(false);
   const [midiClock, setMidiClock] = useState(false);
   const midiClockRef = useRef(false);
@@ -140,6 +243,16 @@ export const InstrumentSurface = ({
     };
     const unsubscribe = useInstrumentStore.subscribe((state, prev) => {
       if (state.config !== prev.config && state.config !== instance.config) {
+        if (
+          recorder.current &&
+          state.config.version !== instance.config.version
+        ) {
+          useInstrumentStore.setState({ config: instance.config });
+          toast(
+            "Finish this capture before applying a mood from a different renderer."
+          );
+          return;
+        }
         instance.configure(state.config);
       }
     });
@@ -151,11 +264,11 @@ export const InstrumentSurface = ({
         void (async () => {
           try {
             await instance.renderer.setImage(url);
+            instance.onEvent?.({ kind: "image", time: instance.elapsed, url });
           } catch {
             toast.error("This image could not be loaded.");
           }
         })();
-        instance.onEvent?.({ kind: "image", time: instance.elapsed, url });
       }
     });
     const animate = (now: number) => {
@@ -224,11 +337,7 @@ export const InstrumentSurface = ({
           await instance.renderer.setImage(imageUrl);
           previousImage = imageUrl;
         }
-        setStatus(
-          recovery > 0
-            ? "compatibility graphics · ready"
-            : "ready to feel something"
-        );
+        setStatus(recovery > 0 ? "compatibility graphics · ready" : "ready");
         origin = performance.now();
         raf = requestAnimationFrame(animate);
       } catch (error) {
@@ -239,7 +348,7 @@ export const InstrumentSurface = ({
             setStatus(
               error instanceof Error
                 ? error.message
-                : "Graphics unavailable. Open the classic visualizer below."
+                : "Graphics unavailable. Please reload to reconnect."
             );
           }
         }
@@ -341,6 +450,25 @@ export const InstrumentSurface = ({
             runtime.current?.freeze();
             setFrozen(runtime.current?.transport.frozen ?? false);
           }
+        } else if (state.config.version === 2) {
+          if (key === "next") {
+            if (value > 0.5) {
+              const choices = ["ink", "silk", "prism"] as const;
+              state.setConfig({
+                ...state.config,
+                treatment:
+                  choices[(choices.indexOf(state.config.treatment) + 1) % 3] ??
+                  "silk",
+              });
+            }
+          } else {
+            const field = key === "energy" ? "intensity" : key;
+            if (field === "crossfade") {
+              state.setConfig({ ...state.config, reveal: value });
+            } else {
+              state.setConfig({ ...state.config, [field]: value });
+            }
+          }
         } else if (key === "next") {
           if (value > 0.5) {
             state.setConfig({
@@ -393,6 +521,7 @@ export const InstrumentSurface = ({
         const take = await recorder.current.stop();
         recorder.current = null;
         setRecording(false);
+        setCapturedId(take.manifest.id);
         toast.success("Your performance is saved on this device.", {
           action: {
             label: "Open take",
@@ -404,7 +533,7 @@ export const InstrumentSurface = ({
       } else if (runtime.current) {
         const capture = new TakeRecorder(
           runtime.current,
-          `${config.a.world} × ${config.b.world}`
+          experienceLabel(config)
         );
         recorder.current = capture;
         capture.onError = (message) => {
@@ -438,379 +567,403 @@ export const InstrumentSurface = ({
     try {
       await rpcClient.looks.create({
         config,
-        name: `${config.a.world} / ${config.b.world} · ${config.palette}`,
+        name: `${experienceLabel(config)} · ${config.palette}`,
       });
       toast.success("Look saved to your collection.");
     } catch {
       toast.error("Sign in to save a look to your collection.");
     }
   };
+  const changeIntensity = (value: number) => {
+    if (config.version === 2) {
+      setConfig({ ...config, intensity: value });
+    } else {
+      setConfig({
+        ...config,
+        a: { ...config.a, macros: { ...config.a.macros, energy: value } },
+      });
+    }
+  };
   return (
-    <main className="instrument-shell" data-hidden={hidden}>
-      <header className="instrument-header">
-        <div className="flex items-center gap-6">
-          <Link href="/" className="instrument-wordmark">
-            sonara<span>fm</span>
-          </Link>
-          <AppNavLinks current="play" />
-        </div>
-        <span className="instrument-edition">
-          an instrument for seeing sound <span>№ 01</span>
-        </span>
-        <div className="flex items-center gap-2">
-          {remoteControl}
-          <UserControls />
-          <Button
-            size="sm"
-            variant="ghost"
-            onClick={() => {
-              void document.documentElement.requestFullscreen();
-            }}
-            aria-label="Fullscreen"
-          >
-            <Expand data-icon="inline-start" />
-          </Button>
-          <Button
-            size="sm"
-            variant="ghost"
-            onClick={() => {
-              useVisualizerStore.getState().setUiVisible(hidden);
-            }}
-          >
-            {hidden ? "show controls" : "hide"}
-          </Button>
-        </div>
-      </header>
-      <section className="instrument-stage" aria-label="Performance canvas">
-        <canvas
-          key={recovery}
-          ref={canvas}
-          className="instrument-canvas"
-          aria-label="Interactive music visualization"
-        />
-        <button
-          type="button"
-          className="instrument-touch"
-          aria-label="Performance surface: drag to move an attractor. Arrow keys move it, space freezes."
-          onPointerDown={(event) => {
-            event.currentTarget.setPointerCapture(event.pointerId);
-            const rect = event.currentTarget.getBoundingClientRect();
-            pointer.current = {
+    <main className="experience-shell" data-sleeping={hidden}>
+      <canvas
+        key={recovery}
+        ref={canvas}
+        className="experience-canvas"
+        aria-label="Music becoming light and liquid"
+      />
+      <audio
+        ref={demoAudio}
+        aria-label="Demo audio"
+        onPlay={() => setPaused(false)}
+        onPause={() => setPaused(true)}
+      />
+      <button
+        type="button"
+        className="experience-touch"
+        aria-label="Drag to stir the light. Arrow keys move it. Space holds the scene."
+        onPointerDown={(event) => {
+          event.currentTarget.setPointerCapture(event.pointerId);
+          const rect = event.currentTarget.getBoundingClientRect();
+          pointer.current = {
+            attractors: [
+              {
+                force: 1,
+                x: (event.clientX - rect.left) / rect.width,
+                y: 1 - (event.clientY - rect.top) / rect.height,
+              },
+            ],
+            expansion: 0.5,
+            rotation: 0,
+            time: performance.now() / 1000,
+          };
+        }}
+        onPointerMove={(event) => {
+          if (!event.buttons) {
+            return;
+          }
+          const rect = event.currentTarget.getBoundingClientRect();
+          pointer.current = {
+            attractors: [
+              {
+                force: event.shiftKey ? -1 : 1,
+                x: Math.max(
+                  0,
+                  Math.min(1, (event.clientX - rect.left) / rect.width)
+                ),
+                y: Math.max(
+                  0,
+                  Math.min(1, 1 - (event.clientY - rect.top) / rect.height)
+                ),
+              },
+            ],
+            expansion: 0.5,
+            rotation: 0,
+            time: performance.now() / 1000,
+          };
+        }}
+        onPointerUp={() => {
+          pointer.current = null;
+        }}
+        onPointerCancel={() => {
+          pointer.current = null;
+        }}
+        onLostPointerCapture={() => {
+          pointer.current = null;
+        }}
+        onKeyDown={(event) => {
+          if (event.key === " ") {
+            event.preventDefault();
+            freeze();
+          }
+          if (event.key.startsWith("Arrow")) {
+            event.preventDefault();
+            const previous = runtime.current?.controls.attractors[0] ?? {
+              x: 0.5,
+              y: 0.5,
+            };
+            runtime.current?.setControls({
               attractors: [
                 {
                   force: 1,
-                  x: (event.clientX - rect.left) / rect.width,
-                  y: 1 - (event.clientY - rect.top) / rect.height,
-                },
-              ],
-              expansion: 0.5,
-              rotation: 0,
-              time: performance.now() / 1000,
-            };
-          }}
-          onPointerMove={(event) => {
-            if (!event.buttons) {
-              return;
-            }
-            const rect = event.currentTarget.getBoundingClientRect();
-            pointer.current = {
-              attractors: [
-                {
-                  force: event.shiftKey ? -1 : 1,
                   x: Math.max(
                     0,
-                    Math.min(1, (event.clientX - rect.left) / rect.width)
+                    Math.min(
+                      1,
+                      previous.x +
+                        (event.key === "ArrowRight" ? 0.05 : 0) -
+                        (event.key === "ArrowLeft" ? 0.05 : 0)
+                    )
                   ),
                   y: Math.max(
                     0,
-                    Math.min(1, 1 - (event.clientY - rect.top) / rect.height)
+                    Math.min(
+                      1,
+                      previous.y +
+                        (event.key === "ArrowUp" ? 0.05 : 0) -
+                        (event.key === "ArrowDown" ? 0.05 : 0)
+                    )
                   ),
                 },
               ],
               expansion: 0.5,
               rotation: 0,
               time: performance.now() / 1000,
-            };
-          }}
-          onPointerUp={() => {
-            pointer.current = null;
-          }}
-          onPointerCancel={() => {
-            pointer.current = null;
-          }}
-          onLostPointerCapture={() => {
-            pointer.current = null;
-          }}
-          onKeyDown={(event) => {
-            if (event.key === " ") {
-              event.preventDefault();
-              freeze();
-            }
-            if (event.key.startsWith("Arrow")) {
-              event.preventDefault();
-              const previous = runtime.current?.controls.attractors[0] ?? {
-                x: 0.5,
-                y: 0.5,
-              };
-              runtime.current?.setControls({
-                attractors: [
-                  {
-                    force: 1,
-                    x: Math.max(
-                      0,
-                      Math.min(
-                        1,
-                        previous.x +
-                          (event.key === "ArrowRight" ? 0.05 : 0) -
-                          (event.key === "ArrowLeft" ? 0.05 : 0)
-                      )
-                    ),
-                    y: Math.max(
-                      0,
-                      Math.min(
-                        1,
-                        previous.y +
-                          (event.key === "ArrowUp" ? 0.05 : 0) -
-                          (event.key === "ArrowDown" ? 0.05 : 0)
-                      )
-                    ),
-                  },
-                ],
-                expansion: 0.5,
-                rotation: 0,
-                time: 0,
-              });
-            }
-          }}
-        />
-        <div className="instrument-stage-label">
-          <span className="instrument-eyebrow">
-            {recording ? "● recording" : "live canvas"}
-          </span>
+            });
+          }
+        }}
+      />
+      <header className="experience-header experience-chrome">
+        <Link href="/" className="instrument-wordmark">
+          sonara<span>fm</span>
+        </Link>
+        <span className="experience-edition">
+          a place to disappear into sound
+        </span>
+        <nav aria-label="Your session" className="flex items-center gap-3">
+          <Link href="/studio">Your collection</Link>
+          {remoteControl}
+          <UserControls />
+          <Button
+            size="icon"
+            variant="ghost"
+            aria-label="Fullscreen"
+            onClick={fullscreen}
+          >
+            <Expand />
+          </Button>
+        </nav>
+      </header>
+      {audioSource.type === "none" && (
+        <section className="experience-invitation">
+          <span className="experience-eyebrow">music, made visible</span>
           <h1>
-            {config.crossfade < 0.5 ? config.a.world : config.b.world}
-            <i> in motion.</i>
+            Let the music
+            <br />
+            <em>take shape.</em>
           </h1>
-        </div>
-        <div className="instrument-stage-caption">
-          <span>{status}</span>
-          <span>
-            {stats.fps} fps ·{" "}
-            {Math.floor(stats.time / 60)
-              .toString()
-              .padStart(2, "0")}
-            :
-            {Math.floor(stats.time % 60)
-              .toString()
-              .padStart(2, "0")}
-          </span>
-        </div>
-        <div className="instrument-stage-actions">
-          <Button size="sm" variant="default" onClick={freeze}>
-            {frozen ? (
+          <p>
+            Light that listens. Images that dream.
+            <br />A little room to lose yourself.
+          </p>
+          <div className="flex flex-wrap items-center gap-4">
+            <Button variant="primary" size="lg" onClick={playDemo}>
               <Play data-icon="inline-start" />
-            ) : (
-              <Pause data-icon="inline-start" />
-            )}
-            {frozen ? "release" : "freeze"}
-          </Button>
-          <Button
-            size="sm"
-            variant="default"
-            onClick={() => {
-              runtime.current?.reset();
-            }}
-          >
-            <RotateCcw data-icon="inline-start" />
-            reset
-          </Button>
-        </div>
-        <StageWire />
-      </section>
-      <aside className="instrument-console">
-        <InstrumentControls
-          config={config}
-          onChange={setConfig}
-          deck={deck}
-          onDeck={setDeck}
-          onLearn={(target) => {
-            void learnMidi(target);
-          }}
-        />
-        <div className="flex flex-wrap gap-2">
-          <Button
-            size="sm"
-            variant="ghost"
-            onClick={() => {
-              void saveLook();
-            }}
-          >
-            save look
-          </Button>
-          <Button
-            size="sm"
-            variant="ghost"
-            onClick={() => {
-              useInstrumentStore.getState().setEnabled(false);
-            }}
-          >
-            classic visualizer ↗
-          </Button>
-        </div>
-      </aside>
-      <footer className="instrument-footer">
-        <div className="instrument-audio">
-          <span className="instrument-eyebrow">01 / bring sound</span>
-          <MusicSource source={audioSource} setSource={setAudioSource} />
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              className="instrument-tempo"
-              onClick={() => {
-                runtime.current?.transport.tap(performance.now() / 1000);
-              }}
-              title="Tap tempo"
-            >
-              {stats.bpm ? Math.round(stats.bpm) : "—"}
-              <small>BPM / TAP</small>
-            </button>
-            <Button
-              size="sm"
-              variant="ghost"
-              onClick={() => {
-                runtime.current?.transport.multiply(0.5);
-              }}
-            >
-              ½
+              Play a demo
             </Button>
-            <Button
-              size="sm"
-              variant="ghost"
-              onClick={() => {
-                runtime.current?.transport.multiply(2);
-              }}
-            >
-              2×
-            </Button>
-            <Button
-              size="sm"
-              variant="ghost"
-              onClick={() => {
-                runtime.current?.transport.automatic();
-              }}
-            >
-              auto
-            </Button>
-            <Button
-              size="sm"
-              variant="ghost"
-              onClick={() => {
-                runtime.current?.transport.downbeat();
-              }}
-            >
-              ↓ beat 1
+            <Button variant="ghost" size="lg" onClick={() => setPanel("music")}>
+              Bring your music ↗
             </Button>
           </div>
-        </div>
-        <div className="instrument-inputs">
-          <span className="instrument-eyebrow">02 / make contact</span>
-          <div className="flex flex-wrap gap-2">
-            <Button
-              size="sm"
-              aria-pressed={tracking === "hands"}
-              variant={tracking === "hands" ? "primary" : "default"}
-              onClick={() => {
-                void toggleCamera("hands");
-              }}
-            >
-              <Hand data-icon="inline-start" />
-              hands
+          <small>48 seconds of original music. No sign-in needed.</small>
+        </section>
+      )}
+      <SessionLine
+        recording={recording}
+        tracking={tracking}
+        name={experienceLabel(config)}
+        status={status}
+      />
+      <footer className="experience-dock experience-chrome">
+        {audioSource.type === "element" && (
+          <Button
+            size="icon"
+            variant="ghost"
+            aria-label={paused ? "Play music" : "Pause music"}
+            onClick={togglePlayback}
+          >
+            {paused ? <Play /> : <Pause />}
+          </Button>
+        )}
+        <Sheet
+          open={panel === "music"}
+          onOpenChange={(open) => setPanel(open ? "music" : null)}
+        >
+          <SheetTrigger asChild>
+            <Button variant="ghost">Music</Button>
+          </SheetTrigger>
+          <SheetContent keepMounted className="experience-sheet">
+            <SheetTitle>Bring sound</SheetTitle>
+            <p>A track, the room around you, or a browser tab.</p>
+            <MusicSource source={audioSource} setSource={setAudioSource} />
+            <Button variant="ghost" onClick={playDemo}>
+              Play First light · Sonara demo
             </Button>
-            <Button
-              size="sm"
-              aria-pressed={tracking === "body"}
-              variant={tracking === "body" ? "primary" : "default"}
-              onClick={() => {
-                void toggleCamera("body");
-              }}
-            >
-              <Camera data-icon="inline-start" />
-              body
-            </Button>
-            <Button
-              size="sm"
-              variant={midiReady ? "primary" : "default"}
-              onClick={() => {
-                void learnMidi("crossfade");
-              }}
-            >
-              <KeyboardMusic data-icon="inline-start" />
-              MIDI
-            </Button>
-            {midiReady && (
+            <div className="experience-tempo">
+              <span>
+                {stats.bpm
+                  ? `${Math.round(stats.bpm)} BPM`
+                  : "Listening for a pulse"}
+              </span>
               <Button
                 size="sm"
-                variant={midiClock ? "primary" : "ghost"}
+                variant="ghost"
+                onClick={() =>
+                  runtime.current?.transport.tap(performance.now() / 1000)
+                }
+              >
+                Tap tempo
+              </Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => runtime.current?.transport.automatic()}
+              >
+                Auto
+              </Button>
+            </div>
+            <Button
+              variant="ghost"
+              onClick={() => {
+                if (audioSource.type === "element") {
+                  audioSource.element.pause();
+                }
+                setAudioSource({ type: "none" });
+              }}
+            >
+              Disconnect sound
+            </Button>
+          </SheetContent>
+        </Sheet>
+        <Sheet
+          open={panel === "mood"}
+          onOpenChange={(open) => setPanel(open ? "mood" : null)}
+        >
+          <SheetTrigger asChild>
+            <Button variant="ghost">Mood</Button>
+          </SheetTrigger>
+          <SheetContent keepMounted className="experience-sheet">
+            <SheetTitle>Give it a feeling</SheetTitle>
+            <p>Choose the material. Let an image emerge inside it.</p>
+            {config.version === 2 ? (
+              <ExperienceControls
+                config={config}
+                onChange={setConfig}
+                compact
+              />
+            ) : (
+              <EngineControls
+                config={config}
+                onChange={setConfig}
+                deck={deck}
+                onDeck={setDeck}
+              />
+            )}
+            <ExperienceMood send={send} open={panel === "mood"} />
+            <Button
+              variant="ghost"
+              onClick={() => {
+                void saveLook();
+              }}
+            >
+              Save this mood
+            </Button>
+          </SheetContent>
+        </Sheet>
+        <Sheet
+          open={panel === "interact"}
+          onOpenChange={(open) => setPanel(open ? "interact" : null)}
+        >
+          <SheetTrigger asChild>
+            <Button variant="ghost">
+              Interact{tracking === "off" ? "" : " ·"}
+            </Button>
+          </SheetTrigger>
+          <SheetContent className="experience-sheet">
+            <SheetTitle>Reach into the music</SheetTitle>
+            <p>
+              Your movement joins the current. Release it and the music carries
+              on.
+            </p>
+            <div className="flex gap-3">
+              <Button
+                variant={tracking === "hands" ? "primary" : "default"}
+                aria-pressed={tracking === "hands"}
                 onClick={() => {
-                  setMidiClock(!midiClock);
-                  if (midiClock) {
-                    runtime.current?.transport.setExternalTempo(0);
-                  }
+                  void toggleCamera("hands");
                 }}
               >
-                MIDI clock
+                <Hand data-icon="inline-start" />
+                Hands
               </Button>
-            )}
-            <Button
-              size="sm"
-              aria-pressed={config.conductor}
-              variant={config.conductor ? "primary" : "default"}
-              onClick={() => {
-                setConfig({ ...config, conductor: !config.conductor });
-              }}
-            >
-              <WandSparkles data-icon="inline-start" />
-              conductor
+              <Button
+                variant={tracking === "body" ? "primary" : "default"}
+                aria-pressed={tracking === "body"}
+                onClick={() => {
+                  void toggleCamera("body");
+                }}
+              >
+                <Camera data-icon="inline-start" />
+                Body
+              </Button>
+            </div>
+            <p className="experience-note">
+              Camera processing stays on this device. Move to stir; pinch to
+              pull. In body mode, your silhouette becomes part of the light.
+            </p>
+            <Button variant="ghost" aria-pressed={frozen} onClick={freeze}>
+              {frozen ? "Release the scene" : "Hold this scene"}
             </Button>
-          </div>
-          <span className="instrument-hint">
-            Drag the canvas. Pinch the light. Let the music lead.
-          </span>
-        </div>
-        <div className="instrument-capture">
-          <span className="instrument-eyebrow">03 / keep the feeling</span>
-          <div className="flex gap-2">
-            <Button
-              aria-pressed={recording}
-              variant={recording ? "signal" : "default"}
-              onClick={() => {
-                void toggleRecording();
-              }}
-            >
-              {recording ? (
-                <Square data-icon="inline-start" />
-              ) : (
-                <Circle data-icon="inline-start" />
-              )}
-              {recording ? "finish take" : "record a take"}
-            </Button>
-            <Sheet>
-              <SheetTrigger asChild>
-                <Button variant="ghost" aria-label="Image sources and live AI">
-                  <SlidersHorizontal data-icon="inline-start" />
+            <div className="experience-midi">
+              <span className="experience-eyebrow">use a controller</span>
+              {(
+                ["energy", "flow", "symmetry", "trails", "crossfade"] as const
+              ).map((target) => (
+                <Button
+                  key={target}
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => {
+                    void learnMidi(target);
+                  }}
+                >
+                  {midiLabel(target)}
                 </Button>
-              </SheetTrigger>
-              <SheetContent>
-                <SheetTitle>Images & live direction</SheetTitle>
-                {sceneControls}
-              </SheetContent>
-            </Sheet>
-          </div>
-          <Link href="/studio/takes" className="instrument-hint">
-            your performances ↗
-          </Link>
+              ))}
+              {midiReady && (
+                <Button
+                  size="sm"
+                  variant={midiClock ? "primary" : "ghost"}
+                  aria-pressed={midiClock}
+                  onClick={() => {
+                    setMidiClock(!midiClock);
+                    if (midiClock) {
+                      runtime.current?.transport.setExternalTempo(0);
+                    }
+                  }}
+                >
+                  Follow MIDI clock
+                </Button>
+              )}
+            </div>
+          </SheetContent>
+        </Sheet>
+        <Button
+          aria-pressed={recording}
+          variant={recording ? "signal" : "ghost"}
+          onClick={() => {
+            void toggleRecording();
+          }}
+        >
+          {recording ? (
+            <Square data-icon="inline-start" />
+          ) : (
+            <Circle data-icon="inline-start" />
+          )}
+          {recording ? "Finish" : "Capture"}
+        </Button>
+        <div className="experience-intensity">
+          <label htmlFor="listening-intensity">Intensity</label>
+          <Slider
+            id="listening-intensity"
+            aria-label="Intensity"
+            value={[intensityOf(config)]}
+            min={0}
+            max={1}
+            step={0.01}
+            onValueChange={(value) =>
+              changeIntensity(Array.isArray(value) ? (value[0] ?? 0.5) : value)
+            }
+          />
         </div>
       </footer>
+      {capturedId && !recording && (
+        <div className="experience-captured experience-chrome">
+          <span>Moment saved</span>
+          <Link href={`/studio/takes/${capturedId}`}>
+            Trim, remix & share ↗
+          </Link>
+          <Button
+            size="icon"
+            variant="ghost"
+            aria-label="Dismiss saved moment"
+            onClick={() => setCapturedId(null)}
+          >
+            ×
+          </Button>
+        </div>
+      )}
+      <StageWire />
     </main>
   );
 };

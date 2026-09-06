@@ -1,11 +1,11 @@
 "use client";
 
 import type { ControlSnapshot } from "@sonara/api/server";
-import { InstrumentConfig } from "@sonara/shared";
+import { EngineConfig } from "@sonara/shared";
 import type { SonaraSceneState } from "@sonara/shared";
 import { useEffect, useState } from "react";
 
-import { InstrumentControls } from "@/components/instrument/instrument-controls";
+import { EngineControls } from "@/components/instrument/experience-controls";
 import { LookPopover } from "@/components/stage-console/look-popover";
 import { StageSheet } from "@/components/stage-console/stage-sheet";
 import { StageHostPanel } from "@/components/stage/stage-host-panel";
@@ -295,13 +295,13 @@ const DetachedConsole = ({
   const instrument = useInstrumentStore((s) => s.config);
   const [deck, setDeck] = useState<"a" | "b">("a");
   useEffect(() => {
-    const parsed = InstrumentConfig.safeParse(snapshot?.look);
+    const parsed = EngineConfig.safeParse(snapshot?.look);
     if (parsed.success) {
       useInstrumentStore.setState({ config: parsed.data });
     }
   }, [snapshot?.look]);
   const [relay] = useState(() =>
-    coalesce((config: InstrumentConfig) => {
+    coalesce((config: EngineConfig) => {
       send({ config, type: "look.set" });
     }, 100)
   );
@@ -327,7 +327,7 @@ const DetachedConsole = ({
         connected={connected}
       />
 
-      <InstrumentControls
+      <EngineControls
         config={instrument}
         onChange={(config) => {
           useInstrumentStore.getState().setConfig(config);

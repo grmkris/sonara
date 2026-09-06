@@ -46,9 +46,13 @@ export const useAudioFeatures = (
     // server cost.
     const gate = createMusicalityGate();
 
+    let lastUiAt = 0;
     const tick = (features: AudioFeatures) => {
-      useVisualizerStore.getState().setAudio(features);
       const now = performance.now();
+      if (now - lastUiAt >= 100 || features.rms === 0) {
+        useVisualizerStore.getState().setAudio(features);
+        lastUiAt = now;
+      }
       gate.update(now, features.flatness, features.onset);
       if (
         gate.isMusic() &&

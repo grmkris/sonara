@@ -1,4 +1,4 @@
-import type { InstrumentMacros, WorldId } from "@sonara/shared";
+import type { EngineConfig, InstrumentMacros, WorldId } from "@sonara/shared";
 
 export const WORLDS: {
   id: WorldId;
@@ -55,3 +55,10 @@ export const lookMacros = (look: number): InstrumentMacros =>
     { energy: 0.65, flow: 0.5, symmetry: 0.5, trails: 0.8 },
     { energy: 0.8, flow: 0.7, symmetry: 0.8, trails: 0.4 },
   ][look] ?? { energy: 0.5, flow: 0.4, symmetry: 0.2, trails: 0.6 };
+
+export const experienceLabel = (config: EngineConfig): string =>
+  config.version === 2
+    ? config.treatment
+    : `${config.a.world} / ${config.b.world}`;
+export const intensityOf = (config: EngineConfig): number =>
+  config.version === 2 ? config.intensity : config.a.macros.energy;

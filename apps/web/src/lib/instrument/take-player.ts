@@ -1,7 +1,7 @@
 // oxlint-disable promise/avoid-new -- REVIEW: yield between deterministic replay batches to keep cancellation responsive
 // oxlint-disable eslint/no-await-in-loop -- REVIEW: chronological replay and bounded chunk reads must remain sequential
 import { TakeEvent } from "@sonara/shared";
-import type { InstrumentConfig } from "@sonara/shared";
+import type { EngineConfig } from "@sonara/shared";
 
 import { InstrumentRuntime } from "./runtime";
 import { readChunk } from "./take-storage";
@@ -31,14 +31,12 @@ export class TakePlayer {
   private imageUrls = new Map<string, string>();
   private disposed = false;
   time = 0;
-  override: InstrumentConfig | null = null;
+  private position = 0;
+  override: EngineConfig | null = null;
   constructor(canvas: HTMLCanvasElement, take: LocalTake, events: TakeEvent[]) {
     this.take = take;
     this.events = events;
-    this.runtime = new InstrumentRuntime(canvas, {
-      ...take.manifest.config,
-      conductor: false,
-    });
+    this.runtime = new InstrumentRuntime(canvas, take.manifest.config);
     this.runtime.replaying = true;
   }
   async init(): Promise<void> {
@@ -84,23 +82,36 @@ export class TakePlayer {
     };
     this.maskIndex += 1;
   }
+  private async applyMasksThrough(time: number): Promise<void> {
+    while (this.nextMask && this.nextMask.time <= time) {
+      if (this.nextMask.width === 0) {
+        this.runtime.renderer.clearMask();
+      } else {
+        this.runtime.renderer.setMask(
+          this.nextMask.data,
+          this.nextMask.width,
+          this.nextMask.height
+        );
+      }
+      await this.readMask();
+    }
+  }
   async seek(to: number, signal?: AbortSignal): Promise<void> {
     const target = Math.max(0, Math.min(this.take.manifest.duration, to));
-    if (target < this.time) {
+    if (target < this.position) {
       this.runtime.renderer.reset();
       this.runtime.transport.reset();
       this.runtime.elapsed = 0;
       this.runtime.transport.frozen = false;
-      this.runtime.configure({
-        ...this.take.manifest.config,
-        conductor: false,
-      });
+      this.runtime.configure(this.take.manifest.config);
       this.runtime.renderer.clearMask();
+      this.runtime.renderer.clearImage();
       this.time = 0;
       this.eventIndex = 0;
       this.maskIndex = 0;
       await this.readMask();
     }
+    this.position = target;
     while (this.time <= target + 1e-8) {
       signal?.throwIfAborted();
       if (this.disposed) {
@@ -108,6 +119,9 @@ export class TakePlayer {
       }
       let event = this.events[this.eventIndex];
       while (event && event.time <= this.time + 1e-8) {
+        if (this.take.manifest.engine === "sonara-2") {
+          await this.applyMasksThrough(event.time);
+        }
         if (event.kind === "image" && event.url.startsWith("take-image:")) {
           let url = this.imageUrls.get(event.url);
           if (!url) {
@@ -129,27 +143,21 @@ export class TakePlayer {
         this.eventIndex += 1;
         event = this.events[this.eventIndex];
       }
-      while (this.nextMask && this.nextMask.time <= this.time) {
-        if (this.nextMask.width === 0) {
-          this.runtime.renderer.clearMask();
-        } else {
-          this.runtime.renderer.setMask(
-            this.nextMask.data,
-            this.nextMask.width,
-            this.nextMask.height
-          );
+      await this.applyMasksThrough(this.time);
+      if (this.take.manifest.engine === "sonara-1") {
+        if (this.runtime.config.version === 1) {
+          this.runtime.config.conductor = false;
         }
-        await this.readMask();
+        this.runtime.advance(this.time);
       }
-      this.runtime.config.conductor = false;
-      this.runtime.advance(this.time);
-      if (this.time === 0) {
+      if (this.time === 0 && this.take.manifest.engine === "sonara-1") {
         this.runtime.renderer.step(
           0,
           this.runtime.audio,
           this.runtime.controls
         );
       }
+      this.runtime.elapsed = this.time;
       this.time += 1 / 60;
       if (Math.round(this.time * 60) % 120 === 0) {
         await new Promise<void>((resolve) => {
@@ -157,6 +165,7 @@ export class TakePlayer {
         });
       }
     }
+    this.runtime.renderer.present(target);
   }
   dispose(): void {
     this.disposed = true;

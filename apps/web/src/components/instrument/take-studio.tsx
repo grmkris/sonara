@@ -1,7 +1,7 @@
 "use client";
 // oxlint-disable eslint/no-await-in-loop -- REVIEW: copy recording chunks sequentially to bound memory
 
-import type { InstrumentConfig, TakeEvent } from "@sonara/shared";
+import type { EngineConfig, TakeEvent } from "@sonara/shared";
 import type { FrameSetId } from "@sonara/shared/typeid";
 import { Download, Pause, Play, Save, Upload } from "lucide-react";
 import Link from "next/link";
@@ -11,6 +11,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import { experienceLabel, intensityOf } from "@/lib/instrument/catalog";
 import { exportTake } from "@/lib/instrument/export";
 import { TakePlayer, readTakeEvents } from "@/lib/instrument/take-player";
 import {
@@ -25,14 +26,14 @@ import {
 } from "@/lib/instrument/take-storage";
 import type { LocalTake } from "@/lib/instrument/take-storage";
 
-import { InstrumentControls } from "./instrument-controls";
+import { EngineControls } from "./experience-controls";
 
 // oxlint-disable-next-line complexity -- REVIEW: editor state binds transport, media, and export controls
 export const TakeStudio = ({ id }: { id: string }) => {
   const [take, setTake] = useState<LocalTake | null>(null);
   const [events, setEvents] = useState<TakeEvent[]>([]);
   const eventsRef = useRef<TakeEvent[]>([]);
-  const [config, setConfig] = useState<InstrumentConfig | null>(null);
+  const [config, setConfig] = useState<EngineConfig | null>(null);
   const [deck, setDeck] = useState<"a" | "b">("a");
   const [time, setTime] = useState(0);
   const [playing, setPlaying] = useState(false);
@@ -120,11 +121,6 @@ export const TakeStudio = ({ id }: { id: string }) => {
           return;
         }
         player.current = instance;
-        instance.runtime.renderer.step(
-          instance.runtime.transport.time,
-          instance.runtime.audio,
-          instance.runtime.controls
-        );
       } catch (error) {
         if (!disposed) {
           toast.error(
@@ -198,7 +194,7 @@ export const TakeStudio = ({ id }: { id: string }) => {
     };
   }, [mode, playing, trim, loop]);
 
-  const changeConfig = (next: InstrumentConfig) => {
+  const changeConfig = (next: EngineConfig) => {
     setConfig(next);
     setMode("remix");
     const event: TakeEvent = { config: next, kind: "scene", time };
@@ -410,6 +406,7 @@ export const TakeStudio = ({ id }: { id: string }) => {
               <track kind="captions" />
             </video>
             <canvas
+              key={`${take?.manifest.id}-${take?.setId ?? "local"}`}
               ref={canvas}
               style={{ visibility: mode === "remix" ? "visible" : "hidden" }}
               aria-label="Remix preview"
@@ -496,9 +493,9 @@ export const TakeStudio = ({ id }: { id: string }) => {
                       setConfig(event.config);
                     }
                   }}
-                  title={`${event.time.toFixed(1)}s · ${event.config.a.world} / ${event.config.b.world}`}
+                  title={`${event.time.toFixed(1)}s · ${experienceLabel(event.config)}`}
                 >
-                  {event.config.a.world}
+                  {experienceLabel(event.config)}
                 </button>
               ))}
           </div>
@@ -526,7 +523,11 @@ export const TakeStudio = ({ id }: { id: string }) => {
               viewBox="0 0 1000 60"
               preserveAspectRatio="none"
               role="img"
-              aria-label="Crossfade over time"
+              aria-label={
+                config?.version === 2
+                  ? "Intensity over time"
+                  : "Crossfade over time"
+              }
             >
               <polyline
                 fill="none"
@@ -536,7 +537,7 @@ export const TakeStudio = ({ id }: { id: string }) => {
                   .filter((e) => e.kind === "scene")
                   .map(
                     (e) =>
-                      `${(e.time / Math.max(1, take?.manifest.duration ?? 1)) * 1000},${55 - e.config.crossfade * 50}`
+                      `${(e.time / Math.max(1, take?.manifest.duration ?? 1)) * 1000},${55 - (e.config.version === 2 ? intensityOf(e.config) : e.config.crossfade) * 50}`
                   )
                   .join(" ")}
               />
@@ -678,7 +679,8 @@ export const TakeStudio = ({ id }: { id: string }) => {
         </section>
         <aside className="take-inspector">
           {config && (
-            <InstrumentControls
+            <EngineControls
+              allowUpgrade={false}
               config={config}
               onChange={changeConfig}
               deck={deck}

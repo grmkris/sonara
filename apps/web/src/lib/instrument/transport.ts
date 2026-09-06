@@ -42,11 +42,16 @@ export class Transport {
   downbeat(): void {
     this.beat = 0;
   }
-  advance(now: number, detectedBpm: number, step: (dt: number) => void): void {
+  advance(
+    now: number,
+    detectedBpm: number,
+    step: (dt: number) => void,
+    maxSteps = 6
+  ): void {
     const elapsed =
       this.lastTime === null
         ? 0
-        : Math.max(0, Math.min(0.1, now - this.lastTime));
+        : Math.max(0, Math.min(maxSteps / 60, now - this.lastTime));
     this.lastTime = now;
     this.bpm =
       (this.externalBpm || this.manualBpm || detectedBpm) * this.multiplier;

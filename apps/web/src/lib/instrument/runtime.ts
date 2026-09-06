@@ -1,7 +1,8 @@
-import { DEFAULT_INSTRUMENT, defaultAudio } from "@sonara/shared";
+import { DEFAULT_EXPERIENCE, EMPTY_MUSIC, defaultAudio } from "@sonara/shared";
 import type {
   AudioFeatureFrame,
-  InstrumentConfig,
+  EngineConfig,
+  MusicalFrame,
   PerformanceControlFrame,
   TakeEvent,
 } from "@sonara/shared";
@@ -13,7 +14,7 @@ import { Transport } from "./transport";
 export class InstrumentRuntime {
   readonly transport = new Transport();
   readonly renderer: InstrumentRenderer;
-  config: InstrumentConfig;
+  config: EngineConfig;
   audio: AudioFeatureFrame = {
     confidence: 0,
     features: { ...defaultAudio },
@@ -26,7 +27,8 @@ export class InstrumentRuntime {
     time: 0,
   };
   onEvent: ((event: TakeEvent) => void) | null = null;
-  onConfig: ((config: InstrumentConfig) => void) | null = null;
+  onConfig: ((config: EngineConfig) => void) | null = null;
+  music: MusicalFrame = { ...EMPTY_MUSIC };
   elapsed = 0;
   replaying = false;
   private targetControls = this.controls;
@@ -47,7 +49,7 @@ export class InstrumentRuntime {
   private manualUntil = 0;
   constructor(
     canvas: HTMLCanvasElement,
-    config = DEFAULT_INSTRUMENT,
+    config: EngineConfig = DEFAULT_EXPERIENCE,
     forceWebGL = false
   ) {
     this.config = structuredClone(config);
@@ -56,7 +58,7 @@ export class InstrumentRuntime {
   async init(): Promise<void> {
     await this.renderer.init();
   }
-  configure(config: InstrumentConfig, manual = true): void {
+  configure(config: EngineConfig, manual = true): void {
     this.config = structuredClone(config);
     this.renderer.configure(this.config);
     if (manual) {
@@ -75,6 +77,9 @@ export class InstrumentRuntime {
     }
     this.lastAudioInput = frame;
     this.audio = frame;
+    if (frame.music) {
+      this.music = frame.music;
+    }
     this.audioUpdated = true;
   }
   setControls(control: PerformanceControlFrame): void {
@@ -108,10 +113,17 @@ export class InstrumentRuntime {
     }
     if (time - this.lastAudioAt > 0.3) {
       this.audio = { confidence: 0, features: { ...defaultAudio }, time };
+      this.music = { ...EMPTY_MUSIC, time };
     }
-    this.transport.advance(time, this.audio.features.bpm, () => {
-      this.step();
-    });
+    this.transport.advance(
+      time,
+      this.audio.features.bpm,
+      () => {
+        this.step();
+      },
+      this.config.version === 2 ? 3 : 6
+    );
+    this.renderer.present(time);
   }
   private step(): void {
     const target =
@@ -151,6 +163,22 @@ export class InstrumentRuntime {
         time: this.elapsed,
       };
     }
+    if (this.config.version === 2) {
+      this.onEvent?.({
+        control: this.controls,
+        frame: this.music,
+        kind: "motion",
+        simulationTime: this.transport.time,
+        time: this.elapsed,
+      });
+      this.renderer.step(
+        this.transport.time,
+        this.audio,
+        this.controls,
+        this.music
+      );
+      return;
+    }
     this.onEvent?.({ frame: this.audio, kind: "audio", time: this.elapsed });
     this.onEvent?.({
       frame: this.controls,
@@ -161,7 +189,11 @@ export class InstrumentRuntime {
     this.renderer.step(this.transport.time, this.audio, this.controls);
   }
   private conduct(): void {
-    if (!this.config.conductor || this.elapsed < this.manualUntil) {
+    if (
+      this.config.version !== 1 ||
+      !this.config.conductor ||
+      this.elapsed < this.manualUntil
+    ) {
       return;
     }
     const beat = Math.floor(this.transport.beat);
@@ -220,6 +252,17 @@ export class InstrumentRuntime {
   }
   async applyEvent(event: TakeEvent): Promise<void> {
     switch (event.kind) {
+      case "motion": {
+        this.music = event.frame;
+        this.controls = event.control;
+        this.renderer.step(
+          event.simulationTime,
+          this.audio,
+          this.controls,
+          this.music
+        );
+        break;
+      }
       case "scene": {
         this.config = event.config;
         this.renderer.configure(event.config);

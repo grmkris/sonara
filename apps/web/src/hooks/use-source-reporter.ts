@@ -28,12 +28,16 @@ export const deriveSource = (s: VisualizerState): ReportedSource => {
   const { source } = s;
   const instrument = useInstrumentStore.getState();
   const hasDream =
+    instrument.config.version === 2 ||
     instrument.config.a.world === "dream" ||
     instrument.config.b.world === "dream";
   if (instrument.enabled && !(hasDream && source.kind === "live")) {
     return {
       kind: "procedural",
-      label: `${instrument.config.a.world} / ${instrument.config.b.world}`,
+      label:
+        instrument.config.version === 2
+          ? instrument.config.treatment
+          : `${instrument.config.a.world} / ${instrument.config.b.world}`,
     };
   }
   switch (source.kind) {

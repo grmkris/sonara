@@ -191,7 +191,7 @@ export const StageScreen = ({ code }: { code: string | null }) => {
   useAudioFeatures(audioSource, send, onAudioError, onAudioSourceLost);
   // Song recognition (AudD) is signed-in only. The hook noops when disabled
   // so the audio-features subscription on the store doesn't even fire.
-  useSongRecognition(send, isSignedIn);
+  useSongRecognition(send, isSignedIn && !instrumentEnabled);
 
   const uiVisible = useVisualizerStore((s) => s.uiVisible);
   const setUiVisible = useVisualizerStore((s) => s.setUiVisible);
@@ -214,14 +214,14 @@ export const StageScreen = ({ code }: { code: string | null }) => {
     if (sessionData === undefined) {
       return;
     }
-    if (isSignedIn) {
+    if (isSignedIn || instrumentEnabled) {
       return;
     }
     const st = useVisualizerStore.getState();
     if (st.source.kind === "idle" || st.source.kind === "live") {
       applyBuiltinSetLocally({ deckKey: "liquid" });
     }
-  }, [sessionData, isSignedIn]);
+  }, [sessionData, isSignedIn, instrumentEnabled]);
 
   // Clear the in-memory library on sign-out (signed-in → signed-out), so a
   // different account signing in on the same tab can't briefly see the
@@ -258,18 +258,6 @@ export const StageScreen = ({ code }: { code: string | null }) => {
           audioSource={audioSource}
           setAudioSource={setAudioSource}
           send={send}
-          sceneControls={
-            <div className="flex flex-col gap-5">
-              {isSignedIn && <PromptInput send={send} />}
-              <StageConsole
-                variant="attached"
-                send={send}
-                hostTarget={hostTarget}
-                onNewSet={onNewSet}
-                onReset={onReset}
-              />
-            </div>
-          }
         />
       </>
     );

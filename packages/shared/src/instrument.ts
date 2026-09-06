@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 import { AudioFeatures } from "./audio";
+import { ExperienceConfig, MusicalFrame } from "./experience";
 
 export const WorldId = z.enum([
   "dream",
@@ -38,6 +39,11 @@ export const InstrumentConfig = z.object({
   version: z.literal(1),
 });
 export type InstrumentConfig = z.infer<typeof InstrumentConfig>;
+export const EngineConfig = z.discriminatedUnion("version", [
+  InstrumentConfig,
+  ExperienceConfig,
+]);
+export type EngineConfig = z.infer<typeof EngineConfig>;
 export const DEFAULT_INSTRUMENT: InstrumentConfig = {
   a: {
     look: 0,
@@ -59,6 +65,7 @@ export const DEFAULT_INSTRUMENT: InstrumentConfig = {
 export const AudioFeatureFrame = z.object({
   confidence: unit,
   features: AudioFeatures,
+  music: MusicalFrame.optional(),
   time: z.number().nonnegative(),
 });
 export type AudioFeatureFrame = z.infer<typeof AudioFeatureFrame>;
@@ -77,7 +84,14 @@ export const PerformanceControlFrame = z.object({
 export type PerformanceControlFrame = z.infer<typeof PerformanceControlFrame>;
 export const TakeEvent = z.discriminatedUnion("kind", [
   z.object({
-    config: InstrumentConfig,
+    control: PerformanceControlFrame,
+    frame: MusicalFrame,
+    kind: z.literal("motion"),
+    simulationTime: z.number().nonnegative(),
+    time: z.number().nonnegative(),
+  }),
+  z.object({
+    config: EngineConfig,
     kind: z.literal("scene"),
     time: z.number().nonnegative(),
   }),
@@ -106,17 +120,23 @@ export const TakeEvent = z.discriminatedUnion("kind", [
 export type TakeEvent = z.infer<typeof TakeEvent>;
 export const TakeManifest = z
   .object({
-    config: InstrumentConfig,
+    config: EngineConfig,
     createdAt: z.string().datetime(),
     duration: z.number().nonnegative(),
-    engine: z.literal("sonara-1"),
+    engine: z.enum(["sonara-1", "sonara-2"]),
     id: z.string().uuid(),
     name: z.string().min(1).max(160),
     range: z
       .tuple([z.number().nonnegative(), z.number().positive()])
       .optional(),
-    version: z.literal(1),
+    version: z.union([z.literal(1), z.literal(2)]),
   })
+  .refine(
+    (take) =>
+      take.engine === (take.config.version === 2 ? "sonara-2" : "sonara-1") &&
+      take.version === take.config.version,
+    { message: "Take engine and configuration versions must agree." }
+  )
   .refine(
     (take) =>
       !take.range ||

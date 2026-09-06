@@ -5,6 +5,7 @@ import { controlRouter } from "./control.router";
 import { creditsRouter } from "./credits.router";
 import { libraryRouter } from "./library.router";
 import { looksRouter } from "./looks.router";
+import { moodRouter } from "./mood.router";
 import { publicProcedure } from "./procedures";
 import { setsRouter } from "./sets.router";
 import { stageRouter } from "./stage.router";
@@ -22,6 +23,7 @@ export const appRouter = {
   healthCheck: publicProcedure.handler(() => "OK" as const),
   library: libraryRouter,
   looks: looksRouter,
+  mood: moodRouter,
   sets: setsRouter,
   stage: stageRouter,
   takes: takesRouter,

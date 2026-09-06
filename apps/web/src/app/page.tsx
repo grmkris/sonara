@@ -81,8 +81,8 @@ export default function LandingPage() {
               made visible.
             </h1>
             <p className="reveal reveal-1 font-sans max-w-[38ch] text-[15px] leading-relaxed text-[color:var(--paper)]/85 md:text-[16px]">
-              it listens to whatever you're playing and paints what it hears, as
-              it happens.
+              living light and liquid, shaped by your music. bring a track,
+              reach into the current, and stay a little longer.
             </p>
             {/* Two CTAs, deliberately uneven. `play` is the filled, confident
                action (anon-usable; sign-in surfaces inside the visualiser).
@@ -121,17 +121,17 @@ export default function LandingPage() {
             <Capability
               eyebrow="01 listen"
               hook="any sound"
-              body="share a tab, open the mic, or drop in a track. it knows the song, too."
+              body="a track, a browser tab, or the room around you. start with our original demo — no sign-in needed."
             />
             <Capability
-              eyebrow="02 speak"
-              hook="in your words"
-              body="say it or type it; the scene composes itself."
+              eyebrow="02 feel"
+              hook="living light"
+              body="ink, silk, or prism. choose a feeling, then let the music move it. your hands can join the current."
             />
             <Capability
-              eyebrow="03 show"
-              hook="an image"
-              body="hand it a picture and it carries that look through."
+              eyebrow="03 remember"
+              hook="keep a moment"
+              body="let a photo or an imagined world emerge inside the light. capture a moment to trim, remix, and share."
             />
           </div>
         </section>

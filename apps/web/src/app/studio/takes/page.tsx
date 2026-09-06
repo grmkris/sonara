@@ -1,10 +1,10 @@
 "use client";
-
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
+import { experienceLabel } from "@/lib/instrument/catalog";
 import { listLocalTakes } from "@/lib/instrument/take-storage";
 import type { LocalTake } from "@/lib/instrument/take-storage";
 import { rpcClient } from "@/lib/orpc";
@@ -50,8 +50,8 @@ export default function TakesPage() {
             <div>
               <h2>{take.manifest.name}</h2>
               <span>
-                {take.manifest.config.a.world} × {take.manifest.config.b.world}{" "}
-                · {Math.round(take.manifest.duration)}s
+                {experienceLabel(take.manifest.config)} ·{" "}
+                {Math.round(take.manifest.duration)}s
               </span>
             </div>
             <small>

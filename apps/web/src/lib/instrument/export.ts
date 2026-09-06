@@ -1,4 +1,4 @@
-import type { InstrumentConfig, TakeEvent } from "@sonara/shared";
+import type { EngineConfig, TakeEvent } from "@sonara/shared";
 // oxlint-disable promise/avoid-new -- REVIEW: cooperative yielding keeps offline export cancellable
 // oxlint-disable eslint/no-await-in-loop -- REVIEW: offline rendering and encoder backpressure require ordered samples
 import {
@@ -62,7 +62,7 @@ const chooseCodecs = async (
 export const exportTake = async (
   take: LocalTake,
   events: TakeEvent[],
-  override: InstrumentConfig | null,
+  override: EngineConfig | null,
   options: ExportOptions,
   progress: (value: number) => void,
   signal: AbortSignal

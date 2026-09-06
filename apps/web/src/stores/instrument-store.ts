@@ -1,20 +1,20 @@
 "use client";
 
-import { DEFAULT_INSTRUMENT, InstrumentConfig } from "@sonara/shared";
+import { DEFAULT_EXPERIENCE, EngineConfig } from "@sonara/shared";
 import { create } from "zustand";
 
-const KEY = "sonara_instrument_v1";
+const KEY = "sonara_experience_v2";
 interface InstrumentState {
-  config: InstrumentConfig;
+  config: EngineConfig;
   enabled: boolean;
-  setConfig: (config: InstrumentConfig) => void;
+  setConfig: (config: EngineConfig) => void;
   setEnabled: (enabled: boolean) => void;
 }
 export const useInstrumentStore = create<InstrumentState>((set) => ({
-  config: structuredClone(DEFAULT_INSTRUMENT),
+  config: structuredClone(DEFAULT_EXPERIENCE),
   enabled: true,
   setConfig: (config) => {
-    const parsed = InstrumentConfig.parse(config);
+    const parsed = EngineConfig.parse(config);
     set({ config: parsed });
     try {
       localStorage.setItem(KEY, JSON.stringify(parsed));
@@ -29,7 +29,7 @@ export const useInstrumentStore = create<InstrumentState>((set) => ({
 export const hydrateInstrument = (): void => {
   try {
     const raw = localStorage.getItem(KEY);
-    const parsed = InstrumentConfig.safeParse(raw ? JSON.parse(raw) : null);
+    const parsed = EngineConfig.safeParse(raw ? JSON.parse(raw) : null);
     if (parsed.success) {
       useInstrumentStore.setState({ config: parsed.data });
     }

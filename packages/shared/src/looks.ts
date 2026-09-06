@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import { InstrumentConfig } from "./instrument";
+import { EngineConfig } from "./instrument";
 import { LookProfileIdSchema } from "./typeid";
 
 // A look profile's render config — the apps/web `PresetConfig` serialized to a
@@ -13,7 +13,7 @@ export const LegacyLookConfig = z
   .refine((o) => Object.keys(o).length <= 64, {
     message: "look config has too many keys",
   });
-export const LookConfig = z.union([InstrumentConfig, LegacyLookConfig]);
+export const LookConfig = z.union([EngineConfig, LegacyLookConfig]);
 export type LookConfig = z.infer<typeof LookConfig>;
 
 export const LookVisibility = z.enum(["private", "unlisted", "public"]);

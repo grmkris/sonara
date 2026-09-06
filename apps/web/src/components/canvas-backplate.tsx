@@ -1,43 +1,70 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 
-import { SonaraCanvas } from "@/components/visualizer/canvas/sonara-canvas";
-import { usePlaybackLoop } from "@/hooks/use-playback-loop";
-import { applyBuiltinSetLocally } from "@/lib/apply-source";
-import { useVisualizerStore } from "@/stores/visualizer";
+import type { InstrumentRuntime } from "@/lib/instrument/runtime";
 
-// Shared marketing backplate for the landing + about pages. The same
-// SonaraCanvas the visualiser uses, mounted as a fixed full-viewport plate so
-// it stays visible while copy scrolls over it. Playback is client-native:
-// usePlaybackLoop() cycles a deck's static frames into the canvas (with the
-// displacement-shader transitions) — no server/WS frames and no audio.
-//
-// A single `.page-veil` sits between the canvas (z-0, behind the grain at z-1)
-// and the page content (z-10): one uniform ink wash so the backplate reads as
-// ONE continuous image top-to-bottom, with no per-section panel seam.
+// A quiet preview of the listening material. It owns no audio, session, or
+// playback source, so browsing the landing page cannot change a running show.
 export const CanvasBackplate = () => {
-  // NO WebSocket here, deliberately: the backplate is fully client-native
-  // (static deck manifests), and a WS would attach this tab as the visitor's
-  // default-stage SCREEN — a signed-in user browsing the homepage would take
-  // over their own projector mid-gig.
-  usePlaybackLoop();
-
-  // Self-start playback regardless of auth/connectivity — without this the
-  // backplate would be black. Only fills gaps (won't override a set a
-  // previous page already chose). Client-native builtin set: setId stays
-  // null (no session, no fetch), deckKey drives the manifest loop.
+  const canvas = useRef<HTMLCanvasElement>(null);
   useEffect(() => {
-    const st = useVisualizerStore.getState();
-    if (st.source.kind === "idle" || st.source.kind === "live") {
-      applyBuiltinSetLocally({ deckKey: "liquid" });
+    const element = canvas.current;
+    if (!element) {
+      return;
     }
+    let disposed = false;
+    let raf = 0;
+    let runtime: InstrumentRuntime | null = null;
+    const start = async () => {
+      try {
+        const { InstrumentRuntime: Runtime } =
+          await import("@/lib/instrument/runtime");
+        if (disposed) {
+          return;
+        }
+        runtime = new Runtime(element);
+        await runtime.init();
+        if (disposed) {
+          runtime.dispose();
+          return;
+        }
+        let last = 0;
+        const origin = performance.now();
+        const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
+        const tick = (now: number) => {
+          if (disposed || !runtime) {
+            return;
+          }
+          if (!document.hidden && now - last > 1000 / 30) {
+            last = now;
+            const rect = element.getBoundingClientRect();
+            runtime.renderer.resize(
+              Math.min(1280, rect.width),
+              (Math.min(1280, rect.width) * rect.height) / rect.width
+            );
+            runtime.advance((now - origin) / 1000);
+          }
+          if (!reduced) {
+            raf = requestAnimationFrame(tick);
+          }
+        };
+        tick(performance.now());
+      } catch {
+        // The CSS backdrop remains available when graphics cannot initialize.
+      }
+    };
+    void start();
+    return () => {
+      disposed = true;
+      cancelAnimationFrame(raf);
+      runtime?.dispose();
+    };
   }, []);
-
   return (
     <>
-      <div className="pointer-events-none fixed inset-0 z-0">
-        <SonaraCanvas />
+      <div className="pointer-events-none fixed inset-0 z-0 bg-[radial-gradient(ellipse_at_center,#251a28,#080809_70%)]">
+        <canvas ref={canvas} aria-hidden className="h-full w-full" />
       </div>
       <div aria-hidden className="grain-overlay" />
       <div

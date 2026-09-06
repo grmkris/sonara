@@ -1,6 +1,9 @@
+import { EMPTY_MUSIC } from "@sonara/shared";
 import type {
   AudioFeatureFrame,
+  EngineConfig,
   InstrumentConfig,
+  MusicalFrame,
   PerformanceControlFrame,
   WorldSlot,
 } from "@sonara/shared";
@@ -25,6 +28,7 @@ import {
 import type { Texture } from "three/webgpu";
 
 import { PALETTES } from "./catalog";
+import { ExperienceLayer } from "./experience-renderer";
 import { makeUniforms, simulationNode, worldColor } from "./world-nodes";
 
 const target = (size: number, floating = false) =>
@@ -166,12 +170,14 @@ export class InstrumentRenderer {
   private disposed = false;
   private width = 0;
   private height = 0;
-  private config: InstrumentConfig;
+  private config: EngineConfig;
+  private experience: ExperienceLayer | null = null;
+  private previousImage: Texture | null = null;
   onLost: (() => void) | null = null;
   onPresented: (() => void) | null = null;
   constructor(
     canvas: HTMLCanvasElement,
-    config: InstrumentConfig,
+    config: EngineConfig,
     forceWebGL = false
   ) {
     this.canvas = canvas;
@@ -213,8 +219,27 @@ export class InstrumentRenderer {
       this.onLost?.();
     };
   }
-  configure(config: InstrumentConfig): void {
+  configure(config: EngineConfig): void {
     this.config = config;
+    if (config.version === 2) {
+      if (!this.experience) {
+        this.experience = new ExperienceLayer(this.empty, config);
+        if (this.image) {
+          this.experience.setImage(this.image, this.previousImage);
+        }
+        this.experience.setMask(
+          this.mask,
+          this.decks[0].uniforms.maskActive.value > 0
+        );
+      }
+      this.experience.configure(config);
+      if (this.width > 0) {
+        this.experience.resize(this.width, this.height, 1);
+      }
+      return;
+    }
+    this.experience?.dispose();
+    this.experience = null;
     this.decks[0].configure(config.a);
     this.decks[1].configure(config.b);
     this.blend.value = config.crossfade;
@@ -240,6 +265,7 @@ export class InstrumentRenderer {
     for (const deck of this.decks) {
       deck.resize(w, h);
     }
+    this.experience?.resize(w, h, scale);
   }
   async setImage(url: string): Promise<void> {
     this.loadId += 1;
@@ -249,12 +275,25 @@ export class InstrumentRenderer {
       image.dispose();
       return;
     }
-    this.image?.dispose();
+    this.previousImage?.dispose();
+    this.previousImage = this.image;
     this.image = image;
+    this.experience?.setImage(image, this.previousImage);
     const element = image.image as { width: number; height: number };
     for (const deck of this.decks) {
       deck.uniforms.image.value = image;
       deck.uniforms.imageAspect.value = element.width / element.height;
+    }
+  }
+  clearImage(): void {
+    this.loadId += 1;
+    this.image?.dispose();
+    this.previousImage?.dispose();
+    this.image = null;
+    this.previousImage = null;
+    this.experience?.clearImage(this.empty);
+    for (const deck of this.decks) {
+      deck.uniforms.image.value = this.empty;
     }
   }
   setMask(data: Uint8Array, width: number, height: number): void {
@@ -269,11 +308,13 @@ export class InstrumentRenderer {
       this.mask.image.data = data;
     }
     this.mask.needsUpdate = true;
+    this.experience?.setMask(this.mask, true);
     for (const deck of this.decks) {
       deck.uniforms.maskActive.value = 1;
     }
   }
   clearMask(): void {
+    this.experience?.setMask(this.mask, false);
     this.mask.image.data?.fill(0);
     this.mask.needsUpdate = true;
     for (const deck of this.decks) {
@@ -283,13 +324,36 @@ export class InstrumentRenderer {
   step(
     time: number,
     audio: AudioFeatureFrame,
-    control: PerformanceControlFrame
+    control: PerformanceControlFrame,
+    music: MusicalFrame = EMPTY_MUSIC
+  ): void {
+    if (this.experience) {
+      this.experience.step(
+        this.backend,
+        this.scene,
+        this.camera,
+        this.quad,
+        time,
+        music,
+        control
+      );
+      return;
+    }
+    if (this.config.version === 1) {
+      this.stepWorlds(time, audio, control, this.config);
+    }
+  }
+  private stepWorlds(
+    time: number,
+    audio: AudioFeatureFrame,
+    control: PerformanceControlFrame,
+    config: InstrumentConfig
   ): void {
     for (const [i, deck] of this.decks.entries()) {
       if (
-        this.config.blend === "mix" &&
-        ((i === 0 && this.config.crossfade === 1) ||
-          (i === 1 && this.config.crossfade === 0))
+        config.blend === "mix" &&
+        ((i === 0 && config.crossfade === 1) ||
+          (i === 1 && config.crossfade === 0))
       ) {
         continue;
       }
@@ -315,7 +379,21 @@ export class InstrumentRenderer {
     this.backend.render(this.scene, this.camera);
     this.onPresented?.();
   }
+  present(time: number): void {
+    if (!this.experience) {
+      return;
+    }
+    this.experience.present(
+      this.backend,
+      this.scene,
+      this.camera,
+      this.quad,
+      time
+    );
+    this.onPresented?.();
+  }
   reset(): void {
+    this.experience?.reset();
     for (const deck of this.decks) {
       deck.reset();
     }
@@ -326,6 +404,8 @@ export class InstrumentRenderer {
       deck.dispose();
     }
     this.image?.dispose();
+    this.previousImage?.dispose();
+    this.experience?.dispose();
     this.empty.dispose();
     this.mask.dispose();
     this.composite.dispose();
