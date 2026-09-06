@@ -172,6 +172,7 @@ export class InstrumentRenderer {
   private depthId = 0;
   private depth: Texture | null = null;
   depthUrl: string | null = null;
+  imageUrl: string | null = null;
   private disposed = false;
   private width = 0;
   private height = 0;
@@ -298,6 +299,7 @@ export class InstrumentRenderer {
     this.previousImage?.dispose();
     this.previousImage = this.image;
     this.image = image;
+    this.imageUrl = url;
     this.experience?.setImage(image, this.previousImage);
     const element = image.image as { width: number; height: number };
     for (const deck of this.decks) {
@@ -312,6 +314,7 @@ export class InstrumentRenderer {
     this.image?.dispose();
     this.previousImage?.dispose();
     this.image = null;
+    this.imageUrl = null;
     this.previousImage = null;
     this.experience?.clearImage(this.empty);
     for (const deck of this.decks) {

@@ -1709,3 +1709,13 @@ body {
   border-width: 2px;
   box-shadow: 0 0 0 6px #ffffff12, 0 0 26px #fff7;
 }
+
+.experience-controls[data-compact="true"] .experience-treatment-art {
+  height: 44px;
+}
+.experience-controls[data-compact="true"] .experience-treatment > span:last-child {
+  padding: 6px;
+}
+.experience-controls[data-compact="true"] .experience-treatment:not(.experience-treatment-wide) small {
+  display: none;
+}

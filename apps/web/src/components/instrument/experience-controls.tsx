@@ -95,7 +95,7 @@ export const ExperienceControls = ({
   onChange: (config: MaterialConfig) => void;
   compact?: boolean;
 }) => (
-  <div className="experience-controls">
+  <div className="experience-controls" data-compact={compact}>
     {config.version !== 2 && (
       <Field>
         <FieldLabel htmlFor="visual-response">Response</FieldLabel>
