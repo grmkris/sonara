@@ -9,6 +9,7 @@ import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { PALETTES } from "@/lib/instrument/catalog";
+import { cn } from "@/lib/utils";
 
 import { InstrumentControls } from "./instrument-controls";
 
@@ -67,6 +68,24 @@ const treatments = [
   },
 ] as const;
 
+const touchTreatments = [
+  ...treatments,
+  {
+    description: "Give your image depth. Move the light.",
+    flow: 0.4,
+    name: "Relief",
+    symmetry: 0.1,
+    trails: 0.3,
+    value: "relief",
+  },
+] as const;
+
+const availableTreatments = (config: MaterialConfig) => {
+  if (config.version === 2) {return originalTreatments;}
+  if (config.version === 4) {return touchTreatments;}
+  return treatments;
+};
+
 export const ExperienceControls = ({
   config,
   onChange,
@@ -77,6 +96,29 @@ export const ExperienceControls = ({
   compact?: boolean;
 }) => (
   <div className="experience-controls">
+    {config.version !== 2 && (
+      <Field>
+        <FieldLabel htmlFor="visual-response">Response</FieldLabel>
+        <Slider
+          id="visual-response"
+          aria-label="Response"
+          min={0}
+          max={1}
+          step={0.01}
+          value={[config.response]}
+          onValueChange={(value) =>
+            onChange({
+              ...config,
+              response: Array.isArray(value) ? (value[0] ?? 0.7) : value,
+            })
+          }
+        />
+        <p className="sound-hint">
+          How strongly the form moves with your music.
+        </p>
+      </Field>
+    )}
+
     <ToggleGroup
       aria-label="Material treatment"
       className="experience-treatments"
@@ -86,6 +128,19 @@ export const ExperienceControls = ({
           const treatment = originalTreatments.find(
             (t) => t.value === values[0]
           );
+          if (treatment) {
+            onChange({
+              ...config,
+              flow: treatment.flow,
+              symmetry: treatment.symmetry,
+              trails: treatment.trails,
+              treatment: treatment.value,
+            });
+          }
+          return;
+        }
+        if (config.version === 4) {
+          const treatment = touchTreatments.find((t) => t.value === values[0]);
           if (treatment) {
             onChange({
               ...config,
@@ -109,11 +164,14 @@ export const ExperienceControls = ({
         }
       }}
     >
-      {(config.version === 2 ? originalTreatments : treatments).map((t) => (
+      {availableTreatments(config).map((t) => (
         <ToggleGroupItem
           key={t.value}
           value={t.value}
-          className="experience-treatment"
+          className={cn(
+            "experience-treatment",
+            t.value === "relief" && "experience-treatment-wide"
+          )}
         >
           <span
             className={`experience-treatment-art experience-treatment-${t.value}`}
@@ -149,33 +207,12 @@ export const ExperienceControls = ({
         </ToggleGroupItem>
       ))}
     </ToggleGroup>
-    {config.version === 3 && (
-      <Field>
-        <FieldLabel htmlFor="visual-response">Response</FieldLabel>
-        <Slider
-          id="visual-response"
-          aria-label="Response"
-          min={0}
-          max={1}
-          step={0.01}
-          value={[config.response]}
-          onValueChange={(value) =>
-            onChange({
-              ...config,
-              response: Array.isArray(value) ? (value[0] ?? 0.7) : value,
-            })
-          }
-        />
-        <p className="sound-hint">
-          How strongly the form moves with your music.
-        </p>
-      </Field>
-    )}
     {!compact && (
       <>
         {(config.treatment === "kaleido" ||
         config.treatment === "loom" ||
-        config.treatment === "orbit"
+        config.treatment === "orbit" ||
+        config.treatment === "relief"
           ? (["intensity", "flow", "reveal"] as const)
           : (["intensity", "flow", "symmetry", "trails", "reveal"] as const)
         ).map((key) => (

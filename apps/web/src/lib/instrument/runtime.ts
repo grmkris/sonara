@@ -10,6 +10,7 @@ import type {
 import { WORLDS, lookMacros } from "./catalog";
 import { InstrumentRenderer } from "./renderer";
 import { smoothControls } from "./smooth-controls";
+import { SurfaceControls } from "./surface-controls";
 import { Transport } from "./transport";
 
 export class InstrumentRuntime {
@@ -32,6 +33,7 @@ export class InstrumentRuntime {
   music: MusicalFrame = { ...EMPTY_MUSIC };
   elapsed = 0;
   replaying = false;
+  private surfaceControls = new SurfaceControls();
   private targetControls = this.controls;
   private lastControlAt = -100;
   private lastAudioAt = -100;
@@ -61,6 +63,9 @@ export class InstrumentRuntime {
     await this.renderer.init();
   }
   configure(config: EngineConfig, manual = true): void {
+    if (this.config.version !== config.version) {
+      this.surfaceControls.reset();
+    }
     this.config = structuredClone(config);
     this.renderer.configure(this.config);
     if (manual) {
@@ -95,6 +100,16 @@ export class InstrumentRuntime {
     });
   }
   reset(): void {
+    this.surfaceControls.reset();
+    if (this.config.version === 4) {
+      this.controls = {
+        attractors: [],
+        contacts: [],
+        expansion: 0.5,
+        rotation: 0,
+        time: this.elapsed,
+      };
+    }
     this.renderer.reset();
     this.transport.reset();
     this.onEvent?.({ kind: "reset", time: this.elapsed });
@@ -141,7 +156,15 @@ export class InstrumentRuntime {
       this.elapsed - this.lastControlAt < 0.25
         ? this.targetControls
         : { ...this.targetControls, attractors: [] };
-    if (!this.replaying && this.config.version !== 3) {
+    if (!this.replaying && this.config.version === 4) {
+      this.controls = this.surfaceControls.step(
+        this.controls,
+        this.targetControls,
+        this.elapsed - this.lastControlAt,
+        this.elapsed
+      );
+    }
+    if (!this.replaying && this.config.version < 3) {
       this.controls = {
         // oxlint-disable-next-line complexity -- REVIEW: interpolate two optional tracked controls and decay missing inputs
         attractors: [0, 1].flatMap((i) => {
@@ -290,6 +313,14 @@ export class InstrumentRuntime {
       }
       case "image": {
         await this.renderer.setImage(event.url);
+        break;
+      }
+      case "depth": {
+        await this.renderer.setDepth(event.url);
+        break;
+      }
+      case "image-clear": {
+        this.renderer.clearImage();
         break;
       }
       case "freeze": {

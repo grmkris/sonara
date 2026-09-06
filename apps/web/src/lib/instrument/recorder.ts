@@ -42,7 +42,8 @@ export class TakeRecorder {
   }
   async start(
     audio: AudioEngine | null,
-    imageUrl: string | null = null
+    imageUrl: string | null = null,
+    depthUrl: string | null = null
   ): Promise<void> {
     if (typeof MediaRecorder === "undefined") {
       throw new TypeError("Recording is unavailable in this browser.");
@@ -58,6 +59,9 @@ export class TakeRecorder {
     if (imageUrl) {
       this.captureImage(imageUrl, 0);
     }
+    if (depthUrl) {
+      this.captureImage(depthUrl, 0, "depth");
+    }
     this.events.push({
       config: structuredClone(this.runtime.config),
       kind: "scene",
@@ -65,8 +69,12 @@ export class TakeRecorder {
     });
     this.runtime.onEvent = (event) => {
       this.previousEvent?.(event);
-      if (event.kind === "image") {
-        this.captureImage(event.url, Math.max(0, event.time - this.origin));
+      if ((event.kind === "image" || event.kind === "depth") && event.url) {
+        this.captureImage(
+          event.url,
+          Math.max(0, event.time - this.origin),
+          event.kind
+        );
       } else {
         this.events.push({
           ...event,
@@ -89,10 +97,14 @@ export class TakeRecorder {
       this.flushEvents();
     }, 1000);
   }
-  private captureImage(url: string, time: number): void {
+  private captureImage(
+    url: string,
+    time: number,
+    kind: "image" | "depth" = "image"
+  ): void {
     this.queue = this.queue
       .then(async () => {
-        let index = this.images.get(url);
+        let index = this.images.get(`${kind}:${url}`);
         if (index === undefined) {
           const response = await fetch(url, {
             signal: AbortSignal.timeout(15_000),
@@ -100,28 +112,33 @@ export class TakeRecorder {
           if (!response.ok) {
             throw new Error("Could not preserve an image input in this take.");
           }
-          const bitmap = await createImageBitmap(await response.blob());
-          const scale = Math.min(
-            1,
-            1280 / Math.max(bitmap.width, bitmap.height)
-          );
-          const canvas = new OffscreenCanvas(
-            Math.round(bitmap.width * scale),
-            Math.round(bitmap.height * scale)
-          );
-          canvas
-            .getContext("2d")
-            ?.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
-          bitmap.close();
-          const blob = await canvas.convertToBlob({
-            quality: 0.85,
-            type: "image/jpeg",
-          });
+          const source = await response.blob();
+          let blob = source;
+          // Packed RG depth must remain lossless: JPEG destroys its low byte.
+          if (kind === "image") {
+            const bitmap = await createImageBitmap(source);
+            const scale = Math.min(
+              1,
+              1280 / Math.max(bitmap.width, bitmap.height)
+            );
+            const canvas = new OffscreenCanvas(
+              Math.round(bitmap.width * scale),
+              Math.round(bitmap.height * scale)
+            );
+            canvas
+              .getContext("2d")
+              ?.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+            bitmap.close();
+            blob = await canvas.convertToBlob({
+              quality: 0.85,
+              type: "image/jpeg",
+            });
+          }
           index = this.take.counts.images;
           await appendChunk(this.take, "images", blob);
-          this.images.set(url, index);
+          this.images.set(`${kind}:${url}`, index);
         }
-        this.events.push({ kind: "image", time, url: `take-image:${index}` });
+        this.events.push({ kind, time, url: `take-image:${index}` });
       })
       .catch((error: unknown) => {
         this.onError?.(

@@ -123,10 +123,12 @@ export const ExperienceMood = ({
   send,
   open,
   compact = false,
+  onPhoto,
 }: {
   send: SessionSend;
   open: boolean;
   compact?: boolean;
+  onPhoto: (file: File) => void;
 }) => {
   const { data: session } = useSession();
   const [prompt, setPrompt] = useState("");
@@ -134,7 +136,7 @@ export const ExperienceMood = ({
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   const photo = useRef<HTMLInputElement>(null);
-  const localUrls = useRef<string[]>([]);
+  const currentFrame = useVisualizerStore((state) => state.currentFrame);
   const submitting = useRef(false);
   const voice = useVoiceRecognition({ onResult: (text) => setPrompt(text) });
   useEffect(() => {
@@ -153,12 +155,6 @@ export const ExperienceMood = ({
     } catch {
       persistRequest(null);
     }
-    const urls = localUrls.current;
-    return () => {
-      for (const url of urls) {
-        URL.revokeObjectURL(url);
-      }
-    };
   }, []);
   useEffect(() => {
     if (!open && voice.listening) {
@@ -268,6 +264,21 @@ export const ExperienceMood = ({
           <ImagePlus data-icon="inline-start" />
           Use a photo
         </Button>
+        {currentFrame && (
+          <Button
+            variant="ghost"
+            onClick={() => {
+              useVisualizerStore.getState().stopToIdle();
+              useVisualizerStore.setState({
+                currentFrame: null,
+                previousFrame: null,
+              });
+              setMessage("Image removed. The material keeps moving.");
+            }}
+          >
+            Remove image
+          </Button>
+        )}
         {!compact && <SourceSwitcher send={send} />}
       </div>
       <input
@@ -286,9 +297,7 @@ export const ExperienceMood = ({
             toast.error("Choose an image smaller than 25 MB.");
             return;
           }
-          const url = URL.createObjectURL(file);
-          localUrls.current.push(url);
-          applyLocalImage(url);
+          onPhoto(file);
           setMessage("Photo added. It keeps moving with your music.");
         }}
       />

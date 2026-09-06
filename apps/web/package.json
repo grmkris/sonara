@@ -19,6 +19,7 @@
     "@base-ui/react": "^1.4.1",
     "@dodopayments/better-auth": "^1.6.3",
     "@ffmpeg/ffmpeg": "^0.12.15",
+    "@huggingface/transformers": "4.2.0",
     "@mediapipe/tasks-vision": "^1.0.1",
     "@orpc/client": "^1.14.6",
     "@sonara/api": "workspace:*",

@@ -23,10 +23,37 @@ export const handControls = (
       }
       const palm = Math.max(0.02, distance(wrist, middle));
       const pinch = 1 - clamp((distance(thumb, finger) / palm - 0.15) / 0.65);
+      const { 5: indexBase, 17: pinkyBase } = hand;
+      const across =
+        indexBase && pinkyBase
+          ? {
+              x: indexBase.x - pinkyBase.x,
+              y: indexBase.y - pinkyBase.y,
+              z: indexBase.z - pinkyBase.z,
+            }
+          : { x: 0, y: 0, z: 0 };
+      const along = {
+        x: middle.x - wrist.x,
+        y: middle.y - wrist.y,
+        z: middle.z - wrist.z,
+      };
+      const normal = {
+        x: across.y * along.z - across.z * along.y,
+        y: across.z * along.x - across.x * along.z,
+        z: across.x * along.y - across.y * along.x,
+      };
+      const facing =
+        Math.abs(normal.z) /
+        Math.max(0.000_01, Math.hypot(normal.x, normal.y, normal.z));
       return [
         {
+          facing: clamp(facing),
           force: 0.65 + pinch * 0.35,
           id: identities[index] ?? index,
+          palm: clamp(Math.sqrt(Math.abs(normal.z))),
+          pinch,
+          tipX: clamp(1 - (thumb.x + finger.x) / 2),
+          tipY: clamp(1 - (thumb.y + finger.y) / 2),
           x: clamp(1 - middle.x),
           y: clamp(1 - middle.y),
         },

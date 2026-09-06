@@ -122,7 +122,10 @@ export class TakePlayer {
         if (this.take.manifest.engine !== "sonara-1") {
           await this.applyMasksThrough(event.time);
         }
-        if (event.kind === "image" && event.url.startsWith("take-image:")) {
+        if (
+          (event.kind === "image" || event.kind === "depth") &&
+          event.url?.startsWith("take-image:")
+        ) {
           let url = this.imageUrls.get(event.url);
           if (!url) {
             const chunk = await readChunk(

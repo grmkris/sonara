@@ -21,6 +21,8 @@ import {
   RenderTarget,
   RGBAFormat,
   Scene,
+  SRGBColorSpace,
+  NoColorSpace,
   TextureLoader,
   UnsignedByteType,
   WebGPURenderer,
@@ -167,6 +169,9 @@ export class InstrumentRenderer {
   private maskSampler = texture(this.mask);
   private image: Texture | null = null;
   private loadId = 0;
+  private depthId = 0;
+  private depth: Texture | null = null;
+  depthUrl: string | null = null;
   private disposed = false;
   private width = 0;
   private height = 0;
@@ -221,6 +226,13 @@ export class InstrumentRenderer {
   }
   configure(config: EngineConfig): void {
     this.config = config;
+    for (const image of [this.image, this.previousImage]) {
+      const colorSpace = config.version === 4 ? SRGBColorSpace : NoColorSpace;
+      if (image && image.colorSpace !== colorSpace) {
+        image.colorSpace = colorSpace;
+        image.needsUpdate = true;
+      }
+    }
     if (config.version !== 1) {
       if (this.experience && this.experience.version !== config.version) {
         this.experience.dispose();
@@ -231,6 +243,7 @@ export class InstrumentRenderer {
         if (this.image) {
           this.experience.setImage(this.image, this.previousImage);
         }
+        this.experience.setDepth(this.depth ?? this.empty, Boolean(this.depth));
         this.experience.setMask(
           this.mask,
           this.decks[0].uniforms.maskActive.value > 0
@@ -271,14 +284,17 @@ export class InstrumentRenderer {
     }
     this.experience?.resize(w, h, scale);
   }
-  async setImage(url: string): Promise<void> {
+  async setImage(url: string): Promise<boolean> {
     this.loadId += 1;
     const id = this.loadId;
     const image = await new TextureLoader().loadAsync(url);
     if (this.disposed || id !== this.loadId) {
       image.dispose();
-      return;
+      return false;
     }
+    this.clearDepth();
+    image.colorSpace =
+      this.config.version === 4 ? SRGBColorSpace : NoColorSpace;
     this.previousImage?.dispose();
     this.previousImage = this.image;
     this.image = image;
@@ -288,8 +304,10 @@ export class InstrumentRenderer {
       deck.uniforms.image.value = image;
       deck.uniforms.imageAspect.value = element.width / element.height;
     }
+    return true;
   }
   clearImage(): void {
+    this.clearDepth();
     this.loadId += 1;
     this.image?.dispose();
     this.previousImage?.dispose();
@@ -299,6 +317,35 @@ export class InstrumentRenderer {
     for (const deck of this.decks) {
       deck.uniforms.image.value = this.empty;
     }
+  }
+  async setDepth(url: string | null): Promise<boolean> {
+    this.depthId += 1;
+    const id = this.depthId;
+    if (!url) {
+      this.clearDepth();
+      return true;
+    }
+    const depth = await new TextureLoader().loadAsync(url);
+    if (this.disposed || id !== this.depthId) {
+      depth.dispose();
+      return false;
+    }
+    depth.colorSpace = NoColorSpace;
+    depth.minFilter = LinearFilter;
+    depth.magFilter = LinearFilter;
+    depth.generateMipmaps = false;
+    this.depth?.dispose();
+    this.depth = depth;
+    this.depthUrl = url;
+    this.experience?.setDepth(depth, true);
+    return true;
+  }
+  private clearDepth(): void {
+    this.depthId += 1;
+    this.depth?.dispose();
+    this.depth = null;
+    this.depthUrl = null;
+    this.experience?.setDepth(this.empty, false);
   }
   setMask(data: Uint8Array, width: number, height: number): void {
     if (this.mask.image.width !== width || this.mask.image.height !== height) {
@@ -409,6 +456,7 @@ export class InstrumentRenderer {
     }
     this.image?.dispose();
     this.previousImage?.dispose();
+    this.depth?.dispose();
     this.experience?.dispose();
     this.empty.dispose();
     this.mask.dispose();

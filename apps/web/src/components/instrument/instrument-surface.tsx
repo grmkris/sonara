@@ -22,6 +22,8 @@ import type { AudioSource } from "@/hooks/use-audio-features";
 import { coalesce } from "@/lib/debounce";
 import { CameraInput } from "@/lib/instrument/camera";
 import { experienceLabel } from "@/lib/instrument/catalog";
+import { DepthInput } from "@/lib/instrument/depth-input";
+import type { DepthStatus } from "@/lib/instrument/depth-input";
 import { MidiInput } from "@/lib/instrument/midi";
 import type { MidiTarget } from "@/lib/instrument/midi";
 import { TakeRecorder } from "@/lib/instrument/recorder";
@@ -37,6 +39,76 @@ import { useVisualizerStore } from "@/stores/visualizer";
 import { EngineControls, ExperienceControls } from "./experience-controls";
 import { ExperienceMood } from "./experience-mood";
 import { InstrumentPanel } from "./instrument-panel";
+
+const updateMarkers = (
+  markers: (HTMLSpanElement | null)[],
+  instance: InstrumentRuntime
+) => {
+  for (const [index, marker] of markers.entries()) {
+    if (!marker) {
+      continue;
+    }
+    const contact = instance.controls.contacts?.find(
+      (point) => point.id === index
+    );
+    const hand = instance.controls.attractors[index];
+    const point = contact?.held ? contact : hand;
+    marker.style.opacity = String(point ? 1 : 0);
+    if (point) {
+      marker.style.left = `${point.x * 100}%`;
+      marker.style.top = `${(1 - point.y) * 100}%`;
+      marker.dataset.grabbed = String(
+        instance.config.version === 4
+          ? (contact?.held ?? false)
+          : (hand?.force ?? 0) > 0.92
+      );
+      marker.style.setProperty("--push", String(contact?.pressure ?? 0));
+    }
+  }
+};
+
+const nextMaterial = () => {
+  const state = useInstrumentStore.getState();
+  if (state.config.version === 4) {
+    const choices = [
+      "ink",
+      "silk",
+      "prism",
+      "kaleido",
+      "loom",
+      "orbit",
+      "relief",
+    ] as const;
+    state.setConfig({
+      ...state.config,
+      treatment:
+        choices[
+          (choices.indexOf(state.config.treatment) + 1) % choices.length
+        ] ?? "loom",
+    });
+  } else if (state.config.version === 3) {
+    const choices = [
+      "ink",
+      "silk",
+      "prism",
+      "kaleido",
+      "loom",
+      "orbit",
+    ] as const;
+    const index = choices.indexOf(state.config.treatment);
+    state.setConfig({
+      ...state.config,
+      treatment: choices[(index + 1) % choices.length] ?? "silk",
+    });
+  } else if (state.config.version === 2) {
+    const choices = ["ink", "silk", "prism"] as const;
+    const index = choices.indexOf(state.config.treatment);
+    state.setConfig({
+      ...state.config,
+      treatment: choices[(index + 1) % choices.length] ?? "silk",
+    });
+  }
+};
 
 const fullscreen = async () => {
   try {
@@ -85,6 +157,9 @@ const LookControls = ({
   send,
   open,
   onSave,
+  onPhoto,
+  depthStatus,
+  onRetryDepth,
 }: {
   advanced: boolean;
   config: EngineConfig;
@@ -94,8 +169,12 @@ const LookControls = ({
   send: SessionSend;
   open: boolean;
   onSave: () => Promise<void>;
+  onPhoto: (file: File) => void;
+  depthStatus: DepthStatus;
+  onRetryDepth: () => void;
 }) => {
   const [lookTab, setLookTab] = useState("looks");
+  const currentFrame = useVisualizerStore((state) => state.currentFrame);
   return (
     <>
       {advanced ? (
@@ -110,7 +189,7 @@ const LookControls = ({
           ) : (
             <ExperienceControls config={config} onChange={setConfig} />
           )}
-          <ExperienceMood send={send} open={open} />
+          <ExperienceMood send={send} open={open} onPhoto={onPhoto} />
           <Button
             variant="outline"
             onClick={() => {
@@ -145,6 +224,7 @@ const LookControls = ({
             <ExperienceMood
               send={send}
               open={open && lookTab === "image"}
+              onPhoto={onPhoto}
               compact
             />
             {config.version !== 1 && (
@@ -171,6 +251,28 @@ const LookControls = ({
           </TabsContent>
         </Tabs>
       )}
+      {config.version === 4 && config.treatment === "relief" && (
+        <div className="relief-status">
+          <output>
+            {currentFrame
+              ? {
+                  error: "Depth could not load. Your image still works.",
+                  estimating: "Finding the shape of your image…",
+                  idle: "Your image is ready for depth.",
+                  loading:
+                    "Preparing Relief… The first use downloads the depth model.",
+                  ready:
+                    "Depth ready. Move to relight. Pinch and drag to reshape.",
+                }[depthStatus]
+              : "Add a photo or generate an image in the Image tab to give it depth."}
+          </output>
+          {depthStatus === "error" && (
+            <Button size="sm" variant="ghost" onClick={onRetryDepth}>
+              Retry depth
+            </Button>
+          )}
+        </div>
+      )}
     </>
   );
 };
@@ -195,6 +297,9 @@ export const InstrumentSurface = ({
   const runtime = useRef<InstrumentRuntime | null>(null);
   const camera = useRef<CameraInput | null>(null);
   const midi = useRef<MidiInput | null>(null);
+  const depthInput = useRef<DepthInput | null>(null);
+  const [depthStatus, setDepthStatus] = useState<DepthStatus>("idle");
+  const localImages = useRef<string[]>([]);
   const recorder = useRef<TakeRecorder | null>(null);
   const pointer = useRef<PerformanceControlFrame | null>(null);
   const recordBusy = useRef(false);
@@ -217,6 +322,38 @@ export const InstrumentSurface = ({
   const markers = useRef<(HTMLSpanElement | null)[]>([]);
   const [leaveHref, setLeaveHref] = useState<string | null>(null);
   const [leaving, setLeaving] = useState(false);
+  const addPhoto = useCallback((file: File) => {
+    const url = URL.createObjectURL(file);
+    localImages.current.push(url);
+    const state = useVisualizerStore.getState();
+    state.stopToIdle();
+    state.pushFrame(url, state.latestVersion + 1);
+  }, []);
+  useEffect(
+    () => () => {
+      const urls = localImages.current;
+      const state = useVisualizerStore.getState();
+      if (state.currentFrame && urls.includes(state.currentFrame)) {
+        useVisualizerStore.setState({
+          currentFrame: null,
+          previousFrame: null,
+        });
+      }
+      const capture = recorder.current;
+      void (async () => {
+        try {
+          if (capture) {
+            await capture.stop();
+          }
+        } finally {
+          for (const url of urls) {
+            URL.revokeObjectURL(url);
+          }
+        }
+      })();
+    },
+    []
+  );
   const hidden = isSleeping(awake, panel, audioSource, recording);
   const wake = useCallback(() => {
     setAwake(true);
@@ -299,6 +436,29 @@ export const InstrumentSurface = ({
       setStatus("graphics connection lost — reconnecting");
       setRecovery((n) => Math.min(1, n + 1));
     };
+    let previousImage = "";
+    let appliedImage: string | null = null;
+    const depth = new DepthInput();
+    depthInput.current = depth;
+    depth.onStatus = setDepthStatus;
+    depth.onReady = (url) => {
+      void (async () => {
+        try {
+          if (await instance.renderer.setDepth(url)) {
+            instance.onEvent?.({ kind: "depth", time: instance.elapsed, url });
+          }
+        } catch {
+          if (!disposed) {
+            setDepthStatus("error");
+          }
+        }
+      })();
+    };
+    const updateDepth = () =>
+      depth.update(
+        appliedImage,
+        instance.config.version === 4 && instance.config.treatment === "relief"
+      );
     const unsubscribe = useInstrumentStore.subscribe((state, prev) => {
       if (state.config !== prev.config && state.config !== instance.config) {
         if (
@@ -312,17 +472,33 @@ export const InstrumentSurface = ({
           return;
         }
         instance.configure(state.config);
+        updateDepth();
       }
     });
-    let previousImage = "";
     const imageSubscription = useVisualizerStore.subscribe((state) => {
       const url = state.currentFrame;
+      if (!url && previousImage) {
+        previousImage = "";
+        appliedImage = null;
+        instance.renderer.clearImage();
+        instance.onEvent?.({ kind: "image-clear", time: instance.elapsed });
+        updateDepth();
+      }
       if (url && url !== previousImage) {
         previousImage = url;
+        appliedImage = null;
+        depth.update(null, false);
         void (async () => {
           try {
-            await instance.renderer.setImage(url);
-            instance.onEvent?.({ kind: "image", time: instance.elapsed, url });
+            if (await instance.renderer.setImage(url)) {
+              appliedImage = url;
+              instance.onEvent?.({
+                kind: "image",
+                time: instance.elapsed,
+                url,
+              });
+              updateDepth();
+            }
           } catch {
             toast.error("This image could not be loaded.");
           }
@@ -362,18 +538,7 @@ export const InstrumentSurface = ({
         );
         return;
       }
-      for (const [index, marker] of markers.current.entries()) {
-        if (!marker) {
-          continue;
-        }
-        const point = instance.controls.attractors[index];
-        marker.style.opacity = String(point ? Math.abs(point.force) : 0);
-        if (point) {
-          marker.style.left = `${point.x * 100}%`;
-          marker.style.top = `${(1 - point.y) * 100}%`;
-          marker.dataset.grabbed = String(point.force > 0.92);
-        }
-      }
+      updateMarkers(markers.current, instance);
       if (
         camera.current &&
         lastVision.current > 0 &&
@@ -413,6 +578,8 @@ export const InstrumentSurface = ({
         if (imageUrl) {
           await instance.renderer.setImage(imageUrl);
           previousImage = imageUrl;
+          appliedImage = imageUrl;
+          updateDepth();
         }
         setStatus(recovery > 0 ? "compatibility graphics · ready" : "ready");
         origin = performance.now();
@@ -440,9 +607,25 @@ export const InstrumentSurface = ({
       camera.current = null;
       midi.current?.stop();
       midi.current = null;
+      depth.onReady = null;
+      depth.onStatus = null;
+      depth.update(null, false);
+      const disposeImages = () => {
+        depth.dispose();
+      };
       if (recorder.current) {
-        void recorder.current.stop();
+        const capture = recorder.current;
+        void (async () => {
+          try {
+            await capture.stop();
+          } finally {
+            disposeImages();
+          }
+        })();
+      } else {
+        disposeImages();
       }
+      depthInput.current = null;
       instance.dispose();
       runtime.current = null;
     };
@@ -551,28 +734,7 @@ export const InstrumentSurface = ({
         } else if (state.config.version !== 1) {
           if (key === "next") {
             if (value > 0.5) {
-              if (state.config.version === 3) {
-                const choices = [
-                  "ink",
-                  "silk",
-                  "prism",
-                  "kaleido",
-                  "loom",
-                  "orbit",
-                ] as const;
-                const index = choices.indexOf(state.config.treatment);
-                state.setConfig({
-                  ...state.config,
-                  treatment: choices[(index + 1) % choices.length] ?? "silk",
-                });
-              } else if (state.config.version === 2) {
-                const choices = ["ink", "silk", "prism"] as const;
-                const index = choices.indexOf(state.config.treatment);
-                state.setConfig({
-                  ...state.config,
-                  treatment: choices[(index + 1) % choices.length] ?? "silk",
-                });
-              }
+              nextMaterial();
             }
           } else {
             const field = key === "energy" ? "intensity" : key;
@@ -690,7 +852,8 @@ export const InstrumentSurface = ({
         };
         await capture.start(
           getCurrentAudioEngine(),
-          useVisualizerStore.getState().currentFrame
+          useVisualizerStore.getState().currentFrame,
+          runtime.current.renderer.depthUrl
         );
         setRecording(true);
       }
@@ -746,6 +909,7 @@ export const InstrumentSurface = ({
               {
                 force: 1,
                 id: 0,
+                pinch: 1,
                 x: (event.clientX - rect.left) / rect.width,
                 y: 1 - (event.clientY - rect.top) / rect.height,
               },
@@ -765,6 +929,7 @@ export const InstrumentSurface = ({
               {
                 force: event.shiftKey ? -1 : 1,
                 id: 0,
+                pinch: 1,
                 x: Math.max(
                   0,
                   Math.min(1, (event.clientX - rect.left) / rect.width)
@@ -782,12 +947,30 @@ export const InstrumentSurface = ({
         }}
         onPointerUp={() => {
           pointer.current = null;
+          runtime.current?.setControls({
+            attractors: [],
+            expansion: 0.5,
+            rotation: 0,
+            time: performance.now() / 1000,
+          });
         }}
         onPointerCancel={() => {
           pointer.current = null;
+          runtime.current?.setControls({
+            attractors: [],
+            expansion: 0.5,
+            rotation: 0,
+            time: performance.now() / 1000,
+          });
         }}
         onLostPointerCapture={() => {
           pointer.current = null;
+          runtime.current?.setControls({
+            attractors: [],
+            expansion: 0.5,
+            rotation: 0,
+            time: performance.now() / 1000,
+          });
         }}
         onKeyDown={(event) => {
           if (event.key === " ") {
@@ -936,6 +1119,9 @@ export const InstrumentSurface = ({
             send={send}
             open={panel === "mood"}
             onSave={saveLook}
+            onPhoto={addPhoto}
+            depthStatus={depthStatus}
+            onRetryDepth={() => depthInput.current?.retry()}
           />
         </InstrumentPanel>
         <InstrumentPanel
@@ -966,7 +1152,7 @@ export const InstrumentSurface = ({
           <p className="sound-hint">
             {tracking === "body"
               ? "Keep your shoulders and wrists in view. Spread your arms to open the form; raise them to lift it."
-              : "Move a hand to pull the light. Pinch to grab. Use two hands to stretch and turn it."}
+              : "Move a hand to pull the light. Pinch to grab. Pinch with both hands to stretch. While holding, bring your palm closer to swell the surface; pull away to sink it."}
           </p>
           <p className="sound-hint">Camera processing stays on this device.</p>
           {advanced && (

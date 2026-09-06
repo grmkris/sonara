@@ -36,6 +36,7 @@ import {
   projectPass,
   vorticityPass,
 } from "./experience-nodes";
+import { loomSurface, reliefSurface, touchSurface } from "./touch-nodes";
 
 const uniforms = (empty: Texture) => ({
   aspect: uniform(1),
@@ -46,6 +47,8 @@ const uniforms = (empty: Texture) => ({
   color2: uniform(new Color()),
   color3: uniform(new Color()),
   curl: texture(empty),
+  depth: texture(empty),
+  depthActive: uniform(0),
   direction: uniform(new Vector4(1, 0, 0, 0)),
   divergence: texture(empty),
   dye: texture(empty),
@@ -53,8 +56,11 @@ const uniforms = (empty: Texture) => ({
   flow: uniform(0.45),
   gesture1: uniform(new Vector2()),
   gesture2: uniform(new Vector2()),
+  grip1: uniform(new Vector4(0.5, 0.5, 0.5, 0.5)),
+  grip2: uniform(new Vector4(0.5, 0.5, 0.5, 0.5)),
   hand1: uniform(new Vector3(0.5, 0.5, 0)),
   hand2: uniform(new Vector3(0.5, 0.5, 0)),
+  hit: uniform(new Vector2(1, 0)),
   image: texture(empty),
   imageActive: uniform(0),
   imageAspect: uniform(1),
@@ -74,6 +80,8 @@ const uniforms = (empty: Texture) => ({
   symmetry: uniform(0.15),
   texel: uniform(new Vector2(1 / 128, 1 / 128)),
   time: uniform(0),
+  touch1: uniform(new Vector4()),
+  touch2: uniform(new Vector4()),
   trails: uniform(0.55),
   treatment: uniform(1),
   velocity: texture(empty),
@@ -101,6 +109,7 @@ export class ExperienceLayer {
   private pigment: [RenderTarget, RenderTarget] = [target(256), target(256)];
   private curl = target();
   private divergence = target();
+  private shaped = target(512, 288);
   private surface = target(512, 288);
   private bloom = target(256, 144);
   private vi: 0 | 1 = 0;
@@ -108,6 +117,7 @@ export class ExperienceLayer {
   private di: 0 | 1 = 0;
   private needsClear = true;
   private imageStarted = -10;
+  private depthEnabled = false;
   private config: MaterialConfig;
   private passes: Record<
     | "flow"
@@ -119,12 +129,15 @@ export class ExperienceLayer {
     | "dye"
     | "material"
     | "bloom"
-    | "present",
+    | "present"
+    | "touch",
     MeshBasicNodeMaterial
   >;
   private pressureIterations = 10;
   private motionClock = 0;
   private previousTime = 0;
+  private previousPulse = 0;
+  private hitTime = -10;
   readonly version: 2 | 3 | 4;
   constructor(empty: Texture, config: MaterialConfig) {
     this.version = config.version;
@@ -137,31 +150,42 @@ export class ExperienceLayer {
       divergence: material(divergencePass(u)),
       dye: material(dyePass(u)),
       flow: material(flowPass(u)),
-      material: material(
-        effectPass(u, config.treatment) ?? materialPass(u, config.version === 3)
-      ),
+      material: this.surfaceMaterial(config),
       present: material(presentPass(u)),
       pressure: material(pressurePass(u)),
       project: material(projectPass(u)),
+      touch: material(touchSurface(u)),
       vorticity: material(vorticityPass(u)),
     };
     this.configure(config);
   }
+  private surfaceMaterial(config: MaterialConfig): MeshBasicNodeMaterial {
+    const { u } = this;
+    if (config.version === 4) {
+      if (config.treatment === "loom") {
+        return material(loomSurface(u));
+      }
+      if (config.treatment === "relief") {
+        return material(reliefSurface(u));
+      }
+    }
+    return material(
+      effectPass(u, config.treatment) ?? materialPass(u, config.version >= 3)
+    );
+  }
   configure(config: MaterialConfig): void {
     if (
       this.config.treatment !== config.treatment &&
-      (isExtendedTreatment(this.config.treatment) ||
+      (config.version === 4 ||
+        isExtendedTreatment(this.config.treatment) ||
         isExtendedTreatment(config.treatment))
     ) {
       this.passes.material.dispose();
-      this.passes.material = material(
-        effectPass(this.u, config.treatment) ??
-          materialPass(this.u, config.version === 3)
-      );
+      this.passes.material = this.surfaceMaterial(config);
     }
     this.config = config;
     const { u } = this;
-    u.response.value = config.version === 3 ? config.response : 0;
+    u.response.value = config.version === 2 ? 0 : config.response;
     u.flow.value = config.flow;
     u.intensity.value = config.intensity;
     u.symmetry.value = config.symmetry;
@@ -185,6 +209,13 @@ export class ExperienceLayer {
     this.u.oldImage.value = empty;
     this.u.imageActive.value = 0;
   }
+  setDepth(depth: Texture, active: boolean): void {
+    this.u.depth.value = depth;
+    this.depthEnabled = active;
+    if (!active) {
+      this.u.depthActive.value = 0;
+    }
+  }
   setMask(mask: Texture, active: boolean): void {
     this.u.mask.value = mask;
     this.u.maskActive.value = active ? 1 : 0;
@@ -192,11 +223,25 @@ export class ExperienceLayer {
   resize(width: number, height: number, _scale: number): void {
     this.u.aspect.value = width / height;
     this.surface.setSize(width, height);
+    if (this.version === 4) {
+      this.shaped.setSize(width, height);
+    }
   }
   reset(): void {
     this.needsClear = true;
     this.motionClock = 0;
     this.previousTime = 0;
+    this.previousPulse = 0;
+    this.hitTime = -10;
+    this.u.hit.value.set(1, 0);
+    this.u.touch1.value.set(0, 0, 0, 0);
+    this.u.touch2.value.set(0, 0, 0, 0);
+    if (this.version === 4) {
+      this.u.motionTime.value = 0;
+      this.u.depthActive.value = 0;
+      this.imageStarted = -10;
+      this.u.oldImage.value = this.u.image.value;
+    }
     this.u.revealAmount.value = 0;
     this.u.gesture1.value.set(0, 0);
     this.u.gesture2.value.set(0, 0);
@@ -209,7 +254,7 @@ export class ExperienceLayer {
     controls: PerformanceControlFrame
   ): void {
     const { u } = this;
-    if (this.config.version === 3) {
+    if (this.config.version !== 2) {
       const dt = Math.max(0, Math.min(0.05, time - this.previousTime));
       this.previousTime = time;
       const energy = Math.max(music.body, music.weight);
@@ -232,6 +277,59 @@ export class ExperienceLayer {
       );
       u.lift.value = controls.lift ?? 0;
       u.rotation.value = controls.rotation;
+    }
+  }
+  private updateGrips(controls: PerformanceControlFrame): void {
+    const { u } = this;
+    for (const [id, grip, touch] of [
+      [0, u.grip1, u.touch1],
+      [1, u.grip2, u.touch2],
+    ] as const) {
+      const contact = controls.contacts?.find((point) => point.id === id);
+      if (contact?.held && touch.value.z === 0) {
+        touch.value.w = u.motionTime.value;
+      }
+      grip.value.set(
+        contact?.anchorX ?? 0.5,
+        contact?.anchorY ?? 0.5,
+        contact?.x ?? 0.5,
+        contact?.y ?? 0.5
+      );
+      touch.value.x = contact?.strength ?? 0;
+      touch.value.y = contact?.pressure ?? 0;
+      touch.value.z = contact?.held ? 1 : 0;
+    }
+  }
+  private updateTouch(
+    time: number,
+    music: MusicalFrame,
+    controls: PerformanceControlFrame
+  ): void {
+    if (this.version !== 4) {
+      return;
+    }
+    const { u } = this;
+    u.depthActive.value +=
+      ((this.depthEnabled ? 1 : 0) - u.depthActive.value) * 0.08;
+    if (music.pulse > this.previousPulse + 0.12 && time - this.hitTime > 0.12) {
+      this.hitTime = time;
+      u.hit.value.y = music.pulse;
+    }
+    this.previousPulse = music.pulse;
+    u.hit.value.x = Math.min(1, Math.max(0, (time - this.hitTime) / 0.9));
+    this.updateGrips(controls);
+    // Give bass compression and opening hits a more legible range in the
+    // existing fractal / particle graphs, with bounded amplitude.
+    if (
+      this.config.treatment === "orbit" ||
+      this.config.treatment === "kaleido"
+    ) {
+      u.music.value.x = Math.min(
+        1.5,
+        music.pulse * 1.5 +
+          Math.sin(u.hit.value.x * Math.PI) * u.hit.value.y * 0.5
+      );
+      u.music.value.y = Math.min(1.6, music.weight * 1.8);
     }
   }
   private draw(
@@ -277,6 +375,8 @@ export class ExperienceLayer {
       this.config.automatic ? music.release : 0,
       music.confidence
     );
+    this.updateTouch(time, music, controls);
+
     u.expansion.value = controls.expansion;
     this.updateMotion(time, music, controls);
     for (const [i, hand] of [u.hand1, u.hand2].entries()) {
@@ -300,7 +400,7 @@ export class ExperienceLayer {
     }
     const reveal =
       this.config.reveal *
-      (this.config.automatic
+      (this.config.automatic && this.version !== 4
         ? Math.min(1, music.body * 0.75 + music.release * 0.6 + 0.45)
         : 1);
     u.revealAmount.value += (reveal - u.revealAmount.value) * 0.012;
@@ -378,6 +478,10 @@ export class ExperienceLayer {
     const { u } = this;
     this.draw(renderer, scene, camera, quad, "material", this.surface);
     u.surface.value = this.surface.texture;
+    if (this.version === 4) {
+      this.draw(renderer, scene, camera, quad, "touch", this.shaped);
+      u.surface.value = this.shaped.texture;
+    }
     this.draw(renderer, scene, camera, quad, "bloom", this.bloom);
     u.bloom.value = this.bloom.texture;
     this.draw(renderer, scene, camera, quad, "present", null);
@@ -390,6 +494,7 @@ export class ExperienceLayer {
       this.curl,
       this.divergence,
       this.surface,
+      this.shaped,
       this.bloom,
     ]) {
       rt.dispose();

@@ -1203,7 +1203,7 @@ body {
 .experience-controls {
   display: flex;
   flex-direction: column;
-  gap: 24px;
+  gap: 18px;
 }
 .experience-treatments {
   display: grid;
@@ -1583,7 +1583,7 @@ body {
   outline-offset: 2px;
 }
 .experience-treatment-art {
-  height: 80px;
+  height: 56px;
 }
 .experience-treatment small {
   font-size: 11px;
@@ -1677,4 +1677,35 @@ body {
   padding-inline: 4px;
   font-size: 12px;
   gap: 6px;
+}
+
+.experience-controls .experience-treatment-wide {
+  grid-column: 1 / -1;
+  flex-direction: row;
+  align-items: center;
+  text-align: left;
+}
+.experience-treatment-wide .experience-treatment-art {
+  width: 80px;
+  min-height: 64px;
+  flex-shrink: 0;
+}
+.experience-treatment-relief {
+  background: radial-gradient(ellipse at 25% 20%, #fff6bc, transparent 45%),
+    repeating-radial-gradient(ellipse at 70% 70%, #7a3658 0 3px, #293942 6px, #e2a578 10px, #3b474f 14px);
+}
+.relief-status {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 16px;
+  color: var(--color-muted-foreground);
+  font-size: 12px;
+  line-height: 1.5;
+}
+.tracking-markers > span[data-grabbed="true"] {
+  width: calc(28px + var(--push, 0) * 10px);
+  height: calc(28px + var(--push, 0) * 10px);
+  border-width: 2px;
+  box-shadow: 0 0 0 6px #ffffff12, 0 0 26px #fff7;
 }
