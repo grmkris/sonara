@@ -1,4 +1,5 @@
 "use client";
+// oxlint-disable unicorn/require-post-message-target-origin -- REVIEW: MessagePort.postMessage has no targetOrigin argument
 
 import { defaultAudio } from "@sonara/shared";
 import type { AudioFeatures, AudioFeatureFrame } from "@sonara/shared";
@@ -66,6 +67,7 @@ export class AudioEngine {
     this.source = node;
     if (this.worklet) {
       this.compressor.connect(this.worklet);
+      this.worklet.port.postMessage({ active: true });
     }
     this.startClipRecorder(this.compressor);
   }
@@ -106,6 +108,7 @@ export class AudioEngine {
     this.source = node;
     if (this.worklet) {
       this.compressor.connect(this.worklet);
+      this.worklet.port.postMessage({ active: true });
     }
     this.startClipRecorder(this.compressor);
   }
@@ -155,6 +158,7 @@ export class AudioEngine {
     this.source = node;
     if (this.worklet) {
       this.compressor.connect(this.worklet);
+      this.worklet.port.postMessage({ active: true });
     }
     this.startClipRecorder(this.compressor);
     // When the user clicks "Stop sharing" in the browser chrome, the track
@@ -172,6 +176,7 @@ export class AudioEngine {
   }
 
   detachSource(): void {
+    this.worklet?.port.postMessage({ active: false });
     this.generation += 1;
     this.worker?.postMessage({ generation: this.generation, type: "reset" });
     this.latest = {

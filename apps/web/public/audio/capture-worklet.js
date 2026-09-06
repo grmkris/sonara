@@ -6,8 +6,16 @@ class SonaraCapture extends AudioWorkletProcessor {
     this.position = 0;
     this.count = 0;
     this.busy = false;
+    this.active = false;
     this.analysis = null;
     this.port.addEventListener("message", ({ data }) => {
+      if (typeof data.active === "boolean") {
+        this.active = data.active;
+        this.ring.fill(0);
+        this.position = 0;
+        this.count = 0;
+        return;
+      }
       this.analysis = data.port;
       this.analysis.addEventListener("message", () => {
         this.busy = false;
@@ -17,6 +25,9 @@ class SonaraCapture extends AudioWorkletProcessor {
     this.port.start();
   }
   process(inputs) {
+    if (!this.active) {
+      return true;
+    }
     const [channels] = inputs;
     const length = channels?.[0]?.length ?? 128;
     for (let i = 0; i < length; i += 1) {

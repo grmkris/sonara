@@ -5,7 +5,6 @@ export class Transport {
   beat = 0;
   private taps: number[] = [];
   private manualBpm = 0;
-  private offset = 0;
   private accumulator = 0;
   private lastTime: number | null = null;
   private multiplier = 1;
@@ -16,7 +15,6 @@ export class Transport {
   reset(): void {
     this.time = 0;
     this.beat = 0;
-    this.offset = 0;
     this.accumulator = 0;
     this.lastTime = null;
   }
@@ -42,7 +40,6 @@ export class Transport {
     this.multiplier = Math.max(0.5, Math.min(2, this.multiplier * value));
   }
   downbeat(): void {
-    this.offset = this.time;
     this.beat = 0;
   }
   advance(now: number, detectedBpm: number, step: (dt: number) => void): void {
@@ -60,7 +57,7 @@ export class Transport {
     while (this.accumulator + 1e-9 >= 1 / 60) {
       this.time += 1 / 60;
       this.accumulator -= 1 / 60;
-      this.beat = ((this.time - this.offset) * this.bpm) / 60;
+      this.beat += this.bpm / (60 * 60);
       step(1 / 60);
     }
   }

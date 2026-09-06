@@ -22,6 +22,7 @@ const requireTake = async (
     .select({
       clientId: SCHEMA.performanceTake.clientId,
       manifest: SCHEMA.performanceTake.manifest,
+      origin: SCHEMA.frameSet.origin,
       owner: SCHEMA.frameSet.userId,
       status: SCHEMA.frameSet.status,
       visibility: SCHEMA.frameSet.visibility,
@@ -253,6 +254,7 @@ export const takesRouter = {
           url: presignReadUrl(c.key),
         })),
         manifest: row.manifest,
+        remix: row.origin === "curated",
       };
     }),
   list: protectedProcedure.handler(

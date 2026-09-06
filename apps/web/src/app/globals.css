@@ -473,7 +473,7 @@ input::placeholder {
   inset: 0;
   display: grid;
   grid-template-columns: minmax(0, 1fr) 348px;
-  grid-template-rows: 72px minmax(0, 1fr) 162px;
+  grid-template-rows: 72px minmax(0, 1fr) 185px;
   background: var(--ink);
   color: var(--paper);
 }
@@ -974,4 +974,56 @@ input::placeholder {
   .take-workspace {
     padding: 16px;
   }
+}
+
+/* Explicit component styling sits beside the app's unlayered button reset. */
+.instrument-controls [data-slot="toggle-group"]:not(.instrument-worlds) {
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.instrument-controls
+  [data-slot="toggle-group-item"]:not(.instrument-world-choice) {
+  padding: 6px 8px;
+  border: 1px solid transparent;
+  font-size: 10px;
+}
+.instrument-controls [data-slot="toggle-group-item"][data-pressed] {
+  background-color: color-mix(in srgb, var(--paper) 9%, transparent);
+  border-color: color-mix(in srgb, var(--paper) 50%, transparent);
+}
+.instrument-controls [data-slot="toggle-group-item"]:hover {
+  background-color: color-mix(in srgb, var(--paper) 5%, transparent);
+}
+.instrument-world-art {
+  flex-shrink: 0;
+}
+.instrument-footer [data-slot="button"],
+.instrument-stage-actions [data-slot="button"] {
+  padding: 5px 8px;
+  border: 1px solid var(--instrument-edge);
+}
+.instrument-footer button[aria-pressed="true"] {
+  background-color: color-mix(in srgb, var(--paper) 12%, transparent);
+  border-color: var(--paper);
+}
+.instrument-capture button[aria-pressed="true"] {
+  background-color: #93352d;
+}
+.instrument-audio > div {
+  flex-wrap: wrap;
+  row-gap: 8px;
+}
+.instrument-audio button.group > span {
+  opacity: 0.8;
+}
+.take-transport [data-slot="button"],
+.take-export [data-slot="toggle-group-item"] {
+  padding: 6px 10px;
+  border: 1px solid color-mix(in srgb, var(--paper) 18%, transparent);
+}
+.take-export [data-slot="toggle-group"] {
+  gap: 6px;
+}
+.take-export [data-pressed] {
+  background-color: color-mix(in srgb, var(--paper) 12%, transparent);
 }

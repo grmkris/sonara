@@ -42,3 +42,16 @@ test("tap tempo and half-time are explicit overrides", () => {
   transport.advance(2, 90, () => {});
   expect(transport.bpm).toBe(90);
 });
+
+test("tempo changes preserve musical phase instead of rescaling elapsed beats", () => {
+  const transport = new Transport();
+  for (let i = 0; i <= 600; i += 1) {
+    transport.advance(i / 60, 120, () => {});
+  }
+  expect(transport.beat).toBeCloseTo(20, 6);
+  transport.advance(601 / 60, 60, () => {});
+  expect(transport.beat).toBeCloseTo(20 + 1 / 60, 6);
+  transport.downbeat();
+  transport.advance(602 / 60, 60, () => {});
+  expect(transport.beat).toBeCloseTo(1 / 60, 6);
+});

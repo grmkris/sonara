@@ -106,7 +106,7 @@ export const TakeStudio = ({ id }: { id: string }) => {
       return;
     }
     const instance = new TakePlayer(canvas.current, take, eventsRef.current);
-    player.current = instance;
+    const controller = new AbortController();
     let disposed = false;
     void (async () => {
       try {
@@ -115,7 +115,11 @@ export const TakeStudio = ({ id }: { id: string }) => {
           return;
         }
         instance.runtime.renderer.resize(960, 540);
-        await instance.seek(take.manifest.range?.[0] ?? 0);
+        await instance.seek(take.manifest.range?.[0] ?? 0, controller.signal);
+        if (disposed) {
+          return;
+        }
+        player.current = instance;
         instance.runtime.renderer.step(
           instance.runtime.transport.time,
           instance.runtime.audio,
@@ -133,6 +137,7 @@ export const TakeStudio = ({ id }: { id: string }) => {
     })();
     return () => {
       disposed = true;
+      controller.abort();
       instance.dispose();
       player.current = null;
     };

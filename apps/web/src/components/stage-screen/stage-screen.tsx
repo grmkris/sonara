@@ -254,6 +254,7 @@ export const StageScreen = ({ code }: { code: string | null }) => {
           <SetPlaybackConsumer />
         </Suspense>
         <InstrumentSurface
+          remoteControl={ownStage ? <RemoteLink code={ownStage.code} /> : null}
           audioSource={audioSource}
           setAudioSource={setAudioSource}
           send={send}

@@ -69,6 +69,7 @@ export class TakePlayer {
     const width = view.getUint32(8);
     const height = view.getUint32(12);
     if (
+      (width === 0) !== (height === 0) ||
       width * height !== bytes.byteLength - 16 ||
       width > 1024 ||
       height > 1024
@@ -129,11 +130,15 @@ export class TakePlayer {
         event = this.events[this.eventIndex];
       }
       while (this.nextMask && this.nextMask.time <= this.time) {
-        this.runtime.renderer.setMask(
-          this.nextMask.data,
-          this.nextMask.width,
-          this.nextMask.height
-        );
+        if (this.nextMask.width === 0) {
+          this.runtime.renderer.clearMask();
+        } else {
+          this.runtime.renderer.setMask(
+            this.nextMask.data,
+            this.nextMask.width,
+            this.nextMask.height
+          );
+        }
         await this.readMask();
       }
       this.runtime.config.conductor = false;

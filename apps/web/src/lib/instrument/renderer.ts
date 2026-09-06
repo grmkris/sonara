@@ -168,6 +168,7 @@ export class InstrumentRenderer {
   private height = 0;
   private config: InstrumentConfig;
   onLost: (() => void) | null = null;
+  onPresented: (() => void) | null = null;
   constructor(
     canvas: HTMLCanvasElement,
     config: InstrumentConfig,
@@ -284,11 +285,7 @@ export class InstrumentRenderer {
     audio: AudioFeatureFrame,
     control: PerformanceControlFrame
   ): void {
-    for (let i = 0; i < 2; i += 1) {
-      const deck = this.decks[i];
-      if (!deck) {
-        continue;
-      }
+    for (const [i, deck] of this.decks.entries()) {
       if (
         this.config.blend === "mix" &&
         ((i === 0 && this.config.crossfade === 1) ||
@@ -316,6 +313,7 @@ export class InstrumentRenderer {
     this.quad.material = this.composite;
     this.backend.setRenderTarget(null);
     this.backend.render(this.scene, this.camera);
+    this.onPresented?.();
   }
   reset(): void {
     for (const deck of this.decks) {

@@ -179,7 +179,7 @@ export const uploadTake = async (
   return setId;
 };
 export const fetchTake = async (setId: FrameSetId): Promise<LocalTake> => {
-  const { chunks, manifest } = await rpcClient.takes.get({ setId });
+  const { chunks, manifest, remix } = await rpcClient.takes.get({ setId });
   if (!manifest) {
     throw new Error("This take is still being uploaded.");
   }
@@ -189,12 +189,15 @@ export const fetchTake = async (setId: FrameSetId): Promise<LocalTake> => {
     existing &&
     Object.values(existing.counts).reduce((a, b) => a + b, 0) === chunks.length
   ) {
-    return existing;
+    const cached = { ...existing, manifest: parsed, remix, setId };
+    await saveLocalTake(cached);
+    return cached;
   }
   const take: LocalTake = {
     counts: { audio: 0, events: 0, images: 0, masks: 0, video: 0 },
     manifest: parsed,
     recording: false,
+    remix,
     setId,
   };
   await saveLocalTake(take);

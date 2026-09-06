@@ -20,6 +20,7 @@ import type { ReactNode } from "react";
 import { toast } from "sonner";
 
 import { AppNavLinks } from "@/components/app-nav";
+import { StageWire } from "@/components/stage/stage-wire";
 import { Button } from "@/components/ui/button";
 import {
   Sheet,
@@ -51,11 +52,13 @@ export const InstrumentSurface = ({
   audioSource,
   setAudioSource,
   sceneControls,
+  remoteControl,
   send,
 }: {
   audioSource: AudioSource;
   setAudioSource: (source: AudioSource) => void;
   sceneControls: ReactNode;
+  remoteControl?: ReactNode;
   send: SessionSend;
 }) => {
   const config = useInstrumentStore((s) => s.config);
@@ -75,7 +78,7 @@ export const InstrumentSurface = ({
   const [status, setStatus] = useState("warming the instrument");
   const [stats, setStats] = useState({ bpm: 0, fps: 0, time: 0 });
   const [recovery, setRecovery] = useState(0);
-  const [hidden, setHidden] = useState(false);
+  const hidden = useVisualizerStore((state) => !state.uiVisible);
   const [midiReady, setMidiReady] = useState(false);
   const [midiClock, setMidiClock] = useState(false);
   const midiClockRef = useRef(false);
@@ -102,6 +105,32 @@ export const InstrumentSurface = ({
       recovery > 0
     );
     runtime.current = instance;
+    setTracking("off");
+    setMidiReady(false);
+    setFrozen(false);
+    setRecording(false);
+    recorder.current = null;
+    const preview = document.createElement("canvas");
+    preview.width = 80;
+    preview.height = 45;
+    let lastPreview = 0;
+    instance.renderer.onPresented = () => {
+      if (performance.now() - lastPreview < 1500) {
+        return;
+      }
+      lastPreview = performance.now();
+      try {
+        // Read immediately after presentation: WebGL clears its drawing buffer
+        // between animation frames when preserveDrawingBuffer is disabled.
+        preview.getContext("2d")?.drawImage(element, 0, 0, 80, 45);
+        const url = preview.toDataURL("image/jpeg", 0.35);
+        if (url.length <= 4096) {
+          send({ type: "frame.report", url });
+        }
+      } catch {
+        /* A thumbnail must not interrupt the performance. */
+      }
+    };
     instance.onConfig = (next) => {
       useInstrumentStore.setState({ config: next });
     };
@@ -231,30 +260,7 @@ export const InstrumentSurface = ({
       instance.dispose();
       runtime.current = null;
     };
-  }, [recovery]);
-
-  useEffect(() => {
-    const preview = document.createElement("canvas");
-    preview.width = 80;
-    preview.height = 45;
-    const timer = setInterval(() => {
-      if (!canvas.current) {
-        return;
-      }
-      try {
-        preview.getContext("2d")?.drawImage(canvas.current, 0, 0, 80, 45);
-        const url = preview.toDataURL("image/jpeg", 0.35);
-        if (url.length <= 4096) {
-          send({ type: "frame.report", url });
-        }
-      } catch {
-        /* A failed thumbnail must never stop the performance. */
-      }
-    }, 1500);
-    return () => {
-      clearInterval(timer);
-    };
-  }, [send]);
+  }, [recovery, send]);
 
   useEffect(() => {
     const relay = coalesce(() => {
@@ -275,6 +281,7 @@ export const InstrumentSurface = ({
     camera.current?.stop();
     camera.current = null;
     runtime.current?.renderer.clearMask();
+    recorder.current?.recordMask(new Uint8Array(0), 0, 0);
     if (tracking === mode) {
       setTracking("off");
       return;
@@ -290,12 +297,20 @@ export const InstrumentSurface = ({
     };
     input.onFrame = (frame) => {
       runtime.current?.setControls(frame.control);
-      if (frame.mask && frame.width && frame.height) {
-        runtime.current?.renderer.setMask(
-          frame.mask,
-          frame.width,
-          frame.height
-        );
+      if (
+        frame.mask &&
+        frame.width !== undefined &&
+        frame.height !== undefined
+      ) {
+        if (frame.width === 0) {
+          runtime.current?.renderer.clearMask();
+        } else {
+          runtime.current?.renderer.setMask(
+            frame.mask,
+            frame.width,
+            frame.height
+          );
+        }
         recorder.current?.recordMask(frame.mask, frame.width, frame.height);
       }
     };
@@ -441,6 +456,7 @@ export const InstrumentSurface = ({
           an instrument for seeing sound <span>№ 01</span>
         </span>
         <div className="flex items-center gap-2">
+          {remoteControl}
           <UserControls />
           <Button
             size="sm"
@@ -456,7 +472,7 @@ export const InstrumentSurface = ({
             size="sm"
             variant="ghost"
             onClick={() => {
-              setHidden((value) => !value);
+              useVisualizerStore.getState().setUiVisible(hidden);
             }}
           >
             {hidden ? "show controls" : "hide"}
@@ -607,6 +623,7 @@ export const InstrumentSurface = ({
             reset
           </Button>
         </div>
+        <StageWire />
       </section>
       <aside className="instrument-console">
         <InstrumentControls
