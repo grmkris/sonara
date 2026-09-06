@@ -2,6 +2,8 @@ import { expect, test } from "bun:test";
 
 import {
   DEFAULT_EXPERIENCE,
+  DEFAULT_TOUCH,
+  TouchConfig,
   DEFAULT_RESPONSIVE,
   EMPTY_MUSIC,
   ExperienceConfig,
@@ -80,7 +82,6 @@ test("a captured motion frame includes the resolved music and simulation clock",
   );
 });
 
-
 test("new effects belong to responsive takes while legacy materials stay unchanged", () => {
   for (const treatment of ["kaleido", "loom", "orbit"]) {
     const config = { ...DEFAULT_RESPONSIVE, treatment };
@@ -105,4 +106,56 @@ test("new effects belong to responsive takes while legacy materials stay unchang
     ResponsiveConfig.safeParse({ ...DEFAULT_RESPONSIVE, treatment: "unknown" })
       .success
   ).toBe(false);
+});
+
+test("touch takes preserve held surface points and lossless depth references", () => {
+  const config = { ...DEFAULT_TOUCH, treatment: "relief" };
+  expect(TouchConfig.safeParse(config).success).toBe(true);
+  expect(ResponsiveConfig.safeParse({ ...config, version: 3 }).success).toBe(
+    false
+  );
+  expect(
+    TakeManifest.safeParse({
+      config,
+      createdAt: new Date().toISOString(),
+      duration: 2,
+      engine: "sonara-4",
+      id: crypto.randomUUID(),
+      name: "Relief",
+      version: 4,
+    }).success
+  ).toBe(true);
+  const contact = {
+    anchorX: 0.25,
+    anchorY: 0.5,
+    held: true,
+    id: 0,
+    pressure: 0.4,
+    strength: 1,
+    x: 0.7,
+    y: 0.5,
+  };
+  const motion: Extract<TakeEvent, { kind: "motion" }> = {
+    control: {
+      attractors: [],
+      contacts: [contact],
+      expansion: 0.5,
+      rotation: 0,
+      time: 1,
+    },
+    frame: EMPTY_MUSIC,
+    kind: "motion",
+    simulationTime: 1,
+    time: 1,
+  };
+  expect(TakeEvent.parse(motion)).toEqual(motion);
+  expect(
+    TakeEvent.safeParse({
+      ...motion,
+      control: { ...motion.control, contacts: [{ ...contact, pressure: 2 }] },
+    }).success
+  ).toBe(false);
+  expect(
+    TakeEvent.parse({ kind: "depth", time: 1, url: "take-image:1" })
+  ).toEqual({ kind: "depth", time: 1, url: "take-image:1" });
 });

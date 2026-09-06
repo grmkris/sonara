@@ -565,7 +565,7 @@ export const InstrumentSurface = ({
                   ...state.config,
                   treatment: choices[(index + 1) % choices.length] ?? "silk",
                 });
-              } else {
+              } else if (state.config.version === 2) {
                 const choices = ["ink", "silk", "prism"] as const;
                 const index = choices.indexOf(state.config.treatment);
                 state.setConfig({

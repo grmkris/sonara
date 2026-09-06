@@ -1,7 +1,12 @@
 import { z } from "zod";
 
 import { AudioFeatures } from "./audio";
-import { ExperienceConfig, MusicalFrame, ResponsiveConfig } from "./experience";
+import {
+  ExperienceConfig,
+  MusicalFrame,
+  ResponsiveConfig,
+  TouchConfig,
+} from "./experience";
 
 export const WorldId = z.enum([
   "dream",
@@ -43,6 +48,7 @@ export const EngineConfig = z.discriminatedUnion("version", [
   InstrumentConfig,
   ExperienceConfig,
   ResponsiveConfig,
+  TouchConfig,
 ]);
 export type EngineConfig = z.infer<typeof EngineConfig>;
 export const DEFAULT_INSTRUMENT: InstrumentConfig = {
@@ -71,14 +77,31 @@ export const AudioFeatureFrame = z.object({
 });
 export type AudioFeatureFrame = z.infer<typeof AudioFeatureFrame>;
 export const Attractor = z.object({
+  facing: unit.optional(),
   force: z.number().min(-1).max(1),
   id: z.number().int().min(0).max(1).optional(),
+  palm: unit.optional(),
+  pinch: unit.optional(),
+  tipX: unit.optional(),
+  tipY: unit.optional(),
   x: unit,
   y: unit,
 });
 export type Attractor = z.infer<typeof Attractor>;
+export const SurfaceContact = z.object({
+  anchorX: unit,
+  anchorY: unit,
+  held: z.boolean(),
+  id: z.number().int().min(0).max(1),
+  pressure: z.number().min(-1).max(1),
+  strength: unit,
+  x: unit,
+  y: unit,
+});
+export type SurfaceContact = z.infer<typeof SurfaceContact>;
 export const PerformanceControlFrame = z.object({
   attractors: z.array(Attractor).max(2),
+  contacts: z.array(SurfaceContact).max(2).optional(),
   expansion: unit,
   lift: z.number().min(-1).max(1).optional(),
   rotation: z.number().min(-Math.PI).max(Math.PI),
@@ -114,6 +137,12 @@ export const TakeEvent = z.discriminatedUnion("kind", [
     url: z.string().max(2048),
   }),
   z.object({
+    kind: z.literal("depth"),
+    time: z.number().nonnegative(),
+    url: z.string().max(2048).nullable(),
+  }),
+  z.object({ kind: z.literal("image-clear"), time: z.number().nonnegative() }),
+  z.object({
     frozen: z.boolean(),
     kind: z.literal("freeze"),
     time: z.number().nonnegative(),
@@ -126,13 +155,13 @@ export const TakeManifest = z
     config: EngineConfig,
     createdAt: z.string().datetime(),
     duration: z.number().nonnegative(),
-    engine: z.enum(["sonara-1", "sonara-2", "sonara-3"]),
+    engine: z.enum(["sonara-1", "sonara-2", "sonara-3", "sonara-4"]),
     id: z.string().uuid(),
     name: z.string().min(1).max(160),
     range: z
       .tuple([z.number().nonnegative(), z.number().positive()])
       .optional(),
-    version: z.union([z.literal(1), z.literal(2), z.literal(3)]),
+    version: z.union([z.literal(1), z.literal(2), z.literal(3), z.literal(4)]),
   })
   .refine(
     (take) =>

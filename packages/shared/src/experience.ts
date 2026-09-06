@@ -20,7 +20,20 @@ export const ResponsiveConfig = ExperienceConfig.extend({
   version: z.literal(3),
 });
 export type ResponsiveConfig = z.infer<typeof ResponsiveConfig>;
-export type MaterialConfig = ExperienceConfig | ResponsiveConfig;
+export const TouchConfig = ResponsiveConfig.extend({
+  treatment: z.enum([
+    "ink",
+    "silk",
+    "prism",
+    "kaleido",
+    "loom",
+    "orbit",
+    "relief",
+  ]),
+  version: z.literal(4),
+});
+export type TouchConfig = z.infer<typeof TouchConfig>;
+export type MaterialConfig = ExperienceConfig | ResponsiveConfig | TouchConfig;
 export const DEFAULT_EXPERIENCE: ExperienceConfig = {
   automatic: true,
   flow: 0.45,
@@ -38,6 +51,12 @@ export const DEFAULT_RESPONSIVE: ResponsiveConfig = {
   ...DEFAULT_EXPERIENCE,
   response: 0.7,
   version: 3,
+};
+
+export const DEFAULT_TOUCH: TouchConfig = {
+  ...DEFAULT_RESPONSIVE,
+  treatment: "loom",
+  version: 4,
 };
 
 // Resolved on the audio clock, then recorded verbatim for future replay.

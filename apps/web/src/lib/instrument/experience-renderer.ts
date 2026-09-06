@@ -125,7 +125,7 @@ export class ExperienceLayer {
   private pressureIterations = 10;
   private motionClock = 0;
   private previousTime = 0;
-  readonly version: 2 | 3;
+  readonly version: 2 | 3 | 4;
   constructor(empty: Texture, config: MaterialConfig) {
     this.version = config.version;
     this.u = uniforms(empty);
